@@ -39,9 +39,9 @@ describe("csReply", () => {
     expect(result.success).toBe(true);
   });
 
-  it("validates scenario max length (6000 chars)", async () => {
+  it("validates scenario max length (10000 chars)", async () => {
     const schema = opsChatRouter._def.procedures.csReply._def.inputs[0];
-    const longScenario = "a".repeat(6001);
+    const longScenario = "a".repeat(10001);
     const result = schema.safeParse({ scenario: longScenario, history: [] });
     expect(result.success).toBe(false);
   });

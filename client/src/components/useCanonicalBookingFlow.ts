@@ -13,7 +13,7 @@ import {
 } from "./useCanonicalBookingDraft";
 
 export type CanonicalBookingFlowOptions = {
-  stepCount: 8 | 9;
+  stepCount: 8 | 9 | 10;
   overrides?: Partial<CanonicalBookingDraft>;
 };
 
@@ -75,6 +75,8 @@ export function useCanonicalBookingFlow({ stepCount, overrides = {} }: Canonical
     setMaidCount: (value: number) => setField("maidCount", value),
     hourCount: draft.hourCount,
     setHourCount: (value: number) => setField("hourCount", value),
+    customPriceCents: draft.customPriceCents,
+    setCustomPriceCents: (value: number | undefined) => setField("customPriceCents", value),
     condition: draft.condition,
     setCondition: (value: number) => setField("condition", value),
     frequency: draft.frequency,

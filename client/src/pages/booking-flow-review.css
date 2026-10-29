@@ -3132,8 +3132,7 @@
   font-weight: 800;
 }
 .booking-card-acceptance-fields input,
-.booking-card-element-shell,
-.booking-card-preview-field {
+.booking-card-element-shell {
   display: flex;
   align-items: center;
   width: 100%;
@@ -3162,25 +3161,6 @@
 .booking-card-element-shell:focus-within {
   border-color: #e66b4b;
   box-shadow: 0 0 0 4px rgba(230, 107, 75, 0.13);
-}
-.booking-card-preview-field {
-  color: #8d8780;
-}
-.booking-card-preview-number {
-  gap: 11px;
-  color: #55504a;
-  letter-spacing: 0.08em;
-}
-.booking-card-preview-number > svg {
-  width: 20px;
-  color: #df6a4d;
-}
-.booking-card-preview-number i {
-  margin-left: auto;
-  color: #8d8780;
-  font-size: 12px;
-  font-style: normal;
-  letter-spacing: 0;
 }
 .booking-card-acceptance-submit {
   display: flex;
@@ -5528,26 +5508,6 @@ button.booking-card-acceptance-submit:disabled {
   font-size: 12px;
   line-height: 1.5;
 }
-.literal-book-page-five .literal-book-card-preview {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 16px 0 0 31px;
-  padding: 13px;
-  border: 1px solid #e1dcd8;
-  border-radius: 12px;
-  background: #fff;
-  color: #777;
-  font-size: 13px;
-}
-.literal-book-page-five .literal-book-card-preview svg {
-  width: 15px;
-  height: 15px;
-}
-.literal-book-page-five .literal-book-card-preview small {
-  margin-left: auto;
-  font-size: 11px;
-}
 .literal-book-page-five .literal-book-card-detail {
   margin: 16px 0 0 31px;
   padding-top: 15px;
@@ -5850,8 +5810,7 @@ button.booking-card-acceptance-submit:disabled {
   }
 }
 @media (max-width: 540px) {
-  .literal-book-page-five .literal-book-card-detail,
-  .literal-book-page-five .literal-book-card-preview {
+  .literal-book-page-five .literal-book-card-detail {
     margin-left: 0;
   }
 }

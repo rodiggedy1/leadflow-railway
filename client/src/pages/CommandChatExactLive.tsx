@@ -198,6 +198,7 @@ type QuoteAssistantFields = {
   condition: number | null;
   extras: Array<{ id: string; quantity: number }> | null;
   extrasConfirmed?: boolean;
+  customPriceDollars?: string;
 };
 
 const QUOTE_EXTRA_OPTIONS = [
@@ -797,10 +798,10 @@ function Avatar({ name, photoUrl, className = "" }: { name: string; photoUrl?: s
 }
 
 type AgentPerformanceSnapshot = {
-  range: "today" | "week" | "month";
+  range: "week" | "month";
   dateFrom: string;
   dateTo: string;
-  leadsClaimed: number;
+  leadsAssigned: number;
   bookedCount: number;
   bookedRevenue: number;
   conversionRate: number;
@@ -835,6 +836,7 @@ function leadCardStatus(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
 }
 
 function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, callPending, bridgePending, onClaim, onUnclaim, onMarkBooked, onUnbook, onCall, onTestBridge, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; callPending: boolean; bridgePending: boolean; onClaim: (lead: CommandLead) => void; onUnclaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onUnbook: (lead: CommandLead) => void; onCall: (lead: CommandLead) => void; onTestBridge: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
+
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
   useEffect(() => {
@@ -844,7 +846,7 @@ function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingP
   const renderLeadCard = (lead: CommandLead) => { const status = leadCardStatus(lead, smsInbox); const conversation = leadCardConversation(lead, smsInbox); return <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}${status.kind === "booked" ? " is-booked" : ""}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
     <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em className={`is-${status.kind}`}><i /> <span>{status.label}</span><time>{formatRelative(status.ts)}</time></em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
     <div className="ccc-live-lead-activity"><span>Received {formatRelative(lead.receivedAt ?? lead.ts)}</span>{conversation?.calledAt && <span>Called {formatRelative(conversation.calledAt)}</span>}</div>
-    {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><button type="button" aria-label={`Call ${lead.name} through office`} title="Call through office" disabled={callPending} onClick={(event) => { event.stopPropagation(); onCall(lead); }}><PhoneCall /></button></div></div>}
+    {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><button type="button" aria-label={`Call ${lead.name} through office`} title="Call through office" disabled={callPending} onClick={(event) => { event.stopPropagation(); onCall(lead); }}><Phone /></button></div></div>}
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
     <div className="ccc-live-lead-chip-row">{[lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
@@ -866,7 +868,7 @@ function LeadDetailPanel({ lead, onClose, onClaim, onUnclaim, claimPending, book
       <header><div><small>LEAD DETAILS</small><h2>{lead.name}</h2><p>{lead.sourceLabel} · {formatRelative(lead.ts)}</p></div><button type="button" aria-label="Close lead details" onClick={onClose}><X /></button></header>
       <div className="ccc-lead-detail-scroll">
         <div className="ccc-lead-detail-hero"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><div><strong>{lead.serviceType || lead.detail}</strong><span><i />New inquiry</span></div></div>
-        {lead.phone && <div className="ccc-lead-detail-phone"><div><Phone /><strong>{formatPhoneDisplay(lead.phone)}</strong><small>Customer phone · Provided by {lead.sourceLabel}</small></div><span><button type="button" aria-label="Copy phone" onClick={() => onCopyPhone(lead.phone!)}><Copy /></button><a href={`tel:${lead.phone}`} aria-label={`Call ${lead.name}`}><Phone /></a></span></div>}
+        {lead.phone && <div className="ccc-lead-detail-phone"><div><Phone /><strong>{formatPhoneDisplay(lead.phone)}</strong><small>Customer phone · Provided by {lead.sourceLabel}</small></div><span><button type="button" aria-label="Copy phone" onClick={() => onCopyPhone(lead.phone!)}><Copy /></button><button type="button" aria-label={`Call ${lead.name} through office`} onClick={() => onTestBridge(lead)} disabled={bridgePending}><Phone /></button></span></div>}
         <div className="ccc-live-lead-chip-row">{[lead.serviceType, lead.requestedDates, lead.homeSize || (lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms), lead.propertyType, lead.frequency, lead.status, lead.leadPrice, lead.negotiationId && `Negotiation ${lead.negotiationId}`, ...lead.extras].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
         <section className="ccc-lead-detail-section"><h3><ClipboardList />Lead info</h3><dl>
           {lead.negotiationId && <><dt>Negotiation ID</dt><dd>{lead.negotiationId}</dd></>}
@@ -959,7 +961,9 @@ export default function CommandChatExactLive() {
   const utils = trpc.useUtils();
   const { data: agentMe, isLoading: agentLoading, isError: agentError, refetch: refetchAgent } = trpc.agents.me.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
-    retry: false,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 4000),
+    refetchOnWindowFocus: true,
   });
   const isAuthenticated = Boolean(agentMe);
   const callerName = agentMe?.name || "MIB Team";
@@ -1189,8 +1193,9 @@ export default function CommandChatExactLive() {
   });
   const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: (result) => { setModal(null); setBookingPerson(""); setBookingAmount(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); if (result.manualHeaderBooking) { void utils.bookings.todayStats.invalidate(); void utils.commandCenter.getAgentPerformance.invalidate(); } } });
   const markLeadBookedMutation = trpc.opsChat.markLeadBooked.useMutation();
-  const callLeadMutation = trpc.commandCenter.callLead.useMutation();
   const testBridgeMutation = trpc.commandCenter.startTwilioLeadBridge.useMutation();
+  const callLeadMutation = testBridgeMutation;
+
   const acknowledgeSuperAlert = trpc.opsChat.acknowledgeSuperAlert.useMutation({
     onSuccess: () => { void utils.opsChat.getPendingSuperAlerts.invalidate(); },
     onError: () => showNotice("Super Alert could not be acknowledged. Please try again."),
@@ -1227,7 +1232,6 @@ export default function CommandChatExactLive() {
     { agentId: selectedAgentPerformanceId ?? 0, agentName: selectedAgentPerformanceName, range: agentPerformanceRange },
     { enabled: isAuthenticated && selectedAgentPerformanceId !== null && selectedAgentPerformanceId > 0 && Boolean(selectedAgentPerformanceName), staleTime: 30_000, refetchInterval: 60_000 },
   );
-  const { data: agentsWithBookingsToday } = trpc.commandCenter.getAgentsWithBookingsToday.useQuery(undefined, { enabled: isAuthenticated, staleTime: 30_000, refetchInterval: 60_000 });
   const rootMessages = useMemo(() => (channelMessages as ChannelMessage[]).filter((message) => !message.threadParentId), [channelMessages]);
   const pendingRootMessages = useMemo(
     () => pendingOutgoingMessages.filter((pending) => !rootMessages.some((persisted) => (
@@ -1456,8 +1460,8 @@ export default function CommandChatExactLive() {
   const callLeadFromQueue = useCallback(async (lead: CommandLead) => {
     if (!lead.phone || callLeadMutation.isPending) return;
     try {
-      await callLeadMutation.mutateAsync({ leadPhone: lead.phone, leadName: lead.name, serviceType: lead.serviceType, sessionId: lead.sessionId });
-      showNotice(`Calling the office to connect with ${lead.name}.`);
+      await callLeadMutation.mutateAsync({ leadPhone: lead.phone, leadName: lead.name, sessionId: lead.sessionId });
+      showNotice(`Office bridge started for ${lead.name}.`);
     } catch (error) {
       showNotice(error instanceof Error ? `Call could not be started: ${error.message}` : "Call could not be started.");
     }
@@ -1466,11 +1470,12 @@ export default function CommandChatExactLive() {
     if (!lead.phone || testBridgeMutation.isPending) return;
     try {
       await testBridgeMutation.mutateAsync({ leadPhone: lead.phone, leadName: lead.name, sessionId: lead.sessionId });
-      showNotice(`Office bridge started for ${lead.name}. Answer the office call and press 1.`);
+      showNotice(`Office bridge started for ${lead.name}.`);
     } catch (error) {
       showNotice(error instanceof Error ? `Office bridge could not start: ${error.message}` : "Office bridge could not start.");
     }
   }, [showNotice, testBridgeMutation]);
+
   const openSmsDrawerFromLead = useCallback((lead: CommandLead) => {
     const inboxConversation = smsInbox.find((conversation) => (
       (lead.sessionId !== null && conversation.id === lead.sessionId)
@@ -1703,7 +1708,8 @@ export default function CommandChatExactLive() {
 
 
   if (agentLoading) return <main className="ccc-app ccc-live-loading"><Loader2 className="animate-spin" /></main>;
-  if (agentError || !agentMe) return <LoginGate onSuccess={() => void refetchAgent()} />;
+  if (agentError && !agentMe) return <main className="ccc-app ccc-live-login"><div className="ccc-static-modal"><header><div><MessageSquare /><span><strong>MIB Command</strong><small>Unable to verify your session right now</small></span></div></header><p className="ccc-live-login-error">The connection to the account service was interrupted. Your session was not signed out.</p><footer><button type="button" onClick={() => void refetchAgent()}><RefreshCw />Try again</button></footer></div></main>;
+  if (!agentMe) return <LoginGate onSuccess={() => void refetchAgent()} />;
 
   return (
     <main className="ccc-app ccc-widget-app ccc-live" aria-label="MIB Command workspace">
@@ -1735,9 +1741,9 @@ export default function CommandChatExactLive() {
   <BarChart3 /> <b>{selectedAgentPerformanceName}</b>{selectedAgentPerformanceId !== null && <span className="ccc-header-booking-popover" role="tooltip">
     <strong>{selectedAgentPerformanceName}</strong>
     <span className="ccc-agent-performance-ranges" role="group" aria-label="Performance date range">{(["today", "week", "month"] as const).map((option) => <button type="button" className={`ccc-agent-performance-range ${agentPerformanceRange === option ? "active" : ""}`} aria-pressed={agentPerformanceRange === option} key={option} aria-label={`Show ${option} performance`} onClick={() => setAgentPerformanceRange(option)}>{option === "today" ? "Today" : option === "week" ? "This week" : "This month"}</button>)}</span>
-    {agentPerformanceLoading && !selectedAgentPerformance ? <span className="ccc-header-booking-row"><span><b>Loading metrics…</b></span></span> : selectedAgentPerformance ? <><span className="ccc-header-booking-row"><span><b>Bookings</b><small>{performanceDateLabel(selectedAgentPerformance.dateFrom)} – {performanceDateLabel(selectedAgentPerformance.dateTo)}</small></span><em>{selectedAgentPerformance.bookedCount}</em></span><span className="ccc-header-booking-row"><span><b>Conversion</b><small>Claimed leads</small></span><em>{selectedAgentPerformance.conversionRate}%</em></span><span className="ccc-header-booking-row"><span><b>Revenue</b><small>{selectedAgentPerformance.leadsClaimed} claimed leads</small></span><em>${selectedAgentPerformance.bookedRevenue.toLocaleString()}</em></span></> : <span className="ccc-header-booking-row"><span><b>No metrics available</b></span></span>}
+    {agentPerformanceLoading ? <span className="ccc-header-booking-row"><span><b>Loading metrics…</b></span></span> : selectedAgentPerformance ? <><span className="ccc-header-booking-row"><span><b>Bookings</b><small>{performanceDateLabel(selectedAgentPerformance.dateFrom)} – {performanceDateLabel(selectedAgentPerformance.dateTo)}</small></span><em>{selectedAgentPerformance.bookedCount}</em></span><span className="ccc-header-booking-row"><span><b>Conversion</b><small>Claimed leads</small></span><em>{selectedAgentPerformance.conversionRate}%</em></span><span className="ccc-header-booking-row"><span><b>Revenue</b><small>{selectedAgentPerformance.leadsClaimed} claimed leads</small></span><em>${selectedAgentPerformance.bookedRevenue.toLocaleString()}</em></span></> : <span className="ccc-header-booking-row"><span><b>No metrics available</b></span></span>}
   </span>}
-</span>}<span className="ccc-header-metric-money"><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today</span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => openIssueEngine()}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-header-metric-bookings ccc-header-booking-hover ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}${agentsWithBookingsToday?.agentIds.includes(agent.id) || agentsWithBookingsToday?.agentNames.includes(agent.name) ? " · booked today" : ""}`} style={{ zIndex: headerAgentPresence.length - index }}><button type="button" className="ccc-live-presence-trigger" aria-label={`View ${agent.name} performance`} aria-expanded={selectedAgentPerformanceId === agent.id} onMouseEnter={() => { void utils.commandCenter.getAgentPerformance.prefetch({ agentId: agent.id, agentName: agent.name, range: "week" }, { staleTime: 30_000 }); }} onFocus={() => { void utils.commandCenter.getAgentPerformance.prefetch({ agentId: agent.id, agentName: agent.name, range: "week" }, { staleTime: 30_000 }); }} onClick={() => setSelectedAgentPerformanceId((current) => current === agent.id ? null : agent.id)}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /></button>{(agentsWithBookingsToday?.agentIds.includes(agent.id) || agentsWithBookingsToday?.agentNames.includes(agent.name)) && <span className="ccc-presence-booking-badge" aria-hidden="true"><Check /></span>}<i aria-hidden="true" /></span>)}</div></div></div></div>
+</span>}<span className="ccc-header-metric-money"><CircleDollarSign /><b>${todayRevenue.toLocaleString()}</b> Today</span><button type="button" className="ccc-header-metric-control ccc-header-metric-issues" onClick={() => openIssueEngine()}><AlertTriangle /><b>{openIssues.length}</b> Issues</button><button type="button" className="ccc-header-metric-control ccc-header-metric-mentions" disabled={!metrics.mentions} aria-label="Open next unread mention" onClick={focusNextMention}><Bell /><b>{metrics.mentions}</b></button></div></div></div><div className="ccc-reference-chat-actions"><div className="ccc-presence ccc-live-header-presence" aria-label="Active command participants">{headerAgentPresence.map((agent, index) => <span className={`ccc-live-presence-agent ccc-live-presence-${agent.presence}`} key={agent.id} title={`${agent.name} — ${agent.presence === "on-call" ? "on a call" : agent.presence}`} style={{ zIndex: headerAgentPresence.length - index }}><button type="button" className="ccc-live-presence-trigger" aria-label={`View ${agent.name} performance`} aria-expanded={selectedAgentPerformanceId === agent.id} onClick={() => setSelectedAgentPerformanceId((current) => current === agent.id ? null : agent.id)}><Avatar name={agent.name} photoUrl={agent.photoUrl} className="ccc-presence-portrait" /></button><i aria-hidden="true" /></span>)}</div></div></div></div>
             <>
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Remove pinned note" disabled={dismissPin.isPending} onClick={() => dismissPin.mutate({ channel })}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
@@ -2383,6 +2389,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const [smsAutoDraftLoading, setSmsAutoDraftLoading] = useState(false);
   const [smsAutoDraftReady, setSmsAutoDraftReady] = useState(false);
   const [smsAutoDraftText, setSmsAutoDraftText] = useState("");
+  const [smsAutoDraftMinimized, setSmsAutoDraftMinimized] = useState(false);
   const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);
   const [quoteAssistantOpen, setQuoteAssistantOpen] = useState(false);
   const [quoteAssistantFields, setQuoteAssistantFields] = useState<QuoteAssistantFields | null>(null);
@@ -2496,8 +2503,15 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
           }
         }
       }
+      if (!accumulated.trim()) {
+        if (smsAutoDraftSessionIdRef.current !== conversation.id) return;
+        setSmsAutoDraftText("");
+        setSmsAutoDraftLoading(true);
+        smsAutoDraft.mutate(request);
+        return;
+      }
       if (smsAutoDraftSessionIdRef.current === conversation.id) {
-        setSmsAutoDraftReady(Boolean(accumulated.trim()));
+        setSmsAutoDraftReady(true);
         setSmsAutoDraftLoading(false);
       }
       if (smsAutoDraftAbortRef.current === controller) smsAutoDraftAbortRef.current = null;
@@ -2521,7 +2535,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   }, [smsAutoDraftText]);
   const prepareQuoteAssistant = trpc.commandCenter.prepareQuoteAssistant.useMutation({
     onSuccess: (result) => {
-      setQuoteAssistantFields(result.quoteInputs);
+      setQuoteAssistantFields({ ...result.quoteInputs, condition: result.quoteInputs.condition ?? 5 });
       setQuoteAssistantMissing(result.missing);
       setQuoteAssistantPrice(result.priceDollars);
       setQuoteAssistantError("");
@@ -2565,6 +2579,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     setSmsAutoDraftReady(false);
     setSmsAutoDraftText("");
     setSmsAutoDraftLoading(false);
+    setSmsAutoDraftMinimized(false);
     setQuoteAssistantOpen(false);
     setQuoteAssistantFields(null);
     setQuoteAssistantMissing([]);
@@ -2648,7 +2663,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     })}</div>
     <footer>
       {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
-      {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className="ccc-live-sms-ai-draft-card"><header><span><Sparkles />World-class draft</span><small>Review before sending</small></header><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></article>}
+      {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className={`ccc-live-sms-ai-draft-card ${smsAutoDraftMinimized ? "is-minimized" : ""}`}><header><span><Sparkles />World-class draft</span><small>Review before sending</small><button type="button" className="ccc-live-sms-ai-draft-toggle" aria-label={smsAutoDraftMinimized ? "Expand world-class draft" : "Minimize world-class draft"} aria-expanded={!smsAutoDraftMinimized} title={smsAutoDraftMinimized ? "Expand draft" : "Minimize draft"} onClick={() => setSmsAutoDraftMinimized((value) => !value)}><ChevronDown /></button></header>{!smsAutoDraftMinimized && <><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></>}</article>}
       <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onChange={(event) => setDraft(event.target.value)} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
     {quoteAssistantOpen && quoteAssistantFields && <QuoteAssistantModal
@@ -2673,11 +2688,12 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
           bedrooms: Number.parseInt(quoteAssistantFields.bedrooms || "0", 10),
           bathrooms: Number.parseInt(quoteAssistantFields.bathrooms || "1", 10),
           homeType: quoteHomeType(lead?.propertyType || null),
-          condition: quoteAssistantFields.condition || 5,
+          condition: quoteAssistantFields.condition ?? 5,
           maidCount: 1,
           hourCount: 1,
           extras: quoteAssistantFields.extras || [],
           recurrence: "one-time",
+          ...(quoteAssistantFields.customPriceDollars?.trim() ? { customPriceCents: Math.round(Number(quoteAssistantFields.customPriceDollars) * 100) } : {}),
         },
         notes: [lead?.summary, lead?.description, lead?.detail].filter((value): value is string => Boolean(value?.trim())),
       })}
@@ -2704,6 +2720,9 @@ function QuoteAssistantModal({ customerName, customerPhone, fields, initialMissi
     !fields.condition && "condition",
     !(fields.extrasConfirmed || fields.extras !== null) && "extras",
   ].filter((value): value is string => Boolean(value));
+  const customPriceDollars = fields.customPriceDollars?.trim() ?? "";
+  const customPriceCents = customPriceDollars === "" ? undefined : Math.round(Number(customPriceDollars) * 100);
+  const customPriceInvalid = customPriceDollars !== "" && (customPriceCents === undefined || !Number.isFinite(customPriceCents) || customPriceCents < 1 || customPriceCents > 1_000_000);
   const toggleExtra = (id: string, checked: boolean) => {
     const extras = fields.extras ?? [];
     onFieldsChange({
@@ -2721,12 +2740,14 @@ function QuoteAssistantModal({ customerName, customerPhone, fields, initialMissi
         <label>Bathrooms<input value={fields.bathrooms ?? ""} onChange={(event) => onFieldsChange({ ...fields, bathrooms: event.target.value || null })} placeholder="e.g. 1 Bathroom" /></label>
         <label>Cleaning type<select value={fields.serviceType ?? ""} onChange={(event) => onFieldsChange({ ...fields, serviceType: event.target.value || null })}><option value="">Select type</option><option>Standard Cleaning</option><option>Deep Cleaning</option><option>Move-In / Move-Out Cleaning</option></select></label>
         <label>Home condition (1–10)<input type="number" min="1" max="10" value={fields.condition ?? ""} onChange={(event) => onFieldsChange({ ...fields, condition: event.target.value ? Number(event.target.value) : null })} placeholder="5" /></label>
+        <label>Custom first-cleaning amount (optional)<input type="number" min="1" max="10000" step="0.01" value={fields.customPriceDollars ?? ""} onChange={(event) => onFieldsChange({ ...fields, customPriceDollars: event.target.value })} placeholder={priceDollars !== null ? priceDollars.toFixed(2) : "0.00"} /></label>
       </div>
       <fieldset className="ccc-live-quote-assistant-extras"><legend>Included add-ons</legend>{QUOTE_EXTRA_OPTIONS.map(([id, label]) => <label key={id}><input type="checkbox" checked={Boolean(fields.extras?.some((extra) => extra.id === id))} onChange={(event) => toggleExtra(id, event.target.checked)} />{label}</label>)}<label><input type="checkbox" checked={fields.extrasConfirmed === true && fields.extras?.length === 0} onChange={(event) => { if (event.target.checked) onFieldsChange({ ...fields, extras: [], extrasConfirmed: true }); }} />No add-ons</label></fieldset>
-      {priceDollars !== null && currentMissing.length === 0 && <div className="ccc-live-quote-assistant-price">Verified first-cleaning price <strong>${priceDollars.toFixed(0)}</strong></div>}
+      {priceDollars !== null && currentMissing.length === 0 && !customPriceInvalid && <div className="ccc-live-quote-assistant-price">{customPriceCents !== undefined ? "Custom first-cleaning price" : "Verified first-cleaning price"}<strong>${((customPriceCents ?? priceDollars * 100) / 100).toFixed(0)}</strong></div>}
       {currentMissing.length > 0 && <p className="ccc-live-quote-assistant-missing">Review required: {currentMissing.join(", ")}. {initialMissing.length > 0 && "AI left these blank because they were not explicit in the conversation."}</p>}
+      {customPriceInvalid && <p className="ccc-live-quote-assistant-error" role="alert">Enter a valid amount between $1 and $10,000.</p>}
       {error && <p className="ccc-live-quote-assistant-error" role="alert">{error}</p>}
-      <footer><button type="button" onClick={onClose}>Cancel</button><button type="button" className="ccc-live-quote-assistant-create" disabled={pending || !customerPhone.trim() || currentMissing.length > 0} onClick={onCreate}>{pending ? <Loader2 className="animate-spin" /> : <Sparkles />}{pending ? "Creating…" : "Create quote & add SMS"}</button></footer>
+      <footer><button type="button" onClick={onClose}>Cancel</button><button type="button" className="ccc-live-quote-assistant-create" disabled={pending || !customerPhone.trim() || currentMissing.length > 0 || customPriceInvalid} onClick={onCreate}>{pending ? <Loader2 className="animate-spin" /> : <Sparkles />}{pending ? "Creating…" : "Create quote & add SMS"}</button></footer>
     </section>
   </div>;
 }

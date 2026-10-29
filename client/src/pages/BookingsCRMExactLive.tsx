@@ -1522,18 +1522,10 @@ function ExactBookingsCRMShell({ model }: { model: any }) {
             <button
               type="button"
               className="bcr-new-booking"
-              onClick={() => setNewBookingOpen(true)}
+              onClick={() => window.location.assign("/review/internal-booking")}
             >
               <Plus size={14} />
               New booking
-            </button>
-            <button
-              type="button"
-              className="bcr-new-quote"
-              onClick={() => setNewQuoteOpen(true)}
-            >
-              <Plus size={14} />
-              New quote
             </button>
             <button
               type="button"

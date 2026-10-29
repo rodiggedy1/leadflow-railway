@@ -274,27 +274,31 @@
 .ccc-live-quote-assistant-modal footer .ccc-live-quote-assistant-create { border-color:rgba(103,214,161,.4); background:#267b5f; color:#f2fff8; }
 .ccc-live-quote-assistant-modal footer button:disabled { opacity:.55; cursor:not-allowed; }
 @media (max-width:560px) { .ccc-live-quote-assistant-grid,.ccc-live-quote-assistant-extras { grid-template-columns:1fr; } .ccc-live-quote-assistant-extras legend { grid-column:auto; } .ccc-live-quote-assistant-customer { flex-direction:column; gap:4px; } }
-.ccc-live-test-bridge-button { border-color: rgba(74,222,128,.35); color: #b8f7cc; background: rgba(22,101,52,.24); }
-.ccc-live-test-bridge-button:hover:not(:disabled) { border-color: rgba(74,222,128,.6); background: rgba(22,101,52,.38); }
+
+/* World-Class Draft collapse control: display-only, preserves existing draft actions. */
+.ccc-live-sms-ai-draft-card>header{position:relative}
+.ccc-live-sms-ai-draft-toggle{display:grid;place-items:center;width:22px;height:22px;margin-left:auto;padding:0;border:1px solid rgba(255,255,255,.12);border-radius:6px;background:rgba(255,255,255,.05);color:#cfc5ef;cursor:pointer}
+.ccc-live-sms-ai-draft-toggle:hover{background:rgba(255,255,255,.12);color:#fff}
+.ccc-live-sms-ai-draft-toggle svg{width:13px;height:13px;transition:transform .16s ease}
+.ccc-live-sms-ai-draft-card.is-minimized .ccc-live-sms-ai-draft-toggle svg{transform:rotate(-90deg)}
+.ccc-live-sms-ai-draft-card.is-minimized{gap:0}
 
 .ccc-live .ccc-live-lead-primary-contact>span { gap:9px; color:#d6eee4; font-size:13px; font-weight:700; letter-spacing:.1px; }
 .ccc-live .ccc-live-lead-primary-contact>span svg { width:19px; height:19px; color:#63d7ad; }
+.ccc-live-test-bridge-button { border-color: rgba(74,222,128,.35); color: #b8f7cc; background: rgba(22,101,52,.24); }
+.ccc-live-test-bridge-button:hover:not(:disabled) { border-color: rgba(74,222,128,.6); background: rgba(22,101,52,.38); }
 
 /* Team avatar performance popover: read-only metrics, no changes to presence behavior. */
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger{display:grid;place-items:center;width:25px;height:25px;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer;}
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger:focus-visible{outline:2px solid #45d8a4;outline-offset:2px;}
 .ccc-widget-app .ccc-live-header-presence .ccc-live-presence-trigger:hover .ccc-presence-portrait{border-color:#45d8a4;}
-.ccc-widget-app .ccc-live .ccc-center-panel{overflow:visible;}
 
-/* Performance range controls: horizontal and visibly selected; no other dropdown behavior changes. */
+
+/* Performance range controls: horizontal and visibly selected. */
 .ccc-widget-app .ccc-agent-performance-ranges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:0 0 8px;padding:3px;border-radius:7px;background:#1c1c1f}
 .ccc-widget-app .ccc-agent-performance-range{min-width:0;padding:6px 4px;border:0;border-radius:5px;background:transparent;color:#aaa7ad;font-size:10px;font-weight:760;line-height:12px;white-space:nowrap;cursor:pointer}
 .ccc-widget-app .ccc-agent-performance-range:hover,.ccc-widget-app .ccc-agent-performance-range:focus-visible{color:#f1eff0;background:#302f34}
 .ccc-widget-app .ccc-agent-performance-range.active{background:#3a3a40;color:#bff5df;box-shadow:inset 0 0 0 1px rgba(69,216,164,.55)}
-
-.ccc-widget-app .ccc-live-header-presence .ccc-presence-booking-badge{position:absolute;top:-3px;right:-3px;display:grid;place-items:center;width:9px;height:9px;border:1.5px solid #1b1b1d;border-radius:50%;background:#dfc27d;color:#242326;pointer-events:none;z-index:2}
-.ccc-widget-app .ccc-live-header-presence .ccc-presence-booking-badge svg{width:6px;height:6px;stroke-width:3}
-@media(max-width:1120px){.ccc-widget-app .ccc-live-header-presence .ccc-presence-booking-badge{top:-2px;right:-2px;width:8px;height:8px}.ccc-widget-app .ccc-live-header-presence .ccc-presence-booking-badge svg{width:5px;height:5px}}
 
 /* Additive lead activity timestamps. */
 .ccc-live .ccc-live-lead-activity{display:flex;flex-wrap:wrap;gap:4px 10px;margin:5px 0 8px;color:#96969f;font-size:9px;line-height:1.3}

@@ -3231,17 +3231,70 @@ export const syncCsOutboundMessages = syncAllOutboundMessages;
 //   }
 // ─────────────────────────────────────────────────────────────────────────────
 
+async function markOutboundOpenPhoneCall(db: Awaited<ReturnType<typeof getDb>>, call: any, eventType: string): Promise<void> {
+  const isOutbound = call?.direction === "outgoing" || eventType === "call.initiated";
+  if (!db || !isOutbound) return;
+  const rawDestination = Array.isArray(call?.to) ? call.to[0] : call?.to;
+  const destination = typeof rawDestination === "string" ? rawDestination : null;
+  const normalizedDestination = destination ? normalizePhone(destination) : null;
+  if (!normalizedDestination) return;
+  const providerStartedAt = typeof call?.createdAt === "string" ? new Date(call.createdAt) : new Date();
+  const callStartedAt = Number.isNaN(providerStartedAt.getTime()) ? new Date() : providerStartedAt;
+  const [matchedSession] = await db
+    .select({ id: conversationSessions.id })
+    .from(conversationSessions)
+    .where(sql`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) = ${normalizedDestination.replace(/[^0-9]/g, "").slice(-10)}`)
+    .orderBy(desc(conversationSessions.updatedAt))
+    .limit(1);
+  if (!matchedSession) return;
+  await db.execute(sql`
+    UPDATE conversation_sessions
+    SET lastCalledAt = CASE
+      WHEN lastCalledAt IS NULL OR lastCalledAt < ${callStartedAt} THEN ${callStartedAt}
+      ELSE lastCalledAt
+    END
+    WHERE id = ${matchedSession.id}
+  `);
+  console.log(`[CallStatus] Updated outbound lastCalledAt for session ${matchedSession.id} (phone=${normalizedDestination}, event=${eventType})`);
+  const { broadcastOpsUpdate } = await import("./sseBroadcast");
+  broadcastOpsUpdate("lead_update");
+}
+
+function normalizeOpenPhoneCallEvent(event: any): any | null {
+  const resource = event?.data?.resource ?? event?.data?.object;
+  const context = event?.data?.context ?? {};
+  const externalParticipants = Array.isArray(context?.participants?.external)
+    ? context.participants.external
+    : [];
+  return resource
+    ? {
+        ...resource,
+        id: resource.id,
+        userId: resource.userId ?? resource.answeredByUserId ?? context.userId,
+        answeredBy: resource.answeredBy ?? resource.answeredByUserId ?? context.userId,
+        initiatedBy: resource.initiatedBy ?? context.userId,
+        phoneNumberId: resource.phoneNumberId ?? context.phoneNumberId,
+        participants: Array.isArray(resource.participants)
+          ? resource.participants
+          : externalParticipants,
+        from: resource.from ?? (resource.direction === "incoming" ? externalParticipants[0] : undefined),
+        to: resource.to ?? (resource.direction === "outgoing" ? externalParticipants : undefined),
+      }
+    : null;
+}
+
 async function handleCallAnswered(event: any): Promise<void> {
-  const call = event?.data?.object;
+  const call = normalizeOpenPhoneCallEvent(event);
   if (!call?.id) return;
+  const db = await getDb();
+  if (!db) return;
+  await markOutboundOpenPhoneCall(db, call, event?.type);
   // userId identifies the agent who answered (or initiated for outgoing)
   const opUserId: string | undefined = call.userId ?? call.answeredBy ?? call.initiatedBy;
   if (!opUserId) {
     console.log(`[CallStatus] call.answered: no userId in payload, skipping (type=${event?.type})`);
     return;
   }
-  const db = await getDb();
-  if (!db) return;
   // Find the agent by openPhoneUserId
   const [agent] = await db
     .select({ id: agents.id, name: agents.name, onCallCallId: agents.onCallCallId })
@@ -3391,10 +3444,11 @@ async function handleCallAnswered(event: any): Promise<void> {
 }
 
 async function handleCallCompleted(event: any): Promise<void> {
-  const call = event?.data?.object;
+  const call = normalizeOpenPhoneCallEvent(event);
   if (!call?.id) return;
   const db = await getDb();
   if (!db) return;
+  await markOutboundOpenPhoneCall(db, call, event?.type);
 
   const callId: string = call.id;
   const direction: string = call.direction ?? "incoming";

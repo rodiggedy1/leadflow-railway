@@ -62,7 +62,7 @@
 @media(max-width:620px){
   .customer-link-step-booking .customer-link-section-heading h2{font-size:29px}
   .customer-link-step-booking .customer-link-section-heading p{margin-top:17px;font-size:20px}
-  .customer-link-step-booking .customer-link-date-options{grid-template-columns:1fr}
+  .customer-link-step-booking .customer-link-date-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
   .customer-link-step-booking .customer-link-option{min-height:126px;padding:28px 25px;border-radius:22px}
   .customer-link-step-booking .customer-link-option b{font-size:23px}
   .customer-link-step-booking .customer-link-option small{margin-top:13px;font-size:17px}
@@ -83,7 +83,7 @@
 .customer-link-step-booking .customer-link-time-options .customer-link-option small{margin-top:6px;color:#817b74;font-size:14px;line-height:1.25}
 .customer-link-step-booking .customer-link-time-options .customer-link-option em{margin-top:7px;color:#684326;font-size:14px;line-height:1.2}
 @media(max-width:620px){
-  .customer-link-step-booking .customer-link-date-options{grid-template-columns:1fr}
+  .customer-link-step-booking .customer-link-date-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
   .customer-link-step-booking .customer-link-time-options{grid-template-columns:1fr 1fr}
   .customer-link-step-booking .customer-link-date-options .customer-link-option,
   .customer-link-step-booking .customer-link-time-options .customer-link-option{min-height:88px;padding:20px 18px}
@@ -165,4 +165,29 @@
   .customer-link-step-booking .customer-link-date-options{grid-template-columns:minmax(0,1fr);width:100%}
   .customer-link-step-booking .customer-link-date-options .customer-link-option{box-sizing:border-box;width:100%;min-width:0}
   .customer-link-step-booking .customer-link-date-options .customer-link-option:first-child.is-selected b{white-space:normal}
+}
+
+/* Mobile overflow guard: keep selected dates and badges inside the card width. */
+@media(max-width:620px){
+  .customer-link-step-booking .customer-link-date-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .customer-link-step-booking .customer-link-time-options{grid-template-columns:1fr 1fr}
+  .customer-link-date-options .customer-link-option:first-child b{font-size:14px;white-space:normal;overflow-wrap:anywhere}
+  .customer-link-option{min-width:0;padding:14px 6px!important}
+  .customer-link-option b{font-size:14px!important;line-height:1.1}
+  .customer-link-option small{font-size:11px!important;line-height:1.15}
+  .customer-link-option-badge{width:100%;max-width:100%;margin:-9px 0 6px;padding:4px 2px;font-size:9px;white-space:normal;text-align:center}
+}
+
+/* The best-option treatment follows selection; an unselected first date is a regular card. */
+.customer-link-date-options .customer-link-option:first-child:not(.is-selected){border:1px solid #ddd7d0;background:#fff}
+
+/* Keep browser-autofilled reservation fields consistent with the form instead of Chrome's yellow fill. */
+.customer-link-details input:-webkit-autofill,
+.customer-link-details input:-webkit-autofill:hover,
+.customer-link-details input:-webkit-autofill:focus,
+.customer-link-details input:-webkit-autofill:active{
+  -webkit-text-fill-color:#2d2d2d;
+  -webkit-box-shadow:0 0 0 1000px #fff inset;
+  box-shadow:0 0 0 1000px #fff inset;
+  transition:background-color 9999s ease-in-out 0s;
 }

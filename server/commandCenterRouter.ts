@@ -56,12 +56,6 @@ import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
 import { ENV } from "./_core/env";
 import { startTwilioLeadBridge } from "./twilioLeadBridge";
 import { getUnifiedBookingDetails } from "./unifiedBookingMetrics";
-const MANUAL_LEAD_CALL_VAPI_BASE = "https://api.vapi.ai";
-const MANUAL_LEAD_CALL_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
-const MANUAL_LEAD_CALL_OFFICE_NUMBER = "+12028885362";
-const MANUAL_LEAD_CALL_DEDUP_WINDOW_MS = 30_000;
-const manualLeadCallLocks = new Map<string, number>();
-
 async function markLeadCalled(db: Awaited<ReturnType<typeof getDb>>, sessionId: number | null | undefined, normalizedPhone: string) {
   if (!db) return;
   let targetSessionId = sessionId ?? null;
@@ -78,93 +72,6 @@ async function markLeadCalled(db: Awaited<ReturnType<typeof getDb>>, sessionId: 
     await db.update(conversationSessions)
       .set({ lastCalledAt: new Date() } as any)
       .where(eq(conversationSessions.id, targetSessionId));
-  }
-}
-
-async function placeManualLeadBridgeCall(input: { leadPhone: string; leadName: string; serviceType?: string | null; sessionId?: number | null }) {
-  const normalizedPhone = normalizePhoneStrict(input.leadPhone);
-  if (!normalizedPhone) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "A valid customer phone number is required to call this lead." });
-  }
-  if (!ENV.vapiPrivateKey) {
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "VAPI_PRIVATE_KEY is not configured." });
-  }
-  const previousCallAt = manualLeadCallLocks.get(normalizedPhone);
-  if (previousCallAt && Date.now() - previousCallAt < MANUAL_LEAD_CALL_DEDUP_WINDOW_MS) {
-    throw new TRPCError({ code: "CONFLICT", message: "A call to this lead was just started. Please wait before trying again." });
-  }
-  const lockTimestamp = Date.now();
-  manualLeadCallLocks.set(normalizedPhone, lockTimestamp);
-
-  const firstName = input.leadName.trim().split(/\s+/)[0] || "the client";
-  const service = input.serviceType?.trim() || "cleaning";
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const response = await fetch(`${MANUAL_LEAD_CALL_VAPI_BASE}/call`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${ENV.vapiPrivateKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-      phoneNumberId: MANUAL_LEAD_CALL_PHONE_NUMBER_ID,
-      customer: { number: MANUAL_LEAD_CALL_OFFICE_NUMBER },
-      assistant: {
-        name: "ManualLeadBridge",
-        firstMessage: `You have a lead call for ${firstName} about ${service}. Connecting you now...`,
-        model: {
-          provider: "openai",
-          model: "gpt-4o-mini",
-          messages: [{
-            role: "system",
-            content: "You are a brief bridge system. After the announcement, immediately transfer the office call to the customer using the transferCall tool. Do not send SMS messages.",
-          }],
-          tools: [{
-            type: "transferCall",
-            destinations: [{
-              type: "number",
-              number: normalizedPhone,
-              message: `Connecting you to ${firstName} now...`,
-            }],
-          }],
-        },
-        voice: {
-          provider: "11labs",
-          voiceId: "EXAVITQu4vr4xnSDxMaL",
-          stability: 0.5,
-          similarityBoost: 0.75,
-        },
-        maxDurationSeconds: 120,
-      },
-      }),
-    });
-    if (!response.ok) {
-      const responseBody = await response.text();
-      console.error("[CommandCenter] Manual lead bridge rejected by Vapi", {
-        status: response.status,
-        body: responseBody.slice(0, 2000),
-        leadPhone: normalizedPhone,
-      });
-      throw new TRPCError({ code: "BAD_GATEWAY", message: "The office call could not be started." });
-    }
-    const result = await response.json() as { id?: string };
-    await markLeadCalled(await getDb(), input.sessionId, normalizedPhone);
-    return { success: true, callId: result.id ?? null };
-  } catch (error) {
-    console.error("[CommandCenter] Manual lead bridge request failed", {
-      leadPhone: normalizedPhone,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-    setTimeout(() => {
-      if (manualLeadCallLocks.get(normalizedPhone) === lockTimestamp) {
-        manualLeadCallLocks.delete(normalizedPhone);
-      }
-    }, MANUAL_LEAD_CALL_DEDUP_WINDOW_MS);
   }
 }
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -394,15 +301,6 @@ export const commandCenterRouter = router({
       sessionId: z.number().int().nullable().optional(),
     }))
     .mutation(async ({ input }) => startTwilioLeadBridge(input)),
-
-  callLead: agentProcedure
-    .input(z.object({
-      leadPhone: z.string().min(1),
-      leadName: z.string().trim().min(1),
-      serviceType: z.string().nullable().optional(),
-      sessionId: z.number().int().nullable().optional(),
-    }))
-    .mutation(async ({ input }) => placeManualLeadBridgeCall(input)),
 
   listCommandChatInbox: agentProcedure
     .query(async () => {

@@ -57,29 +57,68 @@ describe("approved eight-step public booking flow", () => {
 
   it("opens Stripe card entry directly on the public payment step", () => {
     expect(page).toContain("directCardEntry");
+    expect(page).toContain("<PublicBookingCardSetupBeforeReservation");
+    expect(page).toContain("const showCardEntry = phase === 6 || phase === 7;");
+    expect(page).not.toContain("Continue to secure card setup →");
     expect(checkout).toMatch(/if\s*\(\s*!directCardEntry\s*\|\|/);
     expect(checkout).toContain("PremiumCardSetupForm");
-    expect(checkout).toContain("PremiumCardReviewForm");
+    expect(checkout).toContain("<InternalCardSetupForm");
+    expect(checkout).toContain("onPrepareReservation");
     expect(checkout).toContain("booking-card-acceptance");
-    expect(checkout).not.toContain("Try secure card entry again");
+    expect(checkout).toContain("Secure card entry is temporarily unavailable");
+    expect(checkout).not.toContain("PremiumCardReviewForm");
+    expect(checkout).not.toContain("Card acceptance form preview");
+    expect(page).not.toContain("literal-book-card-preview");
     expect(checkout).toContain("authorizationCopy");
     expect(page).not.toContain("booking-payment-timing");
     expect(page).not.toContain("booking-payment-security");
   });
 
-  it("moves directly to final review after Stripe confirms the card", () => {
-    expect(page).toMatch(
-      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setCardOnFile\(true\);[\s\S]*setStep\(8\);[\s\S]*\}\}/
+  it("finalizes the booking immediately after Stripe confirms the card", () => {
+    const literalCheckoutController = page.slice(
+      page.indexOf("const finalizeConfirmedCard = async () =>"),
+      page.indexOf(
+        '  return (\n    <main className="booking-review-page booking-live-page">'
+      )
     );
+    expect(literalCheckoutController).toMatch(
+      /const finalizeConfirmedCard = async \(\) => \{[\s\S]*finalizeBookingMutation\.mutateAsync\([\s\S]*setComplete\(true\);/
+    );
+    expect(literalCheckoutController).not.toMatch(
+      /const finalizeConfirmedCard = async \(\) => \{\s*if \(step === 8\)/
+    );
+    expect(literalCheckoutController).toMatch(
+      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setCardOnFile\(true\);[\s\S]*void finalizeConfirmedCard\(\);[\s\S]*\}\}/
+    );
+    expect(literalCheckoutController).not.toContain(
+      "onReviewBooking={() => setStep(8)}"
+    );
+    expect(literalCheckoutController).not.toContain("Review booking →");
   });
 
-  it("uses the approved tip and thank-you completion presentation without post-booking add-on UI", () => {
+  it("keeps the active literal checkout out of the obsolete Phase 8 review state", () => {
+    const literalPageFive = page.slice(
+      page.indexOf("function LiteralPageFive("),
+      page.indexOf("\nfunction formatPhoneInput(")
+    );
+    expect(literalPageFive).toContain("phase: 6 | 7;");
+    expect(literalPageFive).not.toContain("showFinalReview");
+    expect(literalPageFive).not.toContain("Review booking →");
+    expect(literalPageFive).not.toContain("onFinalize");
+    expect(literalPageFive).toContain("cardOnFile && formError");
+    expect(literalPageFive).toContain("onRetryFinalization");
+    expect(literalPageFive).toContain("Try confirming booking →");
+  });
+
+  it("takes a completed booking directly to the thank-you presentation without a tip preview or post-booking add-on UI", () => {
     expect(page).toContain("literal-book-page-six");
-    expect(page).toContain("Tip your team");
+    expect(page).toContain('"Confirmation"');
     expect(page).toContain("literal-book-thankyou");
-    expect(page).toContain(
+    expect(page).not.toContain("literal-book-tip-v2");
+    expect(page).not.toContain(
       "Tipping is not collected or recorded in this booking flow."
     );
+    expect(page).not.toContain("No tip, thanks — I&apos;m all set");
     expect(page).not.toContain("POST_BOOKING_UPSELLS");
     expect(page).not.toContain("booking-upsell-modal");
     expect(page).not.toContain("booking-upsell-estimate");
