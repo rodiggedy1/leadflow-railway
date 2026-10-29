@@ -14,7 +14,7 @@ describe("booking Stripe webhook route", () => {
     expect(bootstrap.indexOf("registerStripeWebhookRoute(app)")).toBeLessThan(bootstrap.indexOf("app.use(express.json"));
   });
 
-  it("records and de-duplicates provider events before reconciling only an existing bound profile", () => {
+  it("records and de-duplicates provider events before reconciling an existing bound profile or an existing Apple Pay attempt", () => {
     const webhook = read("server/stripeWebhookRoute.ts");
     expect(webhook).toContain("stripeWebhookEvents");
     expect(webhook).toContain("isDuplicateEntry(error)");
@@ -23,6 +23,9 @@ describe("booking Stripe webhook route", () => {
     expect(webhook).toContain("bookingPaymentProfiles.bookingId, bookingId");
     expect(webhook).toContain("if (!profile) return null");
     expect(webhook).toContain("if (!booking) return null");
+    expect(webhook).toContain('object.metadata?.operation === "apple_pay_first_cleaning"');
+    expect(webhook).toContain("settleSucceededApplePayPayment(db, object)");
+    expect(webhook).toContain("markApplePayPaymentUnavailable(db, object");
     expect(webhook).not.toContain("insert(bookings)");
     expect(webhook).not.toContain("insert(bookingPaymentProfiles)");
     expect(webhook).not.toContain("customers.create");

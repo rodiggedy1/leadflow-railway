@@ -10,6 +10,7 @@ describe("approved eight-step public booking flow", () => {
   const page = read("client/src/pages/Book.tsx");
   const pricing = read("shared/publicBookingPricing.ts");
   const paymentRouter = read("server/bookingPaymentRouter.ts");
+  const paymentTarget = read("server/bookingPaymentTargetService.ts");
   const paymentEngine = read("server/bookingPaymentEngine.ts");
   const upsellEngine = read("server/bookingUpsellEngine.ts");
   const persistence = read("server/canonicalBookingPersistence.ts");
@@ -44,8 +45,8 @@ describe("approved eight-step public booking flow", () => {
     expect(page).toContain("trpc.bookingPayments.finalize.useMutation");
     expect(page).toContain("<BookingPaymentCheckout");
     expect(page).toContain("deferConfirmation");
-    expect(paymentRouter).toContain("buildPreparedPublicBooking");
-    expect(paymentRouter).toContain("PUBLIC_BOOKING_PRICING_VERSION");
+    expect(paymentTarget).toContain("buildPreparedPublicBooking");
+    expect(paymentTarget).toContain("PUBLIC_BOOKING_PRICING_VERSION");
     expect(paymentRouter).toContain("finalize: publicProcedure");
     expect(paymentEngine).toContain('stage: "booked"');
     expect(persistence).toContain("persistCanonicalBooking");

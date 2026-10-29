@@ -535,6 +535,14 @@
       "sha256": "50780f403db132188e4438d48383f74ff5d227b72afaa18e7eef1750a77eaf75",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0069_create_twilio_lead_bridges.postconditions.json"
+    },
+    {
+      "id": "0070_create_booking_apple_pay_payments",
+      "mode": "create-table",
+      "sqlFile": "0070_create_booking_apple_pay_payments.sql",
+      "sha256": "41f1bdb28e0422774d6d2fa4020a8b18f6124c1d2579c6e446fce9315df3cd16",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0070_create_booking_apple_pay_payments.postconditions.json"
     }
   ]
 }

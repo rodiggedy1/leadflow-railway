@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "table": "booking_apple_pay_payments",
+  "columns": [
+    { "name": "id", "columnType": "bigint", "nullable": false, "autoIncrement": true },
+    { "name": "bookingId", "columnType": "int", "nullable": false },
+    { "name": "bookingPaymentProfileId", "columnType": "int", "nullable": false },
+    { "name": "attempt", "columnType": "int", "nullable": false },
+    { "name": "stripePaymentIntentId", "columnType": "varchar(255)", "nullable": false },
+    { "name": "idempotencyKey", "columnType": "varchar(160)", "nullable": false },
+    { "name": "amountCents", "columnType": "int", "nullable": false },
+    { "name": "currency", "columnType": "varchar(3)", "nullable": false },
+    { "name": "status", "columnType": "varchar(32)", "nullable": false },
+    { "name": "cardBrand", "columnType": "varchar(40)", "nullable": true },
+    { "name": "cardLast4", "columnType": "varchar(4)", "nullable": true },
+    { "name": "paidAt", "columnType": "bigint", "nullable": true },
+    { "name": "failureCode", "columnType": "varchar(128)", "nullable": true },
+    { "name": "failureMessage", "columnType": "text", "nullable": true },
+    { "name": "createdAt", "columnType": "datetime(3)", "nullable": false },
+    { "name": "updatedAt", "columnType": "datetime(3)", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "uq_booking_apple_pay_payment_intent", "columns": ["stripePaymentIntentId"], "unique": true },
+    { "name": "uq_booking_apple_pay_idempotency", "columns": ["idempotencyKey"], "unique": true },
+    { "name": "uq_booking_apple_pay_booking_attempt", "columns": ["bookingId", "attempt"], "unique": true },
+    { "name": "idx_booking_apple_pay_profile_status", "columns": ["bookingPaymentProfileId", "status"], "unique": false },
+    { "name": "idx_booking_apple_pay_booking_status", "columns": ["bookingId", "status"], "unique": false }
+  ]
+}

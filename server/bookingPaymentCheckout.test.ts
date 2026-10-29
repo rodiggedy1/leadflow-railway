@@ -56,12 +56,13 @@ describe("shared booking Stripe checkout", () => {
   it("requires explicit consent and never moves customer checkout into a charge or automatic hold", () => {
     const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
     const adapter = read("server/bookingPaymentRouter.ts");
+    const engine = read("server/bookingPaymentEngine.ts");
     expect(checkout).toContain("consentAccepted");
     expect(checkout).toContain("BOOKING_PAYMENT_CONSENT_TEXT");
     expect(adapter).not.toContain("paymentIntents.create");
     expect(adapter).not.toContain("paymentIntents.capture");
     expect(adapter).not.toContain("paymentIntents.cancel");
-    expect(adapter).toMatch(
+    expect(engine).toMatch(
       /status:\s*"needs_attention",\s*paymentStatus:\s*"card_on_file"/
     );
   });
@@ -69,13 +70,12 @@ describe("shared booking Stripe checkout", () => {
   it("records card consent only when the customer submits the card form", () => {
     const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
     const adapter = read("server/bookingPaymentRouter.ts");
+    const engine = read("server/bookingPaymentEngine.ts");
     expect(checkout).toContain("consentAccepted: true");
     expect(adapter).toMatch(
       /confirmSetup:\s*publicProcedure[\s\S]*consentAccepted:\s*z\.literal\(true\)/
     );
-    expect(adapter).toMatch(
-      /confirmSetup:\s*publicProcedure[\s\S]*consentAcceptedAt:\s*Date\.now\(\)/
-    );
+    expect(engine).toContain("consentAcceptedAt: Date.now()");
   });
 
   it("never substitutes a fake card form when Stripe configuration is unavailable", () => {
@@ -94,10 +94,8 @@ describe("shared booking Stripe checkout", () => {
       "You&apos;re booked, {firstNameFromFullName(demo.fullName)}!"
     );
     expect(widget).not.toContain("awaiting availability review");
-    expect(book).toContain("You’re booked!");
-    expect(book).toMatch(
-      /You won’t be charged until after your\s+service is completed\./
-    );
+    expect(book).toContain("Let the clean begin");
+    expect(book).toContain("Card on file · pay after service");
     expect(book).not.toContain("VISUAL REVIEW ONLY");
     expect(book).not.toContain("awaiting availability review");
   });

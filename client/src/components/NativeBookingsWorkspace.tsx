@@ -66,7 +66,7 @@ type WorkspaceRow = {
   address: string | null;
   serviceName: string | null;
   homeType?: "House" | "Apartment" | "Townhome" | "Condo" | null;
-  paymentMethod?: "card" | "cashapp" | "invoice" | null;
+  paymentMethod?: "card" | "cashapp" | "invoice" | "apple_pay" | null;
   bedrooms: number | null;
   bathrooms: number | null;
   recurrence: string | null;
@@ -166,6 +166,8 @@ const labelRecurrence = (value: string | null | undefined) => {
 const labelPaymentMethod = (value: WorkspaceRow["paymentMethod"]) =>
   value === "cashapp"
     ? "Cash App"
+    : value === "apple_pay"
+      ? "Apple Pay"
     : value === "invoice"
       ? "Check"
       : value === "card"
@@ -1758,6 +1760,7 @@ export default function NativeBookingsWorkspace({
                     bookingId={active.id}
                     totalCents={active.firstCleaningTotalCents}
                     paymentStatus={active.paymentStatus}
+                    paymentMethod={active.paymentMethod}
                   />
                 ) : null
               ) : active.source === "leadflow" ? (
