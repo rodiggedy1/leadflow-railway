@@ -20,7 +20,7 @@ describe("booking completion notifications", () => {
     expect(readFileSync(resolve(import.meta.dirname, "bookingsRouter.ts"), "utf8")).toContain("void sendBookingCompletionNotifications(persisted.booking.id).catch");
   });
 
-  it("uses booking-scoped idempotency and never introduces retry, hold, capture, or charge behavior", () => {
+  it("uses booking-scoped idempotency and keeps delayed-card versus paid-today wording truthful without creating payment side effects", () => {
     expect(schema).toContain('export const bookingNotificationDeliveries = mysqlTable("booking_notification_deliveries"');
     expect(schema).toContain('uniqueIndex("uq_booking_notification_delivery_channel").on(t.bookingId, t.channel)');
     expect(dispatcher).toContain("const [delivery] = await db.select().from(bookingNotificationDeliveries)");
@@ -28,13 +28,14 @@ describe("booking completion notifications", () => {
     expect(dispatcher).toContain('eq(bookingNotificationDeliveries.claimToken, claimToken)');
     expect(dispatcher).toContain('status: "sending"');
     expect(dispatcher).not.toContain("insertId");
-    expect(dispatcher).not.toContain('profile.paymentStatus !== "card_on_file"');
     expect(dispatcher).toContain("You're booked! 🎉 Your Maids in Black cleaning is confirmed.");
     expect(dispatcher).toContain("Nothing is charged until your cleaning is complete. We'll text you closer to your appointment with updates from your cleaning team.");
+    expect(dispatcher).toContain('booking.paymentMethod === "apple_pay"');
+    expect(dispatcher).toContain("was paid today with Apple Pay for your first cleaning.");
+    expect(dispatcher).toContain("Future recurring visits are charged after service.");
     expect(dispatcher).toContain("Need to reschedule or add anything? Just reply here. Consider it handled. ✨");
-    expect(dispatcher).not.toContain("booking.paymentMethod ===");
     expect(dispatcher).not.toContain("setTimeout(");
-    expect(dispatcher).not.toContain("capture");
+    expect(dispatcher).not.toContain("paymentIntents.capture");
     expect(dispatcher).not.toContain("createPaymentIntent");
   });
 

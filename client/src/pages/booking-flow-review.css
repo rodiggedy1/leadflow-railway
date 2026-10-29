@@ -5475,15 +5475,27 @@ button.booking-card-acceptance-submit:disabled {
 .literal-book-page-five .literal-book-card-choice {
   margin: 24px 0 0;
   padding: 17px 18px;
-  border: 1px solid #d95b49;
+  border: 1px solid #e4dedb;
   border-radius: 16px;
+  background: #fff;
+}
+.literal-book-page-five .literal-book-card-choice.is-selected,
+.literal-book-page-five .literal-book-apple-pay-choice.is-selected {
+  border-color: #d95b49;
   background: #fff8f5;
   box-shadow: 0 0 0 1px #d95b49;
 }
 .literal-book-page-five .literal-book-card-choice-head {
   display: flex;
+  width: 100%;
   align-items: flex-start;
   gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 .literal-book-page-five .literal-book-card-choice-head > span {
   display: grid;
@@ -5492,10 +5504,15 @@ button.booking-card-acceptance-submit:disabled {
   flex: none;
   place-items: center;
   border-radius: 50%;
-  background: #d95b49;
+  border: 2px solid #b9b8b6;
+  background: #fff;
   color: #fff;
   font-size: 12px;
   font-weight: 800;
+}
+.literal-book-page-five .is-selected .literal-book-card-choice-head > span {
+  border-color: #d95b49;
+  background: #d95b49;
 }
 .literal-book-page-five .literal-book-card-choice-head strong {
   display: block;
@@ -5513,6 +5530,16 @@ button.booking-card-acceptance-submit:disabled {
   padding-top: 15px;
   border-top: 1px solid #e9dfda;
 }
+.literal-book-page-five .literal-book-card-detail:not(.is-open),
+.literal-book-page-five .literal-book-apple-pay-detail:not(.is-open) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .literal-book-page-five .literal-book-card-message {
   display: flex;
   align-items: center;
@@ -5528,6 +5555,62 @@ button.booking-card-acceptance-submit:disabled {
 }
 .literal-book-page-five .literal-book-card-detail .booking-card-acceptance {
   margin-top: 0;
+}
+.literal-book-page-five .literal-book-apple-pay-choice {
+  position: relative;
+  margin: 14px 0 0;
+  padding: 17px 18px;
+  border: 1px solid #e4dedb;
+  border-radius: 16px;
+  background: #fff;
+}
+.literal-book-page-five .literal-book-apple-pay-choice.is-probing {
+  position: absolute;
+  left: -10000px;
+  width: min(400px, calc(100vw - 40px));
+  height: 60px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.literal-book-page-five .literal-book-apple-pay-detail {
+  margin: 16px 0 0 31px;
+  padding-top: 15px;
+  border-top: 1px solid #e9dfda;
+}
+.literal-book-page-five .literal-book-apple-pay-note {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-apple-pay-element:not(.is-active) {
+  position: absolute;
+  left: -10000px;
+  width: min(400px, calc(100vw - 40px));
+  height: 60px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.literal-book-page-five .literal-book-apple-pay-error {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.literal-book-page-five .literal-book-apple-pay-probe {
+  display: block;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.literal-book-page-five .literal-book-apple-pay-probe svg {
+  width: 1px;
+  height: 1px;
 }
 .literal-book-page-five .literal-book-trust-grid {
   display: grid;

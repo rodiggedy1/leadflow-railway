@@ -3,6 +3,7 @@ import {
   BookingPaymentCheckout,
   PublicBookingCardSetupBeforeReservation,
 } from "@/components/BookingPaymentCheckout";
+import { BookingApplePayCheckout } from "@/components/BookingApplePayCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
 import {
   ArrowLeft,
@@ -405,6 +406,11 @@ export default function Book() {
   const [formError, setFormError] = useState("");
   const [cardOnFile, setCardOnFile] = useState(false);
   const [cardLabel, setCardLabel] = useState("");
+  const [applePayAvailable, setApplePayAvailable] = useState(false);
+  const [applePayBusy, setApplePayBusy] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
+    "card" | "apple_pay"
+  >("card");
   const [funnelRecord, setFunnelRecord] =
     useState<BookingFunnelPublicResult | null>(null);
   const funnelRecordRef = useRef<BookingFunnelPublicResult | null>(null);
@@ -441,7 +447,18 @@ export default function Book() {
     beginFunnelMutation.isPending ||
     updateFunnelMutation.isPending ||
     reserveFunnelMutation.isPending ||
-    finalizeBookingMutation.isPending;
+    finalizeBookingMutation.isPending ||
+    applePayBusy;
+  const applePayQuote = useMemo(
+    () => ({
+      pricing: pricingInput,
+      acceptedPricing: {
+        version: PUBLIC_BOOKING_PRICING_VERSION,
+        totalCents: priceBreakdown.firstCleaningTotalCents,
+      },
+    }),
+    [priceBreakdown.firstCleaningTotalCents, pricingInput]
+  );
 
   const rememberFunnelRecord = (record: BookingFunnelPublicResult) => {
     funnelRecordRef.current = record;
@@ -827,6 +844,17 @@ export default function Book() {
         isSaving={isSaving}
         formError={formError}
         cardOnFile={cardOnFile}
+        applePayAvailable={applePayAvailable}
+        selectedPaymentMethod={selectedPaymentMethod}
+        onPaymentMethodChange={setSelectedPaymentMethod}
+        applePayQuote={applePayQuote}
+        onApplePayAvailable={setApplePayAvailable}
+        onApplePayBusyChange={setApplePayBusy}
+        onApplePayPaid={totalCents => {
+          setCardLabel(`Apple Pay · ${money(totalCents)} paid today`);
+          setFormError("");
+          setComplete(true);
+        }}
         onCardReady={(brand, last4) => {
           setCardLabel(`${brand} ending in ${last4}`);
           setCardOnFile(true);
@@ -2995,6 +3023,13 @@ function LiteralPageFive({
   isSaving,
   formError,
   cardOnFile,
+  applePayAvailable,
+  selectedPaymentMethod,
+  onPaymentMethodChange,
+  applePayQuote,
+  onApplePayAvailable,
+  onApplePayBusyChange,
+  onApplePayPaid,
   onCardReady,
   onRetryFinalization,
 }: {
@@ -3029,6 +3064,19 @@ function LiteralPageFive({
   isSaving: boolean;
   formError: string;
   cardOnFile: boolean;
+  applePayAvailable: boolean;
+  selectedPaymentMethod: "card" | "apple_pay";
+  onPaymentMethodChange: (method: "card" | "apple_pay") => void;
+  applePayQuote: {
+    pricing: ReturnType<typeof createCanonicalPricingInput>;
+    acceptedPricing: {
+      version: typeof PUBLIC_BOOKING_PRICING_VERSION;
+      totalCents: number;
+    };
+  };
+  onApplePayAvailable: (available: boolean) => void;
+  onApplePayBusyChange: (busy: boolean) => void;
+  onApplePayPaid: (totalCents: number) => void;
   onCardReady: (brand: string, last4: string) => void;
   onRetryFinalization: () => void;
 }) {
@@ -3234,20 +3282,31 @@ function LiteralPageFive({
               </section>
 
               <section
-                className="literal-book-card-choice"
-                aria-label="Payment method"
+                className={`literal-book-card-choice${selectedPaymentMethod === "card" ? " is-selected" : ""}`}
+                aria-label="Card on file payment method"
               >
-                <div className="literal-book-card-choice-head">
-                  <span aria-hidden="true">✓</span>
-                  <div>
+                <button
+                  type="button"
+                  className="literal-book-card-choice-head"
+                  aria-expanded={selectedPaymentMethod === "card"}
+                  onClick={() => onPaymentMethodChange("card")}
+                  disabled={isSaving}
+                >
+                  <span aria-hidden="true">
+                    {selectedPaymentMethod === "card" ? "✓" : ""}
+                  </span>
+                  <span>
                     <strong>Card on file · pay after service</strong>
                     <p>
                       Securely save your card now. You&apos;re charged after the
                       cleaning.
                     </p>
-                  </div>
-                </div>
-                <div className="literal-book-card-detail">
+                  </span>
+                </button>
+                <div
+                  className={`literal-book-card-detail${selectedPaymentMethod === "card" ? " is-open" : ""}`}
+                  aria-hidden={selectedPaymentMethod !== "card"}
+                >
                   {cardOnFile ? (
                     <div className="literal-book-card-message">
                       <Check /> Your card is securely on file. Confirming your
@@ -3263,6 +3322,49 @@ function LiteralPageFive({
                       }
                     />
                   )}
+                </div>
+              </section>
+              <section
+                className={`literal-book-apple-pay-choice${applePayAvailable ? " is-available" : " is-probing"}${selectedPaymentMethod === "apple_pay" ? " is-selected" : ""}`}
+                aria-hidden={!applePayAvailable}
+              >
+                {applePayAvailable ? (
+                  <button
+                    type="button"
+                    className="literal-book-card-choice-head"
+                    aria-expanded={selectedPaymentMethod === "apple_pay"}
+                    onClick={() => onPaymentMethodChange("apple_pay")}
+                    disabled={isSaving}
+                  >
+                    <span aria-hidden="true">
+                      {selectedPaymentMethod === "apple_pay" ? "✓" : ""}
+                    </span>
+                    <span>
+                      <strong>Apple Pay</strong>
+                      <p>
+                        Pay {money(total)} today for your first cleaning. Future
+                        visits are charged after service.
+                      </p>
+                    </span>
+                  </button>
+                ) : null}
+                <div
+                  className={`literal-book-apple-pay-detail${selectedPaymentMethod === "apple_pay" && applePayAvailable ? " is-open" : ""}`}
+                >
+                  <p className="literal-book-apple-pay-note">
+                    Apple Pay securely charges {money(total)} today for the
+                    first cleaning only.
+                  </p>
+                  <BookingApplePayCheckout
+                    quote={applePayQuote}
+                    active={
+                      applePayAvailable && selectedPaymentMethod === "apple_pay"
+                    }
+                    onAvailabilityChange={onApplePayAvailable}
+                    onPrepareReservation={onPrepareReservation}
+                    onPaid={onApplePayPaid}
+                    onBusyChange={onApplePayBusyChange}
+                  />
                 </div>
               </section>
             </>
@@ -3292,7 +3394,11 @@ function LiteralPageFive({
           <div className="literal-book-checkout-dock">
             <div>
               <b>First cleaning · {money(total)}</b>
-              <span>Card charged after service</span>
+              <span>
+                {selectedPaymentMethod === "apple_pay"
+                  ? "Apple Pay charged today"
+                  : "Card charged after service"}
+              </span>
             </div>
             <em>Secure checkout</em>
             {cardOnFile && formError ? (
@@ -3321,8 +3427,9 @@ function LiteralPageFive({
           <details className="literal-book-checkout-help">
             <summary>When would I be charged?</summary>
             <p>
-              Your card is securely collected at booking and charged once the
-              cleaning is completed.
+              {selectedPaymentMethod === "apple_pay"
+                ? `Apple Pay charges ${money(total)} today for the first cleaning only. Future recurring visits are charged after service.`
+                : "Your card is securely collected at booking and charged once the cleaning is completed."}
             </p>
           </details>
         </section>

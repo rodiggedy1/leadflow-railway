@@ -128,7 +128,7 @@ const labelRecurrence = (value: string | null | undefined) => {
       : normalized.charAt(0).toUpperCase() + normalized.slice(1);
 };
 const labelPaymentMethod = (value: string | null | undefined) =>
-  value === "cashapp" ? "Cash App" : value === "invoice" ? "Check" : "Card";
+  value === "cashapp" ? "Cash App" : value === "apple_pay" ? "Apple Pay" : value === "invoice" ? "Check" : "Card";
 const photoDownloadUrl = (photo: any, index: number) =>
   `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`)}`;
 const sourceLabel = (row: any) =>
@@ -260,7 +260,7 @@ function BookingListRow({
       >
         <CreditCard size={14} />
         {row.paymentStatus === "captured"
-          ? "Paid"
+          ? row.paymentMethod === "apple_pay" ? "Apple Pay · paid" : "Paid"
           : isNonCardBooking
             ? labelPaymentMethod(row.paymentMethod)
           : hasCard
@@ -1072,6 +1072,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
                 bookingId={active.id}
                 totalCents={active.firstCleaningTotalCents}
                 paymentStatus={active.paymentStatus}
+                paymentMethod={active.paymentMethod}
               />
             ) : model.portalPaymentAvailable &&
               active.firstCleaningTotalCents !== null ? (

@@ -72,6 +72,7 @@ import { tasksRouter } from "./tasksRouter";
 import { bookingsRouter } from "./bookingsRouter";
 import { bookingFunnelRouter } from "./bookingFunnelRouter";
 import { bookingPaymentRouter } from "./bookingPaymentRouter";
+import { bookingApplePayRouter } from "./bookingApplePayRouter";
 import { bookingPaymentAdminRouter } from "./bookingPaymentAdminRouter";
 import { customerPortalRouter } from "./customerPortalRouter";
 import { applicantPortalRouter } from "./applicantPortalRouter";
@@ -134,6 +135,7 @@ export const appRouter = router({
   bookings: bookingsRouter,
   bookingFunnel: bookingFunnelRouter,
   bookingPayments: bookingPaymentRouter,
+  bookingApplePay: bookingApplePayRouter,
   bookingPaymentAdmin: bookingPaymentAdminRouter,
   customerPortal: customerPortalRouter,
   applicantPortal: applicantPortalRouter,
