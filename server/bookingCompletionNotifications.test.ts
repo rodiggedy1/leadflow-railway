@@ -31,8 +31,9 @@ describe("booking completion notifications", () => {
     expect(dispatcher).toContain("You're booked! 🎉 Your Maids in Black cleaning is confirmed.");
     expect(dispatcher).toContain("Nothing is charged until your cleaning is complete. We'll text you closer to your appointment with updates from your cleaning team.");
     expect(dispatcher).toContain('booking.paymentMethod === "apple_pay"');
-    expect(dispatcher).toContain("was paid today with Apple Pay for your first cleaning.");
-    expect(dispatcher).toContain("Future recurring visits are charged after service.");
+    expect(dispatcher).toContain('booking.paymentMethod === "cashapp"');
+    expect(dispatcher).toContain('immediatePaymentMethod === "cashapp" ? "Cash App" : "Apple Pay"');
+    expect(dispatcher).toContain("was paid today with ${immediatePaymentLabel} for your first cleaning.");
     expect(dispatcher).toContain("Need to reschedule or add anything? Just reply here. Consider it handled. ✨");
     expect(dispatcher).not.toContain("setTimeout(");
     expect(dispatcher).not.toContain("paymentIntents.capture");

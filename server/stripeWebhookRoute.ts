@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import { markApplePayPaymentUnavailable, settleSucceededApplePayPayment } from "./bookingApplePayEngine";
+import { markCashAppPaymentUnavailable, settleSucceededCashAppPayment } from "./bookingCashAppEngine";
 
 function isDuplicateEntry(error: unknown): boolean {
   const candidate = error as { code?: string; errno?: number; message?: string };
@@ -60,6 +61,21 @@ async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
       await markApplePayPaymentUnavailable(db, object, "failed");
     } else if (event.type === "payment_intent.canceled") {
       await markApplePayPaymentUnavailable(db, object, "cancelled");
+    } else {
+      return { status: "ignored" as const };
+    }
+    await db.update(stripeWebhookEvents).set({ status: "processed", processedAt: new Date() }).where(eq(stripeWebhookEvents.id, eventRecordId));
+    return { status: "processed" as const };
+  }
+  if (object.object === "payment_intent" && object.metadata?.operation === "cash_app_first_cleaning") {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+    if (event.type === "payment_intent.succeeded") {
+      await settleSucceededCashAppPayment(db, object);
+    } else if (event.type === "payment_intent.payment_failed") {
+      await markCashAppPaymentUnavailable(db, object, "failed");
+    } else if (event.type === "payment_intent.canceled") {
+      await markCashAppPaymentUnavailable(db, object, "cancelled");
     } else {
       return { status: "ignored" as const };
     }

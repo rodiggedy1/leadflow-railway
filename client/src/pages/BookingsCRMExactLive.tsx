@@ -260,7 +260,11 @@ function BookingListRow({
       >
         <CreditCard size={14} />
         {row.paymentStatus === "captured"
-          ? row.paymentMethod === "apple_pay" ? "Apple Pay · paid" : "Paid"
+          ? row.paymentMethod === "apple_pay"
+            ? "Apple Pay · paid"
+            : row.paymentMethod === "cashapp"
+              ? "Cash App · paid"
+              : "Paid"
           : isNonCardBooking
             ? labelPaymentMethod(row.paymentMethod)
           : hasCard

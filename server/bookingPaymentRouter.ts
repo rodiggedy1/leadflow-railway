@@ -73,7 +73,7 @@ export const bookingPaymentRouter = router({
       verifyPublicBookingFunnelToken(record, input.mutationToken);
       const target = await ensurePublicBookingPaymentTarget(record);
       if (target.profile.paymentStatus === "charge_pending") {
-        throw new TRPCError({ code: "CONFLICT", message: "Apple Pay is currently in progress. Please finish or cancel it before saving a card." });
+        throw new TRPCError({ code: "CONFLICT", message: "An immediate payment is currently in progress. Please finish or cancel it before saving a card." });
       }
       const setup = await startCanonicalCardSetup(db, { bookingId: target.bookingId, customerName: target.customerName, profile: target.profile });
       if (setup.alreadyComplete) {

@@ -526,7 +526,11 @@ function BookingListRow({
       >
         <CreditCard />
         {row.paymentStatus === "captured"
-          ? "Paid"
+          ? row.paymentMethod === "cashapp"
+            ? "Cash App · paid"
+            : row.paymentMethod === "apple_pay"
+              ? "Apple Pay · paid"
+              : "Paid"
           : isNonCardBooking
             ? labelPaymentMethod(row.paymentMethod)
           : hasCard
