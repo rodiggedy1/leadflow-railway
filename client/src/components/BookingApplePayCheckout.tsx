@@ -19,7 +19,7 @@ const APPLE_PAY_ONLY_OPTIONS = {
   buttonHeight: 44,
   buttonTheme: { applePay: "black" as const },
   buttonType: { applePay: "book" as const },
-  layout: { maxColumns: 1, maxRows: 1, overflow: "never" as const },
+  layout: { maxColumns: 1, maxRows: 1, overflow: "auto" as const },
   paymentMethodOrder: ["apple_pay"],
   paymentMethods: {
     applePay: "always" as const,
