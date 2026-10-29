@@ -21,7 +21,7 @@ type PreparedCashAppPayment = Reservation & {
   totalCents: number;
 };
 
-type ExitDestination = "card" | "apple_pay" | null;
+type ExitDestination = "card" | "apple_pay" | "google_pay" | null;
 
 type Props = {
   active: boolean;

@@ -59,27 +59,38 @@ describe("public booking Apple Pay immediate payment", () => {
     expect(sql).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/im);
   });
 
-  it("always presents Apple Pay as a choice, while native Stripe availability controls whether its wallet button is usable", () => {
+  it("keeps historical immediate Apple Pay reconciliation intact while new Apple Pay and Google Pay selections use canonical delayed card setup", () => {
     const component = read("client/src/components/BookingApplePayCheckout.tsx");
     const book = read("client/src/pages/Book.tsx");
     const card = read("client/src/components/BookingPaymentCheckout.tsx");
     expect(component).toContain("ExpressCheckoutElement");
-    expect(component).toContain('applePay: "always"');
-    expect(component).toContain('link: "never"');
+    expect(component).toContain('type Wallet = "apple_pay" | "google_pay"');
+    expect(component).toContain('mode: "setup"');
+    expect(component).toContain('setupFutureUsage: "off_session"');
+    expect(component).toContain("stripe.confirmSetup");
+    expect(component).toContain("trpc.bookingPayments.startSetup.useMutation");
+    expect(component).toContain("trpc.bookingPayments.confirmSetup.useMutation");
+    expect(component).toContain("deferredPaymentRequest");
+    expect(component).not.toContain("trpc.bookingApplePay.prepare.useMutation");
+    expect(component).not.toContain("stripe.confirmPayment");
     expect(component).toContain('layout: { maxColumns: 1, maxRows: 1, overflow: "auto" as const }');
     expect(component).not.toContain('maxRows: 1, overflow: "never"');
     expect(component).toContain("onAvailablePaymentMethodsChange");
     expect(component).toContain("available === true");
     expect(component).toContain("onLoadError={event =>");
-    expect(component).toContain("Apple Pay could not initialize: ${event.error.message}");
+    expect(component).toContain("could not initialize: ${event.error.message}");
     expect(component).not.toContain("ApplePaySession");
     expect(component).not.toContain("qr");
     expect(book).toContain("<PublicBookingCardSetupBeforeReservation");
-    expect(book).toContain("<BookingApplePayCheckout");
+    expect(book).toContain("<BookingWalletCardOnFileCheckout");
     expect(book).toContain('selectedPaymentMethod, setSelectedPaymentMethod');
     expect(book).toContain('onClick={() => onPaymentMethodChange("apple_pay")}');
+    expect(book).toContain('onClick={() => onPaymentMethodChange("google_pay")}');
     expect(book).toContain("Apple Pay is not available in this browser or Wallet.");
-    expect(book).not.toContain('applePayAvailable ? " is-available" : " is-probing"');
+    expect(book).toContain("Google Pay is not available in this browser or Wallet.");
+    expect(book).toContain("Apple Pay is securely saved at booking and charged once the cleaning is completed.");
+    expect(book).toContain("Google Pay is securely saved at booking and charged once the cleaning is completed.");
+    expect(book).not.toContain("Apple Pay charged today");
     expect(card).toContain("InternalCardSetupForm");
   });
 });
