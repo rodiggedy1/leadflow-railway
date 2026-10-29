@@ -59,9 +59,11 @@ describe("approved eight-step public booking flow", () => {
     expect(page).toContain("directCardEntry");
     expect(checkout).toMatch(/if\s*\(\s*!directCardEntry\s*\|\|/);
     expect(checkout).toContain("PremiumCardSetupForm");
-    expect(checkout).toContain("PremiumCardReviewForm");
     expect(checkout).toContain("booking-card-acceptance");
-    expect(checkout).not.toContain("Try secure card entry again");
+    expect(checkout).toContain("Secure card entry is temporarily unavailable");
+    expect(checkout).not.toContain("PremiumCardReviewForm");
+    expect(checkout).not.toContain("Card acceptance form preview");
+    expect(page).not.toContain("literal-book-card-preview");
     expect(checkout).toContain("authorizationCopy");
     expect(page).not.toContain("booking-payment-timing");
     expect(page).not.toContain("booking-payment-security");

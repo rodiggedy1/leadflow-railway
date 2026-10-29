@@ -29,6 +29,18 @@ describe("shared booking Stripe checkout", () => {
     expect(bookNow).not.toContain("UI preview only.");
   });
 
+  it("retains the existing Internal Booking Stripe setup component", () => {
+    const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
+    const internalBooking = read("client/src/pages/InternalBookingReview.tsx");
+    expect(checkout).toContain("export function InternalCardSetupForm");
+    expect(checkout).toContain("const stripe = useStripe()");
+    expect(checkout).toContain("const elements = useElements()");
+    expect(internalBooking).toContain(
+      'import { InternalCardSetupForm } from "@/components/BookingPaymentCheckout"'
+    );
+    expect(internalBooking).toContain("<InternalCardSetupForm");
+  });
+
   it("requires explicit consent and never moves customer checkout into a charge or automatic hold", () => {
     const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
     const adapter = read("server/bookingPaymentRouter.ts");
@@ -54,12 +66,13 @@ describe("shared booking Stripe checkout", () => {
     );
   });
 
-  it("keeps the public booking payment step as a clean card form when Preview lacks Stripe credentials", () => {
+  it("never substitutes a fake card form when Stripe configuration is unavailable", () => {
     const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
-    expect(checkout).toContain("PremiumCardReviewForm");
-    expect(checkout).toContain('aria-label="Card acceptance form preview"');
-    expect(checkout).not.toContain("Try secure card entry again");
-    expect(checkout).not.toContain("Stripe is not configured");
+    expect(checkout).toContain("const stripePublishableKey");
+    expect(checkout).toContain("if (!stripePromise)");
+    expect(checkout).toContain("Secure card entry is temporarily unavailable");
+    expect(checkout).not.toContain("PremiumCardReviewForm");
+    expect(checkout).not.toContain("Card acceptance form preview");
   });
 
   it("confirms a real booking by first name without availability-review or UI-preview language", () => {

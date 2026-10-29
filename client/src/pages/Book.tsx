@@ -3222,86 +3222,82 @@ function LiteralPageFive({
                 )}
               </section>
 
-              <section className="literal-book-payment-heading">
-                <div className="literal-book-eyebrow">Secure checkout</div>
-                <h2>Payment</h2>
-                <p>
-                  Securely save your card now. You&apos;re charged after the
-                  cleaning.
-                </p>
-              </section>
-
-              <section className="literal-book-payment-brand">
-                <div
-                  className="literal-book-payment-brand-card"
-                  aria-hidden="true"
-                >
-                  <strong>
-                    MAIDS <span>IN BLACK</span>
-                  </strong>
-                  <b>•••• &nbsp; •••• &nbsp; •••• &nbsp; ••••</b>
-                  <small>YOUR CLEANING · YOUR WAY</small>
-                </div>
-                <div>
-                  <strong>Your payment. Protected.</strong>
-                  <p>
-                    Secure payment processing, clear charges, and no card
-                    details stored by Maids in Black.
-                  </p>
-                  <span>
-                    <ShieldCheck /> Secure checkout powered by Stripe
-                  </span>
-                </div>
-              </section>
-
-              <section
-                className="literal-book-card-choice"
-                aria-label="Payment method"
-              >
-                <div className="literal-book-card-choice-head">
-                  <span aria-hidden="true">✓</span>
-                  <div>
-                    <strong>Card on file · pay after service</strong>
+              {showCardEntry && (
+                <>
+                  <section className="literal-book-payment-heading">
+                    <div className="literal-book-eyebrow">Secure checkout</div>
+                    <h2>Payment</h2>
                     <p>
                       Securely save your card now. You&apos;re charged after the
                       cleaning.
                     </p>
-                  </div>
-                </div>
-                {showCardEntry ? (
-                  <div className="literal-book-card-detail">
-                    {cardOnFile ? (
-                      <div className="literal-book-card-message">
-                        <Check /> Your card is securely on file. Continue to
-                        take a final look at your booking.
+                  </section>
+
+                  <section className="literal-book-payment-brand">
+                    <div
+                      className="literal-book-payment-brand-card"
+                      aria-hidden="true"
+                    >
+                      <strong>
+                        MAIDS <span>IN BLACK</span>
+                      </strong>
+                      <b>•••• &nbsp; •••• &nbsp; •••• &nbsp; ••••</b>
+                      <small>YOUR CLEANING · YOUR WAY</small>
+                    </div>
+                    <div>
+                      <strong>Your payment. Protected.</strong>
+                      <p>
+                        Secure payment processing, clear charges, and no card
+                        details stored by Maids in Black.
+                      </p>
+                      <span>
+                        <ShieldCheck /> Secure checkout powered by Stripe
+                      </span>
+                    </div>
+                  </section>
+
+                  <section
+                    className="literal-book-card-choice"
+                    aria-label="Payment method"
+                  >
+                    <div className="literal-book-card-choice-head">
+                      <span aria-hidden="true">✓</span>
+                      <div>
+                        <strong>Card on file · pay after service</strong>
+                        <p>
+                          Securely save your card now. You&apos;re charged after
+                          the cleaning.
+                        </p>
                       </div>
-                    ) : funnelRecord ? (
-                      <BookingPaymentCheckout
-                        publicFunnelNumber={funnelRecord.publicFunnelNumber}
-                        mutationToken={funnelRecord.mutationToken}
-                        customerName={`${firstName} ${lastName}`.trim()}
-                        amountCents={total}
-                        directCardEntry
-                        deferConfirmation
-                        onComplete={result =>
-                          onCardReady(result.cardBrand, result.cardLast4)
-                        }
-                      />
-                    ) : (
-                      <div className="literal-book-card-message" role="alert">
-                        Your booking details need to be saved before secure card
-                        entry.
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="literal-book-card-preview">
-                    <CreditCard />
-                    <span>Secure card entry</span>
-                    <small>Card</small>
-                  </div>
-                )}
-              </section>
+                    </div>
+                    <div className="literal-book-card-detail">
+                      {cardOnFile ? (
+                        <div className="literal-book-card-message">
+                          <Check /> Your card is securely on file. Continue to
+                          take a final look at your booking.
+                        </div>
+                      ) : funnelRecord ? (
+                        <BookingPaymentCheckout
+                          publicFunnelNumber={funnelRecord.publicFunnelNumber}
+                          mutationToken={funnelRecord.mutationToken}
+                          customerName={`${firstName} ${lastName}`.trim()}
+                          amountCents={total}
+                          directCardEntry
+                          deferConfirmation
+                          onComplete={result =>
+                            onCardReady(result.cardBrand, result.cardLast4)
+                          }
+                        />
+                      ) : (
+                        <div className="literal-book-card-message" role="alert">
+                          Your booking details need to be saved before secure
+                          card entry.
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                </>
+              )}
 
               <div className="literal-book-trust-grid">
                 <div>
