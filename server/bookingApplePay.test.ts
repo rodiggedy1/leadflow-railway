@@ -66,6 +66,8 @@ describe("public booking Apple Pay immediate payment", () => {
     expect(component).toContain("ExpressCheckoutElement");
     expect(component).toContain('applePay: "always"');
     expect(component).toContain('link: "never"');
+    expect(component).toContain('layout: { maxColumns: 1, maxRows: 1, overflow: "auto" as const }');
+    expect(component).not.toContain('maxRows: 1, overflow: "never"');
     expect(component).toContain("onAvailablePaymentMethodsChange");
     expect(component).toContain("available === true");
     expect(component).toContain("onLoadError={event =>");
