@@ -5497,7 +5497,7 @@ button.booking-card-acceptance-submit:disabled {
   cursor: pointer;
   text-align: left;
 }
-.literal-book-page-five .literal-book-card-choice-head > span {
+.literal-book-page-five .literal-book-card-choice-head > span:first-child {
   display: grid;
   width: 19px;
   height: 19px;
@@ -5510,7 +5510,7 @@ button.booking-card-acceptance-submit:disabled {
   font-size: 12px;
   font-weight: 800;
 }
-.literal-book-page-five .is-selected .literal-book-card-choice-head > span {
+.literal-book-page-five .is-selected .literal-book-card-choice-head > span:first-child {
   border-color: #d95b49;
   background: #d95b49;
 }
