@@ -409,8 +409,8 @@ export default function Book() {
   const [applePayAvailable, setApplePayAvailable] = useState(false);
   const [applePayBusy, setApplePayBusy] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
-    "card" | "apple_pay"
-  >("card");
+    "card" | "apple_pay" | null
+  >(null);
   const [funnelRecord, setFunnelRecord] =
     useState<BookingFunnelPublicResult | null>(null);
   const funnelRecordRef = useRef<BookingFunnelPublicResult | null>(null);
@@ -3065,8 +3065,8 @@ function LiteralPageFive({
   formError: string;
   cardOnFile: boolean;
   applePayAvailable: boolean;
-  selectedPaymentMethod: "card" | "apple_pay";
-  onPaymentMethodChange: (method: "card" | "apple_pay") => void;
+  selectedPaymentMethod: "card" | "apple_pay" | null;
+  onPaymentMethodChange: (method: "card" | "apple_pay" | null) => void;
   applePayQuote: {
     pricing: ReturnType<typeof createCanonicalPricingInput>;
     acceptedPricing: {
@@ -3251,34 +3251,10 @@ function LiteralPageFive({
             <>
               <section className="literal-book-payment-heading">
                 <div className="literal-book-eyebrow">Secure checkout</div>
-                <h2>Payment</h2>
+                <h2>How would you like to secure your booking?</h2>
                 <p>
-                  Securely save your card now. You&apos;re charged after the
-                  cleaning.
+                  Choose the option that works best for you.
                 </p>
-              </section>
-
-              <section className="literal-book-payment-brand">
-                <div
-                  className="literal-book-payment-brand-card"
-                  aria-hidden="true"
-                >
-                  <strong>
-                    MAIDS <span>IN BLACK</span>
-                  </strong>
-                  <b>•••• &nbsp; •••• &nbsp; •••• &nbsp; ••••</b>
-                  <small>YOUR CLEANING · YOUR WAY</small>
-                </div>
-                <div>
-                  <strong>Your payment. Protected.</strong>
-                  <p>
-                    Secure payment processing, clear charges, and no card
-                    details stored by Maids in Black.
-                  </p>
-                  <span>
-                    <ShieldCheck /> Secure checkout powered by Stripe
-                  </span>
-                </div>
               </section>
 
               <section
@@ -3399,7 +3375,9 @@ function LiteralPageFive({
               <span>
                 {selectedPaymentMethod === "apple_pay"
                   ? "Apple Pay charged today"
-                  : "Card charged after service"}
+                  : selectedPaymentMethod === "card"
+                    ? "Card charged after service"
+                    : "Choose a payment method"}
               </span>
             </div>
             <em>Secure checkout</em>
@@ -3431,7 +3409,9 @@ function LiteralPageFive({
             <p>
               {selectedPaymentMethod === "apple_pay"
                 ? `Apple Pay charges ${money(total)} today for the first cleaning only. Future recurring visits are charged after service.`
-                : "Your card is securely collected at booking and charged once the cleaning is completed."}
+                : selectedPaymentMethod === "card"
+                  ? "Your card is securely collected at booking and charged once the cleaning is completed."
+                  : "Choose a payment method to see when you would be charged."}
             </p>
           </details>
         </section>
