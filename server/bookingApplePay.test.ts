@@ -59,7 +59,7 @@ describe("public booking Apple Pay immediate payment", () => {
     expect(sql).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/im);
   });
 
-  it("uses Stripe's native Apple Pay element only when it reports availability and leaves the real card-on-file fallback mounted", () => {
+  it("always presents Apple Pay as a choice, while native Stripe availability controls whether its wallet button is usable", () => {
     const component = read("client/src/components/BookingApplePayCheckout.tsx");
     const book = read("client/src/pages/Book.tsx");
     const card = read("client/src/components/BookingPaymentCheckout.tsx");
@@ -73,6 +73,9 @@ describe("public booking Apple Pay immediate payment", () => {
     expect(book).toContain("<PublicBookingCardSetupBeforeReservation");
     expect(book).toContain("<BookingApplePayCheckout");
     expect(book).toContain('selectedPaymentMethod, setSelectedPaymentMethod');
+    expect(book).toContain('onClick={() => onPaymentMethodChange("apple_pay")}');
+    expect(book).toContain("Apple Pay is not available in this browser or Wallet.");
+    expect(book).not.toContain('applePayAvailable ? " is-available" : " is-probing"');
     expect(card).toContain("InternalCardSetupForm");
   });
 });
