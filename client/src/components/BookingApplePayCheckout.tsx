@@ -163,7 +163,12 @@ function ApplePayElement({
         onCancel={() => {
           onBusyChange(false);
         }}
-        onLoadError={() => setAvailable(false)}
+        onLoadError={event => {
+          setAvailable(false);
+          setError(
+            `Apple Pay could not initialize: ${event.error.message}`
+          );
+        }}
       />
       {active && error ? (
         <p className="literal-book-apple-pay-error" role="alert">

@@ -68,6 +68,8 @@ describe("public booking Apple Pay immediate payment", () => {
     expect(component).toContain('link: "never"');
     expect(component).toContain("onAvailablePaymentMethodsChange");
     expect(component).toContain("available === true");
+    expect(component).toContain("onLoadError={event =>");
+    expect(component).toContain("Apple Pay could not initialize: ${event.error.message}");
     expect(component).not.toContain("ApplePaySession");
     expect(component).not.toContain("qr");
     expect(book).toContain("<PublicBookingCardSetupBeforeReservation");
