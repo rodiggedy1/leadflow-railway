@@ -41,6 +41,18 @@ describe("shared booking Stripe checkout", () => {
     expect(internalBooking).toContain("<InternalCardSetupForm");
   });
 
+  it("mounts the established card form before the public booking funnel is reserved", () => {
+    const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
+    expect(checkout).toContain(
+      "export function PublicBookingCardSetupBeforeReservation"
+    );
+    expect(checkout).toContain("<InternalCardSetupForm");
+    expect(checkout).toContain("onPrepareReservation");
+    expect(checkout).toContain("await onCreateBooking?.()");
+    expect(checkout).toContain("trpc.bookingPayments.startSetup.useMutation");
+    expect(checkout).toContain("trpc.bookingPayments.confirmSetup.useMutation");
+  });
+
   it("requires explicit consent and never moves customer checkout into a charge or automatic hold", () => {
     const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
     const adapter = read("server/bookingPaymentRouter.ts");

@@ -57,8 +57,13 @@ describe("approved eight-step public booking flow", () => {
 
   it("opens Stripe card entry directly on the public payment step", () => {
     expect(page).toContain("directCardEntry");
+    expect(page).toContain("<PublicBookingCardSetupBeforeReservation");
+    expect(page).toContain("const showCardEntry = phase === 6 || phase === 7;");
+    expect(page).not.toContain("Continue to secure card setup →");
     expect(checkout).toMatch(/if\s*\(\s*!directCardEntry\s*\|\|/);
     expect(checkout).toContain("PremiumCardSetupForm");
+    expect(checkout).toContain("<InternalCardSetupForm");
+    expect(checkout).toContain("onPrepareReservation");
     expect(checkout).toContain("booking-card-acceptance");
     expect(checkout).toContain("Secure card entry is temporarily unavailable");
     expect(checkout).not.toContain("PremiumCardReviewForm");

@@ -1,5 +1,8 @@
 import { trpc } from "@/lib/trpc";
-import { BookingPaymentCheckout } from "@/components/BookingPaymentCheckout";
+import {
+  BookingPaymentCheckout,
+  PublicBookingCardSetupBeforeReservation,
+} from "@/components/BookingPaymentCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
 import {
   ArrowLeft,
@@ -464,61 +467,58 @@ export default function Book() {
     futureVisitTotalCents: priceBreakdown.futureVisitTotalCents,
     priceSnapshot: snapshot,
   });
-  const reserveBooking = async () => {
-    if (fullName.split(/\s+/).filter(Boolean).length < 2) {
-      setFormError("Enter your first and last name.");
-      return false;
-    }
-    if (phone.replace(/\D/g, "").length < 10) {
-      setFormError("Enter a valid phone number.");
-      return false;
-    }
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      setFormError("Enter a valid email address.");
-      return false;
-    }
-    if (address.trim().length < 5) {
-      setFormError("Enter the complete service address.");
-      return false;
-    }
-    try {
-      let current = funnelRecordRef.current;
-      if (!current) {
-        current = await beginFunnelMutation.mutateAsync({
-          idempotencyKey: bookingAttemptIdRef.current,
-          source: "book-page",
-          customerName: fullName,
-          customerPhone: phone,
-        });
-        rememberFunnelRecord(current);
+  const reserveBooking =
+    async (): Promise<BookingFunnelPublicResult | null> => {
+      if (fullName.split(/\s+/).filter(Boolean).length < 2) {
+        setFormError("Enter your first and last name.");
+        return null;
       }
-      const input = {
-        publicFunnelNumber: current.publicFunnelNumber,
-        mutationToken: current.mutationToken,
-        expectedVersion: current.version,
-        patch: buildPatch(),
-      };
-      const next =
-        current.stage === "lead"
-          ? await reserveFunnelMutation.mutateAsync(input)
-          : await updateFunnelMutation.mutateAsync(input);
-      rememberFunnelRecord(next);
-      setFormError("");
-      return true;
-    } catch (error) {
-      setFormError(
-        error instanceof Error
-          ? error.message
-          : "We could not save your booking details. Please try again."
-      );
-      return false;
-    }
-  };
+      if (phone.replace(/\D/g, "").length < 10) {
+        setFormError("Enter a valid phone number.");
+        return null;
+      }
+      if (!/^\S+@\S+\.\S+$/.test(email)) {
+        setFormError("Enter a valid email address.");
+        return null;
+      }
+      if (address.trim().length < 5) {
+        setFormError("Enter the complete service address.");
+        return null;
+      }
+      try {
+        let current = funnelRecordRef.current;
+        if (!current) {
+          current = await beginFunnelMutation.mutateAsync({
+            idempotencyKey: bookingAttemptIdRef.current,
+            source: "book-page",
+            customerName: fullName,
+            customerPhone: phone,
+          });
+          rememberFunnelRecord(current);
+        }
+        const input = {
+          publicFunnelNumber: current.publicFunnelNumber,
+          mutationToken: current.mutationToken,
+          expectedVersion: current.version,
+          patch: buildPatch(),
+        };
+        const next =
+          current.stage === "lead"
+            ? await reserveFunnelMutation.mutateAsync(input)
+            : await updateFunnelMutation.mutateAsync(input);
+        rememberFunnelRecord(next);
+        setFormError("");
+        return next;
+      } catch (error) {
+        setFormError(
+          error instanceof Error
+            ? error.message
+            : "We could not save your booking details. Please try again."
+        );
+        return null;
+      }
+    };
   const next = async () => {
-    if (step === 6) {
-      if (await reserveBooking()) setStep(7);
-      return;
-    }
     if (step === 8) {
       const current = funnelRecordRef.current;
       if (!current || !cardOnFile) {
@@ -828,10 +828,9 @@ export default function Book() {
         onBack={() =>
           setStep(current => (current === 6 ? 5 : current === 7 ? 6 : 7))
         }
-        onReserve={() => void next()}
+        onPrepareReservation={reserveBooking}
         isSaving={isSaving}
         formError={formError}
-        funnelRecord={funnelRecord}
         cardOnFile={cardOnFile}
         onCardReady={(brand, last4) => {
           setCardLabel(`${brand} ending in ${last4}`);
@@ -3002,10 +3001,9 @@ function LiteralPageFive({
   onReviewStoryChange,
   onEditSchedule,
   onBack,
-  onReserve,
+  onPrepareReservation,
   isSaving,
   formError,
-  funnelRecord,
   cardOnFile,
   onCardReady,
   onEdit,
@@ -3042,10 +3040,9 @@ function LiteralPageFive({
   onReviewStoryChange: (value: number) => void;
   onEditSchedule: () => void;
   onBack: () => void;
-  onReserve: () => void;
+  onPrepareReservation: () => Promise<BookingFunnelPublicResult | null>;
   isSaving: boolean;
   formError: string;
-  funnelRecord: BookingFunnelPublicResult | null;
   cardOnFile: boolean;
   onCardReady: (brand: string, last4: string) => void;
   onEdit: (step: number) => void;
@@ -3063,7 +3060,7 @@ function LiteralPageFive({
       ? `${maidCount} cleaner${maidCount === 1 ? "" : "s"} · ${hourCount} hours`
       : `${bedrooms === 0 ? "Studio" : `${bedrooms} bedrooms`} · ${bathrooms} bathrooms`;
   const serviceSummary = `${frequencyLabel} · ${CONDITION_COPY[condition - 1]}`;
-  const showCardEntry = phase === 7;
+  const showCardEntry = phase === 6 || phase === 7;
   const showFinalReview = phase === 8;
 
   return (
@@ -3276,23 +3273,15 @@ function LiteralPageFive({
                           <Check /> Your card is securely on file. Continue to
                           take a final look at your booking.
                         </div>
-                      ) : funnelRecord ? (
-                        <BookingPaymentCheckout
-                          publicFunnelNumber={funnelRecord.publicFunnelNumber}
-                          mutationToken={funnelRecord.mutationToken}
-                          customerName={`${firstName} ${lastName}`.trim()}
-                          amountCents={total}
-                          directCardEntry
-                          deferConfirmation
+                      ) : (
+                        <PublicBookingCardSetupBeforeReservation
+                          customerName={customerName}
+                          onPrepareReservation={onPrepareReservation}
+                          creatingBooking={isSaving}
                           onComplete={result =>
                             onCardReady(result.cardBrand, result.cardLast4)
                           }
                         />
-                      ) : (
-                        <div className="literal-book-card-message" role="alert">
-                          Your booking details need to be saved before secure
-                          card entry.
-                        </div>
                       )}
                     </div>
                   </section>
@@ -3356,11 +3345,7 @@ function LiteralPageFive({
               </span>
             </div>
             <em>{showFinalReview ? "Review & confirm" : "Secure checkout"}</em>
-            {phase === 6 ? (
-              <button type="button" onClick={onReserve} disabled={isSaving}>
-                {isSaving ? "Saving…" : "Continue to secure card setup →"}
-              </button>
-            ) : phase === 8 ? (
+            {phase === 8 ? (
               <button type="button" onClick={onFinalize} disabled={isSaving}>
                 {isSaving ? "Saving…" : "Everything looks good →"}
               </button>
