@@ -60,11 +60,15 @@ describe("approved eight-step public booking flow", () => {
     expect(page).toContain("directCardEntry");
     expect(page).toContain("<PublicBookingCardSetupBeforeReservation");
     expect(page).toContain("const showCardEntry = phase === 6 || phase === 7;");
-    expect(page).toContain('"card" | "apple_pay" | "cashapp" | null');
+    expect(page).toContain('"card" | "apple_pay" | "cashapp" | "google_pay" | null');
     expect(page).toContain('selectedPaymentMethod === "card" ? " is-open" : ""');
     expect(page).toContain('selectedPaymentMethod === "apple_pay" ? " is-open" : ""');
     expect(page).toContain('selectedPaymentMethod === "cashapp" ? " is-open" : ""');
+    expect(page).toContain('selectedPaymentMethod === "google_pay" ? " is-open" : ""');
     expect(page).toContain("<BookingCashAppCheckout");
+    expect(page).toContain("<BookingWalletCardOnFileCheckout");
+    expect(page).toContain('wallet="apple_pay"');
+    expect(page).toContain('wallet="google_pay"');
     expect(page).toContain("How would you like to secure your booking?");
     expect(page).not.toContain("Continue to secure card setup →");
     expect(checkout).toMatch(/if\s*\(\s*!directCardEntry\s*\|\|/);

@@ -5481,7 +5481,8 @@ button.booking-card-acceptance-submit:disabled {
 }
 .literal-book-page-five .literal-book-card-choice.is-selected,
 .literal-book-page-five .literal-book-apple-pay-choice.is-selected,
-.literal-book-page-five .literal-book-cashapp-choice.is-selected {
+.literal-book-page-five .literal-book-cashapp-choice.is-selected,
+.literal-book-page-five .literal-book-google-pay-choice.is-selected {
   border-color: #d95b49;
   background: #fff8f5;
   box-shadow: 0 0 0 1px #d95b49;
@@ -5533,7 +5534,8 @@ button.booking-card-acceptance-submit:disabled {
 }
 .literal-book-page-five .literal-book-card-detail:not(.is-open),
 .literal-book-page-five .literal-book-apple-pay-detail:not(.is-open),
-.literal-book-page-five .literal-book-cashapp-detail:not(.is-open) {
+.literal-book-page-five .literal-book-cashapp-detail:not(.is-open),
+.literal-book-page-five .literal-book-google-pay-detail:not(.is-open) {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -5559,7 +5561,8 @@ button.booking-card-acceptance-submit:disabled {
   margin-top: 0;
 }
 .literal-book-page-five .literal-book-apple-pay-choice,
-.literal-book-page-five .literal-book-cashapp-choice {
+.literal-book-page-five .literal-book-cashapp-choice,
+.literal-book-page-five .literal-book-google-pay-choice {
   position: relative;
   margin: 14px 0 0;
   padding: 17px 18px;
@@ -5568,12 +5571,19 @@ button.booking-card-acceptance-submit:disabled {
   background: #fff;
 }
 .literal-book-page-five .literal-book-apple-pay-detail,
-.literal-book-page-five .literal-book-cashapp-detail {
+.literal-book-page-five .literal-book-cashapp-detail,
+.literal-book-page-five .literal-book-google-pay-detail {
   margin: 16px 0 0 31px;
   padding-top: 15px;
   border-top: 1px solid #e9dfda;
 }
 .literal-book-page-five .literal-book-apple-pay-note {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-google-pay-note {
   margin: 0 0 11px;
   color: #777;
   font-size: 12px;
@@ -5585,7 +5595,13 @@ button.booking-card-acceptance-submit:disabled {
   font-size: 12px;
   line-height: 1.5;
 }
-.literal-book-page-five .literal-book-apple-pay-element:not(.is-active) {
+.literal-book-page-five .literal-book-google-pay-unavailable {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-wallet-element:not(.is-active) {
   position: absolute;
   left: -10000px;
   width: min(400px, calc(100vw - 40px));
@@ -5594,22 +5610,28 @@ button.booking-card-acceptance-submit:disabled {
   opacity: 0;
   pointer-events: none;
 }
-.literal-book-page-five .literal-book-apple-pay-error {
+.literal-book-page-five .literal-book-wallet-error {
   margin: 10px 0 0;
   color: #b42318;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.45;
 }
-.literal-book-page-five .literal-book-apple-pay-probe {
+.literal-book-page-five .literal-book-wallet-probe {
   display: block;
   width: 1px;
   height: 1px;
   overflow: hidden;
 }
-.literal-book-page-five .literal-book-apple-pay-probe svg {
+.literal-book-page-five .literal-book-wallet-probe svg {
   width: 1px;
   height: 1px;
+}
+.literal-book-page-five .literal-book-wallet-consent {
+  margin: 11px 0 0;
+  color: #777;
+  font-size: 11px;
+  line-height: 1.55;
 }
 /* Cash App uses the same closed accordion presentation as the other methods. */
 .literal-book-page-five .literal-book-cashapp-note {

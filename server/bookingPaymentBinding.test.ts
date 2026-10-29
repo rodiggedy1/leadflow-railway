@@ -46,4 +46,10 @@ describe("booking-bound Stripe setup adapter", () => {
     expect(verification).toContain("metadata.bookingPaymentProfileId !== String(input.bookingPaymentProfileId)");
     expect(verification).toContain("paymentMethod.customer !== input.stripeCustomerId");
   });
+
+  it("accepts a Stripe card payment method without excluding wallet-backed cards", () => {
+    const verification = read("server/bookingPaymentVerification.ts");
+    expect(verification).toContain('paymentMethod.type !== "card"');
+    expect(verification).not.toContain("paymentMethod.card.wallet?.type");
+  });
 });

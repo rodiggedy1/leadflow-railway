@@ -88,9 +88,9 @@ describe("public booking Cash App immediate payment", () => {
     expect(component).not.toContain("Continue with Cash App");
     expect(component).not.toContain("generateLink");
     expect(book).toContain("<PublicBookingCardSetupBeforeReservation");
-    expect(book).toContain("<BookingApplePayCheckout");
+    expect(book).toContain("<BookingWalletCardOnFileCheckout");
     expect(book).toContain("<BookingCashAppCheckout");
-    expect(book).toContain('"card" | "apple_pay" | "cashapp" | null');
+    expect(book).toContain('"card" | "apple_pay" | "cashapp" | "google_pay" | null');
     expect(book).toContain('selectedPaymentMethod === "cashapp" ? " is-open" : ""');
     expect(book).toContain("onCashAppPaid={totalCents =>");
     expect(book).toContain('onPaid={onCashAppPaid}');
@@ -101,7 +101,7 @@ describe("public booking Cash App immediate payment", () => {
     expect(card).toContain("InternalCardSetupForm");
   });
 
-  it("cancels a pending Cash App intent before opening Card or Apple Pay, without treating a cancelled attempt as a booking", () => {
+  it("cancels a pending Cash App intent before opening Card, Apple Pay, or Google Pay, without treating a cancelled attempt as a booking", () => {
     const component = read("client/src/components/BookingCashAppCheckout.tsx");
     const book = read("client/src/pages/Book.tsx");
     const engine = read("server/bookingCashAppEngine.ts");
@@ -113,8 +113,10 @@ describe("public booking Cash App immediate payment", () => {
     expect(component).toContain("abandonPrepared");
     expect(component).toContain("alreadySucceeded");
     expect(component).toContain("Cash App wasn’t completed. Choose another payment method.");
+    expect(component).toContain('type ExitDestination = "card" | "apple_pay" | "google_pay" | null');
     expect(book).toContain("const choosePaymentMethod");
     expect(book).toContain("setCashAppExitRequest(method)");
+    expect(book).toContain('method === "google_pay"');
     expect(book).toContain("allowCashAppSwitch");
     expect(book).toContain("onCashAppExited={(destination, notice) =>");
     expect(engine).toContain("markCashAppPaymentUnavailable(db, cancelled, \"cancelled\")");
