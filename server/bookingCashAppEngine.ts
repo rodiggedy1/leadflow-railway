@@ -469,8 +469,7 @@ export async function abandonCashAppPayment(
     .where(
       and(
         eq(bookingCashAppPayments.bookingId, input.bookingId),
-        eq(bookingCashAppPayments.stripePaymentIntentId, input.paymentIntentId),
-        eq(bookingCashAppPayments.status, "pending")
+        eq(bookingCashAppPayments.stripePaymentIntentId, input.paymentIntentId)
       )
     )
     .limit(1);
@@ -479,6 +478,13 @@ export async function abandonCashAppPayment(
   const intent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
   if (intent.status === "succeeded") {
     return { abandoned: false as const, alreadySucceeded: true as const };
+  }
+  if (payment.status !== "pending") {
+    return { abandoned: true as const, alreadySucceeded: false as const };
+  }
+  if (intent.status === "requires_payment_method") {
+    await markCashAppPaymentUnavailable(db, intent, "failed");
+    return { abandoned: true as const, alreadySucceeded: false as const };
   }
   const cancelled =
     intent.status === "canceled"

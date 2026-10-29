@@ -410,6 +410,9 @@ export default function Book() {
   const [applePayAvailable, setApplePayAvailable] = useState(false);
   const [applePayBusy, setApplePayBusy] = useState(false);
   const [cashAppBusy, setCashAppBusy] = useState(false);
+  const [cashAppExitRequest, setCashAppExitRequest] = useState<
+    "card" | "apple_pay" | null
+  >(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
     "card" | "apple_pay" | "cashapp" | null
   >(null);
@@ -452,6 +455,21 @@ export default function Book() {
     finalizeBookingMutation.isPending ||
     applePayBusy ||
     cashAppBusy;
+  const choosePaymentMethod = (
+    method: "card" | "apple_pay" | "cashapp" | null
+  ) => {
+    if (
+      cashAppBusy &&
+      selectedPaymentMethod === "cashapp" &&
+      (method === "card" || method === "apple_pay")
+    ) {
+      setCashAppExitRequest(method);
+      return;
+    }
+    setCashAppExitRequest(null);
+    setSelectedPaymentMethod(method);
+    setFormError("");
+  };
   const applePayQuote = useMemo(
     () => ({
       pricing: pricingInput,
@@ -853,7 +871,13 @@ export default function Book() {
         cardOnFile={cardOnFile}
         applePayAvailable={applePayAvailable}
         selectedPaymentMethod={selectedPaymentMethod}
-        onPaymentMethodChange={setSelectedPaymentMethod}
+        onPaymentMethodChange={choosePaymentMethod}
+        allowCashAppSwitch={
+          selectedPaymentMethod === "cashapp" &&
+          cashAppBusy &&
+          cashAppExitRequest === null
+        }
+        cashAppExitRequest={cashAppExitRequest}
         applePayQuote={applePayQuote}
         onApplePayAvailable={setApplePayAvailable}
         onApplePayBusyChange={setApplePayBusy}
@@ -867,6 +891,11 @@ export default function Book() {
           setCardLabel(`Cash App · ${money(totalCents)} paid today`);
           setFormError("");
           setComplete(true);
+        }}
+        onCashAppExited={(destination, notice) => {
+          setCashAppExitRequest(null);
+          setSelectedPaymentMethod(destination);
+          setFormError(notice ?? "");
         }}
         onCardReady={(brand, last4) => {
           setCardLabel(`${brand} ending in ${last4}`);
@@ -2951,12 +2980,15 @@ function LiteralPageFive({
   applePayAvailable,
   selectedPaymentMethod,
   onPaymentMethodChange,
+  allowCashAppSwitch,
+  cashAppExitRequest,
   applePayQuote,
   onApplePayAvailable,
   onApplePayBusyChange,
   onApplePayPaid,
   onCashAppBusyChange,
   onCashAppPaid,
+  onCashAppExited,
   onCardReady,
   onRetryFinalization,
 }: {
@@ -2994,6 +3026,8 @@ function LiteralPageFive({
   onPaymentMethodChange: (
     method: "card" | "apple_pay" | "cashapp" | null
   ) => void;
+  allowCashAppSwitch: boolean;
+  cashAppExitRequest: "card" | "apple_pay" | null;
   applePayQuote: {
     pricing: ReturnType<typeof createCanonicalPricingInput>;
     acceptedPricing: {
@@ -3006,6 +3040,10 @@ function LiteralPageFive({
   onApplePayPaid: (totalCents: number) => void;
   onCashAppBusyChange: (busy: boolean) => void;
   onCashAppPaid: (totalCents: number) => void;
+  onCashAppExited: (
+    destination: "card" | "apple_pay" | null,
+    notice?: string
+  ) => void;
   onCardReady: (brand: string, last4: string) => void;
   onRetryFinalization: () => void;
 }) {
@@ -3195,7 +3233,7 @@ function LiteralPageFive({
                   className="literal-book-card-choice-head"
                   aria-expanded={selectedPaymentMethod === "card"}
                   onClick={() => onPaymentMethodChange("card")}
-                  disabled={isSaving}
+                  disabled={isSaving && !allowCashAppSwitch}
                 >
                   <span aria-hidden="true">
                     {selectedPaymentMethod === "card" ? "✓" : ""}
@@ -3237,7 +3275,7 @@ function LiteralPageFive({
                   className="literal-book-card-choice-head"
                   aria-expanded={selectedPaymentMethod === "apple_pay"}
                   onClick={() => onPaymentMethodChange("apple_pay")}
-                  disabled={isSaving}
+                  disabled={isSaving && !allowCashAppSwitch}
                 >
                   <span aria-hidden="true">
                     {selectedPaymentMethod === "apple_pay" ? "✓" : ""}
@@ -3282,7 +3320,7 @@ function LiteralPageFive({
                   className="literal-book-card-choice-head"
                   aria-expanded={selectedPaymentMethod === "cashapp"}
                   onClick={() => onPaymentMethodChange("cashapp")}
-                  disabled={isSaving}
+                  disabled={isSaving && !allowCashAppSwitch}
                 >
                   <span aria-hidden="true">
                     {selectedPaymentMethod === "cashapp" ? "✓" : ""}
@@ -3304,9 +3342,15 @@ function LiteralPageFive({
                   <BookingCashAppCheckout
                     active={selectedPaymentMethod === "cashapp"}
                     totalCents={total}
+                    exitRequest={
+                      selectedPaymentMethod === "cashapp"
+                        ? cashAppExitRequest
+                        : null
+                    }
                     onPrepareReservation={onPrepareReservation}
                     onBusyChange={onCashAppBusyChange}
                     onPaid={onCashAppPaid}
+                    onExited={onCashAppExited}
                   />
                 </div>
               </section>

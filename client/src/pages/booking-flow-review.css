@@ -5657,8 +5657,9 @@ button.booking-card-acceptance-submit:disabled {
   line-height: 1.45;
 }
 .literal-book-page-five .literal-book-cashapp-pending {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 0;
   color: #68615d;
@@ -5668,6 +5669,25 @@ button.booking-card-acceptance-submit:disabled {
 .literal-book-page-five .literal-book-cashapp-pending svg {
   width: 16px;
   height: 16px;
+}
+.literal-book-page-five .literal-book-cashapp-cancel {
+  border: 0;
+  background: transparent;
+  color: #b94636;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.literal-book-page-five .literal-book-cashapp-cancel:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+.literal-book-page-five .literal-book-cashapp-pending .literal-book-cashapp-error {
+  flex-basis: 100%;
 }
 .literal-book-cashapp-return {
   display: grid;

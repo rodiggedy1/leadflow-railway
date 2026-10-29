@@ -83,6 +83,7 @@ describe("public booking Cash App immediate payment", () => {
     expect(component).toContain("return_url:");
     expect(component).toContain("trpc.cashApp.booking.prepare.useMutation");
     expect(component).toContain("trpc.cashApp.booking.settle.useMutation");
+    expect(component).toContain("trpc.cashApp.booking.abandon.useMutation");
     expect(component).not.toContain("PaymentElement");
     expect(component).not.toContain("Continue with Cash App");
     expect(component).not.toContain("generateLink");
@@ -98,5 +99,27 @@ describe("public booking Cash App immediate payment", () => {
     expect(cashRouter).toContain("booking: bookingCashAppRouter");
     expect(cashRouter).toContain("generateLink: agentProcedure");
     expect(card).toContain("InternalCardSetupForm");
+  });
+
+  it("cancels a pending Cash App intent before opening Card or Apple Pay, without treating a cancelled attempt as a booking", () => {
+    const component = read("client/src/components/BookingCashAppCheckout.tsx");
+    const book = read("client/src/pages/Book.tsx");
+    const engine = read("server/bookingCashAppEngine.ts");
+    const abandonBlock = engine.slice(
+      engine.indexOf("export async function abandonCashAppPayment")
+    );
+    expect(component).toContain("Cancel Cash App");
+    expect(component).toContain("exitRequest");
+    expect(component).toContain("abandonPrepared");
+    expect(component).toContain("alreadySucceeded");
+    expect(component).toContain("Cash App wasn’t completed. Choose another payment method.");
+    expect(book).toContain("const choosePaymentMethod");
+    expect(book).toContain("setCashAppExitRequest(method)");
+    expect(book).toContain("allowCashAppSwitch");
+    expect(book).toContain("onCashAppExited={(destination, notice) =>");
+    expect(engine).toContain("markCashAppPaymentUnavailable(db, cancelled, \"cancelled\")");
+    expect(abandonBlock).toContain('intent.status === "requires_payment_method"');
+    expect(abandonBlock).toContain('markCashAppPaymentUnavailable(db, intent, "failed")');
+    expect(abandonBlock).not.toContain("sendBookingCompletionNotifications");
   });
 });
