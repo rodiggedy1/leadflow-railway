@@ -74,32 +74,51 @@ describe("approved eight-step public booking flow", () => {
     expect(page).not.toContain("booking-payment-security");
   });
 
-  it("keeps checkout in place after Stripe confirms the card until the customer reviews", () => {
+  it("finalizes the booking immediately after Stripe confirms the card", () => {
     const literalCheckoutController = page.slice(
-      page.indexOf("if (step === 6 || step === 7 || step === 8)"),
+      page.indexOf("const finalizeConfirmedCard = async () =>"),
       page.indexOf(
         '  return (\n    <main className="booking-review-page booking-live-page">'
       )
     );
     expect(literalCheckoutController).toMatch(
-      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setCardOnFile\(true\);[\s\S]*setFormError\(""\);[\s\S]*\}\}/
+      /const finalizeConfirmedCard = async \(\) => \{[\s\S]*finalizeBookingMutation\.mutateAsync\([\s\S]*setComplete\(true\);/
     );
     expect(literalCheckoutController).not.toMatch(
-      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setStep\(8\);[\s\S]*\}\}/
+      /const finalizeConfirmedCard = async \(\) => \{\s*if \(step === 8\)/
     );
-    expect(literalCheckoutController).toContain(
+    expect(literalCheckoutController).toMatch(
+      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setCardOnFile\(true\);[\s\S]*void finalizeConfirmedCard\(\);[\s\S]*\}\}/
+    );
+    expect(literalCheckoutController).not.toContain(
       "onReviewBooking={() => setStep(8)}"
     );
-    expect(page).toContain("Review booking →");
+    expect(literalCheckoutController).not.toContain("Review booking →");
   });
 
-  it("uses the approved tip and thank-you completion presentation without post-booking add-on UI", () => {
+  it("keeps the active literal checkout out of the obsolete Phase 8 review state", () => {
+    const literalPageFive = page.slice(
+      page.indexOf("function LiteralPageFive("),
+      page.indexOf("\nfunction formatPhoneInput(")
+    );
+    expect(literalPageFive).toContain("phase: 6 | 7;");
+    expect(literalPageFive).not.toContain("showFinalReview");
+    expect(literalPageFive).not.toContain("Review booking →");
+    expect(literalPageFive).not.toContain("onFinalize");
+    expect(literalPageFive).toContain("cardOnFile && formError");
+    expect(literalPageFive).toContain("onRetryFinalization");
+    expect(literalPageFive).toContain("Try confirming booking →");
+  });
+
+  it("takes a completed booking directly to the thank-you presentation without a tip preview or post-booking add-on UI", () => {
     expect(page).toContain("literal-book-page-six");
-    expect(page).toContain("Tip your team");
+    expect(page).toContain('"Confirmation"');
     expect(page).toContain("literal-book-thankyou");
-    expect(page).toContain(
+    expect(page).not.toContain("literal-book-tip-v2");
+    expect(page).not.toContain(
       "Tipping is not collected or recorded in this booking flow."
     );
+    expect(page).not.toContain("No tip, thanks — I&apos;m all set");
     expect(page).not.toContain("POST_BOOKING_UPSELLS");
     expect(page).not.toContain("booking-upsell-modal");
     expect(page).not.toContain("booking-upsell-estimate");

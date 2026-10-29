@@ -518,28 +518,27 @@ export default function Book() {
         return null;
       }
     };
-  const next = async () => {
-    if (step === 8) {
-      const current = funnelRecordRef.current;
-      if (!current || !cardOnFile) {
-        setFormError("Add a card before confirming your booking.");
-        return;
-      }
-      try {
-        await finalizeBookingMutation.mutateAsync({
-          publicFunnelNumber: current.publicFunnelNumber,
-          mutationToken: current.mutationToken,
-        });
-        setComplete(true);
-      } catch (error) {
-        setFormError(
-          error instanceof Error
-            ? error.message
-            : "We could not confirm your booking. Please try again."
-        );
-      }
+  const finalizeConfirmedCard = async () => {
+    const current = funnelRecordRef.current;
+    if (!current) {
+      setFormError("We couldn't confirm your booking. Please try again.");
       return;
     }
+    try {
+      await finalizeBookingMutation.mutateAsync({
+        publicFunnelNumber: current.publicFunnelNumber,
+        mutationToken: current.mutationToken,
+      });
+      setComplete(true);
+    } catch (error) {
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "We could not confirm your booking. Please try again."
+      );
+    }
+  };
+  const next = async () => {
     setStep(current => current + 1);
   };
   const changeExtra = (id: string, delta: number) =>
@@ -595,7 +594,7 @@ export default function Book() {
                 "Your quote",
                 "Schedule",
                 "Checkout",
-                "Tip your team",
+                "Confirmation",
               ].map((label, index) => (
                 <div
                   className={`literal-book-navitem${index === 0 ? " active" : ""}`}
@@ -792,7 +791,7 @@ export default function Book() {
         onContinue={() => void next()}
       />
     );
-  if (step === 6 || step === 7 || step === 8)
+  if (step === 6 || step === 7)
     return (
       <LiteralPageFive
         phase={step}
@@ -807,10 +806,6 @@ export default function Book() {
         selectedDate={selectedDate}
         selectedTime={selectedTime}
         total={priceBreakdown.firstCleaningTotalCents}
-        futureTotal={priceBreakdown.futureVisitTotalCents}
-        extras={selectedExtras}
-        quantities={extras}
-        homeType={homeType}
         customerName={customerName}
         firstName={firstName}
         lastName={lastName}
@@ -836,10 +831,9 @@ export default function Book() {
           setCardLabel(`${brand} ending in ${last4}`);
           setCardOnFile(true);
           setFormError("");
+          void finalizeConfirmedCard();
         }}
-        onEdit={setStep}
-        onReviewBooking={() => setStep(8)}
-        onFinalize={() => void next()}
+        onRetryFinalization={() => void finalizeConfirmedCard()}
       />
     );
   return (
@@ -1217,7 +1211,7 @@ function LiteralPageThree({
               "Your quote",
               "Schedule",
               "Checkout",
-              "Tip your team",
+              "Confirmation",
             ].map((label, index) => (
               <div
                 className={`literal-book-navitem${index === 2 ? " active" : index < 2 ? " done" : ""}`}
@@ -1612,7 +1606,7 @@ function LiteralPageFour({
               "Your quote",
               "Schedule",
               "Checkout",
-              "Tip your team",
+              "Confirmation",
             ].map((label, index) => (
               <div
                 className={`literal-book-navitem${index === 3 ? " active" : index < 3 ? " done" : ""}`}
@@ -1960,7 +1954,7 @@ function LiteralPageTwo({
               "Your quote",
               "Schedule",
               "Checkout",
-              "Tip your team",
+              "Confirmation",
             ].map((label, index) => (
               <div
                 className={`literal-book-navitem${index === 1 ? " active" : index < 1 ? " done" : ""}`}
@@ -2982,10 +2976,6 @@ function LiteralPageFive({
   selectedDate,
   selectedTime,
   total,
-  futureTotal,
-  extras,
-  quantities,
-  homeType,
   customerName,
   firstName,
   lastName,
@@ -3006,11 +2996,9 @@ function LiteralPageFive({
   formError,
   cardOnFile,
   onCardReady,
-  onEdit,
-  onReviewBooking,
-  onFinalize,
+  onRetryFinalization,
 }: {
-  phase: 6 | 7 | 8;
+  phase: 6 | 7;
   service: string;
   pricingMode: PublicBookingPricingMode;
   bedrooms: number;
@@ -3022,10 +3010,6 @@ function LiteralPageFive({
   selectedDate: Date;
   selectedTime: (typeof TIME_SLOTS)[number];
   total: number;
-  futureTotal: number | null;
-  extras: readonly Extra[];
-  quantities: Record<string, number>;
-  homeType: string;
   customerName: string;
   firstName: string;
   lastName: string;
@@ -3046,9 +3030,7 @@ function LiteralPageFive({
   formError: string;
   cardOnFile: boolean;
   onCardReady: (brand: string, last4: string) => void;
-  onEdit: (step: number) => void;
-  onReviewBooking: () => void;
-  onFinalize: () => void;
+  onRetryFinalization: () => void;
 }) {
   const dateLabel = selectedDate.toLocaleDateString("en-US", {
     weekday: "short",
@@ -3063,7 +3045,6 @@ function LiteralPageFive({
       : `${bedrooms === 0 ? "Studio" : `${bedrooms} bedrooms`} · ${bathrooms} bathrooms`;
   const serviceSummary = `${frequencyLabel} · ${CONDITION_COPY[condition - 1]}`;
   const showCardEntry = phase === 6 || phase === 7;
-  const showFinalReview = phase === 8;
 
   return (
     <main className="literal-book-page-five">
@@ -3093,7 +3074,7 @@ function LiteralPageFive({
               "Your quote",
               "Schedule",
               "Checkout",
-              "Tip your team",
+              "Confirmation",
             ].map((label, index) => (
               <div
                 className={`literal-book-navitem${index === 4 ? " active" : index < 4 ? " done" : ""}`}
@@ -3190,144 +3171,117 @@ function LiteralPageFive({
               <span>Clear pricing, no surprises</span>
             </div>
           </section>
+          <section className="literal-book-checkout-contact">
+            <h2>Where should we send your confirmation?</h2>
+            <p>We&apos;ll use these details to coordinate your cleaning.</p>
+            {phase === 6 ? (
+              <LiteralCheckoutContactForm
+                name={customerName}
+                phone={phone}
+                email={email}
+                notes={notes}
+                onName={onCustomerName}
+                onPhone={onPhone}
+                onEmail={onEmail}
+                onNotes={onNotes}
+              />
+            ) : (
+              <div className="literal-book-checkout-contact-saved">
+                <span>
+                  <b>{`${firstName} ${lastName}`.trim()}</b>
+                  <small>{phone}</small>
+                </span>
+                <span>
+                  <b>{email}</b>
+                  {notes ? <small>Access notes saved</small> : null}
+                </span>
+              </div>
+            )}
+          </section>
 
-          {!showFinalReview && (
+          {showCardEntry && (
             <>
-              <section className="literal-book-checkout-contact">
-                <h2>Where should we send your confirmation?</h2>
-                <p>We&apos;ll use these details to coordinate your cleaning.</p>
-                {phase === 6 ? (
-                  <LiteralCheckoutContactForm
-                    name={customerName}
-                    phone={phone}
-                    email={email}
-                    notes={notes}
-                    onName={onCustomerName}
-                    onPhone={onPhone}
-                    onEmail={onEmail}
-                    onNotes={onNotes}
-                  />
-                ) : (
-                  <div className="literal-book-checkout-contact-saved">
-                    <span>
-                      <b>{`${firstName} ${lastName}`.trim()}</b>
-                      <small>{phone}</small>
-                    </span>
-                    <span>
-                      <b>{email}</b>
-                      {notes ? <small>Access notes saved</small> : null}
-                    </span>
-                  </div>
-                )}
+              <section className="literal-book-payment-heading">
+                <div className="literal-book-eyebrow">Secure checkout</div>
+                <h2>Payment</h2>
+                <p>
+                  Securely save your card now. You&apos;re charged after the
+                  cleaning.
+                </p>
               </section>
 
-              {showCardEntry && (
-                <>
-                  <section className="literal-book-payment-heading">
-                    <div className="literal-book-eyebrow">Secure checkout</div>
-                    <h2>Payment</h2>
+              <section className="literal-book-payment-brand">
+                <div
+                  className="literal-book-payment-brand-card"
+                  aria-hidden="true"
+                >
+                  <strong>
+                    MAIDS <span>IN BLACK</span>
+                  </strong>
+                  <b>•••• &nbsp; •••• &nbsp; •••• &nbsp; ••••</b>
+                  <small>YOUR CLEANING · YOUR WAY</small>
+                </div>
+                <div>
+                  <strong>Your payment. Protected.</strong>
+                  <p>
+                    Secure payment processing, clear charges, and no card
+                    details stored by Maids in Black.
+                  </p>
+                  <span>
+                    <ShieldCheck /> Secure checkout powered by Stripe
+                  </span>
+                </div>
+              </section>
+
+              <section
+                className="literal-book-card-choice"
+                aria-label="Payment method"
+              >
+                <div className="literal-book-card-choice-head">
+                  <span aria-hidden="true">✓</span>
+                  <div>
+                    <strong>Card on file · pay after service</strong>
                     <p>
                       Securely save your card now. You&apos;re charged after the
                       cleaning.
                     </p>
-                  </section>
-
-                  <section className="literal-book-payment-brand">
-                    <div
-                      className="literal-book-payment-brand-card"
-                      aria-hidden="true"
-                    >
-                      <strong>
-                        MAIDS <span>IN BLACK</span>
-                      </strong>
-                      <b>•••• &nbsp; •••• &nbsp; •••• &nbsp; ••••</b>
-                      <small>YOUR CLEANING · YOUR WAY</small>
-                    </div>
-                    <div>
-                      <strong>Your payment. Protected.</strong>
-                      <p>
-                        Secure payment processing, clear charges, and no card
-                        details stored by Maids in Black.
-                      </p>
-                      <span>
-                        <ShieldCheck /> Secure checkout powered by Stripe
-                      </span>
-                    </div>
-                  </section>
-
-                  <section
-                    className="literal-book-card-choice"
-                    aria-label="Payment method"
-                  >
-                    <div className="literal-book-card-choice-head">
-                      <span aria-hidden="true">✓</span>
-                      <div>
-                        <strong>Card on file · pay after service</strong>
-                        <p>
-                          Securely save your card now. You&apos;re charged after
-                          the cleaning.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="literal-book-card-detail">
-                      {cardOnFile ? (
-                        <div className="literal-book-card-message">
-                          <Check /> Your card is securely on file. Continue to
-                          take a final look at your booking.
-                        </div>
-                      ) : (
-                        <PublicBookingCardSetupBeforeReservation
-                          customerName={customerName}
-                          onPrepareReservation={onPrepareReservation}
-                          creatingBooking={isSaving}
-                          onComplete={result =>
-                            onCardReady(result.cardBrand, result.cardLast4)
-                          }
-                        />
-                      )}
-                    </div>
-                  </section>
-                </>
-              )}
-
-              <div className="literal-book-trust-grid">
-                <div>
-                  <b>✓ 200% satisfaction guarantee</b>
-                  <span>We stand behind the cleaning service.</span>
+                  </div>
                 </div>
-                <div>
-                  <b>✓ Insured cleaning teams</b>
-                  <span>Professional service with added peace of mind.</span>
+                <div className="literal-book-card-detail">
+                  {cardOnFile ? (
+                    <div className="literal-book-card-message">
+                      <Check /> Your card is securely on file. Confirming your
+                      booking now.
+                    </div>
+                  ) : (
+                    <PublicBookingCardSetupBeforeReservation
+                      customerName={customerName}
+                      onPrepareReservation={onPrepareReservation}
+                      creatingBooking={isSaving}
+                      onComplete={result =>
+                        onCardReady(result.cardBrand, result.cardLast4)
+                      }
+                    />
+                  )}
                 </div>
-              </div>
-              <LiteralCheckoutProof
-                reviewStoryIndex={reviewStoryIndex}
-                onReviewStoryChange={onReviewStoryChange}
-              />
+              </section>
             </>
           )}
 
-          {showFinalReview && (
-            <section className="literal-book-final-review">
-              <div className="literal-book-eyebrow">Review &amp; confirm</div>
-              <ReviewAndBook
-                service={service}
-                bedrooms={bedrooms}
-                bathrooms={bathrooms}
-                homeType={homeType}
-                pricingMode={pricingMode}
-                maidCount={maidCount}
-                hourCount={hourCount}
-                condition={condition}
-                extras={extras}
-                quantities={quantities}
-                total={total}
-                futureTotal={futureTotal}
-                frequencyLabel={frequencyLabel}
-                onEdit={onEdit}
-              />
-            </section>
-          )}
+          <div className="literal-book-trust-grid">
+            <div>
+              <b>✓ 200% satisfaction guarantee</b>
+              <span>We stand behind the cleaning service.</span>
+            </div>
+            <div>
+              <b>✓ Insured cleaning teams</b>
+              <span>Professional service with added peace of mind.</span>
+            </div>
+          </div>
+          <LiteralCheckoutProof
+            reviewStoryIndex={reviewStoryIndex}
+            onReviewStoryChange={onReviewStoryChange}
+          />
 
           {formError && (
             <div className="literal-book-checkout-error" role="alert">
@@ -3338,26 +3292,16 @@ function LiteralPageFive({
           <div className="literal-book-checkout-dock">
             <div>
               <b>First cleaning · {money(total)}</b>
-              <span>
-                {showFinalReview
-                  ? "Card on file · ready to confirm"
-                  : showCardEntry
-                    ? "Card charged after service"
-                    : "Card charged after service"}
-              </span>
+              <span>Card charged after service</span>
             </div>
-            <em>{showFinalReview ? "Review & confirm" : "Secure checkout"}</em>
-            {phase === 8 ? (
-              <button type="button" onClick={onFinalize} disabled={isSaving}>
-                {isSaving ? "Saving…" : "Everything looks good →"}
-              </button>
-            ) : cardOnFile ? (
+            <em>Secure checkout</em>
+            {cardOnFile && formError ? (
               <button
                 type="button"
-                onClick={onReviewBooking}
+                onClick={onRetryFinalization}
                 disabled={isSaving}
               >
-                Review booking →
+                Try confirming booking →
               </button>
             ) : null}
           </div>
@@ -3907,18 +3851,6 @@ function BookingSuccess({
   frequencyLabel: string;
   cardLabel: string;
 }) {
-  const [completionView, setCompletionView] = useState<"tip" | "thank-you">(
-    "tip"
-  );
-  const [tipPreview, setTipPreview] = useState<number | null>(null);
-  const tipOptions = [10, 15, 20, 25, 30] as const;
-  const tipCopy = [
-    ["A little thank-you", "A kind gesture", "♡"],
-    ["Thanks so much", "A thoughtful extra", "✿"],
-    ["You’re amazing", "Show some extra love", "✦"],
-    ["Above & beyond", "For exceptional care", "★"],
-    ["Made my day", "A generous thank-you", "♥"],
-  ] as const;
   const homeDetails = `${bedrooms === 0 ? "Studio" : `${bedrooms} bedrooms`} · ${bathrooms} bathrooms`;
 
   return (
@@ -3949,7 +3881,7 @@ function BookingSuccess({
               "Your quote",
               "Schedule",
               "Checkout",
-              "Tip your team",
+              "Confirmation",
             ].map((label, index) => (
               <div
                 className={`literal-book-navitem${index === 5 ? " active" : " done"}`}
@@ -3970,237 +3902,101 @@ function BookingSuccess({
             </span>
           </div>
 
-          {completionView === "tip" ? (
-            <section className="literal-book-tip-v2">
-              <div className="literal-book-tip-confirmed">
-                <span className="literal-book-tip-confirmed-icon">
-                  <Check aria-hidden="true" />
-                </span>
-                <div>
-                  <strong>Your booking is confirmed!</strong>
+          <section className="literal-book-thankyou">
+            <div className="literal-book-celebrate-art" aria-hidden="true">
+              <span>✦</span>
+              <span>✳</span>
+              <span>✦</span>
+              <span>✧</span>
+              <div>
+                <Check />
+              </div>
+            </div>
+            <div className="literal-book-eyebrow">YOU&apos;RE ALL SET</div>
+            <h1>
+              Let the clean begin<span>.</span>
+            </h1>
+            <p className="literal-book-thankyou-lead">
+              A fresh home is on the horizon. Here&apos;s everything you need to
+              know about your cleaning.
+            </p>
+
+            <section className="literal-book-thankyou-recap">
+              <div>
+                <small>YOUR CLEANING</small>
+                <strong>{service}</strong>
+                <span>{homeDetails}</span>
+              </div>
+              <div>
+                <small>YOUR PREFERRED ARRIVAL</small>
+                <strong>{dateLabel}</strong>
+                <span>{time}</span>
+              </div>
+              <div>
+                <small>BOOKING TOTAL</small>
+                <strong>{money(total)}</strong>
+                <span>{cardLabel || "Card securely on file"}</span>
+              </div>
+            </section>
+
+            {futureTotal !== null && (
+              <section className="literal-book-thankyou-recurring">
+                <span>{frequencyLabel} visits after your first cleaning</span>
+                <strong>{money(futureTotal)}/visit</strong>
+              </section>
+            )}
+
+            <section className="literal-book-thankyou-next">
+              <div className="literal-book-thankyou-heading">
+                <span className="literal-book-eyebrow">THE GOOD PART</span>
+                <h2>What happens next?</h2>
+              </div>
+              <div className="literal-book-next-steps">
+                <div className="literal-book-next-step">
                   <span>
-                    {dateLabel} · {time} · {service}
+                    <MessageCircle aria-hidden="true" />
                   </span>
-                </div>
-                <span className="literal-book-tip-confirmed-label">
-                  ALL SET
-                </span>
-              </div>
-
-              <div className="literal-book-tip-hero">
-                <div className="literal-book-tip-copy">
-                  <div className="literal-book-tip-eyebrow">
-                    ONE OPTIONAL FINISHING TOUCH <Heart aria-hidden="true" />
-                  </div>
-                  <h1>
-                    A little love goes <em>a long way.</em>
-                  </h1>
-                  <p>
-                    Early mornings, traffic, tricky parking, street closures,
-                    and carrying supplies — your cleaning team handles a lot
-                    before they even knock. If you&apos;d like to show your
-                    appreciation, they&apos;ll be grateful.
-                  </p>
-                  <div className="literal-book-tip-note">
-                    Tipping is completely optional. Your cleaning is already
-                    booked.
-                  </div>
-                </div>
-                <div className="literal-book-tip-art" aria-hidden="true">
-                  <span className="orbit1">✦</span>
-                  <span className="orbit2">✧</span>
-                  <Heart
-                    className="literal-book-tip-heart"
-                    fill="currentColor"
-                  />
-                  <span className="orbit3">✦</span>
-                </div>
-              </div>
-
-              <div className="literal-book-tip-title">
-                <div>
-                  <span className="literal-book-eyebrow">SAY IT YOUR WAY</span>
-                  <h2>Choose your thank-you</h2>
-                </div>
-                <span>Calculated from your {money(total)} cleaning</span>
-              </div>
-              <div
-                className="literal-book-tip-grid"
-                aria-label="Tip preview choices"
-              >
-                {tipOptions.map((percent, index) => {
-                  const [title, description, symbol] = tipCopy[index];
-                  const selected = tipPreview === percent;
-                  return (
-                    <button
-                      type="button"
-                      className={`literal-book-tip-choice${selected ? " selected" : ""}`}
-                      aria-pressed={selected}
-                      key={percent}
-                      onClick={() => setTipPreview(percent)}
-                    >
-                      <span className="literal-book-tip-symbol">{symbol}</span>
-                      <span className="literal-book-tip-percent">
-                        {percent}%
-                      </span>
-                      <span className="literal-book-tip-dollars">
-                        {money(Math.round((total * percent) / 100))}
-                      </span>
-                      <strong>{title}</strong>
-                      <small>{description}</small>
-                      <span className="literal-book-tip-check">
-                        <Check aria-hidden="true" />
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="literal-book-tip-unavailable" role="note">
-                <CircleHelp aria-hidden="true" />
-                <span>
-                  Tipping is not collected or recorded in this booking flow.
-                  Your selection is only a visual preview.
-                </span>
-              </div>
-
-              <div className="literal-book-tip-bottom">
-                <div className="literal-book-tip-summary">
                   <div>
-                    <span>Cleaning estimate</span>
-                    <strong>{money(total)}</strong>
+                    <b>1. Confirmation details</b>
+                    <p>
+                      We&apos;ll text your appointment details and email your
+                      confirmation and receipt.
+                    </p>
                   </div>
-                  <div>
-                    <span>Optional tip preview</span>
-                    <strong>
-                      {tipPreview === null
-                        ? "$0"
-                        : money(Math.round((total * tipPreview) / 100))}
-                    </strong>
-                  </div>
-                  <div className="literal-book-tip-total">
-                    <span>Booking total</span>
-                    <strong>{money(total)}</strong>
-                  </div>
-                  <small>No tip is added to your booking or payment.</small>
                 </div>
-                <div className="literal-book-tip-cta">
-                  <button
-                    type="button"
-                    className="literal-book-primary"
-                    onClick={() => setCompletionView("thank-you")}
-                  >
-                    Continue to booking details{" "}
-                    <ArrowRight aria-hidden="true" />
-                  </button>
-                  <button
-                    className="literal-book-tip-skip"
-                    type="button"
-                    onClick={() => setCompletionView("thank-you")}
-                  >
-                    No tip, thanks — I&apos;m all set
-                  </button>
-                  <span>Your team appreciates the thought either way.</span>
+                <div className="literal-book-next-step">
+                  <span>
+                    <House aria-hidden="true" />
+                  </span>
+                  <div>
+                    <b>2. Get your home ready</b>
+                    <p>
+                      Put away valuables and clear access to the areas
+                      you&apos;d like cleaned. We&apos;ll bring the cleaning
+                      supplies.
+                    </p>
+                  </div>
+                </div>
+                <div className="literal-book-next-step">
+                  <span>
+                    <Sparkles aria-hidden="true" />
+                  </span>
+                  <div>
+                    <b>3. We&apos;ll take it from here</b>
+                    <p>
+                      Your team will follow up about your requested arrival
+                      window before the appointment.
+                    </p>
+                  </div>
                 </div>
               </div>
             </section>
-          ) : (
-            <section className="literal-book-thankyou">
-              <div className="literal-book-celebrate-art" aria-hidden="true">
-                <span>✦</span>
-                <span>✳</span>
-                <span>✦</span>
-                <span>✧</span>
-                <div>
-                  <Check />
-                </div>
-              </div>
-              <div className="literal-book-eyebrow">YOU&apos;RE ALL SET</div>
-              <h1>
-                Let the clean begin<span>.</span>
-              </h1>
-              <p className="literal-book-thankyou-lead">
-                A fresh home is on the horizon. Here&apos;s everything you need
-                to know about your cleaning.
-              </p>
 
-              <section className="literal-book-thankyou-recap">
-                <div>
-                  <small>YOUR CLEANING</small>
-                  <strong>{service}</strong>
-                  <span>{homeDetails}</span>
-                </div>
-                <div>
-                  <small>YOUR PREFERRED ARRIVAL</small>
-                  <strong>{dateLabel}</strong>
-                  <span>{time}</span>
-                </div>
-                <div>
-                  <small>BOOKING TOTAL</small>
-                  <strong>{money(total)}</strong>
-                  <span>{cardLabel || "Card securely on file"}</span>
-                </div>
-              </section>
-
-              {futureTotal !== null && (
-                <section className="literal-book-thankyou-recurring">
-                  <span>{frequencyLabel} visits after your first cleaning</span>
-                  <strong>{money(futureTotal)}/visit</strong>
-                </section>
-              )}
-
-              <section className="literal-book-thankyou-next">
-                <div className="literal-book-thankyou-heading">
-                  <span className="literal-book-eyebrow">THE GOOD PART</span>
-                  <h2>What happens next?</h2>
-                </div>
-                <div className="literal-book-next-steps">
-                  <div className="literal-book-next-step">
-                    <span>
-                      <MessageCircle aria-hidden="true" />
-                    </span>
-                    <div>
-                      <b>1. Confirmation details</b>
-                      <p>
-                        We&apos;ll text your appointment details and email your
-                        confirmation and receipt.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="literal-book-next-step">
-                    <span>
-                      <House aria-hidden="true" />
-                    </span>
-                    <div>
-                      <b>2. Get your home ready</b>
-                      <p>
-                        Put away valuables and clear access to the areas
-                        you&apos;d like cleaned. We&apos;ll bring the cleaning
-                        supplies.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="literal-book-next-step">
-                    <span>
-                      <Sparkles aria-hidden="true" />
-                    </span>
-                    <div>
-                      <b>3. We&apos;ll take it from here</b>
-                      <p>
-                        Your team will follow up about your requested arrival
-                        window before the appointment.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <a className="literal-book-secondary" href="/book">
-                Start another booking <ArrowRight aria-hidden="true" />
-              </a>
-              <p className="literal-book-powered-final">Powered by Baseboard</p>
-            </section>
-          )}
+            <a className="literal-book-secondary" href="/book">
+              Start another booking <ArrowRight aria-hidden="true" />
+            </a>
+            <p className="literal-book-powered-final">Powered by Baseboard</p>
+          </section>
         </section>
       </div>
     </main>
