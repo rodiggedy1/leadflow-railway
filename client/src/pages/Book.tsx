@@ -25,7 +25,6 @@ import {
   Sparkles,
   Star,
   UsersRound,
-  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -50,16 +49,22 @@ import {
   createCanonicalPricingInput,
   selectedCanonicalExtras,
 } from "@shared/canonicalBooking";
-import { CANONICAL_POST_BOOKING_UPSELLS } from "@shared/canonicalBookingCatalog";
-import { easternCalendarWeekday, easternDateIso, easternDateIsoFromDate, easternDateLabel, easternMonthDate, easternMonthLabel, parseEasternDate } from "@shared/easternTime";
+import {
+  easternCalendarWeekday,
+  easternDateIso,
+  easternDateIsoFromDate,
+  easternDateLabel,
+  easternMonthDate,
+  easternMonthLabel,
+  parseEasternDate,
+} from "@shared/easternTime";
 import livingRoom from "@/assets/book-now-review/living-room.jpg";
 import promiseImage from "@/assets/book-now-review/sunlit-marble-tabletop-vignette.png";
 import kitchen from "@/assets/book-now-review/kitchen.jpg";
 import stillLife from "@/assets/book-now-review/still-life.jpg";
-import upsellCarpetCleaning from "@/assets/book-now-review/upsell-carpet-cleaning.webp";
-import upsellExteriorWindowCleaning from "@/assets/book-now-review/upsell-exterior-window-cleaning.jpeg";
 import testimonialCleaner from "@/assets/book-now-review/testimonial-cleaner.webp";
 import amberTestimonial from "@/assets/book-now-review/amber-testimonial.png";
+import reviewCustomerStory from "@/assets/book-now-review/review-customer-story.jpg";
 import standardBedroom from "@/assets/book-now-review/standard-bedroom.png";
 import deepKitchen from "@/assets/book-now-review/deep-kitchen.png";
 import moveoutBoxes from "@/assets/book-now-review/moveout-boxes.png";
@@ -254,37 +259,60 @@ const CONDITION_IMAGES = [
   reinforcementsBoxes,
   trashBags,
 ] as const;
+const LITERAL_CONDITION_OPTIONS = [
+  {
+    id: "normal",
+    score: 5,
+    title: "Light / normal",
+    description: "Routine dusting, wiping and floors",
+  },
+  {
+    id: "moderate",
+    score: 6,
+    title: "Moderately messy",
+    description: "Extra clutter or buildup",
+  },
+  {
+    id: "heavy",
+    score: 8,
+    title: "Heavy cleaning needed",
+    description: "Significant dirt or buildup",
+  },
+  {
+    id: "restoration",
+    score: 10,
+    title: "Full reset / restoration",
+    description:
+      "Severe buildup or a long-unattended home — may need a full-day team reset",
+  },
+] as const;
+const LITERAL_REVIEW_STORIES = [
+  {
+    quote:
+      "“The booking process was simple, and I knew exactly what to expect before the team arrived.”",
+    name: "Customer story 01",
+    detail: "Illustrative customer feedback",
+  },
+  {
+    quote:
+      "“Everything felt organized, from choosing my cleaning to confirming the appointment.”",
+    name: "Customer story 02",
+    detail: "Illustrative customer feedback",
+  },
+  {
+    quote:
+      "“I appreciated being able to review the service details and payment terms before booking.”",
+    name: "Customer story 03",
+    detail: "Illustrative customer feedback",
+  },
+] as const;
 const TIME_SLOTS = CANONICAL_TIME_SLOT_LABELS;
 const REVIEW_OPENING_COUNTS = [2, 4, 3] as const;
-const POST_BOOKING_UPSELL_IMAGES = {
-  "moving-help": livingRoom,
-  "carpet-cleaning": upsellCarpetCleaning,
-  "exterior-window-cleaning": upsellExteriorWindowCleaning,
-  "junk-removal": livingRoom,
-  "furniture-cleaning": kitchen,
-  "appliance-cleaning": stillLife,
-  "window-cleaning": livingRoom,
-  "pet-area-cleaning": kitchen,
-} as const;
-const POST_BOOKING_UPSELLS = Object.entries(CANONICAL_POST_BOOKING_UPSELLS).map(([id, value]) => ({
-  ...value,
-  id,
-  image: POST_BOOKING_UPSELL_IMAGES[id as keyof typeof POST_BOOKING_UPSELL_IMAGES],
-}));
-type PostBookingUpsell = (typeof POST_BOOKING_UPSELLS)[number];
 
 function money(cents: number) {
   return `$${Math.round(cents / 100)}`;
 }
-function getPostBookingUpsellUnitPrice(upsell: PostBookingUpsell) {
-  return `From ${money(upsell.unitPriceCents)}/${upsell.quantityLabel.slice(0, -1)}`;
-}
-function formatPostBookingUpsellQuantity(
-  quantity: number,
-  quantityLabel: string
-) {
-  return `${quantity} ${quantity === 1 ? quantityLabel.slice(0, -1) : quantityLabel}`;
-}
+
 function createBookingAttemptId(): string {
   return crypto.randomUUID();
 }
@@ -306,8 +334,6 @@ function firstBookableDate(): Date {
 }
 
 export default function Book() {
-  const reviewMode =
-    typeof window !== "undefined" && window.location.hostname.endsWith(".manus.computer");
   const {
     step,
     setStep,
@@ -336,6 +362,8 @@ export default function Book() {
     pricingInput,
     pricing: priceBreakdown,
     snapshot,
+    customerName,
+    setCustomerName,
     firstName,
     lastName,
     setFirstName,
@@ -355,12 +383,22 @@ export default function Book() {
   } = useCanonicalBookingFlow({ stepCount: 8 });
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const firstDate = firstBookableDate();
-    return easternMonthDate(firstDate.getUTCFullYear(), firstDate.getUTCMonth(), 1);
+    return easternMonthDate(
+      firstDate.getUTCFullYear(),
+      firstDate.getUTCMonth(),
+      1
+    );
   });
-  const selectedDate = useMemo(() => parseEasternDate(requestedLocalDate), [requestedLocalDate]);
+  const selectedDate = useMemo(
+    () => parseEasternDate(requestedLocalDate),
+    [requestedLocalDate]
+  );
   const setSelectedDate = (date: Date) => setRequestedLocalDate(isoDate(date));
-  const selectedTime = (TIME_SLOTS.find(slot => timeLabelTo24Hour(slot) === requestedLocalTime) ?? TIME_SLOTS[0]);
-  const setSelectedTime = (slot: (typeof TIME_SLOTS)[number]) => setRequestedLocalTime(timeLabelTo24Hour(slot));
+  const selectedTime =
+    TIME_SLOTS.find(slot => timeLabelTo24Hour(slot) === requestedLocalTime) ??
+    TIME_SLOTS[0];
+  const setSelectedTime = (slot: (typeof TIME_SLOTS)[number]) =>
+    setRequestedLocalTime(timeLabelTo24Hour(slot));
   const [formError, setFormError] = useState("");
   const [cardOnFile, setCardOnFile] = useState(false);
   const [cardLabel, setCardLabel] = useState("");
@@ -372,10 +410,20 @@ export default function Book() {
   const updateFunnelMutation = trpc.bookingFunnel.update.useMutation();
   const reserveFunnelMutation = trpc.bookingFunnel.reserve.useMutation();
   const finalizeBookingMutation = trpc.bookingPayments.finalize.useMutation();
+  const [quoteHoldSeconds, setQuoteHoldSeconds] = useState(600);
+  const [reviewStoryIndex, setReviewStoryIndex] = useState(0);
+  const [showAllExtras, setShowAllExtras] = useState(false);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [step, complete]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setQuoteHoldSeconds(current => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const fullName = `${firstName} ${lastName}`.trim();
   const selectedService =
@@ -432,10 +480,6 @@ export default function Book() {
     if (address.trim().length < 5) {
       setFormError("Enter the complete service address.");
       return false;
-    }
-    if (reviewMode) {
-      setFormError("");
-      return true;
     }
     try {
       let current = funnelRecordRef.current;
@@ -504,6 +548,8 @@ export default function Book() {
       [id]: Math.max(0, (current[id] ?? 0) + delta),
     }));
 
+  const quoteHoldCountdown = `${String(Math.floor(quoteHoldSeconds / 60)).padStart(2, "0")}:${String(quoteHoldSeconds % 60).padStart(2, "0")}`;
+
   if (complete)
     return (
       <BookingSuccess
@@ -517,10 +563,286 @@ export default function Book() {
         futureTotal={priceBreakdown.futureVisitTotalCents}
         frequencyLabel={selectedFrequency.label}
         cardLabel={cardLabel}
-        funnelRecord={funnelRecord}
       />
     );
 
+  if (step === 1)
+    return (
+      <main className="literal-book-page-one">
+        <div className="literal-book-shell">
+          <aside className="literal-book-side" aria-label="Booking progress">
+            <a
+              className="literal-book-logo"
+              href="https://maidsinblack.com/"
+              aria-label="Visit Maids in Black"
+            >
+              MAIDS <span>IN BLACK</span>
+              <div className="literal-book-subbrand">SNAPCLEAN</div>
+            </a>
+            <div className="literal-book-brand-intro">
+              <span className="literal-book-accent-line" />
+              <p className="literal-book-promise">
+                A clean home, <em>without the hassle.</em>
+              </p>
+              <p className="literal-book-support">
+                Choose your service. See your price. Book in minutes.
+              </p>
+            </div>
+            <div className="literal-book-stepnav">
+              {[
+                "Your home",
+                "Cleaning details",
+                "Your quote",
+                "Schedule",
+                "Checkout",
+                "Tip your team",
+              ].map((label, index) => (
+                <div
+                  className={`literal-book-navitem${index === 0 ? " active" : ""}`}
+                  key={label}
+                >
+                  <span className="literal-book-num">{index + 1}</span>
+                  {label}
+                </div>
+              ))}
+            </div>
+          </aside>
+          <section className="literal-book-main">
+            <div className="literal-book-top">
+              <span>STEP 1 OF 6</span>
+              <div
+                className="literal-book-clock"
+                aria-label="Quote and time hold preview"
+              >
+                <span className="literal-book-clock-icon" aria-hidden="true">
+                  ◷
+                </span>
+                <span className="literal-book-clock-copy">
+                  <span className="literal-book-clock-label">
+                    Quote &amp; time hold
+                  </span>
+                  <span className="literal-book-clock-note">
+                    We&apos;ll keep your estimate while you finish
+                  </span>
+                </span>
+                <span className="literal-book-clock-value">
+                  {quoteHoldCountdown}
+                </span>
+              </div>
+            </div>
+
+            <div className="literal-book-eyebrow">Book with confidence</div>
+            <h1>Let&apos;s get your home cleaned.</h1>
+            <p className="literal-book-lead">
+              Choose how you&apos;d like to book your cleaning. You&apos;ll see
+              the estimate after you tell us what you need.
+            </p>
+
+            <div className="literal-book-field">
+              <label>How would you like to book?</label>
+              <div
+                className="literal-book-options"
+                role="radiogroup"
+                aria-label="Booking price type"
+              >
+                <button
+                  type="button"
+                  className={`literal-book-choice${pricingMode === "home" ? " selected" : ""}`}
+                  role="radio"
+                  aria-checked={pricingMode === "home"}
+                  onClick={() => setPricingMode("home")}
+                >
+                  <span>
+                    <b>By bedrooms &amp; bathrooms</b>
+                    <small>
+                      A cleaning price based on the size of your home
+                    </small>
+                  </span>
+                  <span className="literal-book-toggle">
+                    {pricingMode === "home" ? "✓" : ""}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`literal-book-choice${pricingMode === "hourly" ? " selected" : ""}`}
+                  role="radio"
+                  aria-checked={pricingMode === "hourly"}
+                  onClick={() => setPricingMode("hourly")}
+                >
+                  <span>
+                    <b>By the hour</b>
+                    <small>Choose how many cleaners and how many hours</small>
+                  </span>
+                  <span className="literal-book-toggle">
+                    {pricingMode === "hourly" ? "✓" : ""}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {pricingMode === "home" ? (
+              <div className="literal-book-counter-grid">
+                <LiteralPageOneCounter
+                  label="Bedrooms"
+                  value={bedrooms}
+                  minimum={0}
+                  maximum={7}
+                  onChange={setBedrooms}
+                />
+                <LiteralPageOneCounter
+                  label="Bathrooms"
+                  value={bathrooms}
+                  minimum={1}
+                  maximum={5}
+                  onChange={setBathrooms}
+                />
+              </div>
+            ) : (
+              <div className="literal-book-counter-grid">
+                <LiteralPageOneCounter
+                  label="# of maids"
+                  value={maidCount}
+                  minimum={1}
+                  maximum={4}
+                  onChange={setMaidCount}
+                />
+                <LiteralPageOneCounter
+                  label="# of hours"
+                  value={hourCount}
+                  minimum={1}
+                  maximum={8}
+                  onChange={setHourCount}
+                />
+              </div>
+            )}
+
+            <div className="literal-book-microproof">
+              <span>✓ 200% satisfaction guarantee</span>
+              <span>✓ Insured cleaning teams</span>
+            </div>
+            <div className="literal-book-actions">
+              <button type="button" onClick={() => void next()}>
+                Continue →
+              </button>
+            </div>
+            <div className="literal-book-powered">Powered by Baseboard</div>
+          </section>
+        </div>
+      </main>
+    );
+
+  if (step === 2)
+    return (
+      <LiteralPageTwo
+        condition={condition}
+        onCondition={setCondition}
+        pricingMode={pricingMode}
+        maidCount={maidCount}
+        hourCount={hourCount}
+        bedrooms={bedrooms}
+        bathrooms={bathrooms}
+        quoteHoldCountdown={quoteHoldCountdown}
+        onBack={() => setStep(1)}
+        onContinue={() => void next()}
+        reviewStoryIndex={reviewStoryIndex}
+        onReviewStoryChange={setReviewStoryIndex}
+      />
+    );
+
+  if (step === 3)
+    return (
+      <LiteralPageThree
+        service={service}
+        onService={setService}
+        pricingMode={pricingMode}
+        bedrooms={bedrooms}
+        bathrooms={bathrooms}
+        maidCount={maidCount}
+        hourCount={hourCount}
+        extras={extras}
+        onExtraChange={changeExtra}
+        frequency={frequency}
+        onFrequency={setFrequency}
+        priceBreakdown={priceBreakdown}
+        quoteHoldCountdown={quoteHoldCountdown}
+        showAllExtras={showAllExtras}
+        onShowAllExtrasChange={setShowAllExtras}
+        onBack={() => setStep(2)}
+        onContinue={() => setStep(5)}
+      />
+    );
+  if (step === 5)
+    return (
+      <LiteralPageFour
+        selectedDate={selectedDate}
+        selectedTime={selectedTime}
+        visibleMonth={visibleMonth}
+        address={address}
+        quoteHoldCountdown={quoteHoldCountdown}
+        onSelectDate={date => {
+          setSelectedDate(date);
+          setVisibleMonth(
+            easternMonthDate(date.getUTCFullYear(), date.getUTCMonth(), 1)
+          );
+        }}
+        onVisibleMonthChange={setVisibleMonth}
+        onSelectTime={setSelectedTime}
+        onAddress={setAddress}
+        onBack={() => setStep(3)}
+        onContinue={() => void next()}
+      />
+    );
+  if (step === 6 || step === 7 || step === 8)
+    return (
+      <LiteralPageFive
+        phase={step}
+        service={selectedService.title}
+        pricingMode={pricingMode}
+        bedrooms={bedrooms}
+        bathrooms={bathrooms}
+        maidCount={maidCount}
+        hourCount={hourCount}
+        condition={condition}
+        frequencyLabel={selectedFrequency.label}
+        selectedDate={selectedDate}
+        selectedTime={selectedTime}
+        total={priceBreakdown.firstCleaningTotalCents}
+        futureTotal={priceBreakdown.futureVisitTotalCents}
+        extras={selectedExtras}
+        quantities={extras}
+        homeType={homeType}
+        customerName={customerName}
+        firstName={firstName}
+        lastName={lastName}
+        phone={phone}
+        email={email}
+        notes={notes}
+        onCustomerName={setCustomerName}
+        onPhone={setPhone}
+        onEmail={setEmail}
+        onNotes={setNotes}
+        quoteHoldCountdown={quoteHoldCountdown}
+        reviewStoryIndex={reviewStoryIndex}
+        onReviewStoryChange={setReviewStoryIndex}
+        onEditSchedule={() => setStep(5)}
+        onBack={() =>
+          setStep(current => (current === 6 ? 5 : current === 7 ? 6 : 7))
+        }
+        onReserve={() => void next()}
+        isSaving={isSaving}
+        formError={formError}
+        funnelRecord={funnelRecord}
+        cardOnFile={cardOnFile}
+        onCardReady={(brand, last4) => {
+          setCardLabel(`${brand} ending in ${last4}`);
+          setCardOnFile(true);
+          setFormError("");
+          setStep(8);
+        }}
+        onEdit={setStep}
+        onFinalize={() => void next()}
+      />
+    );
   return (
     <main className="booking-review-page booking-live-page">
       <header className="booking-review-header">
@@ -545,36 +867,36 @@ export default function Book() {
           aria-label="Booking progress"
         >
           <ol>
-            {BOOKING_PHASES.map(({ title, subtitle, icon: Icon, steps }, index) => {
-              const phaseNumber = index + 1;
-              const isDone = steps.every(itemStep => itemStep < step);
-              const isCurrent =
-                !isDone &&
-                (step === 1
-                  ? index === 0
-                  : steps.includes(step as (typeof steps)[number]));
-              return (
-                <li
-                  key={title}
-                  className={
-                    isDone
-                      ? "done"
-                      : isCurrent
-                        ? "current"
-                        : "future"
-                  }
-                >
-                  <span className="booking-review-progress-number">
-                    {isDone ? <Check /> : phaseNumber}
-                  </span>
-                  <div>
-                    <span className="booking-review-progress-icon"><Icon /></span>
-                    <strong>{title}</strong>
-                    <small>{subtitle}</small>
-                  </div>
-                </li>
-              );
-            })}
+            {BOOKING_PHASES.map(
+              ({ title, subtitle, icon: Icon, steps }, index) => {
+                const phaseNumber = index + 1;
+                const isDone = steps.every(itemStep => itemStep < step);
+                const isCurrent =
+                  !isDone &&
+                  (step === 1
+                    ? index === 0
+                    : steps.includes(step as (typeof steps)[number]));
+                return (
+                  <li
+                    key={title}
+                    className={
+                      isDone ? "done" : isCurrent ? "current" : "future"
+                    }
+                  >
+                    <span className="booking-review-progress-number">
+                      {isDone ? <Check /> : phaseNumber}
+                    </span>
+                    <div>
+                      <span className="booking-review-progress-icon">
+                        <Icon />
+                      </span>
+                      <strong>{title}</strong>
+                      <small>{subtitle}</small>
+                    </div>
+                  </li>
+                );
+              }
+            )}
           </ol>
         </aside>
         <section className="booking-review-stage">
@@ -618,7 +940,11 @@ export default function Book() {
                   onSelectDate={date => {
                     setSelectedDate(date);
                     setVisibleMonth(
-                      easternMonthDate(date.getUTCFullYear(), date.getUTCMonth(), 1)
+                      easternMonthDate(
+                        date.getUTCFullYear(),
+                        date.getUTCMonth(),
+                        1
+                      )
                     );
                   }}
                   onVisibleMonthChange={setVisibleMonth}
@@ -644,7 +970,6 @@ export default function Book() {
               {step === 7 && (
                 <Payment
                   funnelRecord={funnelRecord}
-                  reviewMode={reviewMode}
                   fullName={fullName}
                   amountCents={priceBreakdown.firstCleaningTotalCents}
                   cardOnFile={cardOnFile}
@@ -694,9 +1019,15 @@ export default function Book() {
                     dateLabel={dateLabel}
                     time={selectedTime}
                     pricingMode={pricingMode}
-                    homeServiceBaseTotalCents={priceBreakdown.homeServiceBaseTotalCents}
-                    hourlyServiceTotalCents={priceBreakdown.hourlyServiceTotalCents}
-                    conditionAdjustmentCents={priceBreakdown.conditionAdjustmentCents}
+                    homeServiceBaseTotalCents={
+                      priceBreakdown.homeServiceBaseTotalCents
+                    }
+                    hourlyServiceTotalCents={
+                      priceBreakdown.hourlyServiceTotalCents
+                    }
+                    conditionAdjustmentCents={
+                      priceBreakdown.conditionAdjustmentCents
+                    }
                     conditionMultiplier={priceBreakdown.conditionMultiplier}
                     total={priceBreakdown.firstCleaningTotalCents}
                     futureTotal={priceBreakdown.futureVisitTotalCents}
@@ -720,7 +1051,11 @@ export default function Book() {
               <button
                 type="button"
                 className="booking-review-back"
-                onClick={() => setStep(current => Math.max(1, current - 1))}
+                onClick={() =>
+                  setStep(current =>
+                    current === 5 ? 3 : Math.max(1, current - 1)
+                  )
+                }
                 disabled={step === 1 || isSaving}
               >
                 <ArrowLeft />
@@ -765,6 +1100,1103 @@ export default function Book() {
   );
 }
 
+function LiteralPageThree({
+  service,
+  onService,
+  pricingMode,
+  bedrooms,
+  bathrooms,
+  maidCount,
+  hourCount,
+  extras,
+  onExtraChange,
+  frequency,
+  onFrequency,
+  priceBreakdown,
+  quoteHoldCountdown,
+  showAllExtras,
+  onShowAllExtrasChange,
+  onBack,
+  onContinue,
+}: {
+  service: Service;
+  onService: (value: Service) => void;
+  pricingMode: PublicBookingPricingMode;
+  bedrooms: number;
+  bathrooms: number;
+  maidCount: number;
+  hourCount: number;
+  extras: Record<string, number>;
+  onExtraChange: (id: string, delta: number) => void;
+  frequency: Frequency;
+  onFrequency: (value: Frequency) => void;
+  priceBreakdown: ReturnType<typeof calculatePublicBookingPrice>;
+  quoteHoldCountdown: string;
+  showAllExtras: boolean;
+  onShowAllExtrasChange: (value: boolean) => void;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const isHourly = pricingMode === "hourly";
+  const selectedService =
+    SERVICES.find(item => item.id === service) ?? SERVICES[0];
+  const selectedExtras = EXTRAS.filter(extra => (extras[extra.id] ?? 0) > 0);
+  const visibleExtras = showAllExtras ? EXTRAS : EXTRAS.slice(0, 8);
+  const selectedExtraCount = selectedExtras.length;
+  const frequencyOption =
+    FREQUENCY_OPTIONS.find(option => option.id === frequency) ??
+    FREQUENCY_OPTIONS[0];
+  const serviceDetail = isHourly
+    ? `${hourCount} hours · ${maidCount} cleaner${maidCount === 1 ? "" : "s"}`
+    : `${bedrooms} bedroom${bedrooms === 1 ? "" : "s"} · ${bathrooms} bathroom${bathrooms === 1 ? "" : "s"}`;
+  const servicePrice = isHourly
+    ? priceBreakdown.hourlyServiceTotalCents
+    : priceBreakdown.serviceSubtotalCents;
+  const quoteSummary = isHourly
+    ? `Hourly visit · ${hourCount} hours · ${maidCount} cleaner${maidCount === 1 ? "" : "s"}`
+    : frequency === "one-time"
+      ? "One-time cleaning"
+      : `First cleaning: ${money(priceBreakdown.firstCleaningTotalCents)} · future visits: ${money(priceBreakdown.futureVisitTotalCents ?? 0)}`;
+  const serviceChoices: ReadonlyArray<{
+    id: Service;
+    title: string;
+    description: string;
+  }> = [
+    {
+      id: "standard",
+      title: "Standard cleaning",
+      description: "Routine upkeep, floors, counters and bathrooms",
+    },
+    {
+      id: "deep",
+      title: "Deep cleaning",
+      description: "More detailed attention to buildup and surfaces",
+    },
+    {
+      id: "moveout",
+      title: "Move-in / move-out cleaning",
+      description: "For an empty home before move-in or after move-out",
+    },
+  ];
+  const extraIcons: Readonly<Record<string, string>> = {
+    "inside-oven": "♨",
+    "inside-fridge": "▤",
+    "inside-cabinets": "▥",
+    "interior-windows": "▦",
+    basement: "⌂",
+    "organizing-hour": "▧",
+    "laundry-load": "▤",
+    "wipe-walls-room": "▥",
+    "sweep-garage": "⌂",
+  };
+
+  return (
+    <main className="literal-book-page-three">
+      <div className="literal-book-shell">
+        <aside className="literal-book-side" aria-label="Booking progress">
+          <a
+            className="literal-book-logo"
+            href="https://maidsinblack.com/"
+            aria-label="Visit Maids in Black"
+          >
+            MAIDS <span>IN BLACK</span>
+            <div className="literal-book-subbrand">SNAPCLEAN</div>
+          </a>
+          <div className="literal-book-brand-intro">
+            <span className="literal-book-accent-line" />
+            <p className="literal-book-promise">
+              A clean home, <em>without the hassle.</em>
+            </p>
+            <p className="literal-book-support">
+              Choose your service. See your price. Book in minutes.
+            </p>
+          </div>
+          <div className="literal-book-stepnav">
+            {[
+              "Your home",
+              "Cleaning details",
+              "Your quote",
+              "Schedule",
+              "Checkout",
+              "Tip your team",
+            ].map((label, index) => (
+              <div
+                className={`literal-book-navitem${index === 2 ? " active" : index < 2 ? " done" : ""}`}
+                key={label}
+              >
+                <span className="literal-book-num">
+                  {index < 2 ? "✓" : index + 1}
+                </span>
+                {label}
+              </div>
+            ))}
+          </div>
+        </aside>
+        <section className="literal-book-main">
+          <div className="literal-book-top">
+            <span>STEP 3 OF 6</span>
+            <div
+              className="literal-book-clock"
+              aria-label="Quote and time hold preview"
+            >
+              <span className="literal-book-clock-icon" aria-hidden="true">
+                ◷
+              </span>
+              <span className="literal-book-clock-copy">
+                <span className="literal-book-clock-label">
+                  Quote &amp; time hold
+                </span>
+                <span className="literal-book-clock-note">
+                  We&apos;ll keep your estimate while you finish
+                </span>
+              </span>
+              <span className="literal-book-clock-value">
+                {quoteHoldCountdown}
+              </span>
+            </div>
+          </div>
+
+          <div className="literal-book-eyebrow">
+            Transparent pricing · no obligation
+          </div>
+          <h1>Let&apos;s make it spotless.</h1>
+          <p className="literal-book-lead">
+            Customize your cleaning. Your estimated total updates instantly.
+          </p>
+
+          <section
+            className="literal-book-estimate"
+            aria-label="Estimated cleaning price"
+          >
+            <div>
+              <small>YOUR ESTIMATED CLEANING PRICE</small>
+              <strong>{money(priceBreakdown.firstCleaningTotalCents)}</strong>
+              <small>{quoteSummary}</small>
+            </div>
+            <span aria-hidden="true">✦</span>
+          </section>
+
+          {isHourly ? (
+            <div className="literal-book-hourly-notice">
+              Your hourly estimate is based on {hourCount} hours and {maidCount}{" "}
+              cleaner{maidCount === 1 ? "" : "s"}. No room-size charges are
+              added.
+            </div>
+          ) : (
+            <section className="literal-book-field">
+              <label>Cleaning level</label>
+              <div
+                className="literal-book-options"
+                role="radiogroup"
+                aria-label="Cleaning level"
+              >
+                {serviceChoices.map(choice => (
+                  <button
+                    type="button"
+                    className={`literal-book-choice${service === choice.id ? " selected" : ""}`}
+                    key={choice.id}
+                    role="radio"
+                    aria-checked={service === choice.id}
+                    onClick={() => onService(choice.id)}
+                  >
+                    <span>
+                      <b>{choice.title}</b>
+                      <small>{choice.description}</small>
+                    </span>
+                    <span className="literal-book-toggle">
+                      {service === choice.id ? "✓" : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section
+            className="literal-book-extras-section"
+            aria-label="Cleaning extras"
+          >
+            <div className="literal-book-extras-head">
+              <div>
+                <span className="literal-book-quote-kicker">MAKE IT YOURS</span>
+                <h2>Anything else we can take care of?</h2>
+                <p>
+                  Select any extras you&apos;d like. Your quote updates
+                  automatically.
+                </p>
+              </div>
+              <span className="literal-book-extras-selected">
+                {selectedExtraCount} selected
+              </span>
+            </div>
+            <div className="literal-book-extras-grid">
+              {visibleExtras.map(extra => {
+                const quantity = extras[extra.id] ?? 0;
+                const selected = quantity > 0;
+                return (
+                  <article
+                    className={`literal-book-extra-tile${selected ? " active" : ""}`}
+                    key={extra.id}
+                  >
+                    <button
+                      className="literal-book-extra-select"
+                      type="button"
+                      aria-pressed={selected}
+                      aria-label={`${selected ? "Remove" : "Add"} ${extra.title}`}
+                      onClick={() =>
+                        onExtraChange(extra.id, selected ? -quantity : 1)
+                      }
+                    >
+                      <span
+                        className="literal-book-extra-icon"
+                        aria-hidden="true"
+                      >
+                        {extraIcons[extra.id]}
+                      </span>
+                      <span className="literal-book-extra-copy">
+                        <b>{extra.title}</b>
+                        <small>{extra.description}</small>
+                        <strong>+{money(EXTRA_RATES[extra.id] * 100)}</strong>
+                      </span>
+                      <span
+                        className="literal-book-extra-check"
+                        aria-hidden="true"
+                      >
+                        {selected ? "✓" : "+"}
+                      </span>
+                    </button>
+                    {selected && (
+                      <div className="literal-book-extra-quantity">
+                        <button
+                          type="button"
+                          aria-label={`Decrease ${extra.title.toLowerCase()} quantity`}
+                          onClick={() => onExtraChange(extra.id, -1)}
+                          disabled={quantity <= 1}
+                        >
+                          −
+                        </button>
+                        <span aria-label={`${quantity} selected`}>
+                          {quantity}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Increase ${extra.title.toLowerCase()} quantity`}
+                          onClick={() => onExtraChange(extra.id, 1)}
+                          disabled={quantity >= 50}
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            {EXTRAS.length > 8 && (
+              <button
+                className="literal-book-extras-more"
+                type="button"
+                onClick={() => onShowAllExtrasChange(!showAllExtras)}
+              >
+                {showAllExtras
+                  ? "Show fewer extras"
+                  : `View all ${EXTRAS.length} extras`}{" "}
+                <span aria-hidden="true">{showAllExtras ? "↑" : "↓"}</span>
+              </button>
+            )}
+          </section>
+
+          <section className="literal-book-field literal-book-frequency-field">
+            <label>How often?</label>
+            <div
+              className="literal-book-options"
+              role="radiogroup"
+              aria-label="Cleaning frequency"
+            >
+              {FREQUENCY_OPTIONS.map(option => (
+                <button
+                  type="button"
+                  className={`literal-book-choice${frequency === option.id ? " selected" : ""}`}
+                  key={option.id}
+                  role="radio"
+                  aria-checked={frequency === option.id}
+                  onClick={() => onFrequency(option.id)}
+                >
+                  <span>
+                    <b>
+                      {option.id === "one-time"
+                        ? "Just this once"
+                        : option.id === "weekly"
+                          ? "Every week"
+                          : option.id === "biweekly"
+                            ? "Every two weeks"
+                            : "Every month"}
+                    </b>
+                    <small>
+                      {option.id === "one-time"
+                        ? "One-time cleaning"
+                        : `${option.savings} on future visits · first clean full price`}
+                    </small>
+                  </span>
+                  <span className="literal-book-toggle">
+                    {frequency === option.id ? "✓" : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section
+            className="literal-book-quote-redesign"
+            aria-label="Your personalized estimate"
+          >
+            <div className="literal-book-quote-top">
+              <div>
+                <span className="literal-book-quote-kicker">
+                  YOUR PERSONALIZED ESTIMATE
+                </span>
+                <h2>Here&apos;s your breakdown.</h2>
+                <p>Everything in one place, with no guesswork.</p>
+              </div>
+              <span className="literal-book-quote-symbol" aria-hidden="true">
+                ✦
+              </span>
+            </div>
+            <div className="literal-book-quote-lines">
+              <div className="literal-book-quote-line">
+                <span>
+                  <b>{isHourly ? "Hourly cleaning" : selectedService.title}</b>
+                  <small>{serviceDetail}</small>
+                </span>
+                <strong>{money(servicePrice)}</strong>
+              </div>
+              <div className="literal-book-quote-line">
+                <span>
+                  <b>Selected extras</b>
+                  <small>
+                    {selectedExtras.length
+                      ? selectedExtras
+                          .map(
+                            extra =>
+                              `${extra.title}${(extras[extra.id] ?? 0) > 1 ? ` × ${extras[extra.id]}` : ""}`
+                          )
+                          .join(" · ")
+                      : "No extras selected"}
+                  </small>
+                </span>
+                <strong>
+                  {priceBreakdown.extrasTotalCents
+                    ? money(priceBreakdown.extrasTotalCents)
+                    : "Included"}
+                </strong>
+              </div>
+            </div>
+            {priceBreakdown.futureVisitTotalCents !== null && (
+              <div className="literal-book-quote-repeat">
+                <span>
+                  <b>{frequencyOption.discountPercent}% off future visits</b>
+                  <small>Your first clean remains full price</small>
+                </span>
+                <strong>
+                  {money(priceBreakdown.futureVisitTotalCents)}{" "}
+                  <small>/ visit</small>
+                </strong>
+              </div>
+            )}
+            <div className="literal-book-quote-bottom">
+              <span>✓ No surprise add-ons without approval</span>
+              <span>✓ 200% satisfaction guarantee</span>
+            </div>
+          </section>
+          <p className="literal-book-quote-footnote">
+            Estimates shown are illustrative. Final service scope and pricing
+            are confirmed before a real booking.
+          </p>
+          <div className="literal-book-actions literal-book-actions--split">
+            <button
+              className="literal-book-back"
+              type="button"
+              onClick={onBack}
+            >
+              ← Back
+            </button>
+            <button type="button" onClick={onContinue}>
+              Choose my cleaning time →
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function LiteralPageFour({
+  selectedDate,
+  selectedTime,
+  visibleMonth,
+  address,
+  quoteHoldCountdown,
+  onSelectDate,
+  onVisibleMonthChange,
+  onSelectTime,
+  onAddress,
+  onBack,
+  onContinue,
+}: {
+  selectedDate: Date;
+  selectedTime: (typeof TIME_SLOTS)[number];
+  visibleMonth: Date;
+  address: string;
+  quoteHoldCountdown: string;
+  onSelectDate: (value: Date) => void;
+  onVisibleMonthChange: (value: Date) => void;
+  onSelectTime: (value: (typeof TIME_SLOTS)[number]) => void;
+  onAddress: (value: string) => void;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const earliest = firstBookableDate();
+  const earliestMonth = easternMonthDate(
+    earliest.getUTCFullYear(),
+    earliest.getUTCMonth(),
+    1
+  );
+  const year = visibleMonth.getUTCFullYear();
+  const month = visibleMonth.getUTCMonth();
+  const leading = easternCalendarWeekday(year, month);
+  const days = new Date(Date.UTC(year, month + 1, 0, 12)).getUTCDate();
+  const previousMonth = easternMonthDate(year, month - 1, 1);
+  const nextMonth = easternMonthDate(year, month + 1, 1);
+  const quickDateStrings = useMemo(
+    () => [1, 2, 3, 4].map(offset => easternDateIso(new Date(), offset)),
+    []
+  );
+  const quickDates = quickDateStrings.map(parseEasternDate);
+  const scheduleDateLabel = selectedDate.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/New_York",
+  });
+  const selectDate = (date: Date, closeCalendar = false) => {
+    onSelectDate(date);
+    if (closeCalendar) setCalendarOpen(false);
+  };
+
+  return (
+    <main className="literal-book-page-four">
+      <div className="literal-book-shell">
+        <aside className="literal-book-side" aria-label="Booking progress">
+          <a
+            className="literal-book-logo"
+            href="https://maidsinblack.com/"
+            aria-label="Visit Maids in Black"
+          >
+            MAIDS <span>IN BLACK</span>
+            <div className="literal-book-subbrand">SNAPCLEAN</div>
+          </a>
+          <div className="literal-book-brand-intro">
+            <span className="literal-book-accent-line" />
+            <p className="literal-book-promise">
+              A clean home, <em>without the hassle.</em>
+            </p>
+            <p className="literal-book-support">
+              Choose your service. See your price. Book in minutes.
+            </p>
+          </div>
+          <div className="literal-book-stepnav">
+            {[
+              "Your home",
+              "Cleaning details",
+              "Your quote",
+              "Schedule",
+              "Checkout",
+              "Tip your team",
+            ].map((label, index) => (
+              <div
+                className={`literal-book-navitem${index === 3 ? " active" : index < 3 ? " done" : ""}`}
+                key={label}
+              >
+                <span className="literal-book-num">
+                  {index < 3 ? "✓" : index + 1}
+                </span>
+                {label}
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className="literal-book-main">
+          <div className="literal-book-top">
+            <span>STEP 4 OF 6</span>
+            <div
+              className="literal-book-clock"
+              aria-label="Quote and time hold preview"
+            >
+              <span className="literal-book-clock-icon" aria-hidden="true">
+                ◷
+              </span>
+              <span className="literal-book-clock-copy">
+                <span className="literal-book-clock-label">
+                  Quote &amp; time hold
+                </span>
+                <span className="literal-book-clock-note">
+                  We&apos;ll keep your estimate while you finish
+                </span>
+              </span>
+              <span className="literal-book-clock-value">
+                {quoteHoldCountdown}
+              </span>
+            </div>
+          </div>
+
+          <div className="literal-book-eyebrow">Almost there</div>
+          <h1>Pick a day that works.</h1>
+          <p className="literal-book-lead">
+            Choose a preferred day and arrival window. We&apos;ll confirm the
+            appointment before it&apos;s booked.
+          </p>
+
+          <section className="literal-book-schedule-field">
+            <label>Preferred cleaning day</label>
+            <div className="literal-book-dates" role="radiogroup">
+              {quickDates.map(date => {
+                const selected = isoDate(date) === isoDate(selectedDate);
+                return (
+                  <button
+                    type="button"
+                    className={`literal-book-date${selected ? " selected" : ""}`}
+                    key={isoDate(date)}
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => selectDate(date)}
+                  >
+                    <small>
+                      {date.toLocaleDateString("en-US", {
+                        weekday: "short",
+                        timeZone: "America/New_York",
+                      })}
+                    </small>
+                    <b>{date.getUTCDate()}</b>
+                    <small>
+                      {date.toLocaleDateString("en-US", {
+                        month: "short",
+                        timeZone: "America/New_York",
+                      })}
+                    </small>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="literal-book-calendar-row">
+              <button
+                id="literal-book-calendar-toggle"
+                className="literal-book-calendar-open"
+                type="button"
+                aria-expanded={calendarOpen}
+                aria-controls="literal-book-calendar-panel"
+                onClick={() => setCalendarOpen(current => !current)}
+              >
+                <span>
+                  <span className="literal-book-calendar-caption">
+                    Choose another date
+                  </span>
+                  <span className="literal-book-calendar-sub">
+                    Browse the full calendar
+                  </span>
+                </span>
+                <span className="literal-book-calendar-action">
+                  <span aria-hidden="true">▦</span>
+                  {calendarOpen ? "Close" : "Calendar"}
+                  <span aria-hidden="true">{calendarOpen ? "⌃" : "⌄"}</span>
+                </span>
+              </button>
+              {calendarOpen && (
+                <div
+                  className="literal-book-calendar-panel"
+                  id="literal-book-calendar-panel"
+                  role="group"
+                  aria-label="Choose cleaning date"
+                >
+                  <div className="literal-book-calendar-top">
+                    <span className="literal-book-calendar-month">
+                      {easternMonthLabel(visibleMonth)}
+                    </span>
+                    <div className="literal-book-calendar-arrows">
+                      <button
+                        className="literal-book-calendar-arrow"
+                        type="button"
+                        aria-label="Previous month"
+                        disabled={previousMonth < earliestMonth}
+                        onClick={() => onVisibleMonthChange(previousMonth)}
+                      >
+                        ‹
+                      </button>
+                      <button
+                        className="literal-book-calendar-arrow"
+                        type="button"
+                        aria-label="Next month"
+                        onClick={() => onVisibleMonthChange(nextMonth)}
+                      >
+                        ›
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    className="literal-book-calendar-week"
+                    aria-hidden="true"
+                  >
+                    {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
+                      <span key={`${day}-${index}`}>{day}</span>
+                    ))}
+                  </div>
+                  <div className="literal-book-calendar-days">
+                    {Array.from({ length: leading + days }, (_, index) => {
+                      const day = index - leading + 1;
+                      if (index < leading)
+                        return (
+                          <span
+                            className="literal-book-calendar-day blank"
+                            key={`empty-${index}`}
+                          />
+                        );
+                      const date = easternMonthDate(year, month, day);
+                      const unavailable = date < earliest;
+                      const selected = isoDate(date) === isoDate(selectedDate);
+                      return (
+                        <button
+                          type="button"
+                          className={`literal-book-calendar-day${selected ? " selected" : ""}`}
+                          disabled={unavailable}
+                          aria-current={selected ? "date" : undefined}
+                          key={day}
+                          onClick={() => selectDate(date, true)}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="literal-book-calendar-bottom">
+                    <span>Choose your preferred cleaning date</span>
+                    <button
+                      type="button"
+                      onClick={() => selectDate(earliest, true)}
+                    >
+                      Earliest date
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="literal-book-selected-day">
+              Selected: <strong>{scheduleDateLabel}</strong>
+            </div>
+          </section>
+
+          <section className="literal-book-schedule-field">
+            <label>Arrival window</label>
+            <div className="literal-book-slot-grid" role="radiogroup">
+              {TIME_SLOTS.map((time, index) => {
+                const selected = selectedTime === time;
+                return (
+                  <button
+                    type="button"
+                    className={`literal-book-slot${selected ? " active" : ""}`}
+                    key={time}
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => onSelectTime(time)}
+                  >
+                    <b>{time}</b>
+                    <small>
+                      {index === 0
+                        ? "Early arrival window"
+                        : "Requested arrival window"}
+                    </small>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="literal-book-slot-note">
+              Choose your preferred arrival window. Your selection does not
+              reserve a booking.
+            </p>
+          </section>
+
+          <label className="literal-book-address-field">
+            <span>Service address</span>
+            <input
+              value={address}
+              autoComplete="street-address"
+              placeholder="Street address, city, ZIP"
+              onChange={event => onAddress(event.target.value)}
+            />
+          </label>
+
+          <div className="literal-book-booking-recap">
+            <span>Selected arrival window</span>
+            <b>
+              {scheduleDateLabel} · {selectedTime}
+            </b>
+          </div>
+
+          <details className="literal-book-schedule-help">
+            <summary>Can I change my appointment?</summary>
+            <p>
+              Appointment changes depend on the cleaning team&apos;s
+              availability and the cancellation policy. The live flow will show
+              the policy before confirmation.
+            </p>
+          </details>
+
+          <div className="literal-book-actions literal-book-actions--split">
+            <button
+              className="literal-book-back"
+              type="button"
+              onClick={onBack}
+            >
+              ← Back
+            </button>
+            <button type="button" onClick={onContinue}>
+              Continue to checkout →
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function LiteralPageTwo({
+  condition,
+  onCondition,
+  pricingMode,
+  maidCount,
+  hourCount,
+  bedrooms,
+  bathrooms,
+  quoteHoldCountdown,
+  onBack,
+  onContinue,
+  reviewStoryIndex,
+  onReviewStoryChange,
+}: {
+  condition: number;
+  onCondition: (value: number) => void;
+  pricingMode: PublicBookingPricingMode;
+  maidCount: number;
+  hourCount: number;
+  bedrooms: number;
+  bathrooms: number;
+  quoteHoldCountdown: string;
+  onBack: () => void;
+  onContinue: () => void;
+  reviewStoryIndex: number;
+  onReviewStoryChange: (value: number) => void;
+}) {
+  const selectedCondition =
+    LITERAL_CONDITION_OPTIONS.find(option => option.score === condition) ??
+    LITERAL_CONDITION_OPTIONS[0];
+  const reviewStory = LITERAL_REVIEW_STORIES[reviewStoryIndex];
+  const isHourly = pricingMode === "hourly";
+  const insight = isHourly
+    ? selectedCondition.id === "restoration"
+      ? {
+          title: "A full-day team may be needed",
+          body: "This review estimate includes a restoration allowance. Select enough cleaner-hours for a full-day reset; final scope is confirmed before a real booking.",
+        }
+      : {
+          title: "We’ll prioritize your cleaning goals",
+          body: "Your selected hours and number of cleaners determine your hourly estimate. Tell the team what matters most during the visit.",
+        }
+    : selectedCondition.id === "restoration"
+      ? {
+          title: "Full reset / restoration plan",
+          body: "This level of buildup may need an all-day team reset. We’ll confirm the final scope before a real booking.",
+        }
+      : selectedCondition.id === "heavy"
+        ? {
+            title: "Deep cleaning recommended",
+            body: "For significant buildup, deep cleaning is likely the better fit. You can still choose standard.",
+          }
+        : selectedCondition.id === "moderate"
+          ? {
+              title: "A little extra attention may help",
+              body: "Deep cleaning is worth considering for buildup. Standard is still available.",
+            }
+          : {
+              title: "Standard cleaning looks like a good fit",
+              body: "Based on your home condition, routine cleaning may be all you need.",
+            };
+
+  return (
+    <main className="literal-book-page-two">
+      <div className="literal-book-shell">
+        <aside className="literal-book-side" aria-label="Booking progress">
+          <a
+            className="literal-book-logo"
+            href="https://maidsinblack.com/"
+            aria-label="Visit Maids in Black"
+          >
+            MAIDS <span>IN BLACK</span>
+            <div className="literal-book-subbrand">SNAPCLEAN</div>
+          </a>
+          <div className="literal-book-brand-intro">
+            <span className="literal-book-accent-line" />
+            <p className="literal-book-promise">
+              A clean home, <em>without the hassle.</em>
+            </p>
+            <p className="literal-book-support">
+              Choose your service. See your price. Book in minutes.
+            </p>
+          </div>
+          <div className="literal-book-stepnav">
+            {[
+              "Your home",
+              "Cleaning details",
+              "Your quote",
+              "Schedule",
+              "Checkout",
+              "Tip your team",
+            ].map((label, index) => (
+              <div
+                className={`literal-book-navitem${index === 1 ? " active" : index < 1 ? " done" : ""}`}
+                key={label}
+              >
+                <span className="literal-book-num">
+                  {index < 1 ? "✓" : index + 1}
+                </span>
+                {label}
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className="literal-book-main">
+          <div className="literal-book-top">
+            <span>STEP 2 OF 6</span>
+            <div
+              className="literal-book-clock"
+              aria-label="Quote and time hold preview"
+            >
+              <span className="literal-book-clock-icon" aria-hidden="true">
+                ◷
+              </span>
+              <span className="literal-book-clock-copy">
+                <span className="literal-book-clock-label">
+                  Quote &amp; time hold
+                </span>
+                <span className="literal-book-clock-note">
+                  We&apos;ll keep your estimate while you finish
+                </span>
+              </span>
+              <span className="literal-book-clock-value">
+                {quoteHoldCountdown}
+              </span>
+            </div>
+          </div>
+
+          <div className="literal-book-eyebrow">Personalize your clean</div>
+          <h1>Tell us what matters most.</h1>
+          <p className="literal-book-lead">
+            {isHourly
+              ? "Help your cleaners prioritize their time."
+              : "Help us recommend the right cleaning level."}{" "}
+            Your{" "}
+            {isHourly
+              ? `${hourCount}-hour visit with ${maidCount} cleaner${maidCount > 1 ? "s" : ""}`
+              : `${bedrooms}-bedroom, ${bathrooms}-bathroom home`}{" "}
+            is already saved.
+          </p>
+
+          <div className="literal-book-field">
+            <label>How would you describe the overall condition?</label>
+            <div
+              className="literal-book-options"
+              role="radiogroup"
+              aria-label="Overall home condition"
+            >
+              {LITERAL_CONDITION_OPTIONS.map(option => (
+                <button
+                  type="button"
+                  className={`literal-book-choice${selectedCondition.id === option.id ? " selected" : ""}`}
+                  key={option.id}
+                  role="radio"
+                  aria-checked={selectedCondition.id === option.id}
+                  onClick={() => onCondition(option.score)}
+                >
+                  <span>
+                    <b>{option.title}</b>
+                    <small>{option.description}</small>
+                  </span>
+                  <span className="literal-book-toggle">
+                    {selectedCondition.id === option.id ? "✓" : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="literal-book-insight">
+            <span className="literal-book-glyph" aria-hidden="true">
+              ✦
+            </span>
+            <div>
+              <b>{insight.title}</b>
+              <p>{insight.body}</p>
+            </div>
+          </div>
+
+          <details className="literal-book-helpdetails">
+            <summary>What does the cleaning include?</summary>
+            <p>
+              Standard cleaning covers routine surfaces, bathrooms and floors.
+              Deep cleaning adds more detailed attention to buildup and
+              neglected areas. Move-in / move-out cleaning is for an empty home
+              before or after a move. Full reset / restoration is for severe
+              buildup or a long-unattended home and may need an all-day team
+              plan. Hourly cleaning is limited to the booked time and agreed
+              priorities.
+            </p>
+          </details>
+
+          <section
+            className="literal-book-proof"
+            aria-label="Sample customer stories"
+          >
+            <div className="literal-book-proof-heading">
+              <div>
+                <div className="literal-book-review-eyebrow">
+                  THE MAIDS IN BLACK EXPERIENCE
+                </div>
+                <h3>Why customers choose Maids in Black</h3>
+              </div>
+              <div className="literal-book-review-controls">
+                <button
+                  type="button"
+                  aria-label="Previous review"
+                  onClick={() =>
+                    onReviewStoryChange(
+                      (reviewStoryIndex - 1 + LITERAL_REVIEW_STORIES.length) %
+                        LITERAL_REVIEW_STORIES.length
+                    )
+                  }
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next review"
+                  onClick={() =>
+                    onReviewStoryChange(
+                      (reviewStoryIndex + 1) % LITERAL_REVIEW_STORIES.length
+                    )
+                  }
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+            <div className="literal-book-review-feature">
+              <div className="literal-book-review-photo-wrap">
+                <img
+                  className="literal-book-review-photo"
+                  src={reviewCustomerStory}
+                  alt=""
+                />
+              </div>
+              <div className="literal-book-review-quote">
+                <div
+                  className="literal-book-review-stars"
+                  aria-label="Five decorative stars"
+                >
+                  ★★★★★
+                </div>
+                <blockquote>{reviewStory.quote}</blockquote>
+                <strong>{reviewStory.name}</strong>
+                <span>{reviewStory.detail}</span>
+                <div className="literal-book-review-dots">
+                  {LITERAL_REVIEW_STORIES.map((_, index) => (
+                    <button
+                      type="button"
+                      key={index}
+                      aria-label={`Show sample review ${index + 1}`}
+                      aria-pressed={index === reviewStoryIndex}
+                      className={index === reviewStoryIndex ? "selected" : ""}
+                      onClick={() => onReviewStoryChange(index)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <p className="literal-book-review-disclaimer">
+              Design preview — customer portrait and testimonials are
+              illustrative. Replace with real, permissioned customer reviews
+              before launch.
+            </p>
+          </section>
+
+          <div className="literal-book-actions literal-book-actions--split">
+            <button
+              className="literal-book-back"
+              type="button"
+              onClick={onBack}
+            >
+              ← Back
+            </button>
+            <button type="button" onClick={onContinue}>
+              Continue to my quote →
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function LiteralPageOneCounter({
+  label,
+  value,
+  minimum,
+  maximum,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  minimum: number;
+  maximum: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="literal-book-counter-card">
+      <span className="literal-book-counter-title">{label}</span>
+      <div className="literal-book-counter-actions">
+        <button
+          type="button"
+          aria-label={`Remove ${label.toLowerCase()}`}
+          onClick={() => onChange(Math.max(minimum, value - 1))}
+          disabled={value <= minimum}
+        >
+          −
+        </button>
+        <strong>{value}</strong>
+        <button
+          type="button"
+          aria-label={`Add ${label.toLowerCase()}`}
+          onClick={() => onChange(Math.min(maximum, value + 1))}
+          disabled={value >= maximum}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CleaningType({
   selected,
   onSelect,
@@ -776,18 +2208,52 @@ function CleaningType({
     <>
       <div className="booking-review-promise">
         <div className="booking-review-promise-copy">
-          <h1>Book your cleaning<br />in 60 seconds.</h1>
+          <h1>
+            Book your cleaning
+            <br />
+            in 60 seconds.
+          </h1>
           <p className="booking-review-lede">
             Get your price, choose a time, and you&apos;re booked.
           </p>
-          <div className="booking-review-trust-signals" aria-label="Booking assurances">
-            <span><i><UsersRound /></i><b>Background-checked<br />teams</b></span>
-            <span><i><ShieldCheck /></i><b>Insured</b></span>
-            <span><i><Star /></i><b>Satisfaction<br />guaranteed</b></span>
+          <div
+            className="booking-review-trust-signals"
+            aria-label="Booking assurances"
+          >
+            <span>
+              <i>
+                <UsersRound />
+              </i>
+              <b>
+                Background-checked
+                <br />
+                teams
+              </b>
+            </span>
+            <span>
+              <i>
+                <ShieldCheck />
+              </i>
+              <b>Insured</b>
+            </span>
+            <span>
+              <i>
+                <Star />
+              </i>
+              <b>
+                Satisfaction
+                <br />
+                guaranteed
+              </b>
+            </span>
           </div>
         </div>
         <div className="booking-review-promise-image-wrap">
-          <img className="booking-review-promise-image" src={promiseImage} alt="Sunlit living room with a marble table" />
+          <img
+            className="booking-review-promise-image"
+            src={promiseImage}
+            alt="Sunlit living room with a marble table"
+          />
         </div>
       </div>
       <div className="booking-service-grid">
@@ -1059,14 +2525,20 @@ function HomeDetails({
         />
         <span className="booking-home-testimonial-divider" aria-hidden="true" />
         <div className="booking-home-testimonial-copy">
-          <span className="booking-home-testimonial-stars" aria-label="5 out of 5 stars">
+          <span
+            className="booking-home-testimonial-stars"
+            aria-label="5 out of 5 stars"
+          >
             <Star fill="currentColor" />
             <Star fill="currentColor" />
             <Star fill="currentColor" />
             <Star fill="currentColor" />
             <Star fill="currentColor" />
           </span>
-          <p>“Our 3 bedroom, 3 bathroom house has never looked and smelled so clean.”</p>
+          <p>
+            “Our 3 bedroom, 3 bathroom house has never looked and smelled so
+            clean.”
+          </p>
           <footer>
             <strong>— Amber C.</strong>
           </footer>
@@ -1217,7 +2689,11 @@ function DateTime({
   const leading = easternCalendarWeekday(year, month);
   const days = new Date(Date.UTC(year, month + 1, 0, 12)).getUTCDate();
   const earliest = firstBookableDate();
-  const earliestMonth = easternMonthDate(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1);
+  const earliestMonth = easternMonthDate(
+    earliest.getUTCFullYear(),
+    earliest.getUTCMonth(),
+    1
+  );
   const previousMonth = easternMonthDate(year, month - 1, 1);
   const nextMonth = easternMonthDate(year, month + 1, 1);
   const quickDateStrings = useMemo(
@@ -1268,13 +2744,7 @@ function DateTime({
               return (
                 <button
                   type="button"
-                  className={
-                    selected
-                      ? "selected"
-                        : unavailable
-                          ? "muted"
-                          : ""
-                  }
+                  className={selected ? "selected" : unavailable ? "muted" : ""}
                   disabled={unavailable}
                   key={day}
                   onClick={() => onSelectDate(date)}
@@ -1295,7 +2765,9 @@ function DateTime({
               <button
                 type="button"
                 key={isoDate(date)}
-                className={isoDate(date) === isoDate(selectedDate) ? "selected" : ""}
+                className={
+                  isoDate(date) === isoDate(selectedDate) ? "selected" : ""
+                }
                 onClick={() => onSelectDate(date)}
               >
                 <span className="booking-calendar-quick-date-label">
@@ -1308,9 +2780,7 @@ function DateTime({
                   </strong>
                   <ChevronRight aria-hidden="true" />
                 </span>
-                <span>
-                  {REVIEW_OPENING_COUNTS[index]} openings
-                </span>
+                <span>{REVIEW_OPENING_COUNTS[index]} openings</span>
               </button>
             ))}
           </div>
@@ -1319,11 +2789,15 @@ function DateTime({
           <header className="booking-times-header">
             <div>
               <strong>{formatDate(selectedDate).split(",")[0]}</strong>
-              <span>{formatDate(selectedDate).split(",").slice(1).join(",").trim()}</span>
+              <span>
+                {formatDate(selectedDate).split(",").slice(1).join(",").trim()}
+              </span>
             </div>
             <b>4 openings</b>
           </header>
-          <p className="booking-times-label">Choose your 2-hour arrival window</p>
+          <p className="booking-times-label">
+            Choose your 2-hour arrival window
+          </p>
           {TIME_SLOTS.map(time => (
             <button
               type="button"
@@ -1344,6 +2818,584 @@ function DateTime({
     </>
   );
 }
+function LiteralCheckoutContactForm({
+  name,
+  phone,
+  email,
+  notes,
+  onName,
+  onPhone,
+  onEmail,
+  onNotes,
+}: {
+  name: string;
+  phone: string;
+  email: string;
+  notes: string;
+  onName: (value: string) => void;
+  onPhone: (value: string) => void;
+  onEmail: (value: string) => void;
+  onNotes: (value: string) => void;
+}) {
+  return (
+    <div className="literal-book-checkout-contact-fields">
+      <div className="literal-book-checkout-contact-grid">
+        <label>
+          <span>Full name</span>
+          <input
+            value={name}
+            onChange={event => onName(event.target.value)}
+            placeholder="Alex Morgan"
+            autoComplete="name"
+          />
+        </label>
+        <label>
+          <span>Phone</span>
+          <input
+            value={phone}
+            onChange={event => onPhone(formatPhoneInput(event.target.value))}
+            placeholder="(555) 123-4567"
+            inputMode="tel"
+            autoComplete="tel"
+          />
+        </label>
+      </div>
+      <label>
+        <span>Email</span>
+        <input
+          value={email}
+          onChange={event => onEmail(event.target.value)}
+          placeholder="you@example.com"
+          type="email"
+          autoComplete="email"
+        />
+      </label>
+      <label className="literal-book-checkout-notes">
+        <span>
+          Access notes <em>(optional)</em>
+        </span>
+        <textarea
+          value={notes}
+          onChange={event => onNotes(event.target.value)}
+          placeholder="Gate code, lockbox, parking instructions, pets, or other access details"
+        />
+      </label>
+    </div>
+  );
+}
+
+function LiteralCheckoutProof({
+  reviewStoryIndex,
+  onReviewStoryChange,
+}: {
+  reviewStoryIndex: number;
+  onReviewStoryChange: (value: number) => void;
+}) {
+  const reviewStory = LITERAL_REVIEW_STORIES[reviewStoryIndex];
+  return (
+    <section
+      className="literal-book-checkout-proof"
+      aria-label="Sample customer stories"
+    >
+      <div className="literal-book-checkout-proof-heading">
+        <div>
+          <div className="literal-book-review-eyebrow">
+            THE MAIDS IN BLACK EXPERIENCE
+          </div>
+          <h3>Why customers choose Maids in Black</h3>
+        </div>
+        <div className="literal-book-review-controls">
+          <button
+            type="button"
+            aria-label="Previous review"
+            onClick={() =>
+              onReviewStoryChange(
+                (reviewStoryIndex - 1 + LITERAL_REVIEW_STORIES.length) %
+                  LITERAL_REVIEW_STORIES.length
+              )
+            }
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            aria-label="Next review"
+            onClick={() =>
+              onReviewStoryChange(
+                (reviewStoryIndex + 1) % LITERAL_REVIEW_STORIES.length
+              )
+            }
+          >
+            ›
+          </button>
+        </div>
+      </div>
+      <div className="literal-book-checkout-proof-feature">
+        <div className="literal-book-checkout-proof-photo-wrap">
+          <img
+            className="literal-book-checkout-proof-photo"
+            src={reviewCustomerStory}
+            alt=""
+          />
+        </div>
+        <div className="literal-book-checkout-proof-quote">
+          <div
+            className="literal-book-review-stars"
+            aria-label="Five decorative stars"
+          >
+            ★★★★★
+          </div>
+          <blockquote>{reviewStory.quote}</blockquote>
+          <strong>{reviewStory.name}</strong>
+          <span>{reviewStory.detail}</span>
+          <div className="literal-book-review-dots">
+            {LITERAL_REVIEW_STORIES.map((_, index) => (
+              <button
+                type="button"
+                key={index}
+                aria-label={`Show sample review ${index + 1}`}
+                aria-pressed={index === reviewStoryIndex}
+                className={index === reviewStoryIndex ? "selected" : ""}
+                onClick={() => onReviewStoryChange(index)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="literal-book-review-disclaimer">
+        Design preview — customer portrait and testimonials are illustrative.
+        Replace with real, permissioned customer reviews before launch.
+      </p>
+    </section>
+  );
+}
+
+function LiteralPageFive({
+  phase,
+  service,
+  pricingMode,
+  bedrooms,
+  bathrooms,
+  maidCount,
+  hourCount,
+  condition,
+  frequencyLabel,
+  selectedDate,
+  selectedTime,
+  total,
+  futureTotal,
+  extras,
+  quantities,
+  homeType,
+  customerName,
+  firstName,
+  lastName,
+  phone,
+  email,
+  notes,
+  onCustomerName,
+  onPhone,
+  onEmail,
+  onNotes,
+  quoteHoldCountdown,
+  reviewStoryIndex,
+  onReviewStoryChange,
+  onEditSchedule,
+  onBack,
+  onReserve,
+  isSaving,
+  formError,
+  funnelRecord,
+  cardOnFile,
+  onCardReady,
+  onEdit,
+  onFinalize,
+}: {
+  phase: 6 | 7 | 8;
+  service: string;
+  pricingMode: PublicBookingPricingMode;
+  bedrooms: number;
+  bathrooms: number;
+  maidCount: number;
+  hourCount: number;
+  condition: number;
+  frequencyLabel: string;
+  selectedDate: Date;
+  selectedTime: (typeof TIME_SLOTS)[number];
+  total: number;
+  futureTotal: number | null;
+  extras: readonly Extra[];
+  quantities: Record<string, number>;
+  homeType: string;
+  customerName: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  notes: string;
+  onCustomerName: (value: string) => void;
+  onPhone: (value: string) => void;
+  onEmail: (value: string) => void;
+  onNotes: (value: string) => void;
+  quoteHoldCountdown: string;
+  reviewStoryIndex: number;
+  onReviewStoryChange: (value: number) => void;
+  onEditSchedule: () => void;
+  onBack: () => void;
+  onReserve: () => void;
+  isSaving: boolean;
+  formError: string;
+  funnelRecord: BookingFunnelPublicResult | null;
+  cardOnFile: boolean;
+  onCardReady: (brand: string, last4: string) => void;
+  onEdit: (step: number) => void;
+  onFinalize: () => void;
+}) {
+  const dateLabel = selectedDate.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/New_York",
+  });
+  const serviceDetails =
+    pricingMode === "hourly"
+      ? `${maidCount} cleaner${maidCount === 1 ? "" : "s"} · ${hourCount} hours`
+      : `${bedrooms === 0 ? "Studio" : `${bedrooms} bedrooms`} · ${bathrooms} bathrooms`;
+  const serviceSummary = `${frequencyLabel} · ${CONDITION_COPY[condition - 1]}`;
+  const showCardEntry = phase === 7;
+  const showFinalReview = phase === 8;
+
+  return (
+    <main className="literal-book-page-five">
+      <div className="literal-book-shell">
+        <aside className="literal-book-side" aria-label="Booking progress">
+          <a
+            className="literal-book-logo"
+            href="https://maidsinblack.com/"
+            aria-label="Visit Maids in Black"
+          >
+            MAIDS <span>IN BLACK</span>
+            <div className="literal-book-subbrand">SNAPCLEAN</div>
+          </a>
+          <div className="literal-book-brand-intro">
+            <span className="literal-book-accent-line" />
+            <p className="literal-book-promise">
+              A clean home, <em>without the hassle.</em>
+            </p>
+            <p className="literal-book-support">
+              Choose your service. See your price. Book in minutes.
+            </p>
+          </div>
+          <div className="literal-book-stepnav">
+            {[
+              "Your home",
+              "Cleaning details",
+              "Your quote",
+              "Schedule",
+              "Checkout",
+              "Tip your team",
+            ].map((label, index) => (
+              <div
+                className={`literal-book-navitem${index === 4 ? " active" : index < 4 ? " done" : ""}`}
+                key={label}
+              >
+                <span className="literal-book-num">
+                  {index < 4 ? "✓" : index + 1}
+                </span>
+                {label}
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className="literal-book-main">
+          <div className="literal-book-top">
+            <span>STEP 5 OF 6</span>
+            <div
+              className="literal-book-clock"
+              aria-label="Quote and time hold"
+            >
+              <span className="literal-book-clock-icon" aria-hidden="true">
+                ◷
+              </span>
+              <span className="literal-book-clock-copy">
+                <span className="literal-book-clock-label">
+                  Quote &amp; time hold
+                </span>
+                <span className="literal-book-clock-note">
+                  We&apos;ll keep your estimate while you finish
+                </span>
+              </span>
+              <span className="literal-book-clock-value">
+                {quoteHoldCountdown}
+              </span>
+            </div>
+          </div>
+
+          <section className="literal-book-checkout-intro">
+            <div className="literal-book-eyebrow">
+              YOUR BOOKING · FINAL STEP
+            </div>
+            <h1>
+              Let&apos;s make it official<span>.</span>
+            </h1>
+            <p className="literal-book-lead">
+              Everything looks good. Review your cleaning, add your contact
+              details, and choose how you&apos;d like to pay.
+            </p>
+          </section>
+
+          <section className="literal-book-checkout-ticket">
+            <div className="literal-book-ticket-top">
+              <div className="literal-book-ticket-title">
+                <span className="literal-book-ticket-icon" aria-hidden="true">
+                  ✦
+                </span>
+                <div>
+                  <span>YOUR CLEANING</span>
+                  <strong>{service}</strong>
+                </div>
+              </div>
+              <button type="button" onClick={onEditSchedule}>
+                Edit booking ↗
+              </button>
+            </div>
+            <div className="literal-book-ticket-info">
+              <div className="literal-book-ticket-detail">
+                <span aria-hidden="true">
+                  <CalendarDays />
+                </span>
+                <div>
+                  <small>DATE &amp; ARRIVAL</small>
+                  <b>{dateLabel}</b>
+                  <em>{selectedTime}</em>
+                </div>
+              </div>
+              <div className="literal-book-ticket-detail">
+                <span aria-hidden="true">
+                  <House />
+                </span>
+                <div>
+                  <small>SERVICE DETAILS</small>
+                  <b>{serviceDetails}</b>
+                  <em>{serviceSummary}</em>
+                </div>
+              </div>
+            </div>
+            <div className="literal-book-ticket-total">
+              <div>
+                <small>FIRST CLEANING ESTIMATE</small>
+                <strong>{money(total)}</strong>
+              </div>
+              <span>Clear pricing, no surprises</span>
+            </div>
+          </section>
+
+          {!showFinalReview && (
+            <>
+              <section className="literal-book-checkout-contact">
+                <h2>Where should we send your confirmation?</h2>
+                <p>We&apos;ll use these details to coordinate your cleaning.</p>
+                {phase === 6 ? (
+                  <LiteralCheckoutContactForm
+                    name={customerName}
+                    phone={phone}
+                    email={email}
+                    notes={notes}
+                    onName={onCustomerName}
+                    onPhone={onPhone}
+                    onEmail={onEmail}
+                    onNotes={onNotes}
+                  />
+                ) : (
+                  <div className="literal-book-checkout-contact-saved">
+                    <span>
+                      <b>{`${firstName} ${lastName}`.trim()}</b>
+                      <small>{phone}</small>
+                    </span>
+                    <span>
+                      <b>{email}</b>
+                      {notes ? <small>Access notes saved</small> : null}
+                    </span>
+                  </div>
+                )}
+              </section>
+
+              <section className="literal-book-payment-heading">
+                <div className="literal-book-eyebrow">Secure checkout</div>
+                <h2>Payment</h2>
+                <p>
+                  Securely save your card now. You&apos;re charged after the
+                  cleaning.
+                </p>
+              </section>
+
+              <section className="literal-book-payment-brand">
+                <div
+                  className="literal-book-payment-brand-card"
+                  aria-hidden="true"
+                >
+                  <strong>
+                    MAIDS <span>IN BLACK</span>
+                  </strong>
+                  <b>•••• &nbsp; •••• &nbsp; •••• &nbsp; ••••</b>
+                  <small>YOUR CLEANING · YOUR WAY</small>
+                </div>
+                <div>
+                  <strong>Your payment. Protected.</strong>
+                  <p>
+                    Secure payment processing, clear charges, and no card
+                    details stored by Maids in Black.
+                  </p>
+                  <span>
+                    <ShieldCheck /> Secure checkout powered by Stripe
+                  </span>
+                </div>
+              </section>
+
+              <section
+                className="literal-book-card-choice"
+                aria-label="Payment method"
+              >
+                <div className="literal-book-card-choice-head">
+                  <span aria-hidden="true">✓</span>
+                  <div>
+                    <strong>Card on file · pay after service</strong>
+                    <p>
+                      Securely save your card now. You&apos;re charged after the
+                      cleaning.
+                    </p>
+                  </div>
+                </div>
+                {showCardEntry ? (
+                  <div className="literal-book-card-detail">
+                    {cardOnFile ? (
+                      <div className="literal-book-card-message">
+                        <Check /> Your card is securely on file. Continue to
+                        take a final look at your booking.
+                      </div>
+                    ) : funnelRecord ? (
+                      <BookingPaymentCheckout
+                        publicFunnelNumber={funnelRecord.publicFunnelNumber}
+                        mutationToken={funnelRecord.mutationToken}
+                        customerName={`${firstName} ${lastName}`.trim()}
+                        amountCents={total}
+                        directCardEntry
+                        deferConfirmation
+                        onComplete={result =>
+                          onCardReady(result.cardBrand, result.cardLast4)
+                        }
+                      />
+                    ) : (
+                      <div className="literal-book-card-message" role="alert">
+                        Your booking details need to be saved before secure card
+                        entry.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="literal-book-card-preview">
+                    <CreditCard />
+                    <span>Secure card entry</span>
+                    <small>Card</small>
+                  </div>
+                )}
+              </section>
+
+              <div className="literal-book-trust-grid">
+                <div>
+                  <b>✓ 200% satisfaction guarantee</b>
+                  <span>We stand behind the cleaning service.</span>
+                </div>
+                <div>
+                  <b>✓ Insured cleaning teams</b>
+                  <span>Professional service with added peace of mind.</span>
+                </div>
+              </div>
+              <LiteralCheckoutProof
+                reviewStoryIndex={reviewStoryIndex}
+                onReviewStoryChange={onReviewStoryChange}
+              />
+            </>
+          )}
+
+          {showFinalReview && (
+            <section className="literal-book-final-review">
+              <div className="literal-book-eyebrow">Review &amp; confirm</div>
+              <ReviewAndBook
+                service={service}
+                bedrooms={bedrooms}
+                bathrooms={bathrooms}
+                homeType={homeType}
+                pricingMode={pricingMode}
+                maidCount={maidCount}
+                hourCount={hourCount}
+                condition={condition}
+                extras={extras}
+                quantities={quantities}
+                total={total}
+                futureTotal={futureTotal}
+                frequencyLabel={frequencyLabel}
+                onEdit={onEdit}
+              />
+            </section>
+          )}
+
+          {formError && (
+            <div className="literal-book-checkout-error" role="alert">
+              {formError}
+            </div>
+          )}
+
+          <div className="literal-book-checkout-dock">
+            <div>
+              <b>First cleaning · {money(total)}</b>
+              <span>
+                {showFinalReview
+                  ? "Card on file · ready to confirm"
+                  : showCardEntry
+                    ? "Card charged after service"
+                    : "Card charged after service"}
+              </span>
+            </div>
+            <em>{showFinalReview ? "Review & confirm" : "Secure checkout"}</em>
+            {phase === 6 ? (
+              <button type="button" onClick={onReserve} disabled={isSaving}>
+                {isSaving ? "Saving…" : "Continue to secure card setup →"}
+              </button>
+            ) : phase === 8 ? (
+              <button type="button" onClick={onFinalize} disabled={isSaving}>
+                {isSaving ? "Saving…" : "Everything looks good →"}
+              </button>
+            ) : null}
+          </div>
+          <button
+            className="literal-book-checkout-back"
+            type="button"
+            onClick={onBack}
+            disabled={isSaving}
+          >
+            ←{" "}
+            {phase === 6
+              ? "Back to schedule"
+              : phase === 7
+                ? "Back to contact details"
+                : "Back to card setup"}
+          </button>
+          <details className="literal-book-checkout-help">
+            <summary>When would I be charged?</summary>
+            <p>
+              Your card is securely collected at booking and charged once the
+              cleaning is completed.
+            </p>
+          </details>
+        </section>
+      </div>
+    </main>
+  );
+}
+
 function formatPhoneInput(value: string): string {
   let digits = value.replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
@@ -1396,7 +3448,9 @@ function YourInformation(props: {
             <MessageCircle />
             <input
               value={props.phone}
-              onChange={event => props.onPhone(formatPhoneInput(event.target.value))}
+              onChange={event =>
+                props.onPhone(formatPhoneInput(event.target.value))
+              }
               inputMode="tel"
               autoComplete="tel"
             />
@@ -1440,14 +3494,12 @@ function YourInformation(props: {
 }
 function Payment({
   funnelRecord,
-  reviewMode,
   fullName,
   amountCents,
   cardOnFile,
   onCardReady,
 }: {
   funnelRecord: BookingFunnelPublicResult | null;
-  reviewMode: boolean;
   fullName: string;
   amountCents: number;
   cardOnFile: boolean;
@@ -1458,37 +3510,57 @@ function Payment({
       <section className="booking-payment-hero">
         <h1>Reserve your cleaning</h1>
         <div className="booking-payment-reassurance">
-          <span className="booking-payment-reassurance-icon"><LockKeyhole /></span>
+          <span className="booking-payment-reassurance-icon">
+            <LockKeyhole />
+          </span>
           <div>
             <strong>You won’t be charged today.</strong>
-            <p>Your card securely reserves your appointment.<br />Payment is processed after your cleaning is completed.</p>
+            <p>
+              Your card securely reserves your appointment.
+              <br />
+              Payment is processed after your cleaning is completed.
+            </p>
           </div>
         </div>
         <div className="booking-payment-trust" aria-label="Payment assurances">
           <div>
-            <span><ShieldCheck /></span>
-            <strong>Secure<br />payments</strong>
+            <span>
+              <ShieldCheck />
+            </span>
+            <strong>
+              Secure
+              <br />
+              payments
+            </strong>
             <small>Powered by Stripe</small>
           </div>
           <div>
-            <span><CreditCard /></span>
-            <strong>Your card<br />is not stored</strong>
-            <small>Handled securely<br />by Stripe</small>
+            <span>
+              <CreditCard />
+            </span>
+            <strong>
+              Your card
+              <br />
+              is not stored
+            </strong>
+            <small>
+              Handled securely
+              <br />
+              by Stripe
+            </small>
           </div>
           <div>
-            <span><ShieldCheck /></span>
+            <span>
+              <ShieldCheck />
+            </span>
             <strong>Protects our teams</strong>
-            <small>Helps us avoid traveling with cash throughout the city</small>
+            <small>
+              Helps us avoid traveling with cash throughout the city
+            </small>
           </div>
         </div>
       </section>
-      {reviewMode ? (
-        <div className="booking-live-card-saved">
-          <Check />
-          Review mode: secure card entry is intentionally skipped so the remaining
-          booking steps can be inspected.
-        </div>
-      ) : cardOnFile ? (
+      {cardOnFile ? (
         <div className="booking-live-card-saved">
           <Check />
           Your card is securely on file. Continue to take a final look at your
@@ -1746,7 +3818,9 @@ function BookingSummary({
           </dd>
         </div>
         <div>
-          <dt>{pricingMode === "hourly" ? "Hourly service" : "Base cleaning"}</dt>
+          <dt>
+            {pricingMode === "hourly" ? "Hourly service" : "Base cleaning"}
+          </dt>
           <dd>
             {money(
               pricingMode === "hourly"
@@ -1830,7 +3904,6 @@ function BookingSuccess({
   futureTotal,
   frequencyLabel,
   cardLabel,
-  funnelRecord,
 }: {
   name: string;
   service: string;
@@ -1842,291 +3915,303 @@ function BookingSuccess({
   futureTotal: number | null;
   frequencyLabel: string;
   cardLabel: string;
-  funnelRecord: BookingFunnelPublicResult | null;
 }) {
-  const [selectedUpsell, setSelectedUpsell] =
-    useState<PostBookingUpsell | null>(null);
-  const [draftQuantity, setDraftQuantity] = useState(1);
-  const [addedUpsells, setAddedUpsells] = useState<Record<string, number>>({});
-  const [upsellError, setUpsellError] = useState("");
-  const addPostBookingUpsellsMutation =
-    trpc.bookingPayments.addPostBookingUpsells.useMutation();
-  const addedItems = POST_BOOKING_UPSELLS.filter(
-    upsell => (addedUpsells[upsell.id] ?? 0) > 0
+  const [completionView, setCompletionView] = useState<"tip" | "thank-you">(
+    "tip"
   );
-  const addedServicesTotal = addedItems.reduce(
-    (sum, upsell) =>
-      sum + upsell.unitPriceCents * (addedUpsells[upsell.id] ?? 0),
-    0
-  );
-  const updatedBookingTotal = total + addedServicesTotal;
-  const openQuantityPicker = (upsell: PostBookingUpsell) => {
-    setSelectedUpsell(upsell);
-    setDraftQuantity(addedUpsells[upsell.id] ?? 1);
-  };
-  const applyUpsell = async () => {
-    if (!selectedUpsell) return;
-    if (!funnelRecord) {
-      setUpsellError("Your booking session expired. Please contact us to add this service.");
-      return;
-    }
-    const nextUpsells = {
-      ...addedUpsells,
-      [selectedUpsell.id]: draftQuantity,
-    };
-    setUpsellError("");
-    try {
-      await addPostBookingUpsellsMutation.mutateAsync({
-        publicFunnelNumber: funnelRecord.publicFunnelNumber,
-        mutationToken: funnelRecord.mutationToken,
-        upsells: Object.entries(nextUpsells).map(([id, quantity]) => ({ id, quantity })),
-      });
-      setAddedUpsells(nextUpsells);
-      setSelectedUpsell(null);
-    } catch (error) {
-      setUpsellError(
-        error instanceof Error
-          ? error.message
-          : "We could not add that service. Please try again."
-      );
-    }
-  };
+  const [tipPreview, setTipPreview] = useState<number | null>(null);
+  const tipOptions = [10, 15, 20, 25, 30] as const;
+  const tipCopy = [
+    ["A little thank-you", "A kind gesture", "♡"],
+    ["Thanks so much", "A thoughtful extra", "✿"],
+    ["You’re amazing", "Show some extra love", "✦"],
+    ["Above & beyond", "For exceptional care", "★"],
+    ["Made my day", "A generous thank-you", "♥"],
+  ] as const;
+  const homeDetails = `${bedrooms === 0 ? "Studio" : `${bedrooms} bedrooms`} · ${bathrooms} bathrooms`;
+
   return (
-    <main className="booking-review-page">
-      <header className="booking-review-header">
-        <a href="/" className="booking-review-brand">
-          <strong>
-            Maids in Black<sup>®</sup>
-          </strong>
-          <span>CLEAN HOMES. BRIGHTER LIVES.</span>
-        </a>
-        <div className="booking-review-help">
-          <MessageCircle /> <span>Need help? Text us</span>
-          <i /> <strong>(202) 888-5362</strong>
-        </div>
-      </header>
-      <section className="booking-success-layout">
-        <div>
-          <section className="booking-success-intro">
-            <span>
-              <Check />
+    <main className="literal-book-page-six">
+      <div className="literal-book-shell">
+        <aside className="literal-book-side" aria-label="Booking progress">
+          <a
+            className="literal-book-logo"
+            href="https://maidsinblack.com/"
+            aria-label="Visit Maids in Black"
+          >
+            MAIDS <span>IN BLACK</span>
+            <div className="literal-book-subbrand">SNAPCLEAN</div>
+          </a>
+          <div className="literal-book-brand-intro">
+            <span className="literal-book-accent-line" />
+            <p className="literal-book-promise">
+              A clean home, <em>without the hassle.</em>
+            </p>
+            <p className="literal-book-support">
+              Your booking is confirmed. We&apos;ll take it from here.
+            </p>
+          </div>
+          <div className="literal-book-stepnav">
+            {[
+              "Your home",
+              "Cleaning details",
+              "Your quote",
+              "Schedule",
+              "Checkout",
+              "Tip your team",
+            ].map((label, index) => (
+              <div
+                className={`literal-book-navitem${index === 5 ? " active" : " done"}`}
+                key={label}
+              >
+                <span className="literal-book-num">✓</span>
+                {label}
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className="literal-book-main">
+          <div className="literal-book-top">
+            <span>BOOKING CONFIRMED</span>
+            <span className="literal-book-complete-pill">
+              <Check aria-hidden="true" /> All set
             </span>
-            <div>
-              <h1>You’re booked!</h1>
-              <p>Thanks for choosing Maids in Black.</p>
-              <small>
-                <MessageCircle />
-                We’ll text your appointment details shortly.
-              </small>
-              <small>
-                <MessageCircle />
-                We’ll also email your confirmation and receipt.
-              </small>
-            </div>
-          </section>
-          <section className="booking-upsells">
-            <div>
-              <small>MAKE LIFE EVEN EASIER</small>
-              <h2>Need anything else?</h2>
-              <p>Add more services and let us take care of it all.</p>
-            </div>
-            {addedItems.length > 0 && (
-              <section className="booking-upsell-added" aria-live="polite">
-                <strong>Added to your booking</strong>
-                <ul>
-                  {addedItems.map(upsell => {
-                    const quantity = addedUpsells[upsell.id] ?? 0;
-                    return (
-                      <li key={upsell.id}>
-                        <span>
-                          {upsell.title} ·{" "}
-                          {formatPostBookingUpsellQuantity(
-                            quantity,
-                            upsell.quantityLabel
-                          )}
-                          <small>
-                            {money(upsell.unitPriceCents * quantity)}
-                          </small>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => openQuantityPicker(upsell)}
-                        >
-                          Edit
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <div className="booking-upsell-estimate">
+          </div>
+
+          {completionView === "tip" ? (
+            <section className="literal-book-tip-v2">
+              <div className="literal-book-tip-confirmed">
+                <span className="literal-book-tip-confirmed-icon">
+                  <Check aria-hidden="true" />
+                </span>
+                <div>
+                  <strong>Your booking is confirmed!</strong>
+                  <span>
+                    {dateLabel} · {time} · {service}
+                  </span>
+                </div>
+                <span className="literal-book-tip-confirmed-label">
+                  ALL SET
+                </span>
+              </div>
+
+              <div className="literal-book-tip-hero">
+                <div className="literal-book-tip-copy">
+                  <div className="literal-book-tip-eyebrow">
+                    ONE OPTIONAL FINISHING TOUCH <Heart aria-hidden="true" />
+                  </div>
+                  <h1>
+                    A little love goes <em>a long way.</em>
+                  </h1>
+                  <p>
+                    Early mornings, traffic, tricky parking, street closures,
+                    and carrying supplies — your cleaning team handles a lot
+                    before they even knock. If you&apos;d like to show your
+                    appreciation, they&apos;ll be grateful.
+                  </p>
+                  <div className="literal-book-tip-note">
+                    Tipping is completely optional. Your cleaning is already
+                    booked.
+                  </div>
+                </div>
+                <div className="literal-book-tip-art" aria-hidden="true">
+                  <span className="orbit1">✦</span>
+                  <span className="orbit2">✧</span>
+                  <Heart
+                    className="literal-book-tip-heart"
+                    fill="currentColor"
+                  />
+                  <span className="orbit3">✦</span>
+                </div>
+              </div>
+
+              <div className="literal-book-tip-title">
+                <div>
+                  <span className="literal-book-eyebrow">SAY IT YOUR WAY</span>
+                  <h2>Choose your thank-you</h2>
+                </div>
+                <span>Calculated from your {money(total)} cleaning</span>
+              </div>
+              <div
+                className="literal-book-tip-grid"
+                aria-label="Tip preview choices"
+              >
+                {tipOptions.map((percent, index) => {
+                  const [title, description, symbol] = tipCopy[index];
+                  const selected = tipPreview === percent;
+                  return (
+                    <button
+                      type="button"
+                      className={`literal-book-tip-choice${selected ? " selected" : ""}`}
+                      aria-pressed={selected}
+                      key={percent}
+                      onClick={() => setTipPreview(percent)}
+                    >
+                      <span className="literal-book-tip-symbol">{symbol}</span>
+                      <span className="literal-book-tip-percent">
+                        {percent}%
+                      </span>
+                      <span className="literal-book-tip-dollars">
+                        {money(Math.round((total * percent) / 100))}
+                      </span>
+                      <strong>{title}</strong>
+                      <small>{description}</small>
+                      <span className="literal-book-tip-check">
+                        <Check aria-hidden="true" />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="literal-book-tip-unavailable" role="note">
+                <CircleHelp aria-hidden="true" />
+                <span>
+                  Tipping is not collected or recorded in this booking flow.
+                  Your selection is only a visual preview.
+                </span>
+              </div>
+
+              <div className="literal-book-tip-bottom">
+                <div className="literal-book-tip-summary">
                   <div>
-                    <span>Estimated add-ons</span>
-                    <strong>{money(addedServicesTotal)}</strong>
+                    <span>Cleaning estimate</span>
+                    <strong>{money(total)}</strong>
                   </div>
                   <div>
-                    <span>Updated booking estimate</span>
-                    <strong>{money(updatedBookingTotal)}</strong>
+                    <span>Optional tip preview</span>
+                    <strong>
+                      {tipPreview === null
+                        ? "$0"
+                        : money(Math.round((total * tipPreview) / 100))}
+                    </strong>
+                  </div>
+                  <div className="literal-book-tip-total">
+                    <span>Booking total</span>
+                    <strong>{money(total)}</strong>
+                  </div>
+                  <small>No tip is added to your booking or payment.</small>
+                </div>
+                <div className="literal-book-tip-cta">
+                  <button
+                    type="button"
+                    className="literal-book-primary"
+                    onClick={() => setCompletionView("thank-you")}
+                  >
+                    Continue to booking details{" "}
+                    <ArrowRight aria-hidden="true" />
+                  </button>
+                  <button
+                    className="literal-book-tip-skip"
+                    type="button"
+                    onClick={() => setCompletionView("thank-you")}
+                  >
+                    No tip, thanks — I&apos;m all set
+                  </button>
+                  <span>Your team appreciates the thought either way.</span>
+                </div>
+              </div>
+            </section>
+          ) : (
+            <section className="literal-book-thankyou">
+              <div className="literal-book-celebrate-art" aria-hidden="true">
+                <span>✦</span>
+                <span>✳</span>
+                <span>✦</span>
+                <span>✧</span>
+                <div>
+                  <Check />
+                </div>
+              </div>
+              <div className="literal-book-eyebrow">YOU&apos;RE ALL SET</div>
+              <h1>
+                Let the clean begin<span>.</span>
+              </h1>
+              <p className="literal-book-thankyou-lead">
+                A fresh home is on the horizon. Here&apos;s everything you need
+                to know about your cleaning.
+              </p>
+
+              <section className="literal-book-thankyou-recap">
+                <div>
+                  <small>YOUR CLEANING</small>
+                  <strong>{service}</strong>
+                  <span>{homeDetails}</span>
+                </div>
+                <div>
+                  <small>YOUR PREFERRED ARRIVAL</small>
+                  <strong>{dateLabel}</strong>
+                  <span>{time}</span>
+                </div>
+                <div>
+                  <small>BOOKING TOTAL</small>
+                  <strong>{money(total)}</strong>
+                  <span>{cardLabel || "Card securely on file"}</span>
+                </div>
+              </section>
+
+              {futureTotal !== null && (
+                <section className="literal-book-thankyou-recurring">
+                  <span>{frequencyLabel} visits after your first cleaning</span>
+                  <strong>{money(futureTotal)}/visit</strong>
+                </section>
+              )}
+
+              <section className="literal-book-thankyou-next">
+                <div className="literal-book-thankyou-heading">
+                  <span className="literal-book-eyebrow">THE GOOD PART</span>
+                  <h2>What happens next?</h2>
+                </div>
+                <div className="literal-book-next-steps">
+                  <div className="literal-book-next-step">
+                    <span>
+                      <MessageCircle aria-hidden="true" />
+                    </span>
+                    <div>
+                      <b>1. Confirmation details</b>
+                      <p>
+                        We&apos;ll text your appointment details and email your
+                        confirmation and receipt.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="literal-book-next-step">
+                    <span>
+                      <House aria-hidden="true" />
+                    </span>
+                    <div>
+                      <b>2. Get your home ready</b>
+                      <p>
+                        Put away valuables and clear access to the areas
+                        you&apos;d like cleaned. We&apos;ll bring the cleaning
+                        supplies.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="literal-book-next-step">
+                    <span>
+                      <Sparkles aria-hidden="true" />
+                    </span>
+                    <div>
+                      <b>3. We&apos;ll take it from here</b>
+                      <p>
+                        Your team will follow up about your requested arrival
+                        window before the appointment.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </section>
-            )}
-            <div className="booking-upsell-grid">
-              {POST_BOOKING_UPSELLS.map(upsell => {
-                const quantity = addedUpsells[upsell.id] ?? 0;
-                return (
-                  <article key={upsell.id}>
-                    <img src={upsell.image} alt="Home service visual" />
-                    <div>
-                      <strong>{upsell.title}</strong>
-                      <p>{upsell.copy}</p>
-                      <b>{getPostBookingUpsellUnitPrice(upsell)}</b>
-                      <button
-                        type="button"
-                        onClick={() => openQuantityPicker(upsell)}
-                      >
-                        {quantity > 0
-                          ? `Added · ${formatPostBookingUpsellQuantity(
-                              quantity,
-                              upsell.quantityLabel
-                            )}`
-                          : "Add to Booking"}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-            {upsellError && (
-              <div className="booking-live-error" role="alert">
-                {upsellError}
-              </div>
-            )}
-          </section>
-        </div>
-        <aside className="booking-success-summary">
-          <img src={stillLife} alt="Warm clean home interior" />
-          <h2>Booking Details</h2>
-          <dl>
-            <div>
-              <CalendarDays />
-              <span>
-                {dateLabel}
-                <br />
-                <small>{time}</small>
-              </span>
-            </div>
-            <div>
-              <House />
-              <span>
-                {bedrooms === 0 ? "Studio" : `${bedrooms} bed`} · {bathrooms}{" "}
-                bath
-              </span>
-            </div>
-            <div>
-              <Sparkles />
-              <span>{service}</span>
-            </div>
-            <div>
-              <UsersRound />
-              <span>
-                {name}
-                <br />
-                <small>Booking contact</small>
-              </span>
-            </div>
-            <div>
-              <CreditCard />
-              <span>{cardLabel || "Card securely on file"}</span>
-            </div>
-          </dl>
-          <div className="booking-success-total">
-            <span>First cleaning</span>
-            <strong>{money(updatedBookingTotal)}</strong>
-          </div>
-          {futureTotal !== null && (
-            <div className="booking-success-recurring">
-              <span>
-                {frequencyLabel} future visits
-                <small>After your first cleaning</small>
-              </span>
-              <strong>
-                {money(futureTotal)}
-                <small>/visit</small>
-              </strong>
-            </div>
+
+              <a className="literal-book-secondary" href="/book">
+                Start another booking <ArrowRight aria-hidden="true" />
+              </a>
+              <p className="literal-book-powered-final">Powered by Baseboard</p>
+            </section>
           )}
-        </aside>
-      </section>
-      {selectedUpsell && (
-        <div
-          className="booking-upsell-modal-backdrop"
-          role="presentation"
-          onClick={() => setSelectedUpsell(null)}
-        >
-          <section
-            className="booking-upsell-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="booking-upsell-modal-title"
-            onClick={event => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="booking-upsell-modal-close"
-              aria-label="Close service quantity picker"
-              onClick={() => setSelectedUpsell(null)}
-            >
-              <X />
-            </button>
-            <img src={selectedUpsell.image} alt="" />
-            <div>
-              <span>ADD TO BOOKING</span>
-              <h2 id="booking-upsell-modal-title">{selectedUpsell.title}</h2>
-              <p>{selectedUpsell.copy}</p>
-              <b>{getPostBookingUpsellUnitPrice(selectedUpsell)}</b>
-            </div>
-            <div className="booking-upsell-quantity">
-              <span>How many {selectedUpsell.quantityLabel}?</span>
-              <div>
-                <button
-                  type="button"
-                  aria-label={`Reduce ${selectedUpsell.title} quantity`}
-                  onClick={() =>
-                    setDraftQuantity(quantity => Math.max(1, quantity - 1))
-                  }
-                  disabled={draftQuantity === 1}
-                >
-                  <Minus />
-                </button>
-                <output aria-live="polite">{draftQuantity}</output>
-                <button
-                  type="button"
-                  aria-label={`Increase ${selectedUpsell.title} quantity`}
-                  onClick={() => setDraftQuantity(quantity => quantity + 1)}
-                >
-                  <Plus />
-                </button>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="booking-upsell-modal-apply"
-              onClick={applyUpsell}
-              disabled={addPostBookingUpsellsMutation.isPending}
-            >
-              {addPostBookingUpsellsMutation.isPending
-                ? "Saving…"
-                : addedUpsells[selectedUpsell.id]
-                ? `Update estimate · ${money(
-                    selectedUpsell.unitPriceCents * draftQuantity
-                  )}`
-                : `Add to estimate · ${money(
-                    selectedUpsell.unitPriceCents * draftQuantity
-                  )}`}
-            </button>
-          </section>
-        </div>
-      )}
+        </section>
+      </div>
     </main>
   );
 }

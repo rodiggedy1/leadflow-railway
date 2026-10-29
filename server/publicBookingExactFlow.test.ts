@@ -73,18 +73,23 @@ describe("approved eight-step public booking flow", () => {
     );
   });
 
-  it("restores the approved confirmation service picker treatment", () => {
-    expect(page).toContain("POST_BOOKING_UPSELLS");
-    expect(read("shared/canonicalBookingCatalog.ts")).toContain("CANONICAL_POST_BOOKING_UPSELLS");
-    expect(read("shared/canonicalBookingCatalog.ts")).toContain("CANONICAL_POST_BOOKING_UPSELLS");
-    expect(page).toContain("booking-upsell-modal");
-    expect(page).toContain("booking-upsell-estimate");
-    expect(page).not.toContain("Coming soon");
+  it("uses the approved tip and thank-you completion presentation without post-booking add-on UI", () => {
+    expect(page).toContain("literal-book-page-six");
+    expect(page).toContain("Tip your team");
+    expect(page).toContain("literal-book-thankyou");
+    expect(page).toContain(
+      "Tipping is not collected or recorded in this booking flow."
+    );
+    expect(page).not.toContain("POST_BOOKING_UPSELLS");
+    expect(page).not.toContain("booking-upsell-modal");
+    expect(page).not.toContain("booking-upsell-estimate");
+    expect(page).not.toContain("addPostBookingUpsells.useMutation");
   });
 
-  it("persists confirmation add-ons through the booking and current operational job", () => {
-    expect(page).toContain("trpc.bookingPayments.addPostBookingUpsells.useMutation");
-    expect(page).toContain("mutationToken: funnelRecord.mutationToken");
+  it("keeps the existing server-only additional-services contract intact", () => {
+    expect(read("shared/canonicalBookingCatalog.ts")).toContain(
+      "CANONICAL_POST_BOOKING_UPSELLS"
+    );
     expect(paymentRouter).toContain("addPostBookingUpsells: publicProcedure");
     expect(upsellEngine).toContain("PUBLIC_BOOKING_POST_BOOKING_UPSELLS");
     expect(upsellEngine).toContain("firstCleaningTotalCents");
