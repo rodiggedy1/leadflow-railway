@@ -72,22 +72,28 @@ describe("public booking Cash App immediate payment", () => {
     expect(sql).not.toMatch(/^\s*(DROP|TRUNCATE|DELETE|UPDATE|INSERT)\b/im);
   });
 
-  it("keeps Card on file and Apple Pay available while adding Cash App as a third closed choice", () => {
+  it("keeps Card on file and Apple Pay available while Cash App starts Stripe's native flow from its selection", () => {
     const component = read("client/src/components/BookingCashAppCheckout.tsx");
     const book = read("client/src/pages/Book.tsx");
     const engine = read("server/bookingCashAppEngine.ts");
     const card = read("client/src/components/BookingPaymentCheckout.tsx");
     const cashRouter = read("server/cashAppRouter.ts");
-    expect(component).toContain("PaymentElement");
+    expect(component).toContain("stripe.confirmCashappPayment");
     expect(engine).toContain('payment_method_types: ["cashapp"]');
     expect(component).toContain("return_url:");
     expect(component).toContain("trpc.cashApp.booking.prepare.useMutation");
+    expect(component).toContain("trpc.cashApp.booking.settle.useMutation");
+    expect(component).not.toContain("PaymentElement");
+    expect(component).not.toContain("Continue with Cash App");
     expect(component).not.toContain("generateLink");
     expect(book).toContain("<PublicBookingCardSetupBeforeReservation");
     expect(book).toContain("<BookingApplePayCheckout");
     expect(book).toContain("<BookingCashAppCheckout");
     expect(book).toContain('"card" | "apple_pay" | "cashapp" | null');
     expect(book).toContain('selectedPaymentMethod === "cashapp" ? " is-open" : ""');
+    expect(book).toContain("onCashAppPaid={totalCents =>");
+    expect(book).toContain('onPaid={onCashAppPaid}');
+    expect(book).toContain('className="literal-book-cashapp-return"');
     expect(book).toContain("123 Google reviews");
     expect(cashRouter).toContain("booking: bookingCashAppRouter");
     expect(cashRouter).toContain("generateLink: agentProcedure");
