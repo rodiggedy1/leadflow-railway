@@ -74,10 +74,23 @@ describe("approved eight-step public booking flow", () => {
     expect(page).not.toContain("booking-payment-security");
   });
 
-  it("moves directly to final review after Stripe confirms the card", () => {
-    expect(page).toMatch(
-      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setCardOnFile\(true\);[\s\S]*setStep\(8\);[\s\S]*\}\}/
+  it("keeps checkout in place after Stripe confirms the card until the customer reviews", () => {
+    const literalCheckoutController = page.slice(
+      page.indexOf("if (step === 6 || step === 7 || step === 8)"),
+      page.indexOf(
+        '  return (\n    <main className="booking-review-page booking-live-page">'
+      )
     );
+    expect(literalCheckoutController).toMatch(
+      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setCardOnFile\(true\);[\s\S]*setFormError\(""\);[\s\S]*\}\}/
+    );
+    expect(literalCheckoutController).not.toMatch(
+      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setStep\(8\);[\s\S]*\}\}/
+    );
+    expect(literalCheckoutController).toContain(
+      "onReviewBooking={() => setStep(8)}"
+    );
+    expect(page).toContain("Review booking →");
   });
 
   it("uses the approved tip and thank-you completion presentation without post-booking add-on UI", () => {

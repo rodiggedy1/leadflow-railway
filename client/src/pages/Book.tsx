@@ -836,9 +836,9 @@ export default function Book() {
           setCardLabel(`${brand} ending in ${last4}`);
           setCardOnFile(true);
           setFormError("");
-          setStep(8);
         }}
         onEdit={setStep}
+        onReviewBooking={() => setStep(8)}
         onFinalize={() => void next()}
       />
     );
@@ -3007,6 +3007,7 @@ function LiteralPageFive({
   cardOnFile,
   onCardReady,
   onEdit,
+  onReviewBooking,
   onFinalize,
 }: {
   phase: 6 | 7 | 8;
@@ -3046,6 +3047,7 @@ function LiteralPageFive({
   cardOnFile: boolean;
   onCardReady: (brand: string, last4: string) => void;
   onEdit: (step: number) => void;
+  onReviewBooking: () => void;
   onFinalize: () => void;
 }) {
   const dateLabel = selectedDate.toLocaleDateString("en-US", {
@@ -3348,6 +3350,14 @@ function LiteralPageFive({
             {phase === 8 ? (
               <button type="button" onClick={onFinalize} disabled={isSaving}>
                 {isSaving ? "Saving…" : "Everything looks good →"}
+              </button>
+            ) : cardOnFile ? (
+              <button
+                type="button"
+                onClick={onReviewBooking}
+                disabled={isSaving}
+              >
+                Review booking →
               </button>
             ) : null}
           </div>
