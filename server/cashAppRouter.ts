@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { cashAppPaymentTokens } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { getStripeClient } from "./stripeClient";
+import { bookingCashAppRouter } from "./bookingCashAppRouter";
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -33,6 +34,7 @@ async function getOpenToken(token: string) {
 }
 
 export const cashAppRouter = router({
+  booking: bookingCashAppRouter,
   generateLink: agentProcedure
     .input(z.object({
       customerPhone: z.string().min(7).max(30),

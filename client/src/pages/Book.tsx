@@ -4,6 +4,7 @@ import {
   PublicBookingCardSetupBeforeReservation,
 } from "@/components/BookingPaymentCheckout";
 import { BookingApplePayCheckout } from "@/components/BookingApplePayCheckout";
+import { BookingCashAppCheckout } from "@/components/BookingCashAppCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
 import {
   ArrowLeft,
@@ -408,8 +409,9 @@ export default function Book() {
   const [cardLabel, setCardLabel] = useState("");
   const [applePayAvailable, setApplePayAvailable] = useState(false);
   const [applePayBusy, setApplePayBusy] = useState(false);
+  const [cashAppBusy, setCashAppBusy] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
-    "card" | "apple_pay" | null
+    "card" | "apple_pay" | "cashapp" | null
   >(null);
   const [funnelRecord, setFunnelRecord] =
     useState<BookingFunnelPublicResult | null>(null);
@@ -448,7 +450,8 @@ export default function Book() {
     updateFunnelMutation.isPending ||
     reserveFunnelMutation.isPending ||
     finalizeBookingMutation.isPending ||
-    applePayBusy;
+    applePayBusy ||
+    cashAppBusy;
   const applePayQuote = useMemo(
     () => ({
       pricing: pricingInput,
@@ -565,6 +568,12 @@ export default function Book() {
     }));
 
   const quoteHoldCountdown = `${String(Math.floor(quoteHoldSeconds / 60)).padStart(2, "0")}:${String(quoteHoldSeconds % 60).padStart(2, "0")}`;
+  const cashAppReturnToken = new URLSearchParams(window.location.search).get(
+    "cashapp_return"
+  );
+
+  if (cashAppReturnToken)
+    return <CashAppBookingReturn returnToken={cashAppReturnToken} />;
 
   if (complete)
     return (
@@ -834,8 +843,6 @@ export default function Book() {
         onEmail={setEmail}
         onNotes={setNotes}
         quoteHoldCountdown={quoteHoldCountdown}
-        reviewStoryIndex={reviewStoryIndex}
-        onReviewStoryChange={setReviewStoryIndex}
         onEditSchedule={() => setStep(5)}
         onBack={() =>
           setStep(current => (current === 6 ? 5 : current === 7 ? 6 : 7))
@@ -855,6 +862,7 @@ export default function Book() {
           setFormError("");
           setComplete(true);
         }}
+        onCashAppBusyChange={setCashAppBusy}
         onCardReady={(brand, last4) => {
           setCardLabel(`${brand} ending in ${last4}`);
           setCardOnFile(true);
@@ -2905,92 +2913,6 @@ function LiteralCheckoutContactForm({
   );
 }
 
-function LiteralCheckoutProof({
-  reviewStoryIndex,
-  onReviewStoryChange,
-}: {
-  reviewStoryIndex: number;
-  onReviewStoryChange: (value: number) => void;
-}) {
-  const reviewStory = LITERAL_REVIEW_STORIES[reviewStoryIndex];
-  return (
-    <section
-      className="literal-book-checkout-proof"
-      aria-label="Sample customer stories"
-    >
-      <div className="literal-book-checkout-proof-heading">
-        <div>
-          <div className="literal-book-review-eyebrow">
-            THE MAIDS IN BLACK EXPERIENCE
-          </div>
-          <h3>Why customers choose Maids in Black</h3>
-        </div>
-        <div className="literal-book-review-controls">
-          <button
-            type="button"
-            aria-label="Previous review"
-            onClick={() =>
-              onReviewStoryChange(
-                (reviewStoryIndex - 1 + LITERAL_REVIEW_STORIES.length) %
-                  LITERAL_REVIEW_STORIES.length
-              )
-            }
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            aria-label="Next review"
-            onClick={() =>
-              onReviewStoryChange(
-                (reviewStoryIndex + 1) % LITERAL_REVIEW_STORIES.length
-              )
-            }
-          >
-            ›
-          </button>
-        </div>
-      </div>
-      <div className="literal-book-checkout-proof-feature">
-        <div className="literal-book-checkout-proof-photo-wrap">
-          <img
-            className="literal-book-checkout-proof-photo"
-            src={reviewCustomerStory}
-            alt=""
-          />
-        </div>
-        <div className="literal-book-checkout-proof-quote">
-          <div
-            className="literal-book-review-stars"
-            aria-label="Five decorative stars"
-          >
-            ★★★★★
-          </div>
-          <blockquote>{reviewStory.quote}</blockquote>
-          <strong>{reviewStory.name}</strong>
-          <span>{reviewStory.detail}</span>
-          <div className="literal-book-review-dots">
-            {LITERAL_REVIEW_STORIES.map((_, index) => (
-              <button
-                type="button"
-                key={index}
-                aria-label={`Show sample review ${index + 1}`}
-                aria-pressed={index === reviewStoryIndex}
-                className={index === reviewStoryIndex ? "selected" : ""}
-                onClick={() => onReviewStoryChange(index)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-      <p className="literal-book-review-disclaimer">
-        Design preview — customer portrait and testimonials are illustrative.
-        Replace with real, permissioned customer reviews before launch.
-      </p>
-    </section>
-  );
-}
-
 function LiteralPageFive({
   phase,
   service,
@@ -3015,8 +2937,6 @@ function LiteralPageFive({
   onEmail,
   onNotes,
   quoteHoldCountdown,
-  reviewStoryIndex,
-  onReviewStoryChange,
   onEditSchedule,
   onBack,
   onPrepareReservation,
@@ -3030,6 +2950,7 @@ function LiteralPageFive({
   onApplePayAvailable,
   onApplePayBusyChange,
   onApplePayPaid,
+  onCashAppBusyChange,
   onCardReady,
   onRetryFinalization,
 }: {
@@ -3056,8 +2977,6 @@ function LiteralPageFive({
   onEmail: (value: string) => void;
   onNotes: (value: string) => void;
   quoteHoldCountdown: string;
-  reviewStoryIndex: number;
-  onReviewStoryChange: (value: number) => void;
   onEditSchedule: () => void;
   onBack: () => void;
   onPrepareReservation: () => Promise<BookingFunnelPublicResult | null>;
@@ -3065,8 +2984,10 @@ function LiteralPageFive({
   formError: string;
   cardOnFile: boolean;
   applePayAvailable: boolean;
-  selectedPaymentMethod: "card" | "apple_pay" | null;
-  onPaymentMethodChange: (method: "card" | "apple_pay" | null) => void;
+  selectedPaymentMethod: "card" | "apple_pay" | "cashapp" | null;
+  onPaymentMethodChange: (
+    method: "card" | "apple_pay" | "cashapp" | null
+  ) => void;
   applePayQuote: {
     pricing: ReturnType<typeof createCanonicalPricingInput>;
     acceptedPricing: {
@@ -3077,6 +2998,7 @@ function LiteralPageFive({
   onApplePayAvailable: (available: boolean) => void;
   onApplePayBusyChange: (busy: boolean) => void;
   onApplePayPaid: (totalCents: number) => void;
+  onCashAppBusyChange: (busy: boolean) => void;
   onCardReady: (brand: string, last4: string) => void;
   onRetryFinalization: () => void;
 }) {
@@ -3345,6 +3267,41 @@ function LiteralPageFive({
                   />
                 </div>
               </section>
+              <section
+                className={`literal-book-cashapp-choice${selectedPaymentMethod === "cashapp" ? " is-selected" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="literal-book-card-choice-head"
+                  aria-expanded={selectedPaymentMethod === "cashapp"}
+                  onClick={() => onPaymentMethodChange("cashapp")}
+                  disabled={isSaving}
+                >
+                  <span aria-hidden="true">
+                    {selectedPaymentMethod === "cashapp" ? "✓" : ""}
+                  </span>
+                  <span>
+                    <strong>Pay with Cash App</strong>
+                    <p>
+                      Pay {money(total)} today for your first cleaning.
+                    </p>
+                  </span>
+                </button>
+                <div
+                  className={`literal-book-cashapp-detail${selectedPaymentMethod === "cashapp" ? " is-open" : ""}`}
+                >
+                  <p className="literal-book-cashapp-note">
+                    Cash App securely charges {money(total)} today for the first
+                    cleaning only.
+                  </p>
+                  <BookingCashAppCheckout
+                    active={selectedPaymentMethod === "cashapp"}
+                    totalCents={total}
+                    onPrepareReservation={onPrepareReservation}
+                    onBusyChange={onCashAppBusyChange}
+                  />
+                </div>
+              </section>
             </>
           )}
 
@@ -3358,10 +3315,10 @@ function LiteralPageFive({
               <span>Professional service with added peace of mind.</span>
             </div>
           </div>
-          <LiteralCheckoutProof
-            reviewStoryIndex={reviewStoryIndex}
-            onReviewStoryChange={onReviewStoryChange}
-          />
+          <div className="literal-book-google-proof" aria-label="Google reviews">
+            <span aria-hidden="true">★★★★★</span>
+            <strong>123 Google reviews</strong>
+          </div>
 
           {formError && (
             <div className="literal-book-checkout-error" role="alert">
@@ -3375,6 +3332,8 @@ function LiteralPageFive({
               <span>
                 {selectedPaymentMethod === "apple_pay"
                   ? "Apple Pay charged today"
+                  : selectedPaymentMethod === "cashapp"
+                    ? "Cash App charged today"
                   : selectedPaymentMethod === "card"
                     ? "Card charged after service"
                     : "Choose a payment method"}
@@ -3409,11 +3368,62 @@ function LiteralPageFive({
             <p>
               {selectedPaymentMethod === "apple_pay"
                 ? `Apple Pay charges ${money(total)} today for the first cleaning only. Future recurring visits are charged after service.`
+                : selectedPaymentMethod === "cashapp"
+                  ? `Cash App charges ${money(total)} today for the first cleaning.`
                 : selectedPaymentMethod === "card"
                   ? "Your card is securely collected at booking and charged once the cleaning is completed."
                   : "Choose a payment method to see when you would be charged."}
             </p>
           </details>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function CashAppBookingReturn({ returnToken }: { returnToken: string }) {
+  const payment = trpc.cashApp.booking.returnStatus.useQuery(
+    { returnToken },
+    {
+      refetchInterval: query => (query.state.data?.booking ? false : 1_500),
+      refetchIntervalInBackground: false,
+    }
+  );
+  const booking = payment.data?.booking;
+  if (booking) {
+    const time =
+      TIME_SLOTS.find(
+        slot => timeLabelTo24Hour(slot) === booking.requestedLocalTime
+      ) ?? booking.requestedLocalTime;
+    return (
+      <BookingSuccess
+        name={booking.customerName.split(/\s+/)[0] || booking.customerName}
+        service={booking.serviceName}
+        bedrooms={booking.bedrooms}
+        bathrooms={booking.bathrooms}
+        dateLabel={easternDateLabel(booking.requestedLocalDate)}
+        time={time}
+        total={booking.firstCleaningTotalCents}
+        futureTotal={booking.futureVisitTotalCents}
+        frequencyLabel={booking.recurrence}
+        cardLabel={`Cash App · ${money(booking.firstCleaningTotalCents)} paid today`}
+      />
+    );
+  }
+  return (
+    <main className="literal-book-page-six">
+      <div className="literal-book-shell">
+        <section className="literal-book-main">
+          <div className="literal-book-thankyou">
+            <div className="literal-book-eyebrow">SECURE CHECKOUT</div>
+            <h1>{payment.isError ? "Cash App payment was not completed." : "Confirming your Cash App payment…"}</h1>
+            <p className="literal-book-thankyou-lead">
+              {payment.isError
+                ? payment.error.message
+                : "Please keep this page open while we confirm your booking."}
+            </p>
+            {payment.isError ? <a className="literal-book-thankyou-link" href="/book">Return to booking</a> : null}
+          </div>
         </section>
       </div>
     </main>

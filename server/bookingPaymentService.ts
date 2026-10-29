@@ -25,7 +25,11 @@ export function assertBookingPaymentTransition(from: BookingPaymentStatus, to: B
 
 export function bookingPaymentIdempotencyKey(
   bookingId: number,
-  operation: "setup" | BookingPaymentOperation | "apple_pay_first_cleaning",
+  operation:
+    | "setup"
+    | BookingPaymentOperation
+    | "apple_pay_first_cleaning"
+    | "cash_app_first_cleaning",
   version: number,
 ): string {
   if (!Number.isInteger(bookingId) || bookingId < 1) throw new BookingPaymentStateError("Invalid booking payment identity.");

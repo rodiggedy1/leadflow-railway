@@ -86,12 +86,17 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
   const name = booking.customerName;
   const schedule = `${booking.requestedLocalDate} at ${booking.requestedLocalTime}`;
   const confirmationAmount = displayConfirmationAmount(booking.firstCleaningTotalCents);
-  const paidWithApplePay = booking.paymentMethod === "apple_pay" && booking.paymentStatus === "captured";
-  const paymentTiming = paidWithApplePay
+  const immediatePaymentMethod =
+    booking.paymentStatus === "captured" &&
+    (booking.paymentMethod === "apple_pay" || booking.paymentMethod === "cashapp")
+      ? booking.paymentMethod
+      : null;
+  const immediatePaymentLabel =
+    immediatePaymentMethod === "cashapp" ? "Cash App" : "Apple Pay";
+  const paymentTiming = immediatePaymentMethod
     ? [
-        `${confirmationAmount} was paid today with Apple Pay for your first cleaning.`,
-        booking.recurrence === "one-time" ? null : "Future recurring visits are charged after service.",
-      ].filter(Boolean).join(" ")
+        `${confirmationAmount} was paid today with ${immediatePaymentLabel} for your first cleaning.`,
+      ].join(" ")
     : "Nothing is charged until your cleaning is complete. We'll text you closer to your appointment with updates from your cleaning team.";
   const purchaserText = [
     "You're booked! 🎉 Your Maids in Black cleaning is confirmed.",
@@ -106,8 +111,8 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
     paymentTiming,
     "Need to reschedule or add anything? Just reply here. Consider it handled. ✨",
   ].join("\n\n");
-  const operationsText = paidWithApplePay
-    ? `New booking: ${name} · ${booking.serviceName} · ${schedule} · Apple Pay paid ${amount} today · ${booking.publicBookingNumber}`
+  const operationsText = immediatePaymentMethod
+    ? `New booking: ${name} · ${booking.serviceName} · ${schedule} · ${immediatePaymentLabel} paid ${amount} today · ${booking.publicBookingNumber}`
     : `New booking: ${name} · ${booking.serviceName} · ${schedule} · ${amount} · ${booking.publicBookingNumber}`;
   const celebrationNote = `${booking.serviceName} · ${schedule}`;
 
@@ -167,8 +172,8 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
           channel: "command",
           authorName: "🎉 New Booking",
           authorRole: "office",
-          body: paidWithApplePay
-            ? `🎉 New booking! ${name} — Apple Pay paid ${amount} today · ${celebrationNote}`
+          body: immediatePaymentMethod
+            ? `🎉 New booking! ${name} — ${immediatePaymentLabel} paid ${amount} today · ${celebrationNote}`
             : `🎉 New booking! ${name} — ${amount} · ${celebrationNote}`,
           quickAction: "announce_booking",
           metadata: JSON.stringify({

@@ -543,6 +543,14 @@
       "sha256": "41f1bdb28e0422774d6d2fa4020a8b18f6124c1d2579c6e446fce9315df3cd16",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0070_create_booking_apple_pay_payments.postconditions.json"
+    },
+    {
+      "id": "0071_create_booking_cash_app_payments",
+      "mode": "create-table",
+      "sqlFile": "0071_create_booking_cash_app_payments.sql",
+      "sha256": "7c84994445e3684de91e019efd38ec0da916f4d2a96d5e30ae8e2819d6e9768b",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0071_create_booking_cash_app_payments.postconditions.json"
     }
   ]
 }
