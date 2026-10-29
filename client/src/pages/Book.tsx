@@ -863,6 +863,11 @@ export default function Book() {
           setComplete(true);
         }}
         onCashAppBusyChange={setCashAppBusy}
+        onCashAppPaid={totalCents => {
+          setCardLabel(`Cash App · ${money(totalCents)} paid today`);
+          setFormError("");
+          setComplete(true);
+        }}
         onCardReady={(brand, last4) => {
           setCardLabel(`${brand} ending in ${last4}`);
           setCardOnFile(true);
@@ -2951,6 +2956,7 @@ function LiteralPageFive({
   onApplePayBusyChange,
   onApplePayPaid,
   onCashAppBusyChange,
+  onCashAppPaid,
   onCardReady,
   onRetryFinalization,
 }: {
@@ -2999,6 +3005,7 @@ function LiteralPageFive({
   onApplePayBusyChange: (busy: boolean) => void;
   onApplePayPaid: (totalCents: number) => void;
   onCashAppBusyChange: (busy: boolean) => void;
+  onCashAppPaid: (totalCents: number) => void;
   onCardReady: (brand: string, last4: string) => void;
   onRetryFinalization: () => void;
 }) {
@@ -3299,6 +3306,7 @@ function LiteralPageFive({
                     totalCents={total}
                     onPrepareReservation={onPrepareReservation}
                     onBusyChange={onCashAppBusyChange}
+                    onPaid={onCashAppPaid}
                   />
                 </div>
               </section>
@@ -3411,21 +3419,17 @@ function CashAppBookingReturn({ returnToken }: { returnToken: string }) {
     );
   }
   return (
-    <main className="literal-book-page-six">
-      <div className="literal-book-shell">
-        <section className="literal-book-main">
-          <div className="literal-book-thankyou">
-            <div className="literal-book-eyebrow">SECURE CHECKOUT</div>
-            <h1>{payment.isError ? "Cash App payment was not completed." : "Confirming your Cash App payment…"}</h1>
-            <p className="literal-book-thankyou-lead">
-              {payment.isError
-                ? payment.error.message
-                : "Please keep this page open while we confirm your booking."}
-            </p>
-            {payment.isError ? <a className="literal-book-thankyou-link" href="/book">Return to booking</a> : null}
-          </div>
-        </section>
-      </div>
+    <main className="literal-book-cashapp-return">
+      <section className="literal-book-cashapp-return-card">
+        <div className="literal-book-eyebrow">SECURE CHECKOUT</div>
+        <h1>{payment.isError ? "Cash App payment was not completed." : "Confirming your Cash App payment…"}</h1>
+        <p>
+          {payment.isError
+            ? payment.error?.message ?? "Cash App could not confirm the payment."
+            : "Please keep this page open while we confirm your booking."}
+        </p>
+        {payment.isError ? <a href="/book">Return to booking</a> : null}
+      </section>
     </main>
   );
 }
