@@ -3428,9 +3428,9 @@ button.booking-card-acceptance-submit:disabled {
 
 .literal-book-shell {
   display: grid;
-  grid-template-columns: 290px 1fr;
+  grid-template-columns: 261px 1fr;
   min-height: 750px;
-  max-width: 1160px;
+  max-width: 1044px;
   margin: 30px auto;
   overflow: hidden;
   border: 1px solid #e5e5e5;

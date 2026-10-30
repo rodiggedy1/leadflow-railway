@@ -8,6 +8,8 @@ const read = (relative: string) =>
 
 describe("approved eight-step public booking flow", () => {
   const page = read("client/src/pages/Book.tsx");
+  const reviewCss = read("client/src/pages/booking-flow-review.css");
+  const headerCss = read("client/src/components/public-booking-header.css");
   const pricing = read("shared/publicBookingPricing.ts");
   const paymentRouter = read("server/bookingPaymentRouter.ts");
   const paymentTarget = read("server/bookingPaymentTargetService.ts");
@@ -18,11 +20,17 @@ describe("approved eight-step public booking flow", () => {
 
   it("uses the review canvas on /book while leaving /book-now available", () => {
     const app = read("client/src/App.tsx");
-    expect(app).toContain('<Route path={"/book"} component={Book} />');
+    expect(app).toContain('import PublicBookingHeader from "./components/PublicBookingHeader";');
+    expect(app).toContain("function PublicBookingRoute()");
+    expect(app).toContain("<PublicBookingHeader /><Book />");
+    expect(app).toContain('<Route path={"/book"} component={PublicBookingRoute} />');
     expect(app).toContain('<Route path={"/book-now"} component={BookNow} />');
     expect(page).toContain("STEP {step} OF 8");
     expect(page).toContain("booking-review-page booking-live-page");
     expect(page).not.toContain("VISUAL REVIEW ONLY");
+    expect(reviewCss).toContain("grid-template-columns: 261px 1fr;");
+    expect(reviewCss).toContain("max-width: 1044px;");
+    expect(headerCss).not.toMatch(/literal-book|booking-review-page|#root|\bbody\b/);
   });
 
   it("uses the approved versioned pricing model rather than the legacy widget model", () => {
