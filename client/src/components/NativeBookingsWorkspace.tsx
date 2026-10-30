@@ -66,7 +66,7 @@ type WorkspaceRow = {
   address: string | null;
   serviceName: string | null;
   homeType?: "House" | "Apartment" | "Townhome" | "Condo" | null;
-  paymentMethod?: "card" | "cashapp" | "invoice" | "apple_pay" | null;
+  paymentMethod?: "card" | "cashapp" | "invoice" | "apple_pay" | "google_pay" | null;
   bedrooms: number | null;
   bathrooms: number | null;
   recurrence: string | null;
@@ -169,7 +169,9 @@ const labelPaymentMethod = (value: WorkspaceRow["paymentMethod"]) =>
     ? "Cash App"
     : value === "apple_pay"
       ? "Apple Pay"
-    : value === "invoice"
+      : value === "google_pay"
+        ? "Google Pay"
+      : value === "invoice"
       ? "Check"
       : value === "card"
         ? "Card"
@@ -530,11 +532,15 @@ function BookingListRow({
             ? "Cash App · paid"
             : row.paymentMethod === "apple_pay"
               ? "Apple Pay · paid"
+              : row.paymentMethod === "google_pay"
+                ? "Google Pay · paid"
               : "Paid"
           : isNonCardBooking
             ? labelPaymentMethod(row.paymentMethod)
           : hasCard
-            ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
+            ? row.paymentMethod === "apple_pay" || row.paymentMethod === "google_pay"
+              ? `${labelPaymentMethod(row.paymentMethod)} card on file${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : ""}`
+              : `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
             : "Not started"}
       </span>
       <strong className="bookings-row-price">

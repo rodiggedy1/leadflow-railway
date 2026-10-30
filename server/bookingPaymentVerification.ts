@@ -1,6 +1,11 @@
 import type Stripe from "stripe";
 import { TRPCError } from "@trpc/server";
 
+type Wallet = "apple_pay" | "google_pay";
+type VerifiedCardPaymentMethod = Stripe.PaymentMethod & {
+  card: NonNullable<Stripe.PaymentMethod["card"]>;
+};
+
 export async function verifyCanonicalCardSetup(
   stripe: Stripe,
   input: {
@@ -9,6 +14,7 @@ export async function verifyCanonicalCardSetup(
     bookingId: number;
     bookingPaymentProfileId: number;
     stripeCustomerId: string;
+    wallet?: Wallet;
   },
 ) {
   const setupIntent = await stripe.setupIntents.retrieve(input.setupIntentId);
@@ -26,9 +32,10 @@ export async function verifyCanonicalCardSetup(
   if (
     paymentMethod.type !== "card" ||
     !paymentMethod.card ||
-    paymentMethod.customer !== input.stripeCustomerId
+    paymentMethod.customer !== input.stripeCustomerId ||
+    (input.wallet && paymentMethod.card.wallet?.type !== input.wallet)
   ) {
     throw new TRPCError({ code: "CONFLICT", message: "Stripe card does not belong to this booking." });
   }
-  return paymentMethod;
+  return paymentMethod as VerifiedCardPaymentMethod;
 }

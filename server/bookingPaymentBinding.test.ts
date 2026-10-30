@@ -47,9 +47,17 @@ describe("booking-bound Stripe setup adapter", () => {
     expect(verification).toContain("paymentMethod.customer !== input.stripeCustomerId");
   });
 
-  it("accepts a Stripe card payment method without excluding wallet-backed cards", () => {
+  it("persists a wallet label only after Stripe verifies the selected Apple Pay or Google Pay wallet", () => {
+    const router = read("server/bookingPaymentRouter.ts");
+    const engine = read("server/bookingPaymentEngine.ts");
     const verification = read("server/bookingPaymentVerification.ts");
     expect(verification).toContain('paymentMethod.type !== "card"');
-    expect(verification).not.toContain("paymentMethod.card.wallet?.type");
+    expect(router).toContain('wallet: z.enum(["apple_pay", "google_pay"]).optional()');
+    expect(router).toContain("wallet: input.wallet");
+    expect(router.indexOf("await verifyCanonicalCardSetup")).toBeLessThan(
+      router.indexOf("await finalizeCanonicalCardOnFile")
+    );
+    expect(verification).toContain("(input.wallet && paymentMethod.card.wallet?.type !== input.wallet)");
+    expect(engine).toContain('paymentMethod: input.wallet ?? "card"');
   });
 });
