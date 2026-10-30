@@ -72,6 +72,7 @@ describe("public booking Apple Pay immediate payment", () => {
     expect(component).toContain("return_url: window.location.href");
     expect(component).toContain("trpc.bookingPayments.startSetup.useMutation");
     expect(component).toContain("trpc.bookingPayments.confirmSetup.useMutation");
+    expect(component).toContain("paymentMethodId,\n        wallet,");
     expect(component).toContain("deferredPaymentRequest");
     expect(component).not.toContain("trpc.bookingApplePay.prepare.useMutation");
     expect(component).not.toContain("stripe.confirmPayment");

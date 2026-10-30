@@ -172,6 +172,7 @@ function WalletCardOnFileElement({
       const result = await confirmSetup.mutateAsync({
         ...reservation,
         paymentMethodId,
+        wallet,
         consentAccepted: true,
         deferConfirmation: true,
       });

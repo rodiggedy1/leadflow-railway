@@ -128,7 +128,7 @@ const labelRecurrence = (value: string | null | undefined) => {
       : normalized.charAt(0).toUpperCase() + normalized.slice(1);
 };
 const labelPaymentMethod = (value: string | null | undefined) =>
-  value === "cashapp" ? "Cash App" : value === "apple_pay" ? "Apple Pay" : value === "invoice" ? "Check" : "Card";
+  value === "cashapp" ? "Cash App" : value === "apple_pay" ? "Apple Pay" : value === "google_pay" ? "Google Pay" : value === "invoice" ? "Check" : "Card";
 const photoDownloadUrl = (photo: any, index: number) =>
   `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`)}`;
 const sourceLabel = (row: any) =>
@@ -262,13 +262,17 @@ function BookingListRow({
         {row.paymentStatus === "captured"
           ? row.paymentMethod === "apple_pay"
             ? "Apple Pay · paid"
+            : row.paymentMethod === "google_pay"
+              ? "Google Pay · paid"
             : row.paymentMethod === "cashapp"
               ? "Cash App · paid"
               : "Paid"
           : isNonCardBooking
             ? labelPaymentMethod(row.paymentMethod)
           : hasCard
-            ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
+            ? row.paymentMethod === "apple_pay" || row.paymentMethod === "google_pay"
+              ? `${labelPaymentMethod(row.paymentMethod)} card on file${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : ""}`
+              : `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
             : "Not started"}
       </span>
       <strong className="bcr-row-price">

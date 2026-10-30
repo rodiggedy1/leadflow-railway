@@ -114,7 +114,7 @@ export const bookingPaymentRouter = router({
     }),
 
   confirmSetup: publicProcedure
-    .input(deferredConfirmationInput.extend({ paymentMethodId: z.string().trim().min(1).max(255), consentAccepted: z.literal(true) }))
+    .input(deferredConfirmationInput.extend({ paymentMethodId: z.string().trim().min(1).max(255), wallet: z.enum(["apple_pay", "google_pay"]).optional(), consentAccepted: z.literal(true) }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
@@ -132,6 +132,7 @@ export const bookingPaymentRouter = router({
         bookingId: record.bookingId!,
         bookingPaymentProfileId: profile.id,
         stripeCustomerId: profile.stripeCustomerId!,
+        wallet: input.wallet,
       });
       const now = new Date();
       await finalizeCanonicalCardOnFile(db, {
@@ -143,6 +144,7 @@ export const bookingPaymentRouter = router({
         customerName: record.customerName,
         customerPhone: record.customerPhone,
         paymentMethod: { id: paymentMethod.id, brand: paymentMethod.card.brand, last4: paymentMethod.card.last4, exp_month: paymentMethod.card.exp_month, exp_year: paymentMethod.card.exp_year },
+        wallet: input.wallet,
         deferConfirmation: input.deferConfirmation,
       });
       broadcastOpsUpdate("booking_funnel_update");
