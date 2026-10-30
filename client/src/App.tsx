@@ -11,6 +11,7 @@ import ReviewWorkspaceNav from "./components/ReviewWorkspaceNav";
 import OriginalDashboardWorkspaceNav from "./components/OriginalDashboardWorkspaceNav";
 import "./pages/review-typography.css";
 import AdminPageGuard from "./components/AdminPageGuard";
+import PublicBookingHeader from "./components/PublicBookingHeader";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -209,12 +210,16 @@ function AdminLeadsCRMExactLiveRoute() {
   return <AdminPageGuard pageId="leads"><ReviewWorkspaceFrame navActivePath="/review/leads-crm"><LeadsCRMExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function PublicBookingRoute() {
+  return <><PublicBookingHeader /><Book /></>;
+}
+
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path={"/"} component={Home} />
-        <Route path={"/book"} component={Book} />
+        <Route path={"/book"} component={PublicBookingRoute} />
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />
         <Route path={"/review/customer-booking-link"} component={CustomerBookingLinkReview} />
