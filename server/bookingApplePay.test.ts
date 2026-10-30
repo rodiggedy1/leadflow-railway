@@ -67,6 +67,7 @@ describe("public booking Apple Pay immediate payment", () => {
     expect(component).toContain('type Wallet = "apple_pay" | "google_pay"');
     expect(component).toContain('mode: "setup"');
     expect(component).toContain('setupFutureUsage: "off_session"');
+    expect(component).toContain('allowedPaymentMethodTypes: ["card"]');
     expect(component).toContain("stripe.confirmSetup");
     expect(component).toContain("return_url: window.location.href");
     expect(component).toContain("trpc.bookingPayments.startSetup.useMutation");
