@@ -260,6 +260,7 @@ export function BookingWalletCardOnFileCheckout(props: Props) {
           mode: "setup",
           currency: "usd",
           setupFutureUsage: "off_session",
+          allowedPaymentMethodTypes: ["card"],
         }}
       >
         <WalletCardOnFileElement {...props} />
