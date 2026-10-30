@@ -9,7 +9,7 @@ import { invokeLLM } from "./_core/llm";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { extractUSDigits } from "./utils/phone";
 
-export const THUMBTACK_REVIEW_URL = "https://www.thumbtack.com/reviews/services/382987965776199683/write-customer-review";
+export const THUMBTACK_REVIEW_URL = "https://share.google/Tm468dywmXkUnBQBL";
 
 const REVIEW_CHIPS = [
   "On time",
