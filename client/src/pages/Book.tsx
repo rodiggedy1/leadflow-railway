@@ -83,6 +83,14 @@ import extrasOven from "@/assets/book-now-review/extras-oven.png";
 import extrasWindows from "@/assets/book-now-review/extras-windows.png";
 import extrasCeilingFans from "@/assets/book-now-review/extras-ceiling-fans.png";
 import extrasDoors from "@/assets/book-now-review/extras-doors.png";
+import visaMark from "@/assets/payment-marks/visa.svg";
+import mastercardMark from "@/assets/payment-marks/mastercard.svg";
+import amexMark from "@/assets/payment-marks/amex.svg";
+import discoverMark from "@/assets/payment-marks/discover.svg";
+import applePayMark from "@/assets/payment-marks/apple-pay.svg";
+import cashAppPayMark from "@/assets/payment-marks/cash-app-pay.svg";
+import googlePayMark from "@/assets/payment-marks/google-pay.svg";
+import poweredByStripeMark from "@/assets/payment-marks/powered-by-stripe.svg";
 import spotlessHouse from "@/assets/book-now-review/condition-01-spotless-house-ui.png";
 import refreshedHouse from "@/assets/book-now-review/condition-02-refresh-house-ui.png";
 import normalSofa from "@/assets/book-now-review/condition-03-sofa-ui.png";
@@ -1566,10 +1574,6 @@ function LiteralPageThree({
               <span>✓ 200% satisfaction guarantee</span>
             </div>
           </section>
-          <p className="literal-book-quote-footnote">
-            Estimates shown are illustrative. Final service scope and pricing
-            are confirmed before a real booking.
-          </p>
           <div className="literal-book-actions literal-book-actions--split">
             <button
               className="literal-book-back"
@@ -1902,15 +1906,6 @@ function LiteralPageFour({
             </b>
           </div>
 
-          <details className="literal-book-schedule-help">
-            <summary>Can I change my appointment?</summary>
-            <p>
-              Appointment changes depend on the cleaning team&apos;s
-              availability and the cancellation policy. The live flow will show
-              the policy before confirmation.
-            </p>
-          </details>
-
           <div className="literal-book-actions literal-book-actions--split">
             <button
               className="literal-book-back"
@@ -2191,11 +2186,6 @@ function LiteralPageTwo({
                 </div>
               </div>
             </div>
-            <p className="literal-book-review-disclaimer">
-              Design preview — customer portrait and testimonials are
-              illustrative. Replace with real, permissioned customer reviews
-              before launch.
-            </p>
           </section>
 
           <div className="literal-book-actions literal-book-actions--split">
@@ -3214,9 +3204,14 @@ function LiteralPageFive({
               <section className="literal-book-payment-heading">
                 <div className="literal-book-eyebrow">Secure checkout</div>
                 <h2>How would you like to secure your booking?</h2>
-                <p>
-                  Choose the option that works best for you.
-                </p>
+                <div className="literal-book-payment-heading-detail">
+                  <p>Choose the option that works best for you.</p>
+                  <img
+                    className="literal-book-powered-by-stripe"
+                    src={poweredByStripeMark}
+                    alt="Powered by Stripe"
+                  />
+                </div>
               </section>
 
               <section
@@ -3233,13 +3228,24 @@ function LiteralPageFive({
                   <span aria-hidden="true">
                     {selectedPaymentMethod === "card" ? "✓" : ""}
                   </span>
-                  <span>
+                  <div className="literal-book-payment-choice-content">
+                    <div className="literal-book-payment-choice-copy">
                     <strong>Card on file · pay after service</strong>
                     <p>
                       Securely save your card now. You&apos;re charged after the
                       cleaning.
                     </p>
-                  </span>
+                    </div>
+                    <span
+                      className="literal-book-payment-choice-marks literal-book-card-network-marks"
+                      aria-hidden="true"
+                    >
+                      <img src={visaMark} alt="" />
+                      <img src={mastercardMark} alt="" />
+                      <img src={amexMark} alt="" />
+                      <img src={discoverMark} alt="" />
+                    </span>
+                  </div>
                 </button>
                 <div
                   className={`literal-book-card-detail${selectedPaymentMethod === "card" ? " is-open" : ""}`}
@@ -3275,13 +3281,21 @@ function LiteralPageFive({
                   <span aria-hidden="true">
                     {selectedPaymentMethod === "apple_pay" ? "✓" : ""}
                   </span>
-                  <span>
+                  <div className="literal-book-payment-choice-content">
+                    <div className="literal-book-payment-choice-copy">
                     <strong>Apple Pay</strong>
                     <p>
                       Securely save Apple Pay now. You&apos;re charged after the
                       cleaning.
                     </p>
-                  </span>
+                    </div>
+                    <span
+                      className="literal-book-payment-choice-marks literal-book-wallet-mark"
+                      aria-hidden="true"
+                    >
+                      <img src={applePayMark} alt="" />
+                    </span>
+                  </div>
                 </button>
                 <div
                   className={`literal-book-apple-pay-detail${selectedPaymentMethod === "apple_pay" ? " is-open" : ""}`}
@@ -3324,12 +3338,20 @@ function LiteralPageFive({
                   <span aria-hidden="true">
                     {selectedPaymentMethod === "cashapp" ? "✓" : ""}
                   </span>
-                  <span>
+                  <div className="literal-book-payment-choice-content">
+                    <div className="literal-book-payment-choice-copy">
                     <strong>Pay with Cash App</strong>
                     <p>
                       Pay {money(total)} today for your first cleaning.
                     </p>
-                  </span>
+                    </div>
+                    <span
+                      className="literal-book-payment-choice-marks literal-book-wallet-mark"
+                      aria-hidden="true"
+                    >
+                      <img src={cashAppPayMark} alt="" />
+                    </span>
+                  </div>
                 </button>
                 <div
                   className={`literal-book-cashapp-detail${selectedPaymentMethod === "cashapp" ? " is-open" : ""}`}
@@ -3366,13 +3388,21 @@ function LiteralPageFive({
                   <span aria-hidden="true">
                     {selectedPaymentMethod === "google_pay" ? "✓" : ""}
                   </span>
-                  <span>
+                  <div className="literal-book-payment-choice-content">
+                    <div className="literal-book-payment-choice-copy">
                     <strong>Google Pay</strong>
                     <p>
                       Securely save Google Pay now. You&apos;re charged after the
                       cleaning.
                     </p>
-                  </span>
+                    </div>
+                    <span
+                      className="literal-book-payment-choice-marks literal-book-wallet-mark"
+                      aria-hidden="true"
+                    >
+                      <img src={googlePayMark} alt="" />
+                    </span>
+                  </div>
                 </button>
                 <div
                   className={`literal-book-google-pay-detail${selectedPaymentMethod === "google_pay" ? " is-open" : ""}`}

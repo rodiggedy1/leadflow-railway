@@ -5023,12 +5023,21 @@ button.booking-card-acceptance-submit:disabled {
 .literal-book-page-four .literal-book-address-field {
   display: block;
   margin-top: 22px;
+  padding: 14px;
+  border: 1px solid #ecc7bf;
+  border-radius: 14px;
+  background: #fffaf8;
+  box-shadow: 0 8px 20px #d95b490a;
+}
+.literal-book-page-four .literal-book-address-field > span {
+  margin-bottom: 8px;
+  color: #a84639;
 }
 .literal-book-page-four .literal-book-address-field input {
   display: block;
   width: 100%;
   padding: 13px 14px;
-  border: 1px solid #e6e2df;
+  border: 1px solid #dec7c0;
   border-radius: 12px;
   background: #ffffff;
   color: #282828;
@@ -5038,6 +5047,7 @@ button.booking-card-acceptance-submit:disabled {
 .literal-book-page-four .literal-book-address-field input:focus {
   border-color: #d95b49;
   outline: 2px solid #d95b4920;
+  box-shadow: 0 0 0 3px #d95b4912;
 }
 .literal-book-page-four .literal-book-booking-recap {
   display: flex;
@@ -5399,9 +5409,23 @@ button.booking-card-acceptance-submit:disabled {
   font-size: 28px;
   letter-spacing: -0.8px;
 }
-.literal-book-page-five .literal-book-payment-heading > p {
+.literal-book-page-five .literal-book-payment-heading-detail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 11px;
+}
+.literal-book-page-five .literal-book-payment-heading-detail > p {
+  margin: 0;
   font-size: 14px;
   line-height: 1.5;
+}
+.literal-book-page-five .literal-book-powered-by-stripe {
+  display: block;
+  width: 93px;
+  height: auto;
+  flex: none;
+  opacity: 0.86;
 }
 .literal-book-page-five .literal-book-payment-brand {
   display: flex;
@@ -5526,6 +5550,39 @@ button.booking-card-acceptance-submit:disabled {
   color: #777;
   font-size: 12px;
   line-height: 1.5;
+}
+.literal-book-page-five .literal-book-payment-choice-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.literal-book-page-five .literal-book-payment-choice-copy {
+  min-width: 0;
+}
+.literal-book-page-five .literal-book-payment-choice-marks {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-left: auto;
+}
+.literal-book-page-five .literal-book-payment-choice-marks img {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+}
+.literal-book-page-five .literal-book-card-network-marks img {
+  width: 32px;
+  max-height: 21px;
+}
+.literal-book-page-five .literal-book-wallet-mark img {
+  width: auto;
+  max-width: 86px;
+  height: 24px;
 }
 .literal-book-page-five .literal-book-card-detail {
   margin: 16px 0 0 31px;
@@ -6053,6 +6110,12 @@ button.booking-card-acceptance-submit:disabled {
   }
 }
 @media (max-width: 420px) {
+  .literal-book-page-five .literal-book-card-network-marks {
+    width: 100%;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin: 3px 0 0;
+  }
   .literal-book-page-five .literal-book-clock {
     gap: 6px;
     padding: 7px 9px;
