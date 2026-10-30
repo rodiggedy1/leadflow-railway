@@ -18,7 +18,9 @@ describe("approved eight-step public booking flow", () => {
 
   it("uses the review canvas on /book while leaving /book-now available", () => {
     const app = read("client/src/App.tsx");
-    expect(app).toContain('<Route path={"/book"} component={Book} />');
+    expect(app).toContain("function PublicBookingRoute()");
+    expect(app).toContain("<PublicBookingHeader /><Book />");
+    expect(app).toContain('<Route path={"/book"} component={PublicBookingRoute} />');
     expect(app).toContain('<Route path={"/book-now"} component={BookNow} />');
     expect(page).toContain("STEP {step} OF 8");
     expect(page).toContain("booking-review-page booking-live-page");
