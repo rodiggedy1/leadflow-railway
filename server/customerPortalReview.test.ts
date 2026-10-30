@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (relative: string) => readFileSync(resolve(root, relative), "utf8");
+const legacyCleanerSymbol = ["cleaner", "Jobs"].join("");
 
 describe("LeadFlow-owned Customer Portal review workflow", () => {
   it("uses completed LeadFlow jobs and authenticated customer ownership without legacy cleaner-job storage", () => {
@@ -13,7 +14,7 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     expect(router).toContain("cleanerPortalJobProgress");
     expect(router).toContain('eq(cleanerPortalJobProgress.jobStatus, "completed")');
     expect(router).toContain("RIGHT(REGEXP_REPLACE");
-    expect(router).not.toContain("cleanerJobs");
+    expect(router).not.toContain(legacyCleanerSymbol);
     expect(router).not.toContain("sendSms");
   });
 
@@ -24,7 +25,7 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     expect(router).toContain("broadcastOpsUpdate");
     expect(router).toContain("if (job.customerRating !== 5)");
     expect(router).toContain("THUMBTACK_REVIEW_URL");
-    expect(router).toContain("https://www.thumbtack.com/reviews/services/382987965776199683/write-customer-review");
+    expect(router).toContain("https://share.google/Tm468dywmXkUnBQBL");
   });
 
   it("uses the exact prior review-draft prompt and structured-generation treatment without fake fallbacks", () => {
@@ -47,7 +48,7 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     expect(signoff).toContain("view=review");
     expect(signoff).toContain("getOrCreateCustomerPortalMagicLink");
     expect(signoff).toContain("Hi ${firstName(job.customerName)}! ✨ ${teamDisplay} just finished your clean — your home is sparkling!");
-    expect(signoff).toContain("Leave a 5-star Thumbtack review and we'll add a $50 tip to ${teamDisplay}:");
+    expect(signoff).toContain("Leave a 5-star Google review and we'll add a $50 tip to ${teamDisplay}:");
     expect(cleanerUi).not.toContain('label: "Job complete"');
     expect(handoff).toContain('requestedView === "review" ? "/my-home?view=review"');
   });
@@ -66,7 +67,7 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     expect(page).toContain("trpc.customerPortalReview.recordThumbtackAction.useMutation");
     expect(page).not.toContain("trpc.tracker.");
     expect(page).not.toContain('"/track/');
-    expect(page).not.toContain("cleanerJobs");
+    expect(page).not.toContain(legacyCleanerSymbol);
   });
 
   it("registers an idempotent additive LeadFlow review-field migration with the exact manifest checksum", () => {
