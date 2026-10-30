@@ -30,6 +30,86 @@ async function findBoundProfile(object: Stripe.SetupIntent | Stripe.PaymentInten
   return { db, profile, booking };
 }
 
+/**
+ * New manual holds are locally persisted in `pending` before Stripe is called.
+ * This signed-event branch can only promote that same row after every provider
+ * identity matches. Historical PaymentIntents without this marker are ignored.
+ */
+async function promoteMarkedPendingAuthorization(object: Stripe.PaymentIntent): Promise<boolean> {
+  if (
+    object.metadata?.leadflowAuthorizationAttempt !== "v1" ||
+    object.status !== "requires_capture" ||
+    object.capture_method !== "manual" ||
+    object.metadata.operation !== "authorization"
+  ) return false;
+
+  const attemptId = Number(object.metadata.leadflowAuthorizationAttemptId);
+  const stripeCustomerId = typeof object.customer === "string" ? object.customer : object.customer?.id ?? null;
+  const stripePaymentMethodId = typeof object.payment_method === "string" ? object.payment_method : object.payment_method?.id ?? null;
+  if (!Number.isInteger(attemptId) || attemptId < 1 || !stripeCustomerId || !stripePaymentMethodId) return false;
+
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [pending] = await db.select().from(paymentAuthorizations)
+    .where(and(eq(paymentAuthorizations.id, attemptId), eq(paymentAuthorizations.status, "pending")))
+    .limit(1);
+  if (!pending) return false;
+
+  const localIdentityMatches =
+    pending.stripeCustomerId === stripeCustomerId &&
+    pending.stripePaymentMethodId === stripePaymentMethodId &&
+    pending.amountCents === object.amount &&
+    pending.currency === object.currency &&
+    object.amount_capturable === pending.amountCents;
+  if (!localIdentityMatches) return false;
+
+  let bookingProfile: typeof bookingPaymentProfiles.$inferSelect | null = null;
+  if (pending.bookingPaymentProfileId !== null) {
+    const [profile] = await db.select().from(bookingPaymentProfiles)
+      .where(eq(bookingPaymentProfiles.id, pending.bookingPaymentProfileId))
+      .limit(1);
+    if (
+      !profile ||
+      Number(object.metadata.bookingPaymentProfileId) !== profile.id ||
+      Number(object.metadata.bookingId) !== profile.bookingId
+    ) return false;
+    bookingProfile = profile;
+  } else if (pending.customerPortalServiceRequestId !== null) {
+    if (Number(object.metadata.customerPortalServiceRequestId) !== pending.customerPortalServiceRequestId) return false;
+  } else if (object.metadata.customerPhone !== pending.customerPhone) {
+    return false;
+  }
+
+  const cardOptions = object.payment_method_options?.card as { capture_before?: number } | undefined;
+  const captureBefore = typeof cardOptions?.capture_before === "number" ? cardOptions.capture_before * 1_000 : null;
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx.update(paymentAuthorizations).set({
+      stripePaymentIntentId: object.id,
+      status: "authorized",
+      errorMessage: null,
+      authorizedAt: Date.now(),
+      captureBefore,
+    }).where(and(eq(paymentAuthorizations.id, pending.id), eq(paymentAuthorizations.status, "pending")));
+    if (bookingProfile) {
+      await tx.update(bookingPaymentProfiles).set({
+        paymentStatus: "authorized",
+        stripePaymentIntentId: object.id,
+        authorizedAt: Date.now(),
+        authorizationExpiresAt: captureBefore,
+        failureMessage: null,
+        updatedAt: now,
+      }).where(eq(bookingPaymentProfiles.id, bookingProfile.id));
+      await tx.update(bookings).set({
+        status: "needs_attention",
+        paymentStatus: "authorized",
+        updatedAt: now,
+      }).where(eq(bookings.id, bookingProfile.bookingId));
+    }
+  });
+  return true;
+}
+
 async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
   const object = event.data.object;
   if (object.object !== "setup_intent" && object.object !== "payment_intent") return { status: "ignored" as const };
@@ -81,6 +161,14 @@ async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
     }
     await db.update(stripeWebhookEvents).set({ status: "processed", processedAt: new Date() }).where(eq(stripeWebhookEvents.id, eventRecordId));
     return { status: "processed" as const };
+  }
+  if (object.object === "payment_intent" && event.type === "payment_intent.amount_capturable_updated") {
+    if (await promoteMarkedPendingAuthorization(object)) {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      await db.update(stripeWebhookEvents).set({ status: "processed", processedAt: new Date() }).where(eq(stripeWebhookEvents.id, eventRecordId));
+      return { status: "processed" as const };
+    }
   }
   const bound = await findBoundProfile(object);
   if (!bound) return { status: "ignored" as const };

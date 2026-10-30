@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   bookingFunnelRecords,
@@ -138,7 +138,10 @@ async function activePortalRequestHold(
     .where(
       and(
         eq(paymentAuthorizations.customerPortalServiceRequestId, requestId),
-        eq(paymentAuthorizations.status, "authorized")
+        or(
+          eq(paymentAuthorizations.status, "authorized"),
+          eq(paymentAuthorizations.status, "pending")
+        )
       )
     )
     .orderBy(desc(paymentAuthorizations.createdAt))
@@ -468,7 +471,10 @@ export const bookingPaymentAdminRouter = router({
         .where(
           and(
             eq(paymentAuthorizations.bookingPaymentProfileId, profile.id),
-            eq(paymentAuthorizations.status, "authorized")
+            or(
+              eq(paymentAuthorizations.status, "authorized"),
+              eq(paymentAuthorizations.status, "pending")
+            )
           )
         )
         .limit(1);
@@ -479,6 +485,24 @@ export const bookingPaymentAdminRouter = router({
         });
       const stripe = getStripeClient();
       const agentName = ctx.agent?.agentName ?? "admin";
+      const [pending] = await db.insert(paymentAuthorizations).values({
+        bookingPaymentProfileId: profile.id,
+        cleanerJobId: null,
+        jobLabel: `Booking ${booking.publicBookingNumber}`,
+        customerPhone: booking.customerPhone,
+        customerName: booking.customerName,
+        stripeCustomerId: profile.stripeCustomerId,
+        stripePaymentMethodId: profile.stripePaymentMethodId,
+        stripePaymentIntentId: null,
+        amountCents: booking.firstCleaningTotalCents,
+        currency: "usd",
+        operation: "authorization",
+        status: "pending",
+        errorMessage: null,
+        createdBy: agentName,
+        authorizedAt: null,
+        notes: null,
+      }).$returningId();
       let intent: Stripe.PaymentIntent;
       try {
         intent = await authorizeCanonicalBookingHold(stripe, {
@@ -490,19 +514,35 @@ export const bookingPaymentAdminRouter = router({
           publicBookingNumber: booking.publicBookingNumber,
           agentName,
           attempt: profile.version,
+          authorizationAttemptId: Number(pending.id),
         });
       } catch (error) {
         const message = stripeFailureMessage(error, "Stripe hold failed");
-        await db.transaction(async tx => {
-          await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: message, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
-          await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
-        });
+        const definitiveProviderFailure = typeof (error as Stripe.StripeRawError | undefined)?.statusCode === "number";
+        await db.update(paymentAuthorizations).set(
+          definitiveProviderFailure
+            ? { status: "failed", errorMessage: message }
+            : { errorMessage: `Stripe outcome is unknown; awaiting a signed webhook or explicit review. ${message}` }
+        ).where(eq(paymentAuthorizations.id, Number(pending.id)));
+        if (definitiveProviderFailure) {
+          await db.transaction(async tx => {
+            await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: message, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
+            await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
+          });
+        }
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: `Stripe hold failed: ${message}`,
+          message: definitiveProviderFailure
+            ? `Stripe hold failed: ${message}`
+            : "Stripe did not confirm the hold outcome. The local attempt remains in review to prevent a duplicate charge.",
         });
       }
       if (intent.status !== "requires_capture") {
+        await db.update(paymentAuthorizations).set({
+          status: "failed",
+          stripePaymentIntentId: intent.id,
+          errorMessage: "PaymentIntent did not reach requires_capture",
+        }).where(eq(paymentAuthorizations.id, Number(pending.id)));
         await db.transaction(async tx => {
           await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: "PaymentIntent did not reach requires_capture", updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
           await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
@@ -517,25 +557,13 @@ export const bookingPaymentAdminRouter = router({
         typeof intent.payment_method_options?.card?.capture_before === "number"
           ? intent.payment_method_options.card.capture_before * 1000
           : null;
-      const result = await db.insert(paymentAuthorizations).values({
-        bookingPaymentProfileId: profile.id,
-        cleanerJobId: null,
-        jobLabel: `Booking ${booking.publicBookingNumber}`,
-        customerPhone: booking.customerPhone,
-        customerName: booking.customerName,
-        stripeCustomerId: profile.stripeCustomerId,
-        stripePaymentMethodId: profile.stripePaymentMethodId,
+      await db.update(paymentAuthorizations).set({
         stripePaymentIntentId: intent.id,
-        amountCents: booking.firstCleaningTotalCents,
-        currency: "usd",
-        operation: "authorization",
         status: "authorized",
         errorMessage: null,
-        createdBy: agentName,
         authorizedAt: now,
         captureBefore,
-        notes: null,
-      });
+      }).where(eq(paymentAuthorizations.id, Number(pending.id)));
       await db
         .update(bookingPaymentProfiles)
         .set({
@@ -555,7 +583,7 @@ export const bookingPaymentAdminRouter = router({
         });
       });
       return {
-        authorizationId: Number((result as { insertId?: number }).insertId),
+        authorizationId: Number(pending.id),
         paymentStatus: "authorized" as const,
         captureBefore,
       };
@@ -789,6 +817,25 @@ export const bookingPaymentAdminRouter = router({
       const { stripe, customerId } =
         await portalRequestStripeCardOrThrow(request);
       const agentName = ctx.agent?.agentName ?? "admin";
+      const [pending] = await db.insert(paymentAuthorizations).values({
+        cleanerJobId: null,
+        bookingPaymentProfileId: null,
+        customerPortalServiceRequestId: request.id,
+        jobLabel: `Service request ${request.publicRequestNumber}`,
+        customerPhone: request.customerPhone,
+        customerName: request.customerName,
+        stripeCustomerId: customerId,
+        stripePaymentMethodId: request.stripePaymentMethodId,
+        stripePaymentIntentId: null,
+        amountCents: request.estimatedTotalCents,
+        currency: "usd",
+        operation: "authorization",
+        status: "pending",
+        errorMessage: null,
+        createdBy: agentName,
+        authorizedAt: null,
+        notes: null,
+      }).$returningId();
       let intent: Stripe.PaymentIntent;
       try {
         intent = await stripe.paymentIntents.create(
@@ -806,6 +853,8 @@ export const bookingPaymentAdminRouter = router({
               customerPortalServiceRequestId: String(request.id),
               operation: "authorization",
               createdBy: agentName,
+              leadflowAuthorizationAttempt: "v1",
+              leadflowAuthorizationAttemptId: String(pending.id),
             },
           },
           {
@@ -813,43 +862,45 @@ export const bookingPaymentAdminRouter = router({
           }
         );
       } catch (error) {
+        const message = stripeFailureMessage(error, "Stripe hold failed");
+        const definitiveProviderFailure = typeof (error as Stripe.StripeRawError | undefined)?.statusCode === "number";
+        await db.update(paymentAuthorizations).set(
+          definitiveProviderFailure
+            ? { status: "failed", errorMessage: message }
+            : { errorMessage: `Stripe outcome is unknown; awaiting a signed webhook or explicit review. ${message}` }
+        ).where(eq(paymentAuthorizations.id, Number(pending.id)));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: `Stripe hold failed: ${stripeFailureMessage(error, "Stripe hold failed")}`,
+          message: definitiveProviderFailure
+            ? `Stripe hold failed: ${message}`
+            : "Stripe did not confirm the hold outcome. The local attempt remains in review to prevent a duplicate charge.",
         });
       }
-      if (intent.status !== "requires_capture")
+      if (intent.status !== "requires_capture") {
+        await db.update(paymentAuthorizations).set({
+          status: "failed",
+          stripePaymentIntentId: intent.id,
+          errorMessage: "PaymentIntent did not reach requires_capture",
+        }).where(eq(paymentAuthorizations.id, Number(pending.id)));
         throw new TRPCError({
           code: "CONFLICT",
           message: "Stripe did not authorize this hold.",
         });
+      }
       const now = Date.now();
       const captureBefore =
         typeof intent.payment_method_options?.card?.capture_before === "number"
           ? intent.payment_method_options.card.capture_before * 1000
           : null;
-      const result = await db.insert(paymentAuthorizations).values({
-        cleanerJobId: null,
-        bookingPaymentProfileId: null,
-        customerPortalServiceRequestId: request.id,
-        jobLabel: `Service request ${request.publicRequestNumber}`,
-        customerPhone: request.customerPhone,
-        customerName: request.customerName,
-        stripeCustomerId: customerId,
-        stripePaymentMethodId: request.stripePaymentMethodId,
+      await db.update(paymentAuthorizations).set({
         stripePaymentIntentId: intent.id,
-        amountCents: request.estimatedTotalCents,
-        currency: "usd",
-        operation: "authorization",
         status: "authorized",
         errorMessage: null,
-        createdBy: agentName,
         authorizedAt: now,
         captureBefore,
-        notes: null,
-      });
+      }).where(eq(paymentAuthorizations.id, Number(pending.id)));
       return {
-        authorizationId: Number((result as { insertId?: number }).insertId),
+        authorizationId: Number(pending.id),
         paymentStatus: "authorized" as const,
         captureBefore,
       };
