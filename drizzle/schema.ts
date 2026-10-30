@@ -4879,6 +4879,37 @@ export const bookingPaymentProfiles = mysqlTable("booking_payment_profiles", {
 ]);
 export type BookingPaymentProfile = typeof bookingPaymentProfiles.$inferSelect;
 
+/** Immediate first-cleaning Cash App attempts. No reusable wallet credential is stored here. */
+export const bookingCashAppPayments = mysqlTable("booking_cash_app_payments", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  bookingId: int("bookingId").notNull(),
+  bookingPaymentProfileId: int("bookingPaymentProfileId").notNull(),
+  attempt: int("attempt").notNull(),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }).notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 160 }).notNull(),
+  /** Opaque browser-return capability; never a payment identity. */
+  returnToken: varchar("returnToken", { length: 36 }).notNull(),
+  amountCents: int("amountCents").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull(),
+  status: varchar("status", { length: 32 }).notNull(),
+  cardBrand: varchar("cardBrand", { length: 40 }),
+  cardLast4: varchar("cardLast4", { length: 4 }),
+  paidAt: bigint("paidAt", { mode: "number" }),
+  failureCode: varchar("failureCode", { length: 128 }),
+  failureMessage: text("failureMessage"),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_booking_cash_app_payment_intent").on(t.stripePaymentIntentId),
+  uniqueIndex("uq_booking_cash_app_idempotency").on(t.idempotencyKey),
+  uniqueIndex("uq_booking_cash_app_return_token").on(t.returnToken),
+  uniqueIndex("uq_booking_cash_app_booking_attempt").on(t.bookingId, t.attempt),
+  index("idx_booking_cash_app_profile_status").on(t.bookingPaymentProfileId, t.status),
+  index("idx_booking_cash_app_booking_status").on(t.bookingId, t.status),
+]);
+export type BookingCashAppPayment = typeof bookingCashAppPayments.$inferSelect;
+
+
 /** Each signed Stripe event is stored once before it can update an existing booking profile. */
 export const stripeWebhookEvents = mysqlTable("stripe_webhook_events", {
   id: int("id").autoincrement().primaryKey(),

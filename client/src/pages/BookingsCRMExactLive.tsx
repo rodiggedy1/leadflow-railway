@@ -126,7 +126,7 @@ const labelRecurrence = (value: string | null | undefined) => {
       : normalized.charAt(0).toUpperCase() + normalized.slice(1);
 };
 const labelPaymentMethod = (value: string | null | undefined) =>
-  value === "cashapp" ? "Cash App" : value === "invoice" ? "Check" : "Card";
+  value === "cashapp" ? "Cash App" : value === "apple_pay" ? "Apple Pay" : value === "google_pay" ? "Google Pay" : value === "invoice" ? "Check" : "Card";
 const photoDownloadUrl = (photo: any, index: number) =>
   `/api/media-proxy?url=${encodeURIComponent(photo.photoUrl)}&download=1&filename=${encodeURIComponent(photo.filename?.trim() || `cleaner-photo-${index + 1}.jpg`)}`;
 const sourceLabel = (row: any) =>
@@ -258,11 +258,15 @@ function BookingListRow({
       >
         <CreditCard size={14} />
         {row.paymentStatus === "captured"
-          ? "Paid"
+          ? row.paymentMethod === "cashapp"
+            ? "Cash App · paid"
+            : "Paid"
           : isNonCardBooking
             ? labelPaymentMethod(row.paymentMethod)
           : hasCard
-            ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
+            ? row.paymentMethod === "apple_pay" || row.paymentMethod === "google_pay"
+              ? `${labelPaymentMethod(row.paymentMethod)} card on file${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : ""}`
+              : `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
             : "Not started"}
       </span>
       <strong className="bcr-row-price">
@@ -1055,8 +1059,30 @@ function BookingDetailDrawer({ model }: { model: any }) {
                 </div>
               </div>
             ) : active.source === "booking" &&
-              (active.paymentMethod === "cashapp" ||
-                active.paymentMethod === "invoice") ? (
+              active.paymentMethod === "cashapp" &&
+              active.paymentStatus === "captured" &&
+              active.firstCleaningTotalCents !== null ? (
+              <BookingPaymentActions
+                bookingId={active.id}
+                totalCents={active.firstCleaningTotalCents}
+                paymentStatus={active.paymentStatus}
+                paymentMethod={active.paymentMethod}
+              />
+            ) : active.source === "booking" &&
+              active.paymentMethod === "cashapp" ? (
+              <div className="bcr-card-panel">
+                <CreditCard />
+                <div>
+                  <strong>Cash App</strong>
+                  <p>
+                    {active.paymentStatus === "charge_pending"
+                      ? "Cash App payment is in progress."
+                      : "Cash App payment has not been completed."}
+                  </p>
+                </div>
+              </div>
+            ) : active.source === "booking" &&
+              active.paymentMethod === "invoice" ? (
               <div className="bcr-card-panel">
                 <CreditCard />
                 <div>
@@ -1070,6 +1096,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
                 bookingId={active.id}
                 totalCents={active.firstCleaningTotalCents}
                 paymentStatus={active.paymentStatus}
+                paymentMethod={active.paymentMethod}
               />
             ) : model.portalPaymentAvailable &&
               active.firstCleaningTotalCents !== null ? (

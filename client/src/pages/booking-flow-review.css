@@ -5023,12 +5023,21 @@ button.booking-card-acceptance-submit:disabled {
 .literal-book-page-four .literal-book-address-field {
   display: block;
   margin-top: 22px;
+  padding: 14px;
+  border: 1px solid #ecc7bf;
+  border-radius: 14px;
+  background: #fffaf8;
+  box-shadow: 0 8px 20px #d95b490a;
+}
+.literal-book-page-four .literal-book-address-field > span {
+  margin-bottom: 8px;
+  color: #a84639;
 }
 .literal-book-page-four .literal-book-address-field input {
   display: block;
   width: 100%;
   padding: 13px 14px;
-  border: 1px solid #e6e2df;
+  border: 1px solid #dec7c0;
   border-radius: 12px;
   background: #ffffff;
   color: #282828;
@@ -5038,6 +5047,7 @@ button.booking-card-acceptance-submit:disabled {
 .literal-book-page-four .literal-book-address-field input:focus {
   border-color: #d95b49;
   outline: 2px solid #d95b4920;
+  box-shadow: 0 0 0 3px #d95b4912;
 }
 .literal-book-page-four .literal-book-booking-recap {
   display: flex;
@@ -5399,9 +5409,23 @@ button.booking-card-acceptance-submit:disabled {
   font-size: 28px;
   letter-spacing: -0.8px;
 }
-.literal-book-page-five .literal-book-payment-heading > p {
+.literal-book-page-five .literal-book-payment-heading-detail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 11px;
+}
+.literal-book-page-five .literal-book-payment-heading-detail > p {
+  margin: 0;
   font-size: 14px;
   line-height: 1.5;
+}
+.literal-book-page-five .literal-book-powered-by-stripe {
+  display: block;
+  width: 93px;
+  height: auto;
+  flex: none;
+  opacity: 0.86;
 }
 .literal-book-page-five .literal-book-payment-brand {
   display: flex;
@@ -5475,27 +5499,46 @@ button.booking-card-acceptance-submit:disabled {
 .literal-book-page-five .literal-book-card-choice {
   margin: 24px 0 0;
   padding: 17px 18px;
-  border: 1px solid #d95b49;
+  border: 1px solid #e4dedb;
   border-radius: 16px;
+  background: #fff;
+}
+.literal-book-page-five .literal-book-card-choice.is-selected,
+.literal-book-page-five .literal-book-apple-pay-choice.is-selected,
+.literal-book-page-five .literal-book-cashapp-choice.is-selected,
+.literal-book-page-five .literal-book-google-pay-choice.is-selected {
+  border-color: #d95b49;
   background: #fff8f5;
   box-shadow: 0 0 0 1px #d95b49;
 }
 .literal-book-page-five .literal-book-card-choice-head {
   display: flex;
+  width: 100%;
   align-items: flex-start;
   gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
-.literal-book-page-five .literal-book-card-choice-head > span {
+.literal-book-page-five .literal-book-card-choice-head > span:first-child {
   display: grid;
   width: 19px;
   height: 19px;
   flex: none;
   place-items: center;
   border-radius: 50%;
-  background: #d95b49;
+  border: 2px solid #b9b8b6;
+  background: #fff;
   color: #fff;
   font-size: 12px;
   font-weight: 800;
+}
+.literal-book-page-five .is-selected .literal-book-card-choice-head > span:first-child {
+  border-color: #d95b49;
+  background: #d95b49;
 }
 .literal-book-page-five .literal-book-card-choice-head strong {
   display: block;
@@ -5508,10 +5551,55 @@ button.booking-card-acceptance-submit:disabled {
   font-size: 12px;
   line-height: 1.5;
 }
+.literal-book-page-five .literal-book-payment-choice-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.literal-book-page-five .literal-book-payment-choice-copy {
+  min-width: 0;
+}
+.literal-book-page-five .literal-book-payment-choice-marks {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-left: auto;
+}
+.literal-book-page-five .literal-book-payment-choice-marks img {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+}
+.literal-book-page-five .literal-book-card-network-marks img {
+  width: 32px;
+  max-height: 21px;
+}
+.literal-book-page-five .literal-book-wallet-mark img {
+  width: auto;
+  max-width: 86px;
+  height: 24px;
+}
 .literal-book-page-five .literal-book-card-detail {
   margin: 16px 0 0 31px;
   padding-top: 15px;
   border-top: 1px solid #e9dfda;
+}
+.literal-book-page-five .literal-book-card-detail:not(.is-open),
+.literal-book-page-five .literal-book-apple-pay-detail:not(.is-open),
+.literal-book-page-five .literal-book-cashapp-detail:not(.is-open),
+.literal-book-page-five .literal-book-google-pay-detail:not(.is-open) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .literal-book-page-five .literal-book-card-message {
   display: flex;
@@ -5528,6 +5616,213 @@ button.booking-card-acceptance-submit:disabled {
 }
 .literal-book-page-five .literal-book-card-detail .booking-card-acceptance {
   margin-top: 0;
+}
+.literal-book-page-five .literal-book-apple-pay-choice,
+.literal-book-page-five .literal-book-cashapp-choice,
+.literal-book-page-five .literal-book-google-pay-choice {
+  position: relative;
+  margin: 14px 0 0;
+  padding: 17px 18px;
+  border: 1px solid #e4dedb;
+  border-radius: 16px;
+  background: #fff;
+}
+.literal-book-page-five .literal-book-apple-pay-detail,
+.literal-book-page-five .literal-book-cashapp-detail,
+.literal-book-page-five .literal-book-google-pay-detail {
+  margin: 16px 0 0 31px;
+  padding-top: 15px;
+  border-top: 1px solid #e9dfda;
+}
+.literal-book-page-five .literal-book-apple-pay-note {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-google-pay-note {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-apple-pay-unavailable {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-google-pay-unavailable {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-wallet-element:not(.is-active) {
+  position: absolute;
+  left: -10000px;
+  width: min(400px, calc(100vw - 40px));
+  height: 60px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.literal-book-page-five .literal-book-wallet-error {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.literal-book-page-five .literal-book-wallet-probe {
+  display: block;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.literal-book-page-five .literal-book-wallet-probe svg {
+  width: 1px;
+  height: 1px;
+}
+.literal-book-page-five .literal-book-wallet-consent {
+  margin: 11px 0 0;
+  color: #777;
+  font-size: 11px;
+  line-height: 1.55;
+}
+/* Cash App uses the same closed accordion presentation as the other methods. */
+.literal-book-page-five .literal-book-cashapp-note {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-cashapp-form,
+.literal-book-page-five .literal-book-cashapp-start {
+  display: grid;
+  gap: 11px;
+}
+.literal-book-page-five .literal-book-cashapp-submit {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: #171717;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 12px 18px;
+}
+.literal-book-page-five .literal-book-cashapp-submit:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.literal-book-page-five .literal-book-cashapp-form > p:not(.literal-book-cashapp-error) {
+  margin: 0;
+  color: #777;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.literal-book-page-five .literal-book-cashapp-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.literal-book-page-five .literal-book-cashapp-pending {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  color: #68615d;
+  font-size: 12px;
+  font-weight: 700;
+}
+.literal-book-page-five .literal-book-cashapp-pending svg {
+  width: 16px;
+  height: 16px;
+}
+.literal-book-page-five .literal-book-cashapp-cancel {
+  border: 0;
+  background: transparent;
+  color: #b94636;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.literal-book-page-five .literal-book-cashapp-cancel:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+.literal-book-page-five .literal-book-cashapp-pending .literal-book-cashapp-error {
+  flex-basis: 100%;
+}
+.literal-book-cashapp-return {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: #f3f3f3;
+  color: #242120;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.literal-book-cashapp-return-card {
+  width: min(100%, 580px);
+  padding: clamp(34px, 7vw, 58px);
+  border: 1px solid #e5e5e5;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 24px 70px #00000018;
+  text-align: center;
+}
+.literal-book-cashapp-return-card .literal-book-eyebrow {
+  margin-bottom: 14px;
+}
+.literal-book-cashapp-return-card h1 {
+  margin: 0;
+  color: #222;
+  font-size: clamp(32px, 5vw, 46px);
+  letter-spacing: -1.8px;
+  line-height: 1.06;
+}
+.literal-book-cashapp-return-card p {
+  max-width: 410px;
+  margin: 16px auto 0;
+  color: #777;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.literal-book-cashapp-return-card a {
+  display: inline-flex;
+  margin-top: 22px;
+  color: #b94636;
+  font-size: 13px;
+  font-weight: 750;
+}
+.literal-book-page-five .literal-book-google-proof {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: 15px 0 19px;
+  color: #242424;
+  font-size: 12px;
+}
+.literal-book-page-five .literal-book-google-proof > span {
+  color: #c99b2d;
+  font-size: 14px;
+  letter-spacing: 1px;
 }
 .literal-book-page-five .literal-book-trust-grid {
   display: grid;
@@ -5815,6 +6110,12 @@ button.booking-card-acceptance-submit:disabled {
   }
 }
 @media (max-width: 420px) {
+  .literal-book-page-five .literal-book-card-network-marks {
+    width: 100%;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin: 3px 0 0;
+  }
   .literal-book-page-five .literal-book-clock {
     gap: 6px;
     padding: 7px 9px;

@@ -66,7 +66,7 @@ type WorkspaceRow = {
   address: string | null;
   serviceName: string | null;
   homeType?: "House" | "Apartment" | "Townhome" | "Condo" | null;
-  paymentMethod?: "card" | "cashapp" | "invoice" | null;
+  paymentMethod?: "card" | "cashapp" | "invoice" | "apple_pay" | "google_pay" | null;
   bedrooms: number | null;
   bathrooms: number | null;
   recurrence: string | null;
@@ -166,7 +166,11 @@ const labelRecurrence = (value: string | null | undefined) => {
 const labelPaymentMethod = (value: WorkspaceRow["paymentMethod"]) =>
   value === "cashapp"
     ? "Cash App"
-    : value === "invoice"
+    : value === "apple_pay"
+      ? "Apple Pay"
+      : value === "google_pay"
+        ? "Google Pay"
+      : value === "invoice"
       ? "Check"
       : value === "card"
         ? "Card"
@@ -523,11 +527,15 @@ function BookingListRow({
       >
         <CreditCard />
         {row.paymentStatus === "captured"
-          ? "Paid"
+          ? row.paymentMethod === "cashapp"
+            ? "Cash App · paid"
+            : "Paid"
           : isNonCardBooking
             ? labelPaymentMethod(row.paymentMethod)
           : hasCard
-            ? `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
+            ? row.paymentMethod === "apple_pay" || row.paymentMethod === "google_pay"
+              ? `${labelPaymentMethod(row.paymentMethod)} card on file${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : ""}`
+              : `${row.paymentBrand ?? "Card"}${row.paymentLast4 ? ` •••• ${row.paymentLast4}` : " on file"}`
             : "Not started"}
       </span>
       <strong className="bookings-row-price">
@@ -1744,8 +1752,28 @@ export default function NativeBookingsWorkspace({
             <section className="bookings-editor-section">
               <small>PAYMENT</small>
               {active.source === "booking" ? (
-                active.paymentMethod === "cashapp" ||
-                active.paymentMethod === "invoice" ? (
+                active.paymentMethod === "cashapp" &&
+                active.paymentStatus === "captured" &&
+                active.firstCleaningTotalCents !== null ? (
+                  <BookingPaymentActions
+                    bookingId={active.id}
+                    totalCents={active.firstCleaningTotalCents}
+                    paymentStatus={active.paymentStatus}
+                    paymentMethod={active.paymentMethod}
+                  />
+                ) : active.paymentMethod === "cashapp" ? (
+                  <div className="bookings-card-panel">
+                    <CreditCard />
+                    <div>
+                      <strong>Cash App</strong>
+                      <p>
+                        {active.paymentStatus === "charge_pending"
+                          ? "Cash App payment is in progress."
+                          : "Cash App payment has not been completed."}
+                      </p>
+                    </div>
+                  </div>
+                ) : active.paymentMethod === "invoice" ? (
                   <div className="bookings-card-panel">
                     <CreditCard />
                     <div>
@@ -1758,6 +1786,7 @@ export default function NativeBookingsWorkspace({
                     bookingId={active.id}
                     totalCents={active.firstCleaningTotalCents}
                     paymentStatus={active.paymentStatus}
+                    paymentMethod={active.paymentMethod}
                   />
                 ) : null
               ) : active.source === "leadflow" ? (

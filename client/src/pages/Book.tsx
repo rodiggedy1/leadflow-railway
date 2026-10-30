@@ -3,6 +3,8 @@ import {
   BookingPaymentCheckout,
   PublicBookingCardSetupBeforeReservation,
 } from "@/components/BookingPaymentCheckout";
+import { BookingWalletCardOnFileCheckout } from "@/components/BookingApplePayCheckout";
+import { BookingCashAppCheckout } from "@/components/BookingCashAppCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
 import {
   ArrowLeft,
@@ -81,6 +83,14 @@ import extrasOven from "@/assets/book-now-review/extras-oven.png";
 import extrasWindows from "@/assets/book-now-review/extras-windows.png";
 import extrasCeilingFans from "@/assets/book-now-review/extras-ceiling-fans.png";
 import extrasDoors from "@/assets/book-now-review/extras-doors.png";
+import visaMark from "@/assets/payment-marks/visa.svg";
+import mastercardMark from "@/assets/payment-marks/mastercard.svg";
+import amexMark from "@/assets/payment-marks/amex.svg";
+import discoverMark from "@/assets/payment-marks/discover.svg";
+import applePayMark from "@/assets/payment-marks/apple-pay.svg";
+import cashAppPayMark from "@/assets/payment-marks/cash-app-pay.svg";
+import googlePayMark from "@/assets/payment-marks/google-pay.svg";
+import poweredByStripeMark from "@/assets/payment-marks/powered-by-stripe.svg";
 import spotlessHouse from "@/assets/book-now-review/condition-01-spotless-house-ui.png";
 import refreshedHouse from "@/assets/book-now-review/condition-02-refresh-house-ui.png";
 import normalSofa from "@/assets/book-now-review/condition-03-sofa-ui.png";
@@ -405,6 +415,16 @@ export default function Book() {
   const [formError, setFormError] = useState("");
   const [cardOnFile, setCardOnFile] = useState(false);
   const [cardLabel, setCardLabel] = useState("");
+  const [applePayAvailable, setApplePayAvailable] = useState(false);
+  const [googlePayAvailable, setGooglePayAvailable] = useState(false);
+  const [walletBusy, setWalletBusy] = useState(false);
+  const [cashAppBusy, setCashAppBusy] = useState(false);
+  const [cashAppExitRequest, setCashAppExitRequest] = useState<
+    "card" | "apple_pay" | "google_pay" | null
+  >(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
+    "card" | "apple_pay" | "cashapp" | "google_pay" | null
+  >(null);
   const [funnelRecord, setFunnelRecord] =
     useState<BookingFunnelPublicResult | null>(null);
   const funnelRecordRef = useRef<BookingFunnelPublicResult | null>(null);
@@ -441,7 +461,24 @@ export default function Book() {
     beginFunnelMutation.isPending ||
     updateFunnelMutation.isPending ||
     reserveFunnelMutation.isPending ||
-    finalizeBookingMutation.isPending;
+    finalizeBookingMutation.isPending ||
+    walletBusy ||
+    cashAppBusy;
+  const choosePaymentMethod = (
+    method: "card" | "apple_pay" | "cashapp" | "google_pay" | null
+  ) => {
+    if (
+      cashAppBusy &&
+      selectedPaymentMethod === "cashapp" &&
+      (method === "card" || method === "apple_pay" || method === "google_pay")
+    ) {
+      setCashAppExitRequest(method);
+      return;
+    }
+    setCashAppExitRequest(null);
+    setSelectedPaymentMethod(method);
+    setFormError("");
+  };
 
   const rememberFunnelRecord = (record: BookingFunnelPublicResult) => {
     funnelRecordRef.current = record;
@@ -548,6 +585,12 @@ export default function Book() {
     }));
 
   const quoteHoldCountdown = `${String(Math.floor(quoteHoldSeconds / 60)).padStart(2, "0")}:${String(quoteHoldSeconds % 60).padStart(2, "0")}`;
+  const cashAppReturnToken = new URLSearchParams(window.location.search).get(
+    "cashapp_return"
+  );
+
+  if (cashAppReturnToken)
+    return <CashAppBookingReturn returnToken={cashAppReturnToken} />;
 
   if (complete)
     return (
@@ -817,8 +860,6 @@ export default function Book() {
         onEmail={setEmail}
         onNotes={setNotes}
         quoteHoldCountdown={quoteHoldCountdown}
-        reviewStoryIndex={reviewStoryIndex}
-        onReviewStoryChange={setReviewStoryIndex}
         onEditSchedule={() => setStep(5)}
         onBack={() =>
           setStep(current => (current === 6 ? 5 : current === 7 ? 6 : 7))
@@ -827,6 +868,38 @@ export default function Book() {
         isSaving={isSaving}
         formError={formError}
         cardOnFile={cardOnFile}
+        applePayAvailable={applePayAvailable}
+        googlePayAvailable={googlePayAvailable}
+        selectedPaymentMethod={selectedPaymentMethod}
+        onPaymentMethodChange={choosePaymentMethod}
+        allowCashAppSwitch={
+          selectedPaymentMethod === "cashapp" &&
+          cashAppBusy &&
+          cashAppExitRequest === null
+        }
+        cashAppExitRequest={cashAppExitRequest}
+        onApplePayAvailable={setApplePayAvailable}
+        onGooglePayAvailable={setGooglePayAvailable}
+        onWalletBusyChange={setWalletBusy}
+        onWalletReady={(wallet, brand, last4) => {
+          setCardLabel(
+            `${wallet === "apple_pay" ? "Apple Pay" : "Google Pay"} · ${brand} ending in ${last4}`
+          );
+          setCardOnFile(true);
+          setFormError("");
+          void finalizeConfirmedCard();
+        }}
+        onCashAppBusyChange={setCashAppBusy}
+        onCashAppPaid={totalCents => {
+          setCardLabel(`Cash App · ${money(totalCents)} paid today`);
+          setFormError("");
+          setComplete(true);
+        }}
+        onCashAppExited={(destination, notice) => {
+          setCashAppExitRequest(null);
+          setSelectedPaymentMethod(destination);
+          setFormError(notice ?? "");
+        }}
         onCardReady={(brand, last4) => {
           setCardLabel(`${brand} ending in ${last4}`);
           setCardOnFile(true);
@@ -1501,10 +1574,6 @@ function LiteralPageThree({
               <span>✓ 200% satisfaction guarantee</span>
             </div>
           </section>
-          <p className="literal-book-quote-footnote">
-            Estimates shown are illustrative. Final service scope and pricing
-            are confirmed before a real booking.
-          </p>
           <div className="literal-book-actions literal-book-actions--split">
             <button
               className="literal-book-back"
@@ -1837,15 +1906,6 @@ function LiteralPageFour({
             </b>
           </div>
 
-          <details className="literal-book-schedule-help">
-            <summary>Can I change my appointment?</summary>
-            <p>
-              Appointment changes depend on the cleaning team&apos;s
-              availability and the cancellation policy. The live flow will show
-              the policy before confirmation.
-            </p>
-          </details>
-
           <div className="literal-book-actions literal-book-actions--split">
             <button
               className="literal-book-back"
@@ -2126,11 +2186,6 @@ function LiteralPageTwo({
                 </div>
               </div>
             </div>
-            <p className="literal-book-review-disclaimer">
-              Design preview — customer portrait and testimonials are
-              illustrative. Replace with real, permissioned customer reviews
-              before launch.
-            </p>
           </section>
 
           <div className="literal-book-actions literal-book-actions--split">
@@ -2877,92 +2932,6 @@ function LiteralCheckoutContactForm({
   );
 }
 
-function LiteralCheckoutProof({
-  reviewStoryIndex,
-  onReviewStoryChange,
-}: {
-  reviewStoryIndex: number;
-  onReviewStoryChange: (value: number) => void;
-}) {
-  const reviewStory = LITERAL_REVIEW_STORIES[reviewStoryIndex];
-  return (
-    <section
-      className="literal-book-checkout-proof"
-      aria-label="Sample customer stories"
-    >
-      <div className="literal-book-checkout-proof-heading">
-        <div>
-          <div className="literal-book-review-eyebrow">
-            THE MAIDS IN BLACK EXPERIENCE
-          </div>
-          <h3>Why customers choose Maids in Black</h3>
-        </div>
-        <div className="literal-book-review-controls">
-          <button
-            type="button"
-            aria-label="Previous review"
-            onClick={() =>
-              onReviewStoryChange(
-                (reviewStoryIndex - 1 + LITERAL_REVIEW_STORIES.length) %
-                  LITERAL_REVIEW_STORIES.length
-              )
-            }
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            aria-label="Next review"
-            onClick={() =>
-              onReviewStoryChange(
-                (reviewStoryIndex + 1) % LITERAL_REVIEW_STORIES.length
-              )
-            }
-          >
-            ›
-          </button>
-        </div>
-      </div>
-      <div className="literal-book-checkout-proof-feature">
-        <div className="literal-book-checkout-proof-photo-wrap">
-          <img
-            className="literal-book-checkout-proof-photo"
-            src={reviewCustomerStory}
-            alt=""
-          />
-        </div>
-        <div className="literal-book-checkout-proof-quote">
-          <div
-            className="literal-book-review-stars"
-            aria-label="Five decorative stars"
-          >
-            ★★★★★
-          </div>
-          <blockquote>{reviewStory.quote}</blockquote>
-          <strong>{reviewStory.name}</strong>
-          <span>{reviewStory.detail}</span>
-          <div className="literal-book-review-dots">
-            {LITERAL_REVIEW_STORIES.map((_, index) => (
-              <button
-                type="button"
-                key={index}
-                aria-label={`Show sample review ${index + 1}`}
-                aria-pressed={index === reviewStoryIndex}
-                className={index === reviewStoryIndex ? "selected" : ""}
-                onClick={() => onReviewStoryChange(index)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-      <p className="literal-book-review-disclaimer">
-        Design preview — customer portrait and testimonials are illustrative.
-        Replace with real, permissioned customer reviews before launch.
-      </p>
-    </section>
-  );
-}
-
 function LiteralPageFive({
   phase,
   service,
@@ -2987,14 +2956,25 @@ function LiteralPageFive({
   onEmail,
   onNotes,
   quoteHoldCountdown,
-  reviewStoryIndex,
-  onReviewStoryChange,
   onEditSchedule,
   onBack,
   onPrepareReservation,
   isSaving,
   formError,
   cardOnFile,
+  applePayAvailable,
+  googlePayAvailable,
+  selectedPaymentMethod,
+  onPaymentMethodChange,
+  allowCashAppSwitch,
+  cashAppExitRequest,
+  onApplePayAvailable,
+  onGooglePayAvailable,
+  onWalletBusyChange,
+  onWalletReady,
+  onCashAppBusyChange,
+  onCashAppPaid,
+  onCashAppExited,
   onCardReady,
   onRetryFinalization,
 }: {
@@ -3021,14 +3001,34 @@ function LiteralPageFive({
   onEmail: (value: string) => void;
   onNotes: (value: string) => void;
   quoteHoldCountdown: string;
-  reviewStoryIndex: number;
-  onReviewStoryChange: (value: number) => void;
   onEditSchedule: () => void;
   onBack: () => void;
   onPrepareReservation: () => Promise<BookingFunnelPublicResult | null>;
   isSaving: boolean;
   formError: string;
   cardOnFile: boolean;
+  applePayAvailable: boolean;
+  googlePayAvailable: boolean;
+  selectedPaymentMethod: "card" | "apple_pay" | "cashapp" | "google_pay" | null;
+  onPaymentMethodChange: (
+    method: "card" | "apple_pay" | "cashapp" | "google_pay" | null
+  ) => void;
+  allowCashAppSwitch: boolean;
+  cashAppExitRequest: "card" | "apple_pay" | "google_pay" | null;
+  onApplePayAvailable: (available: boolean) => void;
+  onGooglePayAvailable: (available: boolean) => void;
+  onWalletBusyChange: (busy: boolean) => void;
+  onWalletReady: (
+    wallet: "apple_pay" | "google_pay",
+    brand: string,
+    last4: string
+  ) => void;
+  onCashAppBusyChange: (busy: boolean) => void;
+  onCashAppPaid: (totalCents: number) => void;
+  onCashAppExited: (
+    destination: "card" | "apple_pay" | "google_pay" | null,
+    notice?: string
+  ) => void;
   onCardReady: (brand: string, last4: string) => void;
   onRetryFinalization: () => void;
 }) {
@@ -3203,51 +3203,54 @@ function LiteralPageFive({
             <>
               <section className="literal-book-payment-heading">
                 <div className="literal-book-eyebrow">Secure checkout</div>
-                <h2>Payment</h2>
-                <p>
-                  Securely save your card now. You&apos;re charged after the
-                  cleaning.
-                </p>
-              </section>
-
-              <section className="literal-book-payment-brand">
-                <div
-                  className="literal-book-payment-brand-card"
-                  aria-hidden="true"
-                >
-                  <strong>
-                    MAIDS <span>IN BLACK</span>
-                  </strong>
-                  <b>•••• &nbsp; •••• &nbsp; •••• &nbsp; ••••</b>
-                  <small>YOUR CLEANING · YOUR WAY</small>
-                </div>
-                <div>
-                  <strong>Your payment. Protected.</strong>
-                  <p>
-                    Secure payment processing, clear charges, and no card
-                    details stored by Maids in Black.
-                  </p>
-                  <span>
-                    <ShieldCheck /> Secure checkout powered by Stripe
-                  </span>
+                <h2>How would you like to secure your booking?</h2>
+                <div className="literal-book-payment-heading-detail">
+                  <p>Choose the option that works best for you.</p>
+                  <img
+                    className="literal-book-powered-by-stripe"
+                    src={poweredByStripeMark}
+                    alt="Powered by Stripe"
+                  />
                 </div>
               </section>
 
               <section
-                className="literal-book-card-choice"
-                aria-label="Payment method"
+                className={`literal-book-card-choice${selectedPaymentMethod === "card" ? " is-selected" : ""}`}
+                aria-label="Card on file payment method"
               >
-                <div className="literal-book-card-choice-head">
-                  <span aria-hidden="true">✓</span>
-                  <div>
+                <button
+                  type="button"
+                  className="literal-book-card-choice-head"
+                  aria-expanded={selectedPaymentMethod === "card"}
+                  onClick={() => onPaymentMethodChange("card")}
+                  disabled={isSaving && !allowCashAppSwitch}
+                >
+                  <span aria-hidden="true">
+                    {selectedPaymentMethod === "card" ? "✓" : ""}
+                  </span>
+                  <div className="literal-book-payment-choice-content">
+                    <div className="literal-book-payment-choice-copy">
                     <strong>Card on file · pay after service</strong>
                     <p>
                       Securely save your card now. You&apos;re charged after the
                       cleaning.
                     </p>
+                    </div>
+                    <span
+                      className="literal-book-payment-choice-marks literal-book-card-network-marks"
+                      aria-hidden="true"
+                    >
+                      <img src={visaMark} alt="" />
+                      <img src={mastercardMark} alt="" />
+                      <img src={amexMark} alt="" />
+                      <img src={discoverMark} alt="" />
+                    </span>
                   </div>
-                </div>
-                <div className="literal-book-card-detail">
+                </button>
+                <div
+                  className={`literal-book-card-detail${selectedPaymentMethod === "card" ? " is-open" : ""}`}
+                  aria-hidden={selectedPaymentMethod !== "card"}
+                >
                   {cardOnFile ? (
                     <div className="literal-book-card-message">
                       <Check /> Your card is securely on file. Confirming your
@@ -3265,6 +3268,170 @@ function LiteralPageFive({
                   )}
                 </div>
               </section>
+              <section
+                className={`literal-book-apple-pay-choice${selectedPaymentMethod === "apple_pay" ? " is-selected" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="literal-book-card-choice-head"
+                  aria-expanded={selectedPaymentMethod === "apple_pay"}
+                  onClick={() => onPaymentMethodChange("apple_pay")}
+                  disabled={isSaving && !allowCashAppSwitch}
+                >
+                  <span aria-hidden="true">
+                    {selectedPaymentMethod === "apple_pay" ? "✓" : ""}
+                  </span>
+                  <div className="literal-book-payment-choice-content">
+                    <div className="literal-book-payment-choice-copy">
+                    <strong>Apple Pay</strong>
+                    <p>
+                      Securely save Apple Pay now. You&apos;re charged after the
+                      cleaning.
+                    </p>
+                    </div>
+                    <span
+                      className="literal-book-payment-choice-marks literal-book-wallet-mark"
+                      aria-hidden="true"
+                    >
+                      <img src={applePayMark} alt="" />
+                    </span>
+                  </div>
+                </button>
+                <div
+                  className={`literal-book-apple-pay-detail${selectedPaymentMethod === "apple_pay" ? " is-open" : ""}`}
+                >
+                  <p className="literal-book-apple-pay-note">
+                    Use Apple Pay to securely save your card. You&apos;re charged
+                    after the cleaning.
+                  </p>
+                  {!applePayAvailable ? (
+                    <p className="literal-book-apple-pay-unavailable" role="status">
+                      Apple Pay is not available in this browser or Wallet. You
+                      can use Card on file or Google Pay instead.
+                    </p>
+                  ) : null}
+                  <BookingWalletCardOnFileCheckout
+                    wallet="apple_pay"
+                    active={selectedPaymentMethod === "apple_pay"}
+                    customerName={customerName}
+                    deferredAmountCents={total}
+                    deferredPaymentDate={selectedDate}
+                    onAvailabilityChange={onApplePayAvailable}
+                    onPrepareReservation={onPrepareReservation}
+                    onComplete={({ cardBrand, cardLast4 }) =>
+                      onWalletReady("apple_pay", cardBrand, cardLast4)
+                    }
+                    onBusyChange={onWalletBusyChange}
+                  />
+                </div>
+              </section>
+              <section
+                className={`literal-book-cashapp-choice${selectedPaymentMethod === "cashapp" ? " is-selected" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="literal-book-card-choice-head"
+                  aria-expanded={selectedPaymentMethod === "cashapp"}
+                  onClick={() => onPaymentMethodChange("cashapp")}
+                  disabled={isSaving && !allowCashAppSwitch}
+                >
+                  <span aria-hidden="true">
+                    {selectedPaymentMethod === "cashapp" ? "✓" : ""}
+                  </span>
+                  <div className="literal-book-payment-choice-content">
+                    <div className="literal-book-payment-choice-copy">
+                    <strong>Pay with Cash App</strong>
+                    <p>
+                      Pay {money(total)} today for your first cleaning.
+                    </p>
+                    </div>
+                    <span
+                      className="literal-book-payment-choice-marks literal-book-wallet-mark"
+                      aria-hidden="true"
+                    >
+                      <img src={cashAppPayMark} alt="" />
+                    </span>
+                  </div>
+                </button>
+                <div
+                  className={`literal-book-cashapp-detail${selectedPaymentMethod === "cashapp" ? " is-open" : ""}`}
+                >
+                  <p className="literal-book-cashapp-note">
+                    Cash App securely charges {money(total)} today for the first
+                    cleaning only.
+                  </p>
+                  <BookingCashAppCheckout
+                    active={selectedPaymentMethod === "cashapp"}
+                    totalCents={total}
+                    exitRequest={
+                      selectedPaymentMethod === "cashapp"
+                        ? cashAppExitRequest
+                        : null
+                    }
+                    onPrepareReservation={onPrepareReservation}
+                    onBusyChange={onCashAppBusyChange}
+                    onPaid={onCashAppPaid}
+                    onExited={onCashAppExited}
+                  />
+                </div>
+              </section>
+              <section
+                className={`literal-book-google-pay-choice${selectedPaymentMethod === "google_pay" ? " is-selected" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="literal-book-card-choice-head"
+                  aria-expanded={selectedPaymentMethod === "google_pay"}
+                  onClick={() => onPaymentMethodChange("google_pay")}
+                  disabled={isSaving && !allowCashAppSwitch}
+                >
+                  <span aria-hidden="true">
+                    {selectedPaymentMethod === "google_pay" ? "✓" : ""}
+                  </span>
+                  <div className="literal-book-payment-choice-content">
+                    <div className="literal-book-payment-choice-copy">
+                    <strong>Google Pay</strong>
+                    <p>
+                      Securely save Google Pay now. You&apos;re charged after the
+                      cleaning.
+                    </p>
+                    </div>
+                    <span
+                      className="literal-book-payment-choice-marks literal-book-wallet-mark"
+                      aria-hidden="true"
+                    >
+                      <img src={googlePayMark} alt="" />
+                    </span>
+                  </div>
+                </button>
+                <div
+                  className={`literal-book-google-pay-detail${selectedPaymentMethod === "google_pay" ? " is-open" : ""}`}
+                >
+                  <p className="literal-book-google-pay-note">
+                    Use Google Pay to securely save your card. You&apos;re charged
+                    after the cleaning.
+                  </p>
+                  {!googlePayAvailable ? (
+                    <p className="literal-book-google-pay-unavailable" role="status">
+                      Google Pay is not available in this browser or Wallet. You
+                      can use Card on file or Apple Pay instead.
+                    </p>
+                  ) : null}
+                  <BookingWalletCardOnFileCheckout
+                    wallet="google_pay"
+                    active={selectedPaymentMethod === "google_pay"}
+                    customerName={customerName}
+                    deferredAmountCents={total}
+                    deferredPaymentDate={selectedDate}
+                    onAvailabilityChange={onGooglePayAvailable}
+                    onPrepareReservation={onPrepareReservation}
+                    onComplete={({ cardBrand, cardLast4 }) =>
+                      onWalletReady("google_pay", cardBrand, cardLast4)
+                    }
+                    onBusyChange={onWalletBusyChange}
+                  />
+                </div>
+              </section>
             </>
           )}
 
@@ -3278,10 +3445,10 @@ function LiteralPageFive({
               <span>Professional service with added peace of mind.</span>
             </div>
           </div>
-          <LiteralCheckoutProof
-            reviewStoryIndex={reviewStoryIndex}
-            onReviewStoryChange={onReviewStoryChange}
-          />
+          <div className="literal-book-google-proof" aria-label="Google reviews">
+            <span aria-hidden="true">★★★★★</span>
+            <strong>123 Google reviews</strong>
+          </div>
 
           {formError && (
             <div className="literal-book-checkout-error" role="alert">
@@ -3292,7 +3459,17 @@ function LiteralPageFive({
           <div className="literal-book-checkout-dock">
             <div>
               <b>First cleaning · {money(total)}</b>
-              <span>Card charged after service</span>
+              <span>
+                {selectedPaymentMethod === "apple_pay"
+                  ? "Apple Pay charged after service"
+                  : selectedPaymentMethod === "google_pay"
+                    ? "Google Pay charged after service"
+                  : selectedPaymentMethod === "cashapp"
+                    ? "Cash App charged today"
+                    : selectedPaymentMethod === "card"
+                    ? "Card charged after service"
+                    : "Choose a payment method"}
+              </span>
             </div>
             <em>Secure checkout</em>
             {cardOnFile && formError ? (
@@ -3321,12 +3498,64 @@ function LiteralPageFive({
           <details className="literal-book-checkout-help">
             <summary>When would I be charged?</summary>
             <p>
-              Your card is securely collected at booking and charged once the
-              cleaning is completed.
+              {selectedPaymentMethod === "apple_pay"
+                ? "Apple Pay is securely saved at booking and charged once the cleaning is completed."
+                : selectedPaymentMethod === "google_pay"
+                  ? "Google Pay is securely saved at booking and charged once the cleaning is completed."
+                : selectedPaymentMethod === "cashapp"
+                  ? `Cash App charges ${money(total)} today for the first cleaning.`
+                  : selectedPaymentMethod === "card"
+                  ? "Your card is securely collected at booking and charged once the cleaning is completed."
+                  : "Choose a payment method to see when you would be charged."}
             </p>
           </details>
         </section>
       </div>
+    </main>
+  );
+}
+
+function CashAppBookingReturn({ returnToken }: { returnToken: string }) {
+  const payment = trpc.cashApp.booking.returnStatus.useQuery(
+    { returnToken },
+    {
+      refetchInterval: query => (query.state.data?.booking ? false : 1_500),
+      refetchIntervalInBackground: false,
+    }
+  );
+  const booking = payment.data?.booking;
+  if (booking) {
+    const time =
+      TIME_SLOTS.find(
+        slot => timeLabelTo24Hour(slot) === booking.requestedLocalTime
+      ) ?? booking.requestedLocalTime;
+    return (
+      <BookingSuccess
+        name={booking.customerName.split(/\s+/)[0] || booking.customerName}
+        service={booking.serviceName}
+        bedrooms={booking.bedrooms}
+        bathrooms={booking.bathrooms}
+        dateLabel={easternDateLabel(booking.requestedLocalDate)}
+        time={time}
+        total={booking.firstCleaningTotalCents}
+        futureTotal={booking.futureVisitTotalCents}
+        frequencyLabel={booking.recurrence}
+        cardLabel={`Cash App · ${money(booking.firstCleaningTotalCents)} paid today`}
+      />
+    );
+  }
+  return (
+    <main className="literal-book-cashapp-return">
+      <section className="literal-book-cashapp-return-card">
+        <div className="literal-book-eyebrow">SECURE CHECKOUT</div>
+        <h1>{payment.isError ? "Cash App payment was not completed." : "Confirming your Cash App payment…"}</h1>
+        <p>
+          {payment.isError
+            ? payment.error?.message ?? "Cash App could not confirm the payment."
+            : "Please keep this page open while we confirm your booking."}
+        </p>
+        {payment.isError ? <a href="/book">Return to booking</a> : null}
+      </section>
     </main>
   );
 }

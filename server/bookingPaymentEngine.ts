@@ -11,6 +11,7 @@ import { TRPCError } from "@trpc/server";
 type Db = NonNullable<Awaited<ReturnType<typeof import("./db").getDb>>>;
 type Profile = typeof bookingPaymentProfiles.$inferSelect;
 type CardDetails = { id: string; brand: string | null; last4: string | null; exp_month: number | null; exp_year: number | null };
+type Wallet = "apple_pay" | "google_pay";
 
 function affectedRows(result: unknown): number {
   const direct = result as { affectedRows?: number };
@@ -49,12 +50,12 @@ export async function startCanonicalCardSetup(db: Db, input: { bookingId: number
   return { alreadyComplete: false as const, clientSecret: setupIntent.client_secret, setupIntentId: setupIntent.id };
 }
 
-export async function finalizeCanonicalCardOnFile(db: Db, input: { bookingId: number; profileId: number; profileVersion: number; funnelId: number; stripeCustomerId: string; customerName: string; customerPhone: string; paymentMethod: CardDetails; deferConfirmation?: boolean }) {
+export async function finalizeCanonicalCardOnFile(db: Db, input: { bookingId: number; profileId: number; profileVersion: number; funnelId: number; stripeCustomerId: string; customerName: string; customerPhone: string; paymentMethod: CardDetails; wallet?: Wallet; deferConfirmation?: boolean }) {
   const now = new Date();
   await db.transaction(async tx => {
     const profileUpdate = await tx.update(bookingPaymentProfiles).set({ paymentStatus: "card_on_file", stripeCustomerId: input.stripeCustomerId, stripePaymentMethodId: input.paymentMethod.id, cardBrand: input.paymentMethod.brand, cardLast4: input.paymentMethod.last4, cardExpMonth: input.paymentMethod.exp_month, cardExpYear: input.paymentMethod.exp_year, consentVersion: BOOKING_PAYMENT_CONSENT_VERSION, consentText: BOOKING_PAYMENT_CONSENT_TEXT, consentAcceptedAt: Date.now(), version: sql`${bookingPaymentProfiles.version} + 1`, updatedAt: now }).where(and(eq(bookingPaymentProfiles.id, input.profileId), eq(bookingPaymentProfiles.version, input.profileVersion)));
     if (affectedRows(profileUpdate) !== 1) throw new TRPCError({ code: "CONFLICT", message: "The payment method changed. Please try again." });
-    await tx.update(bookings).set({ status: input.deferConfirmation ? "pending_payment" : "needs_attention", paymentStatus: "card_on_file", updatedAt: now }).where(eq(bookings.id, input.bookingId));
+    await tx.update(bookings).set({ status: input.deferConfirmation ? "pending_payment" : "needs_attention", paymentStatus: "card_on_file", paymentMethod: input.wallet ?? "card", updatedAt: now }).where(eq(bookings.id, input.bookingId));
     await syncNativeBookingPaymentState(tx, { bookingId: input.bookingId, paymentStatus: "card_on_file", paymentBrand: input.paymentMethod.brand, paymentLast4: input.paymentMethod.last4 });
     await tx.update(bookingFunnelRecords).set({ stripeCustomerId: input.stripeCustomerId, stripePaymentMethodId: input.paymentMethod.id, paymentBrand: input.paymentMethod.brand, paymentLast4: input.paymentMethod.last4, updatedAt: now }).where(eq(bookingFunnelRecords.id, input.funnelId));
     await tx.insert(stripeCustomers).values({ phone: input.customerPhone, name: input.customerName, stripeCustomerId: input.stripeCustomerId, stripePaymentMethodId: input.paymentMethod.id, cardBrand: input.paymentMethod.brand, cardLast4: input.paymentMethod.last4, cardExpMonth: input.paymentMethod.exp_month, cardExpYear: input.paymentMethod.exp_year, cardSavedAt: Date.now() }).onDuplicateKeyUpdate({ set: { name: input.customerName, stripeCustomerId: input.stripeCustomerId, stripePaymentMethodId: input.paymentMethod.id, cardBrand: input.paymentMethod.brand, cardLast4: input.paymentMethod.last4, cardExpMonth: input.paymentMethod.exp_month, cardExpYear: input.paymentMethod.exp_year, cardSavedAt: Date.now() } });

@@ -10,6 +10,7 @@ describe("approved eight-step public booking flow", () => {
   const page = read("client/src/pages/Book.tsx");
   const pricing = read("shared/publicBookingPricing.ts");
   const paymentRouter = read("server/bookingPaymentRouter.ts");
+  const paymentTarget = read("server/bookingPaymentTargetService.ts");
   const paymentEngine = read("server/bookingPaymentEngine.ts");
   const upsellEngine = read("server/bookingUpsellEngine.ts");
   const persistence = read("server/canonicalBookingPersistence.ts");
@@ -44,8 +45,8 @@ describe("approved eight-step public booking flow", () => {
     expect(page).toContain("trpc.bookingPayments.finalize.useMutation");
     expect(page).toContain("<BookingPaymentCheckout");
     expect(page).toContain("deferConfirmation");
-    expect(paymentRouter).toContain("buildPreparedPublicBooking");
-    expect(paymentRouter).toContain("PUBLIC_BOOKING_PRICING_VERSION");
+    expect(paymentTarget).toContain("buildPreparedPublicBooking");
+    expect(paymentTarget).toContain("PUBLIC_BOOKING_PRICING_VERSION");
     expect(paymentRouter).toContain("finalize: publicProcedure");
     expect(paymentEngine).toContain('stage: "booked"');
     expect(persistence).toContain("persistCanonicalBooking");
@@ -55,10 +56,20 @@ describe("approved eight-step public booking flow", () => {
     expect(checkout).toContain("trpc.bookingPayments.confirmSetup.useMutation");
   });
 
-  it("opens Stripe card entry directly on the public payment step", () => {
+  it("keeps payment methods closed by default and opens the real direct Stripe card entry when Card is selected", () => {
     expect(page).toContain("directCardEntry");
     expect(page).toContain("<PublicBookingCardSetupBeforeReservation");
     expect(page).toContain("const showCardEntry = phase === 6 || phase === 7;");
+    expect(page).toContain('"card" | "apple_pay" | "cashapp" | "google_pay" | null');
+    expect(page).toContain('selectedPaymentMethod === "card" ? " is-open" : ""');
+    expect(page).toContain('selectedPaymentMethod === "apple_pay" ? " is-open" : ""');
+    expect(page).toContain('selectedPaymentMethod === "cashapp" ? " is-open" : ""');
+    expect(page).toContain('selectedPaymentMethod === "google_pay" ? " is-open" : ""');
+    expect(page).toContain("<BookingCashAppCheckout");
+    expect(page).toContain("<BookingWalletCardOnFileCheckout");
+    expect(page).toContain('wallet="apple_pay"');
+    expect(page).toContain('wallet="google_pay"');
+    expect(page).toContain("How would you like to secure your booking?");
     expect(page).not.toContain("Continue to secure card setup →");
     expect(checkout).toMatch(/if\s*\(\s*!directCardEntry\s*\|\|/);
     expect(checkout).toContain("PremiumCardSetupForm");
@@ -72,6 +83,8 @@ describe("approved eight-step public booking flow", () => {
     expect(checkout).toContain("authorizationCopy");
     expect(page).not.toContain("booking-payment-timing");
     expect(page).not.toContain("booking-payment-security");
+    expect(page).toContain("123 Google reviews");
+    expect(page).not.toContain("LiteralCheckoutProof");
   });
 
   it("finalizes the booking immediately after Stripe confirms the card", () => {

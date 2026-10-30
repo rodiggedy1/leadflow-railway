@@ -3,7 +3,7 @@ import type { BookingPaymentOperation, BookingPaymentStatus } from "../shared/bo
 export class BookingPaymentStateError extends Error {}
 
 const PAYMENT_TRANSITIONS: Record<BookingPaymentStatus, readonly BookingPaymentStatus[]> = {
-  not_started: ["setup_pending"],
+  not_started: ["setup_pending", "charge_pending"],
   setup_pending: ["card_on_file", "failed", "action_required"],
   card_on_file: ["authorization_pending", "charge_pending"],
   authorization_pending: ["authorized", "failed", "action_required"],
@@ -25,7 +25,7 @@ export function assertBookingPaymentTransition(from: BookingPaymentStatus, to: B
 
 export function bookingPaymentIdempotencyKey(
   bookingId: number,
-  operation: "setup" | BookingPaymentOperation,
+  operation: "setup" | BookingPaymentOperation | "cash_app_first_cleaning",
   version: number,
 ): string {
   if (!Number.isInteger(bookingId) || bookingId < 1) throw new BookingPaymentStateError("Invalid booking payment identity.");
