@@ -39,6 +39,23 @@ describe("manual booking payment actions", () => {
     expect(lifecycle).toContain("nativeBookingHasCard");
   });
 
+  it("persists a local pending authorization before every booking or portal Stripe hold call", () => {
+    const source = read("server/bookingPaymentAdminRouter.ts");
+    const bookingStart = source.indexOf("placeHold: agentProcedure");
+    const bookingStripeCall = source.indexOf("authorizeCanonicalBookingHold", bookingStart);
+    const bookingPending = source.indexOf('status: "pending"', bookingStart);
+    const portalStart = source.indexOf("placePortalRequestHold: agentProcedure");
+    const portalStripeCall = source.indexOf("stripe.paymentIntents.create", portalStart);
+    const portalPending = source.indexOf('status: "pending"', portalStart);
+
+    expect(bookingPending).toBeGreaterThan(bookingStart);
+    expect(bookingPending).toBeLessThan(bookingStripeCall);
+    expect(portalPending).toBeGreaterThan(portalStart);
+    expect(portalPending).toBeLessThan(portalStripeCall);
+    expect(source).toContain('eq(paymentAuthorizations.status, "pending")');
+    expect(source).toContain("where(eq(paymentAuthorizations.id, Number(pending.id)))");
+  });
+
   it("uses canonical booking finalization after internal card confirmation", () => {
     const source = read("server/bookingPaymentAdminRouter.ts");
     expect(source).toContain("finalizeCanonicalCardOnFile");

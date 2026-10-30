@@ -1,8 +1,8 @@
 import type Stripe from "stripe";
 import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingPaymentService";
 
-export async function authorizeCanonicalBookingHold(stripe: Stripe, input: { bookingId: number; profileId: number; customerId: string; paymentMethodId: string; amountCents: number; publicBookingNumber: string; agentName: string; attempt: number }) {
-  return stripe.paymentIntents.create({ amount: input.amountCents, currency: "usd", customer: input.customerId, payment_method: input.paymentMethodId, capture_method: "manual", confirm: true, off_session: true, description: `LeadFlow booking ${input.publicBookingNumber}`, metadata: { ...bookingPaymentMetadata(input.bookingId, input.profileId), operation: "authorization", createdBy: input.agentName } }, { idempotencyKey: bookingPaymentIdempotencyKey(input.bookingId, "authorization", input.attempt) });
+export async function authorizeCanonicalBookingHold(stripe: Stripe, input: { bookingId: number; profileId: number; customerId: string; paymentMethodId: string; amountCents: number; publicBookingNumber: string; agentName: string; attempt: number; authorizationAttemptId: number }) {
+  return stripe.paymentIntents.create({ amount: input.amountCents, currency: "usd", customer: input.customerId, payment_method: input.paymentMethodId, capture_method: "manual", confirm: true, off_session: true, description: `LeadFlow booking ${input.publicBookingNumber}`, metadata: { ...bookingPaymentMetadata(input.bookingId, input.profileId), operation: "authorization", createdBy: input.agentName, leadflowAuthorizationAttempt: "v1", leadflowAuthorizationAttemptId: String(input.authorizationAttemptId) } }, { idempotencyKey: bookingPaymentIdempotencyKey(input.bookingId, "authorization", input.attempt) });
 }
 
 export async function captureCanonicalPaymentIntent(stripe: Stripe, paymentIntentId: string, amountCents: number) {

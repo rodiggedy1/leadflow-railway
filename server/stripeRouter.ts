@@ -342,6 +342,25 @@ export const stripeRouter = router({
 
       const stripe = getStripe();
       const agentName = ctx.agent?.agentName ?? "admin";
+      // Persist the attempt before calling Stripe. A successful Stripe hold is
+      // therefore still visible locally if a later process failure occurs.
+      const [pending] = await db.insert(paymentAuthorizations).values({
+        cleanerJobId: input.cleanerJobId ?? null,
+        jobLabel: input.jobLabel ?? null,
+        customerPhone: input.customerPhone,
+        customerName: customer.name ?? null,
+        stripeCustomerId: customer.stripeCustomerId,
+        stripePaymentMethodId: customer.stripePaymentMethodId,
+        stripePaymentIntentId: null,
+        amountCents: input.amountCents,
+        currency: "usd",
+        operation: "authorization",
+        status: "pending",
+        errorMessage: null,
+        createdBy: agentName,
+        authorizedAt: null,
+        notes: input.notes ?? null,
+      }).$returningId();
 
       let paymentIntent: Stripe.PaymentIntent;
       try {
@@ -359,59 +378,119 @@ export const stripeRouter = router({
             jobLabel: input.jobLabel ?? "",
             cleanerJobId: input.cleanerJobId?.toString() ?? "",
             createdBy: agentName,
+            leadflowAuthorizationAttempt: "v1",
+            leadflowAuthorizationAttemptId: String(pending.id),
           },
         });
       } catch (err: unknown) {
         const stripeErr = err as Stripe.StripeRawError;
-        await db.insert(paymentAuthorizations).values({
-          cleanerJobId: input.cleanerJobId ?? null,
-          jobLabel: input.jobLabel ?? null,
-          customerPhone: input.customerPhone,
-          customerName: customer.name ?? null,
-          stripeCustomerId: customer.stripeCustomerId,
-          stripePaymentMethodId: customer.stripePaymentMethodId,
-          stripePaymentIntentId: null,
-          amountCents: input.amountCents,
-          currency: "usd",
-          status: "failed",
-          errorMessage: stripeErr?.message ?? "Unknown Stripe error",
-          createdBy: agentName,
-          authorizedAt: null,
-          notes: input.notes ?? null,
-        });
+        const message = stripeErr?.message ?? "Unknown Stripe error";
+        const definitiveProviderFailure = typeof stripeErr?.statusCode === "number";
+        await db.update(paymentAuthorizations).set(
+          definitiveProviderFailure
+            ? { status: "failed", errorMessage: message }
+            : { errorMessage: `Stripe outcome is unknown; awaiting a signed webhook or explicit review. ${message}` }
+        ).where(eq(paymentAuthorizations.id, Number(pending.id)));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: `Stripe preauth failed: ${stripeErr?.message ?? "Unknown error"}`,
+          message: definitiveProviderFailure
+            ? `Stripe preauth failed: ${message}`
+            : "Stripe did not confirm the hold outcome. The local attempt remains in review to prevent a duplicate charge.",
         });
       }
 
       const now = Date.now();
       const status = paymentIntent.status === "requires_capture" ? "authorized" : "failed";
-
-      const [result] = await db.insert(paymentAuthorizations).values({
-        cleanerJobId: input.cleanerJobId ?? null,
-        jobLabel: input.jobLabel ?? null,
-        customerPhone: input.customerPhone,
-        customerName: customer.name ?? null,
-        stripeCustomerId: customer.stripeCustomerId,
-        stripePaymentMethodId: customer.stripePaymentMethodId,
+      await db.update(paymentAuthorizations).set({
         stripePaymentIntentId: paymentIntent.id,
-        amountCents: input.amountCents,
-        currency: "usd",
         status,
         errorMessage: status === "failed" ? "PaymentIntent did not reach requires_capture" : null,
-        createdBy: agentName,
         authorizedAt: status === "authorized" ? now : null,
-        notes: input.notes ?? null,
-      }).$returningId();
+      }).where(eq(paymentAuthorizations.id, Number(pending.id)));
 
       return {
-        id: result.id,
+        id: Number(pending.id),
         stripePaymentIntentId: paymentIntent.id,
         status,
         amountCents: input.amountCents,
         authorizedAt: now,
       };
+    }),
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // 6b. recoverVerifiedCardLinkHold (admin) — restores only a missing local
+  // record for a verified preexisting Stripe hold. It never changes Stripe.
+  // ────────────────────────────────────────────────────────────────────────────
+  recoverVerifiedCardLinkHold: agentProcedure
+    .input(z.object({
+      cardAuthTokenId: z.number().int().positive(),
+      paymentIntentId: z.string().regex(/^pi_[A-Za-z0-9]+$/, "Enter a Stripe PaymentIntent ID beginning with pi_"),
+      expectedAmountCents: z.number().int().positive(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const [existing] = await db.select().from(paymentAuthorizations)
+        .where(eq(paymentAuthorizations.stripePaymentIntentId, input.paymentIntentId)).limit(1);
+      if (existing) return { authorizationId: existing.id, recovered: false as const };
+
+      const [token] = await db.select().from(cardAuthTokens)
+        .where(eq(cardAuthTokens.id, input.cardAuthTokenId)).limit(1);
+      if (!token?.used || !token.completedAt) {
+        throw new TRPCError({ code: "CONFLICT", message: "Recovery requires a completed LeadFlow card link." });
+      }
+      const [customer] = await db.select().from(stripeCustomers)
+        .where(eq(stripeCustomers.phone, token.customerPhone)).limit(1);
+      if (!customer?.stripePaymentMethodId) {
+        throw new TRPCError({ code: "CONFLICT", message: "The completed link no longer has a verified saved card." });
+      }
+
+      const stripe = getStripe();
+      const intent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
+      const intentCustomerId = typeof intent.customer === "string" ? intent.customer : intent.customer?.id ?? null;
+      const intentPaymentMethodId = typeof intent.payment_method === "string" ? intent.payment_method : intent.payment_method?.id ?? null;
+      const paymentMethod = intentPaymentMethodId ? await stripe.paymentMethods.retrieve(intentPaymentMethodId) : null;
+      const paymentMethodCustomerId = typeof paymentMethod?.customer === "string" ? paymentMethod.customer : paymentMethod?.customer?.id ?? null;
+      const cardOptions = intent.payment_method_options?.card as { capture_before?: number } | undefined;
+      const captureBefore = typeof cardOptions?.capture_before === "number"
+        ? cardOptions.capture_before * 1000
+        : null;
+      const matchingJob = token.cleanerJobId === null || intent.metadata.cleanerJobId === String(token.cleanerJobId);
+      const isVerifiedLegacyHold =
+        intent.status === "requires_capture" &&
+        intent.capture_method === "manual" &&
+        intent.currency === "usd" &&
+        intent.amount === input.expectedAmountCents &&
+        intent.metadata.customerPhone === token.customerPhone &&
+        matchingJob &&
+        intentCustomerId === customer.stripeCustomerId &&
+        intentPaymentMethodId === customer.stripePaymentMethodId &&
+        paymentMethod?.type === "card" &&
+        paymentMethodCustomerId === customer.stripeCustomerId;
+      if (!isVerifiedLegacyHold) {
+        throw new TRPCError({ code: "CONFLICT", message: "That Stripe PaymentIntent is not a verified active hold for this completed LeadFlow card link." });
+      }
+
+      const agentName = ctx.agent?.agentName ?? "admin";
+      const [recovered] = await db.insert(paymentAuthorizations).values({
+        cleanerJobId: token.cleanerJobId,
+        jobLabel: intent.metadata.jobLabel || token.jobDate || intent.description || null,
+        customerPhone: token.customerPhone,
+        customerName: token.customerName ?? customer.name ?? null,
+        stripeCustomerId: customer.stripeCustomerId,
+        stripePaymentMethodId: customer.stripePaymentMethodId,
+        stripePaymentIntentId: intent.id,
+        amountCents: intent.amount,
+        currency: intent.currency,
+        operation: "authorization",
+        status: "authorized",
+        errorMessage: null,
+        createdBy: agentName,
+        authorizedAt: intent.created * 1000,
+        captureBefore,
+        notes: "Recovered from a verified existing Stripe hold. No Stripe action was performed.",
+      }).$returningId();
+      return { authorizationId: Number(recovered.id), recovered: true as const };
     }),
 
   // ────────────────────────────────────────────────────────────────────────────

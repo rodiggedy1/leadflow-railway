@@ -60,6 +60,7 @@ type PaymentRecord = {
   paymentIntentId?: string | null;
   cardSavedAt?: number;
   cardUpdatedAt?: number;
+  cardAuthTokenId?: number;
 };
 
 const STATUS: Record<ReviewState, string> = {
@@ -158,6 +159,9 @@ export default function PaymentsExactLive() {
   const [preauthJobLabel, setPreauthJobLabel] = useState("");
   const [preauthNotes, setPreauthNotes] = useState("");
   const [captureAmount, setCaptureAmount] = useState("");
+  const [recoverIntentId, setRecoverIntentId] = useState("");
+  const [recoverAmount, setRecoverAmount] = useState("");
+  const [recoverOpen, setRecoverOpen] = useState(false);
 
   const cardLinks = trpc.stripe.listAllCardAuthTokens.useQuery({ limit: 50 }, { staleTime: 30_000, retry: false, throwOnError: false });
   const cards = trpc.stripe.listAllCustomers.useQuery(undefined, { staleTime: 30_000, retry: false, throwOnError: false });
@@ -196,6 +200,17 @@ export default function PaymentsExactLive() {
       void authorizations.refetch();
     },
     onError: (error) => toast.error(error.message || "Cancel failed"),
+  });
+  const recoverVerifiedCardLinkHold = trpc.stripe.recoverVerifiedCardLinkHold.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.recovered ? "Verified Stripe hold restored to LeadFlow." : "That Stripe hold is already in LeadFlow.");
+      setRecoverOpen(false);
+      setRecoverIntentId("");
+      setRecoverAmount("");
+      setSelectedId(`authorization-${data.authorizationId}`);
+      void authorizations.refetch();
+    },
+    onError: (error) => toast.error(error.message || "Could not recover that hold"),
   });
 
   const cardsByPhone = useMemo(() => new Map((cards.data ?? []).map(card => [card.phone, card])), [cards.data]);
@@ -271,6 +286,7 @@ export default function PaymentsExactLive() {
         serviceDate: link.jobDate,
         serviceAddress: link.jobAddress,
         completedAt: timestamp(link.completedAt),
+        cardAuthTokenId: link.id,
       };
     });
     return [...authorizationRecords, ...cardRecords, ...linkRecords].sort((a, b) => b.createdAt - a.createdAt);
@@ -350,6 +366,27 @@ export default function PaymentsExactLive() {
     cancelPreauth.mutate({ authorizationId: selected.authorizationId });
   }
 
+  function recoverSelectedCardLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected || selected.kind !== "link" || !selected.cardAuthTokenId) return;
+    const paymentIntentId = recoverIntentId.trim();
+    if (!/^pi_[A-Za-z0-9]+$/.test(paymentIntentId)) {
+      toast.error("Enter the Stripe PaymentIntent ID beginning with pi_");
+      return;
+    }
+    const expectedAmountCents = Math.round(Number(recoverAmount) * 100);
+    if (!Number.isInteger(expectedAmountCents) || expectedAmountCents < 1) {
+      toast.error("Enter the exact Stripe hold amount.");
+      return;
+    }
+    if (!window.confirm("This only restores the matching existing Stripe hold to LeadFlow. It does not charge, capture, cancel, or change Stripe.")) return;
+    recoverVerifiedCardLinkHold.mutate({
+      cardAuthTokenId: selected.cardAuthTokenId,
+      paymentIntentId,
+      expectedAmountCents,
+    });
+  }
+
   const primaryActionSlot = !selected ? null : (
     <section className="payment-primary-actions" aria-label="Existing payment actions">
       <header>
@@ -358,12 +395,14 @@ export default function PaymentsExactLive() {
       </header>
       <div className="payment-primary-actions__controls">
         {selected.kind === "link" && selected.token && <CopyButton text={`https://quote.maidinblack.com/pay/${selected.token}`} label="Copy link" />}
+        {selected.kind === "link" && selected.statusLabel === "Link used" && <button type="button" className="payment-action" onClick={() => setRecoverOpen(open => !open)}><RefreshCw size={14} />{recoverOpen ? "Cancel recovery" : "Recover existing Stripe hold"}</button>}
         {selected.kind === "card" && <button type="button" className="payment-action is-primary" onClick={() => setPreauthOpen(open => !open)}><Zap size={14} />{preauthOpen ? "Cancel" : "Preauthorize"}</button>}
         {selected.kind === "authorization" && selected.state === "held" && <><label className="payment-primary-capture">Capture amount (optional)<input type="number" min="0.50" step="0.01" value={captureAmount} onChange={(event) => setCaptureAmount(event.target.value)} placeholder={selected.amountCents ? (selected.amountCents / 100).toFixed(2) : "0.00"} /></label><button type="button" className="payment-action is-primary" onClick={captureSelected} disabled={capturePayment.isPending}>{capturePayment.isPending ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={14} />}Capture</button><button type="button" className="payment-action is-danger" onClick={cancelSelected} disabled={cancelPreauth.isPending}>{cancelPreauth.isPending ? <Loader2 className="animate-spin" /> : <XCircle size={14} />}Cancel hold</button></>}
         {selected.kind === "authorization" && selected.state !== "held" && <button type="button" className="payment-action" onClick={() => void authorizations.refetch()}><RefreshCw size={14} />Refresh record</button>}
         {selected.kind === "card" && <button type="button" className="payment-action" onClick={() => void cards.refetch()}><RefreshCw size={14} />Refresh record</button>}
       </div>
       {selected.kind === "card" && preauthOpen && <form onSubmit={submitPreauth} className="payment-primary-action-form"><label><DollarSign size={13} />Amount (USD) *<input type="number" min="0.50" step="0.01" value={preauthAmount} onChange={(event) => setPreauthAmount(event.target.value)} placeholder="150.00" required autoFocus /></label><label>Job label<input value={preauthJobLabel} onChange={(event) => setPreauthJobLabel(event.target.value)} placeholder="Deep clean — July 10" /></label><label>Notes<input value={preauthNotes} onChange={(event) => setPreauthNotes(event.target.value)} placeholder="Optional" /></label><button type="submit" className="payment-action is-primary" disabled={createPreauth.isPending}>{createPreauth.isPending ? <Loader2 className="animate-spin" /> : <DollarSign size={14} />}Place hold</button></form>}
+      {selected.kind === "link" && selected.statusLabel === "Link used" && recoverOpen && <form onSubmit={recoverSelectedCardLink} className="payment-primary-action-form"><label className="payment-existing-fields__wide">Stripe PaymentIntent ID *<input value={recoverIntentId} onChange={(event) => setRecoverIntentId(event.target.value)} placeholder="pi_…" required autoFocus /></label><label>Exact Stripe hold amount (USD) *<input type="number" min="0.01" step="0.01" value={recoverAmount} onChange={(event) => setRecoverAmount(event.target.value)} placeholder="249.00" required /></label><p className="payment-live-warning"><CircleAlert size={15} />Only restores an uncaptured Stripe hold after it matches this used LeadFlow link, its customer, saved card, and exact amount. It does not change Stripe.</p><button type="submit" className="payment-action is-primary" disabled={recoverVerifiedCardLinkHold.isPending}>{recoverVerifiedCardLinkHold.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw size={14} />}Verify and restore hold</button></form>}
     </section>
   );
 

@@ -25,4 +25,15 @@ describe("booking Stripe webhook route", () => {
     expect(webhook).not.toContain("paymentIntents.capture");
     expect(webhook).not.toContain("paymentIntents.cancel");
   });
+
+  it("can promote only a marked existing pending authorization after a signed manual-capture event", () => {
+    const webhook = read("server/stripeWebhookRoute.ts");
+    expect(webhook).toContain("promoteMarkedPendingAuthorization");
+    expect(webhook).toContain('object.metadata?.leadflowAuthorizationAttempt !== "v1"');
+    expect(webhook).toContain('eq(paymentAuthorizations.status, "pending")');
+    expect(webhook).toContain("object.amount_capturable === pending.amountCents");
+    expect(webhook).toContain("object.metadata.customerPhone !== pending.customerPhone");
+    expect(webhook).toContain("status: \"authorized\"");
+    expect(webhook).not.toContain("tx.insert(paymentAuthorizations)");
+  });
 });
