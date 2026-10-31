@@ -342,25 +342,6 @@ export const stripeRouter = router({
 
       const stripe = getStripe();
       const agentName = ctx.agent?.agentName ?? "admin";
-      // Persist the attempt before calling Stripe. A successful Stripe hold is
-      // therefore still visible locally if a later process failure occurs.
-      const [pending] = await db.insert(paymentAuthorizations).values({
-        cleanerJobId: input.cleanerJobId ?? null,
-        jobLabel: input.jobLabel ?? null,
-        customerPhone: input.customerPhone,
-        customerName: customer.name ?? null,
-        stripeCustomerId: customer.stripeCustomerId,
-        stripePaymentMethodId: customer.stripePaymentMethodId,
-        stripePaymentIntentId: null,
-        amountCents: input.amountCents,
-        currency: "usd",
-        operation: "authorization",
-        status: "pending",
-        errorMessage: null,
-        createdBy: agentName,
-        authorizedAt: null,
-        notes: input.notes ?? null,
-      }).$returningId();
 
       let paymentIntent: Stripe.PaymentIntent;
       try {
@@ -378,38 +359,54 @@ export const stripeRouter = router({
             jobLabel: input.jobLabel ?? "",
             cleanerJobId: input.cleanerJobId?.toString() ?? "",
             createdBy: agentName,
-            leadflowAuthorizationAttempt: "v1",
-            leadflowAuthorizationAttemptId: String(pending.id),
           },
         });
       } catch (err: unknown) {
         const stripeErr = err as Stripe.StripeRawError;
-        const message = stripeErr?.message ?? "Unknown Stripe error";
-        const definitiveProviderFailure = typeof stripeErr?.statusCode === "number";
-        await db.update(paymentAuthorizations).set(
-          definitiveProviderFailure
-            ? { status: "failed", errorMessage: message }
-            : { errorMessage: `Stripe outcome is unknown; awaiting a signed webhook or explicit review. ${message}` }
-        ).where(eq(paymentAuthorizations.id, Number(pending.id)));
+        await db.insert(paymentAuthorizations).values({
+          cleanerJobId: input.cleanerJobId ?? null,
+          jobLabel: input.jobLabel ?? null,
+          customerPhone: input.customerPhone,
+          customerName: customer.name ?? null,
+          stripeCustomerId: customer.stripeCustomerId,
+          stripePaymentMethodId: customer.stripePaymentMethodId,
+          stripePaymentIntentId: null,
+          amountCents: input.amountCents,
+          currency: "usd",
+          status: "failed",
+          errorMessage: stripeErr?.message ?? "Unknown Stripe error",
+          createdBy: agentName,
+          authorizedAt: null,
+          notes: input.notes ?? null,
+        });
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: definitiveProviderFailure
-            ? `Stripe preauth failed: ${message}`
-            : "Stripe did not confirm the hold outcome. The local attempt remains in review to prevent a duplicate charge.",
+          message: `Stripe preauth failed: ${stripeErr?.message ?? "Unknown error"}`,
         });
       }
 
       const now = Date.now();
       const status = paymentIntent.status === "requires_capture" ? "authorized" : "failed";
-      await db.update(paymentAuthorizations).set({
+
+      const [result] = await db.insert(paymentAuthorizations).values({
+        cleanerJobId: input.cleanerJobId ?? null,
+        jobLabel: input.jobLabel ?? null,
+        customerPhone: input.customerPhone,
+        customerName: customer.name ?? null,
+        stripeCustomerId: customer.stripeCustomerId,
+        stripePaymentMethodId: customer.stripePaymentMethodId,
         stripePaymentIntentId: paymentIntent.id,
+        amountCents: input.amountCents,
+        currency: "usd",
         status,
         errorMessage: status === "failed" ? "PaymentIntent did not reach requires_capture" : null,
+        createdBy: agentName,
         authorizedAt: status === "authorized" ? now : null,
-      }).where(eq(paymentAuthorizations.id, Number(pending.id)));
+        notes: input.notes ?? null,
+      }).$returningId();
 
       return {
-        id: Number(pending.id),
+        id: result.id,
         stripePaymentIntentId: paymentIntent.id,
         status,
         amountCents: input.amountCents,

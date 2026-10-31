@@ -6,18 +6,29 @@ const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 describe("payment authorization reconciliation", () => {
-  it("persists every new manual hold attempt locally before the Stripe create call", () => {
+  it("keeps legacy card-on-file holds Stripe-first while booking and portal holds remain local-first", () => {
     const legacy = read("server/stripeRouter.ts");
     const booking = read("server/bookingPaymentAdminRouter.ts");
 
     const legacyStart = legacy.indexOf("createPreauth: agentProcedure");
+    const legacyEnd = legacy.indexOf(
+      "recoverVerifiedCardLinkHold: agentProcedure",
+      legacyStart
+    );
     const legacyCreate = legacy.indexOf(
       "stripe.paymentIntents.create",
       legacyStart
     );
-    const legacyPending = legacy.indexOf('status: "pending"', legacyStart);
-    expect(legacyPending).toBeGreaterThan(legacyStart);
-    expect(legacyPending).toBeLessThan(legacyCreate);
+    const legacyInsert = legacy.indexOf(
+      "await db.insert(paymentAuthorizations).values({",
+      legacyStart
+    );
+    const legacyBlock = legacy.slice(legacyStart, legacyEnd);
+
+    expect(legacyCreate).toBeGreaterThan(legacyStart);
+    expect(legacyInsert).toBeGreaterThan(legacyCreate);
+    expect(legacyBlock).not.toContain('status: "pending"');
+    expect(legacyBlock).not.toContain("leadflowAuthorizationAttempt");
 
     const bookingStart = booking.indexOf("placeHold: agentProcedure");
     const bookingCreate = booking.indexOf(
@@ -40,27 +51,43 @@ describe("payment authorization reconciliation", () => {
     expect(portalPending).toBeLessThan(portalCreate);
   });
 
-  it("updates the same pending record with Stripe's final authorization result", () => {
+  it("keeps booking and portal completion tied to their same pending record", () => {
     const legacy = read("server/stripeRouter.ts");
     const booking = read("server/bookingPaymentAdminRouter.ts");
+    const legacyStart = legacy.indexOf("createPreauth: agentProcedure");
+    const legacyEnd = legacy.indexOf(
+      "recoverVerifiedCardLinkHold: agentProcedure",
+      legacyStart
+    );
+    const legacyBlock = legacy.slice(legacyStart, legacyEnd);
 
-    expect(legacy).toContain(
+    expect(legacyBlock).toContain("stripePaymentIntentId: paymentIntent.id");
+    expect(legacyBlock).toContain("}).$returningId();");
+    expect(legacyBlock).not.toContain(
       "where(eq(paymentAuthorizations.id, Number(pending.id)))"
     );
-    expect(legacy).toContain("stripePaymentIntentId: paymentIntent.id");
     expect(booking).toContain(
       "where(eq(paymentAuthorizations.id, Number(pending.id)))"
     );
     expect(booking).toContain("stripePaymentIntentId: intent.id");
   });
 
-  it("keeps an unknown provider outcome pending and correlates only new manual holds to their signed webhook", () => {
+  it("keeps booking and portal unknown outcomes pending and correlates only marked new holds to the signed webhook", () => {
     const legacy = read("server/stripeRouter.ts");
     const booking = read("server/bookingPaymentAdminRouter.ts");
     const engine = read("server/bookingPaymentActionsEngine.ts");
     const webhook = read("server/stripeWebhookRoute.ts");
 
-    for (const source of [legacy, booking]) {
+    const legacyStart = legacy.indexOf("createPreauth: agentProcedure");
+    const legacyEnd = legacy.indexOf(
+      "recoverVerifiedCardLinkHold: agentProcedure",
+      legacyStart
+    );
+    const legacyBlock = legacy.slice(legacyStart, legacyEnd);
+
+    expect(legacyBlock).not.toContain("definitiveProviderFailure");
+    expect(legacyBlock).not.toContain("leadflowAuthorizationAttempt");
+    for (const source of [booking]) {
       expect(source).toContain("definitiveProviderFailure");
       expect(source).toContain(
         "The local attempt remains in review to prevent a duplicate charge."
