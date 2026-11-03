@@ -27,7 +27,7 @@ async function establishDirectPortalSession(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   record: typeof bookingFunnelRecords.$inferSelect,
 ): Promise<boolean> {
-  if (record.source !== "book-page") return false;
+  if (!["book-page", "customer-booking-link", "madison-quote"].includes(record.source)) return false;
   try {
     const account = await ensureCustomerPortalAccount(db, {
       customerName: record.customerName,
@@ -79,7 +79,7 @@ export const bookingPaymentRouter = router({
       if (setup.alreadyComplete) {
         const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
         let portalAccessCode: string | null = null;
-        if (record.source !== "book-page") {
+        if (record.source !== "book-page" && !directPortalSessionReady) {
           try {
             portalAccessCode = await createCanonicalBookingPortalHandoff(db, { customerName: record.customerName, customerPhone: record.customerPhone, customerEmail: record.customerEmail });
           } catch (error) {
@@ -153,7 +153,7 @@ export const bookingPaymentRouter = router({
       );
       const directPortalSessionReady = await establishDirectPortalSession(ctx, db, record);
       let portalAccessCode: string | null = null;
-      if (record.source !== "book-page") try {
+      if (record.source !== "book-page" && !directPortalSessionReady) try {
         portalAccessCode = await createCanonicalBookingPortalHandoff(db, {
           customerName: record.customerName,
           customerPhone: record.customerPhone,

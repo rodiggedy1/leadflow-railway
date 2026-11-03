@@ -82,7 +82,7 @@ function asBookingInput(record: PublicBookingFunnelRecord): PrepareBookingInput 
   });
   return {
     idempotencyKey: record.idempotencyKey,
-    surface: record.source === "book-page" ? "full_page" : "popup",
+    surface: ["book-page", "customer-booking-link", "madison-quote"].includes(record.source) ? "full_page" : "popup",
     customer: {
       fullName: record.customerName,
       phone: record.customerPhone,
@@ -172,6 +172,25 @@ export async function ensurePublicBookingPaymentTarget(
       code: "INTERNAL_SERVER_ERROR",
       message: "Booking service unavailable.",
     });
+  }
+  if (["customer-booking-link", "madison-quote"].includes(record.source)) {
+    const persisted = await persistCanonicalBooking(db, undefined, {
+      funnelRecordId: record.id,
+      syncFunnelDetails: true,
+      paymentTargetOnly: true,
+      expectedFunnelIdentity: record,
+      bookingSource: "full_page",
+      initialBookingStatus: "pending_payment",
+      prepareLockedFunnelDetails: current => {
+        const built = current.pricingVersion === PUBLIC_BOOKING_PRICING_VERSION
+          ? buildPreparedPublicBooking(asPublicBookingInput(current), { nowMs: Date.now(), timeZone: BOOKING_TIME_ZONE })
+          : buildPreparedNativeBooking(asBookingInput(current), { nowMs: Date.now(), timeZone: BOOKING_TIME_ZONE });
+        if (built.type === "price_changed") throw new TRPCError({ code: "CONFLICT", message: "The quoted price changed. Please review the updated quote before continuing." });
+        return built.prepared;
+      },
+    });
+    if (!persisted.paymentTarget) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking payment profile could not be created." });
+    return { db, bookingId: persisted.bookingId, ...persisted.paymentTarget };
   }
   if (record.stage !== "payment_incomplete") {
     throw new TRPCError({
