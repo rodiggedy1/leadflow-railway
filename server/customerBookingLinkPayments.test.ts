@@ -123,6 +123,23 @@ describe("customer booking links reuse the current /book payment types", () => {
     expect(inactive).toContain("startingRef.current = false");
   });
 
+  it("preserves the original first-page welcome, video, rating, quote and benefits above the date selector", () => {
+    const introStart = page.indexOf('{step === "booking" && <><div className="customer-link-heading">');
+    const calendarStart = page.indexOf('{step === "booking" ? <><div className="customer-link-section-heading">');
+    expect(introStart).toBeGreaterThan(0);
+    expect(calendarStart).toBeGreaterThan(introStart);
+    const intro = page.slice(introStart, calendarStart);
+    expect(intro).toContain("Hi {firstName}");
+    expect(intro).toContain("Let’s get you booked.");
+    expect(intro).toContain("<WistiaPlayer />");
+    expect(intro).toContain("See how we work — 60 seconds");
+    expect(intro).toContain('className="customer-link-rating"');
+    expect(intro).toContain('aria-label="Generated quote summary"');
+    expect(intro).toContain('className="customer-link-benefits"');
+    expect(page).toContain('player.setAttribute("media-id", "bzlt49ipk1")');
+    expect(page).toContain('player.setAttribute("aspect", "1.7777777777777777")');
+  });
+
   it("scopes copied styles only to the payment section and never changes page width", () => {
     const styles = read(
       "client/src/components/customer-booking-link-payment-options.css"
