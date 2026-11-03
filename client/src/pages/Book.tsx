@@ -329,7 +329,7 @@ function money(cents: number) {
 function createBookingAttemptId(): string {
   return crypto.randomUUID();
 }
-function timeLabelTo24Hour(time: string): string {
+export function timeLabelTo24Hour(time: string): string {
   const match = /^(\d{1,2}):(\d{2})\s+(AM|PM)$/i.exec(time);
   if (!match) throw new Error("Select a valid arrival time.");
   const hour =
@@ -4057,7 +4057,7 @@ function BookingSummary({
     </div>
   );
 }
-function BookingSuccess({
+export function BookingSuccess({
   name,
   service,
   bedrooms,

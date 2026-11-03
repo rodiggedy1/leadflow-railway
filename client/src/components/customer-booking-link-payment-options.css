@@ -1,0 +1,475 @@
+/* Exact /book payment styling; scoped only to the customer-link payment section. */
+.customer-link-payment-options .literal-book-payment-heading h2 {
+  margin: 0 0 7px;
+  color: #222;
+  font-size: 21px;
+  letter-spacing: -0.6px;
+}
+
+.customer-link-payment-options .literal-book-payment-heading > p {
+  margin: 0;
+  color: #7a7774;
+  font-size: 13px;
+}
+
+.customer-link-payment-options .literal-book-payment-heading {
+  margin: 28px 0 4px;
+}
+
+.customer-link-payment-options
+  .literal-book-payment-heading
+  .literal-book-eyebrow {
+  margin-bottom: 9px;
+}
+
+.customer-link-payment-options .literal-book-payment-heading h2 {
+  font-size: 28px;
+  letter-spacing: -0.8px;
+}
+
+.customer-link-payment-options .literal-book-payment-heading-detail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 11px;
+}
+
+.customer-link-payment-options .literal-book-payment-heading-detail > p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.customer-link-payment-options .literal-book-powered-by-stripe {
+  display: block;
+  width: 93px;
+  height: auto;
+  flex: none;
+  opacity: 0.86;
+}
+
+.customer-link-payment-options .literal-book-payment-brand {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 20px 22px;
+  border: 1px solid #ece9e7;
+  border-radius: 20px;
+  background: #f8f7f6;
+}
+
+.customer-link-payment-options .literal-book-payment-brand-card {
+  display: flex;
+  width: 295px;
+  max-width: 100%;
+  min-height: 154px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 19px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #242424, #101010);
+  box-shadow: 0 12px 30px #00000015;
+  color: #fff;
+}
+
+.customer-link-payment-options .literal-book-payment-brand-card strong {
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.customer-link-payment-options .literal-book-payment-brand-card strong span {
+  color: #e87561;
+}
+
+.customer-link-payment-options .literal-book-payment-brand-card b {
+  font-size: 18px;
+  letter-spacing: 3px;
+}
+
+.customer-link-payment-options .literal-book-payment-brand-card small {
+  color: #c6c6c6;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+}
+
+.customer-link-payment-options .literal-book-payment-brand > div:last-child {
+  max-width: 290px;
+  color: #68625f;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.customer-link-payment-options
+  .literal-book-payment-brand
+  > div:last-child
+  > strong {
+  display: block;
+  margin-bottom: 9px;
+  color: #222;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.customer-link-payment-options .literal-book-payment-brand p {
+  margin: 0;
+}
+
+.customer-link-payment-options
+  .literal-book-payment-brand
+  > div:last-child
+  > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 13px;
+  color: #3f5a4b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.customer-link-payment-options .literal-book-payment-brand svg {
+  width: 15px;
+  height: 15px;
+}
+
+.customer-link-payment-options .literal-book-card-choice {
+  margin: 24px 0 0;
+  padding: 17px 18px;
+  border: 1px solid #e4dedb;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.customer-link-payment-options .literal-book-card-choice.is-selected,
+.customer-link-payment-options .literal-book-apple-pay-choice.is-selected,
+.customer-link-payment-options .literal-book-cashapp-choice.is-selected,
+.customer-link-payment-options .literal-book-google-pay-choice.is-selected {
+  border-color: #d95b49;
+  background: #fff8f5;
+  box-shadow: 0 0 0 1px #d95b49;
+}
+
+.customer-link-payment-options .literal-book-card-choice-head {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.customer-link-payment-options
+  .literal-book-card-choice-head
+  > span:first-child {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid #b9b8b6;
+  background: #fff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.customer-link-payment-options
+  .is-selected
+  .literal-book-card-choice-head
+  > span:first-child {
+  border-color: #d95b49;
+  background: #d95b49;
+}
+
+.customer-link-payment-options .literal-book-card-choice-head strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.customer-link-payment-options .literal-book-card-choice-head p {
+  margin: 5px 0 0;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.customer-link-payment-options .literal-book-payment-choice-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.customer-link-payment-options .literal-book-payment-choice-copy {
+  min-width: 0;
+}
+
+.customer-link-payment-options .literal-book-payment-choice-marks {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.customer-link-payment-options .literal-book-payment-choice-marks img {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.customer-link-payment-options .literal-book-card-network-marks img {
+  width: 32px;
+  max-height: 21px;
+}
+
+.customer-link-payment-options .literal-book-wallet-mark img {
+  width: auto;
+  max-width: 86px;
+  height: 24px;
+}
+
+.customer-link-payment-options .literal-book-card-detail {
+  margin: 16px 0 0 31px;
+  padding-top: 15px;
+  border-top: 1px solid #e9dfda;
+}
+
+.customer-link-payment-options .literal-book-card-detail:not(.is-open),
+.customer-link-payment-options .literal-book-apple-pay-detail:not(.is-open),
+.customer-link-payment-options .literal-book-cashapp-detail:not(.is-open),
+.customer-link-payment-options .literal-book-google-pay-detail:not(.is-open) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.customer-link-payment-options
+  .literal-book-card-detail
+  .booking-card-acceptance {
+  margin-top: 0;
+}
+
+.customer-link-payment-options .literal-book-apple-pay-choice,
+.customer-link-payment-options .literal-book-cashapp-choice,
+.customer-link-payment-options .literal-book-google-pay-choice {
+  position: relative;
+  margin: 14px 0 0;
+  padding: 17px 18px;
+  border: 1px solid #e4dedb;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.customer-link-payment-options .literal-book-apple-pay-detail,
+.customer-link-payment-options .literal-book-cashapp-detail,
+.customer-link-payment-options .literal-book-google-pay-detail {
+  margin: 16px 0 0 31px;
+  padding-top: 15px;
+  border-top: 1px solid #e9dfda;
+}
+
+.customer-link-payment-options .literal-book-apple-pay-note {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.customer-link-payment-options .literal-book-google-pay-note {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.customer-link-payment-options .literal-book-apple-pay-unavailable {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.customer-link-payment-options .literal-book-google-pay-unavailable {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.customer-link-payment-options .literal-book-wallet-element:not(.is-active) {
+  position: absolute;
+  left: -10000px;
+  width: min(400px, calc(100vw - 40px));
+  height: 60px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.customer-link-payment-options .literal-book-wallet-error {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.customer-link-payment-options .literal-book-wallet-probe {
+  display: block;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.customer-link-payment-options .literal-book-wallet-probe svg {
+  width: 1px;
+  height: 1px;
+}
+
+.customer-link-payment-options .literal-book-wallet-consent {
+  margin: 11px 0 0;
+  color: #777;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.customer-link-payment-options .literal-book-cashapp-note {
+  margin: 0 0 11px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.customer-link-payment-options .literal-book-cashapp-form,
+.customer-link-payment-options .literal-book-cashapp-start {
+  display: grid;
+  gap: 11px;
+}
+
+.customer-link-payment-options .literal-book-cashapp-submit {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: #171717;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 12px 18px;
+}
+
+.customer-link-payment-options .literal-book-cashapp-submit:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.customer-link-payment-options
+  .literal-book-cashapp-form
+  > p:not(.literal-book-cashapp-error) {
+  margin: 0;
+  color: #777;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.customer-link-payment-options .literal-book-cashapp-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.customer-link-payment-options .literal-book-cashapp-pending {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  color: #68615d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.customer-link-payment-options .literal-book-cashapp-pending svg {
+  width: 16px;
+  height: 16px;
+}
+
+.customer-link-payment-options .literal-book-cashapp-cancel {
+  border: 0;
+  background: transparent;
+  color: #b94636;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.customer-link-payment-options .literal-book-cashapp-cancel:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.customer-link-payment-options
+  .literal-book-cashapp-pending
+  .literal-book-cashapp-error {
+  flex-basis: 100%;
+}
+
+@media (max-width: 620px) {
+  .customer-link-payment-options .literal-book-payment-brand {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .customer-link-payment-options .literal-book-payment-brand > div:last-child {
+    max-width: 100%;
+  }
+
+  .customer-link-payment-options
+    .literal-book-payment-brand
+    > div:last-child
+    > span {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 540px) {
+  .customer-link-payment-options .literal-book-card-detail {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .customer-link-payment-options .literal-book-card-network-marks {
+    width: 100%;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin: 3px 0 0;
+  }
+}

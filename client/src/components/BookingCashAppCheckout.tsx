@@ -78,7 +78,8 @@ export function BookingCashAppCheckout({
     (destination: ExitDestination, notice?: string) => {
       preparedRef.current = null;
       setPrepared(null);
-      startingRef.current = false;
+      // Keep the completed exit guarded until active=false resets this ref.
+      startingRef.current = true;
       cancellingRef.current = false;
       exitRef.current = null;
       setCancelling(false);
