@@ -242,7 +242,7 @@ const EXTRA_RATES: Readonly<Record<string, number>> = {
   "sweep-garage": 30,
 };
 
-const FREQUENCY_OPTIONS: ReadonlyArray<{
+export const FREQUENCY_OPTIONS: ReadonlyArray<{
   id: Frequency;
   label: string;
   savings?: string;
@@ -1592,6 +1592,46 @@ function LiteralPageThree({
   );
 }
 
+export function BookingArrivalWindowSelector({
+  selectedTime,
+  onSelectTime,
+}: {
+  selectedTime: (typeof TIME_SLOTS)[number];
+  onSelectTime: (value: (typeof TIME_SLOTS)[number]) => void;
+}) {
+  return (
+  <section className="literal-book-schedule-field">
+    <label>Arrival window</label>
+    <div className="literal-book-slot-grid" role="radiogroup">
+      {TIME_SLOTS.map((time, index) => {
+        const selected = selectedTime === time;
+        return (
+          <button
+            type="button"
+            className={`literal-book-slot${selected ? " active" : ""}`}
+            key={time}
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onSelectTime(time)}
+          >
+            <b>{time}</b>
+            <small>
+              {index === 0
+                ? "Early arrival window"
+                : "Requested arrival window"}
+            </small>
+          </button>
+        );
+      })}
+    </div>
+    <p className="literal-book-slot-note">
+      Choose your preferred arrival window. Your selection does not
+      reserve a booking.
+    </p>
+  </section>
+  );
+}
+
 function LiteralPageFour({
   selectedDate,
   selectedTime,
@@ -1859,35 +1899,10 @@ function LiteralPageFour({
             </div>
           </section>
 
-          <section className="literal-book-schedule-field">
-            <label>Arrival window</label>
-            <div className="literal-book-slot-grid" role="radiogroup">
-              {TIME_SLOTS.map((time, index) => {
-                const selected = selectedTime === time;
-                return (
-                  <button
-                    type="button"
-                    className={`literal-book-slot${selected ? " active" : ""}`}
-                    key={time}
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => onSelectTime(time)}
-                  >
-                    <b>{time}</b>
-                    <small>
-                      {index === 0
-                        ? "Early arrival window"
-                        : "Requested arrival window"}
-                    </small>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="literal-book-slot-note">
-              Choose your preferred arrival window. Your selection does not
-              reserve a booking.
-            </p>
-          </section>
+          <BookingArrivalWindowSelector
+            selectedTime={selectedTime}
+            onSelectTime={onSelectTime}
+          />
 
           <label className="literal-book-address-field">
             <span>Service address</span>
