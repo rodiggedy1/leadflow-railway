@@ -99,7 +99,7 @@ describe("customer booking links reuse the current /book payment types", () => {
 
   it("reuses /book's actual thank-you component with the same saved-wallet and paid-Cash-App summaries", () => {
     expect(book).toContain("export function BookingSuccess(");
-    expect(page).toContain('import { BookingSuccess, timeLabelTo24Hour } from "./Book"');
+    expect(page).toContain('import { BookingArrivalWindowSelector, BookingSuccess, FREQUENCY_OPTIONS, timeLabelTo24Hour } from "./Book"');
     expect(page).toContain("return <BookingSuccess");
     expect(page).not.toContain('className="customer-link-success"');
     expect(options).toContain("onPaymentSaved(`${brand} ending in ${last4}`)");
