@@ -316,6 +316,17 @@ export const commandCenterRouter = router({
       const inboundVoiceCallActivityFilter = sql`EXISTS (
         SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id}
       )`;
+      // A call can be retained before its conversation exists, leaving lastCalledAt unset.
+      const retainedOutboundCallActivityFilter = sql`(
+        CHAR_LENGTH(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '')) >= 10
+        AND RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) IN (
+          SELECT DISTINCT RIGHT(REGEXP_REPLACE(ocr.callerPhone, '[^0-9]', ''), 10)
+          FROM openphone_call_recordings ocr
+          WHERE ocr.direction = 'outgoing'
+            AND UNIX_TIMESTAMP(ocr.callStartedAt) > 0
+            AND CHAR_LENGTH(REGEXP_REPLACE(ocr.callerPhone, '[^0-9]', '')) >= 10
+        )
+      )`;
       const csTouchedOutboundFilter = eq(conversationSessions.csQueue as any, "CS");
       const sessions = await db
         .select({
@@ -338,6 +349,7 @@ export const commandCenterRouter = router({
           and(or(inboundMessageActivityFilter, csTouchedOutboundFilter), isNull(conversationSessions.csResolvedAt)),
           inboundVoiceCallActivityFilter,
           isNotNull(conversationSessions.lastCalledAt),
+          and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt)),
         ));
 
       const augmented = sessions.map((session) => {
@@ -380,6 +392,27 @@ export const commandCenterRouter = router({
         if (!phone || !session.calledAt) continue;
         const current = latestCalledAtByPhone.get(phone) ?? 0;
         if (session.calledAt > current) latestCalledAtByPhone.set(phone, session.calledAt);
+      }
+      const calledPhoneDigits = Array.from(new Set(augmented
+        .map((session) => normalizePhone(session.leadPhone ?? ""))
+        .filter((phone) => phone.length === 10)));
+      if (calledPhoneDigits.length > 0) {
+        const rows = await db.execute(sql`
+          SELECT RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10) AS phone10,
+            MAX(UNIX_TIMESTAMP(callStartedAt) * 1000) AS latestCalledTs
+          FROM openphone_call_recordings
+          WHERE direction = 'outgoing'
+            AND CHAR_LENGTH(REGEXP_REPLACE(callerPhone, '[^0-9]', '')) >= 10
+            AND ${inArray(sql`RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10)`, calledPhoneDigits)}
+          GROUP BY RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10)
+        `);
+        for (const row of (rows as any)[0] as Array<{ phone10: string; latestCalledTs: number | string | null }>) {
+          const phone = String(row.phone10 ?? "");
+          const calledAt = Number(row.latestCalledTs);
+          if (!calledPhoneDigits.includes(phone) || !Number.isFinite(calledAt) || calledAt <= 0) continue;
+          const current = latestCalledAtByPhone.get(phone) ?? 0;
+          if (calledAt > current) latestCalledAtByPhone.set(phone, calledAt);
+        }
       }
       const sessionsByPhone = new Map<string, typeof augmented>();
       for (const session of augmented) {
