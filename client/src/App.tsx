@@ -12,6 +12,7 @@ import OriginalDashboardWorkspaceNav from "./components/OriginalDashboardWorkspa
 import "./pages/review-typography.css";
 import AdminPageGuard from "./components/AdminPageGuard";
 import PublicBookingHeader from "./components/PublicBookingHeader";
+import "./components/public-booking-cohesion.css";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -211,7 +212,7 @@ function AdminLeadsCRMExactLiveRoute() {
 }
 
 function PublicBookingRoute() {
-  return <><PublicBookingHeader /><Book /></>;
+  return <div className="public-booking-cohesion"><PublicBookingHeader /><Book /></div>;
 }
 
 function Router() {
