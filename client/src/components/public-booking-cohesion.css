@@ -1,0 +1,281 @@
+/* Approved dark-stone review. Every visual selector is confined to /book. */
+@font-face {
+  font-family: "MIB Book Poppins";
+  src: url("../assets/book-cohesion/poppins-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "MIB Book Poppins";
+  src: url("../assets/book-cohesion/poppins-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "MIB Book Poppins";
+  src: url("../assets/book-cohesion/poppins-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "MIB Book Poppins";
+  src: url("../assets/book-cohesion/poppins-800.woff2") format("woff2");
+  font-weight: 800;
+  font-display: swap;
+}
+.public-booking-cohesion {
+  background-color: #201f1d;
+  background-image:
+    linear-gradient(rgba(15, 16, 14, 0.56), rgba(15, 16, 14, 0.56)),
+    url("../assets/book-cohesion/modern-home-dark-stone.webp");
+  background-position: center, center;
+  background-size: cover, cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed, fixed;
+}
+.public-booking-cohesion .public-booking-header {
+  height: 68px;
+  min-height: 0;
+  background: #fff;
+  color: #111;
+  border-bottom: 1px solid rgba(17, 17, 17, 0.08);
+  font-family: "MIB Book Poppins", Arial, sans-serif;
+  box-sizing: border-box;
+}
+.public-booking-cohesion .public-booking-header__inner {
+  width: auto;
+  max-width: 1044px;
+  margin: auto;
+  padding: 0 2px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.public-booking-cohesion .public-booking-header__brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: #111;
+  font-size: 15px;
+  line-height: 1.1;
+  letter-spacing: -0.4px;
+  text-decoration: none;
+}
+.public-booking-cohesion .public-booking-header__brand img {
+  width: 186px;
+  height: 34px;
+  object-fit: contain;
+  display: block;
+}
+.public-booking-cohesion .public-booking-header__assurance {
+  display: flex;
+  align-items: center;
+  gap: 23px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #696969;
+  white-space: normal;
+}
+.public-booking-cohesion .public-booking-header__assurance a,
+.public-booking-cohesion .public-booking-header__assurance span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+.public-booking-cohesion .public-booking-header__assurance svg {
+  width: 14px;
+  height: 14px;
+  color: currentColor;
+  stroke-width: 2;
+}
+.public-booking-cohesion
+  .public-booking-header__assurance
+  .public-booking-header__help {
+  color: #111;
+  font-weight: 700;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  letter-spacing: normal;
+}
+.public-booking-cohesion [class^="literal-book-page"],
+.public-booking-cohesion .literal-book-side,
+.public-booking-cohesion .literal-book-main {
+  font-family: "MIB Book Poppins", Arial, sans-serif !important;
+}
+.public-booking-cohesion [class^="literal-book-page"] {
+  background: transparent !important;
+  color: #111;
+}
+.public-booking-cohesion .literal-book-shell {
+  border-color: transparent !important;
+  background-clip: padding-box;
+}
+.public-booking-cohesion .literal-book-side {
+  background: #151515 !important;
+  color: #fff !important;
+}
+/* CSS-only brand display keeps Book.tsx and its accessible visit link unchanged. */
+.public-booking-cohesion .literal-book-logo {
+  display: block;
+  height: 69px;
+  color: #fff !important;
+  font-size: 0;
+}
+.public-booking-cohesion .literal-book-logo > span,
+.public-booking-cohesion .literal-book-logo > .literal-book-subbrand {
+  display: none;
+}
+.public-booking-cohesion .literal-book-logo::before {
+  content: "";
+  display: block;
+  width: 186px;
+  max-width: 100%;
+  height: 34px;
+  background: url("../assets/book-cohesion/maids-in-black-logo.svg") left
+    center/contain no-repeat;
+  filter: brightness(0) invert(1);
+}
+.public-booking-cohesion .literal-book-logo::after {
+  content: "ONLINE BOOKING";
+  display: block;
+  margin-top: 14px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2.2px;
+  color: #bcbcbc;
+}
+.public-booking-cohesion .literal-book-brand-intro {
+  border-top-color: #ffffff24 !important;
+}
+.public-booking-cohesion .literal-book-accent-line {
+  background: #ff684c !important;
+}
+.public-booking-cohesion .literal-book-promise {
+  color: #f7f7f7 !important;
+  font-weight: 700;
+}
+.public-booking-cohesion .literal-book-promise em {
+  color: #ff684c !important;
+}
+.public-booking-cohesion .literal-book-support {
+  color: #aaa !important;
+}
+.public-booking-cohesion .literal-book-navitem {
+  color: #999 !important;
+}
+.public-booking-cohesion .literal-book-navitem.active {
+  background: #242424 !important;
+  color: #fff !important;
+}
+.public-booking-cohesion .literal-book-navitem.done {
+  color: #fff !important;
+}
+.public-booking-cohesion .literal-book-num {
+  border-color: #555 !important;
+}
+.public-booking-cohesion .literal-book-navitem.active .literal-book-num {
+  background: #ff684c !important;
+  color: #111 !important;
+}
+.public-booking-cohesion .literal-book-main h1 {
+  font-family: "MIB Book Poppins", Arial, sans-serif !important;
+  color: #111 !important;
+  font-weight: 800;
+}
+.public-booking-cohesion .literal-book-lead,
+.public-booking-cohesion .literal-book-choice small {
+  color: #696969 !important;
+}
+.public-booking-cohesion .literal-book-eyebrow {
+  color: #b84632 !important;
+}
+.public-booking-cohesion .literal-book-field > label {
+  color: #2b2b2b !important;
+}
+.public-booking-cohesion .literal-book-choice.selected {
+  background: #fff6f2 !important;
+  border-color: #ff684c !important;
+}
+.public-booking-cohesion .literal-book-choice.selected .literal-book-toggle {
+  background: #ff684c !important;
+  border-color: #ff684c !important;
+  color: #111 !important;
+}
+.public-booking-cohesion .literal-book-actions button:not(.literal-book-back) {
+  background: #ff684c !important;
+  color: #111 !important;
+}
+.public-booking-cohesion
+  .literal-book-actions
+  button:not(.literal-book-back):hover {
+  background: #f85d41 !important;
+}
+.public-booking-cohesion .literal-book-counter-actions button {
+  color: #b84632 !important;
+  background: #fffaf6 !important;
+}
+.public-booking-cohesion .literal-book-clock {
+  background: #fffaf6 !important;
+  border-color: #f1e8e1 !important;
+}
+.public-booking-cohesion .literal-book-clock-icon {
+  color: #b84632 !important;
+  background: #fff0e9 !important;
+}
+.public-booking-cohesion :focus-visible {
+  outline-color: #ff684c !important;
+}
+@media (max-width: 1100px) {
+  .public-booking-cohesion .public-booking-header__inner {
+    padding: 0 24px;
+  }
+}
+@media (max-width: 800px) {
+  .public-booking-cohesion .public-booking-header {
+    height: 64px;
+  }
+  .public-booking-cohesion .public-booking-header__inner {
+    padding: 0 20px;
+    gap: 10px;
+  }
+  .public-booking-cohesion .public-booking-header__brand img {
+    width: 153px;
+    height: 28px;
+  }
+  .public-booking-cohesion .public-booking-header__assurance {
+    gap: 12px;
+  }
+  .public-booking-cohesion .public-booking-header__back,
+  .public-booking-cohesion .public-booking-header__secure {
+    display: none !important;
+  }
+  .public-booking-cohesion
+    .public-booking-header__assurance
+    .public-booking-header__help {
+    font-size: 10px;
+  }
+  .public-booking-cohesion .public-booking-header__assurance svg {
+    width: 12px;
+    height: 12px;
+  }
+  .public-booking-cohesion .literal-book-logo {
+    height: auto;
+  }
+  .public-booking-cohesion .literal-book-logo::before {
+    width: 155px;
+    height: 28px;
+  }
+  .public-booking-cohesion .literal-book-logo::after {
+    margin-top: 5px;
+    font-size: 8px;
+  }
+}
