@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
@@ -17,13 +18,14 @@ const bodyStart =
 const bodyEnd = source.indexOf("\n    }),", bodyStart);
 const body = source.slice(bodyStart, bodyEnd);
 // Execute the real query handler without importing unrelated router side effects.
-const compiled = ts.transpileModule(`const run = async () => {${body}\n};`, {
+function handlerFactory(handlerBody: string) {
+const compiled = ts.transpileModule(`const run = async () => {${handlerBody}\n};`, {
   compilerOptions: {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.None,
   },
 }).outputText;
-const makeHandler = new Function(
+return new Function(
   "getDb",
   "conversationSessions",
   "and",
@@ -35,6 +37,15 @@ const makeHandler = new Function(
   "sql",
   `${compiled}\nreturn run;`
 );
+}
+const makeHandler = handlerFactory(body);
+// Restoration changes only the actual source flag, never a parallel handler.
+const restoredHandler = handlerFactory(body.replace(
+  "const pauseRetainedCallReadsInProduction = true;",
+  "const pauseRetainedCallReadsInProduction = false;"
+));
+beforeEach(() => vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "test"));
+afterEach(() => vi.unstubAllEnvs());
 const dialect = new MySqlDialect();
 const normalize = (phone: string) => phone.replace(/\D/g, "").slice(-10);
 const callAt = Date.parse("2026-11-04T20:33:00.000Z");
@@ -84,18 +95,21 @@ async function run(
     rawCallRows?: Array<{ phone10: string; latestCalledTs: unknown }>;
     voiceRows?: Array<{ sessionId: number; latestCallTs: number }>;
     teamPhones?: string[];
-  } = {}
+  } = {},
+  factory = makeHandler
 ) {
   const sessions = options.sessions ?? [session()];
   const recordings = options.recordings ?? [];
   const filters: string[] = [];
+  const filterParams: unknown[][] = [];
   const queries: Array<{ sql: string; params: unknown[] }> = [];
   const db = {
-    select: vi.fn(() => ({
+    select: vi.fn((selection: Record<string, unknown>) => ({
       from: vi.fn(() => ({
         where: vi.fn(async predicate => {
           const query = dialect.sqlToQuery(predicate);
           filters.push(query.sql);
+          filterParams.push(query.params);
           // SQL contract assertions below verify the actual outgoing-only predicate.
           return sessions.filter(
             s =>
@@ -110,7 +124,9 @@ async function run(
                     normalize(r.phone).length === 10 &&
                     normalize(r.phone) === normalize(s.leadPhone ?? "")
                 ))
-          );
+          ).map(s => Object.fromEntries(
+            Object.keys(selection).map(key => [key, s[key as keyof Session]])
+          ));
         }),
       })),
     })),
@@ -158,7 +174,7 @@ async function run(
       throw new Error("No writes allowed");
     }),
   };
-  const handler = makeHandler(
+  const handler = factory(
     async () => db,
     conversationSessions,
     and,
@@ -173,6 +189,25 @@ async function run(
   expect(db.insert).not.toHaveBeenCalled();
   expect(db.update).not.toHaveBeenCalled();
   expect(db.delete).not.toHaveBeenCalled();
+  // Inspect real compiled SQL, not just fixture eligibility.
+  expect(filters).toHaveLength(1);
+  expect(filters[0]).toContain("JSON_SEARCH");
+  expect(filters[0]).toContain("'$[*].role'");
+  expect(filters[0]).toContain("`csQueue` = ?");
+  expect(filters[0]).toContain("`csResolvedAt` is null");
+  expect(filters[0]).toContain("FROM voice_calls vc WHERE vc.sessionId");
+  expect(filters[0]).toContain("`lastCalledAt` is not null");
+  expect(filters[0]).toContain("'one', 'user'");
+  expect(filters[0]).toContain("'one', 'customer'");
+  expect(filterParams).toEqual([["CS"]]);
+  const paused = factory === makeHandler && process.env.RAILWAY_ENVIRONMENT_NAME === "production";
+  expect(filters[0].includes("openphone_call_recordings")).toBe(!paused);
+  const recordingQueries = queries.filter(q => q.sql.includes("FROM openphone_call_recordings"));
+  const eligibleFullPhone = sessions.some(s =>
+    (s.baseEligible || (!paused && s.csResolvedAt === null && recordings.some(r => r.direction === "outgoing" && Number(r.callStartedAt) > 0 && normalize(r.phone) === normalize(s.leadPhone ?? "")))) && normalize(s.leadPhone ?? "").length === 10
+  );
+  expect(recordingQueries).toHaveLength(!paused && eligibleFullPhone ? 1 : 0);
+  expect(queries.every(q => /^\s*SELECT\b/i.test(q.sql))).toBe(true);
   return { result, queries, filters, db };
 }
 
@@ -421,5 +456,89 @@ describe("Command Chat retained outgoing Called marker", () => {
     ]) {
       expect(body).not.toContain(prohibited);
     }
+  });
+});
+
+describe("Production-only retained-call read pause", () => {
+  it("matches the frozen original handler byte-for-byte after only the approved reversals", () => {
+    const guard = [
+      "      // Temporary Production mitigation: pause only the two retained lead-card recording reads.",
+      "      // Set this local flag to false to restore them; other environments remain unchanged.",
+      "      const pauseRetainedCallReadsInProduction = true;",
+      "      const retainedCallReadsEnabled = !(pauseRetainedCallReadsInProduction",
+      '        && process.env.RAILWAY_ENVIRONMENT_NAME === "production");',
+    ].join("\n") + "\n";
+    expect(body.split(guard)).toHaveLength(2);
+    const membership = "retainedCallReadsEnabled ? and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt)) : undefined";
+    const late = "if (retainedCallReadsEnabled && calledPhoneDigits.length > 0)";
+    expect(body.split(membership)).toHaveLength(2);
+    expect(body.split(late)).toHaveLength(2);
+    const original = body.replace(guard, "")
+      .replace(membership, "and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt))")
+      .replace(late, "if (calledPhoneDigits.length > 0)");
+    expect(createHash("sha256").update(original).digest("hex"))
+      .toBe("617fdd7e0e49fe751e4dfb637d9aa41194d033f42702d6ddb773433eb92396c2");
+  });
+
+  it.each(["false", "true", undefined])("pauses both actual recording reads in production with PREVIEW_MODE=%s", async previewMode => {
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "production");
+    vi.stubEnv("PREVIEW_MODE", previewMode);
+    const { result, filters, queries } = await run({
+      sessions: [session(), session({ id: 2, leadPhone: "+13025551234", baseEligible: false, csQueue: null })],
+      recordings: [recording(), recording({ phone: "+13025551234" })],
+    });
+    expect(result.map(r => r.id)).toEqual([14100069]);
+    expect(result[0].calledAt).toBeNull();
+    expect(filters[0]).not.toContain("openphone_call_recordings");
+    expect(queries.some(q => q.sql.includes("openphone_call_recordings"))).toBe(false);
+    expect(queries.some(q => q.sql.includes("FROM voice_calls"))).toBe(true);
+    expect(queries.some(q => q.sql.includes("FROM cleaner_profiles"))).toBe(true);
+  });
+
+  it.each(["preview", "test", undefined])("preserves both recording reads outside production (%s)", async environment => {
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", environment);
+    const { result, filters, queries } = await run({
+      sessions: [session({ baseEligible: false, csQueue: null })], recordings: [recording()],
+    });
+    expect(result[0].calledAt).toBe(callAt);
+    expect(filters[0]).toContain("SELECT DISTINCT RIGHT(REGEXP_REPLACE(ocr.callerPhone");
+    expect(queries.filter(q => q.sql.includes("FROM openphone_call_recordings"))).toHaveLength(1);
+  });
+
+  it("preserves voice canonical choice, manual propagation, roles, team/CS history, ordering and 19-field shape in production", async () => {
+    const options = {
+      sessions: [
+        session({ id: 1, lastMessageTs: 100, lastCalledAt: new Date(callAt + 1000) }),
+        session({ id: 2, lastMessageTs: 200, lastMessageRole: "user" }),
+        session({ id: 3, leadPhone: "+13025551234", csQueue: "Teams", lastMessageTs: 400 }),
+        session({ id: 4, leadPhone: "+13025551235", csQueue: "CS", lastMessageTs: 300 }),
+        session({ id: 5, leadPhone: "+13025551236", csQueue: null, lastMessageTs: 50 }),
+      ],
+      voiceRows: [{ sessionId: 2, latestCallTs: 500 }],
+      recordings: [recording()], teamPhones: ["3025551236"],
+    };
+    const normal = await run(options);
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "production");
+    const paused = await run(options);
+    expect(paused.result).toEqual(normal.result);
+    expect(paused.result.map(r => r.id)).toEqual([3, 4, 2, 5]);
+    expect(paused.result[2]).toMatchObject({ calledAt: callAt + 1000, lastCalledAt: null, lastSenderRole: "user", hasUnanswered: true, receivedAt: options.sessions[1].createdAt.getTime() });
+    expect(paused.result[0]).toMatchObject({ personType: "team", lastSenderRole: "assistant", hasUnanswered: false });
+    expect(paused.result[1].personType).toBe("customer");
+    expect(paused.result[3].personType).toBe("team");
+    for (const row of paused.result) expect(Object.keys(row).sort()).toEqual([
+      "id", "leadPhone", "leadName", "leadSource", "csQueue", "aiSummary", "lastInboundPhoneNumberId", "lastMessageText", "lastMessageTs", "lastMessageRole", "lastCalledAt", "createdAt", "updatedAt", "lastMsgTs", "calledAt", "receivedAt", "hasUnanswered", "lastSenderRole", "personType",
+    ].sort());
+  });
+
+  it("restores both reads by flipping only the actual source flag and equals the normal environment", async () => {
+    const options = { sessions: [session({ baseEligible: false, csQueue: null })], recordings: [recording()] };
+    const normal = await run(options);
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "production");
+    const restored = await run(options, restoredHandler);
+    expect(restored.result).toEqual(normal.result);
+    expect(restored.filters).toEqual(normal.filters);
+    expect(restored.queries).toEqual(normal.queries);
+    expect(restored.result[0].calledAt).toBe(callAt);
   });
 });

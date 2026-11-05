@@ -306,6 +306,11 @@ export const commandCenterRouter = router({
 
   listCommandChatInbox: agentProcedure
     .query(async () => {
+      // Temporary Production mitigation: pause only the two retained lead-card recording reads.
+      // Set this local flag to false to restore them; other environments remain unchanged.
+      const pauseRetainedCallReadsInProduction = true;
+      const retainedCallReadsEnabled = !(pauseRetainedCallReadsInProduction
+        && process.env.RAILWAY_ENVIRONMENT_NAME === "production");
       const db = await getDb();
       if (!db) throw new Error("Database unavailable");
 
@@ -349,7 +354,7 @@ export const commandCenterRouter = router({
           and(or(inboundMessageActivityFilter, csTouchedOutboundFilter), isNull(conversationSessions.csResolvedAt)),
           inboundVoiceCallActivityFilter,
           isNotNull(conversationSessions.lastCalledAt),
-          and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt)),
+          retainedCallReadsEnabled ? and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt)) : undefined,
         ));
 
       const augmented = sessions.map((session) => {
@@ -396,7 +401,7 @@ export const commandCenterRouter = router({
       const calledPhoneDigits = Array.from(new Set(augmented
         .map((session) => normalizePhone(session.leadPhone ?? ""))
         .filter((phone) => phone.length === 10)));
-      if (calledPhoneDigits.length > 0) {
+      if (retainedCallReadsEnabled && calledPhoneDigits.length > 0) {
         const rows = await db.execute(sql`
           SELECT RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10) AS phone10,
             MAX(UNIX_TIMESTAMP(callStartedAt) * 1000) AS latestCalledTs
