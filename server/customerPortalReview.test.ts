@@ -48,7 +48,9 @@ describe("LeadFlow-owned Customer Portal review workflow", () => {
     expect(signoff).toContain("view=review");
     expect(signoff).toContain("getOrCreateCustomerPortalMagicLink");
     expect(signoff).toContain("Hi ${firstName(job.customerName)}! ✨ ${teamDisplay} just finished your clean — your home is sparkling!");
-    expect(signoff).toContain("Leave a 5-star Google review and we'll add a $50 tip to ${teamDisplay}:");
+    expect(signoff).toContain("Please leave a review for ${teamDisplay}:");
+    expect(signoff).not.toContain("$50");
+    expect(signoff).not.toContain("5-star Google review");
     expect(cleanerUi).not.toContain('label: "Job complete"');
     expect(handoff).toContain('requestedView === "review" ? "/my-home?view=review"');
   });

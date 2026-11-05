@@ -54,7 +54,7 @@ async function sendLeadflowCompletionReviewSms(leadflowJobId: number): Promise<v
   const teamDisplay = job.teamName ?? "your team";
   const body =
     `Hi ${firstName(job.customerName)}! ✨ ${teamDisplay} just finished your clean — your home is sparkling!\n\n` +
-    `Leave a 5-star Google review and we'll add a $50 tip to ${teamDisplay}:`;
+    `Please leave a review for ${teamDisplay}:`;
   const result = await sendSms({
     to: job.customerPhone,
     content: `${body}\n\nOpen My Home: ${portalLink}`,
