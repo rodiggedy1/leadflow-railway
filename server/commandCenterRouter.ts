@@ -315,15 +315,12 @@ export const commandCenterRouter = router({
         SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id}
       )`;
       // A call can be retained before its conversation exists, leaving lastCalledAt unset.
-      const retainedOutboundCallActivityFilter = sql`(
-        CHAR_LENGTH(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '')) >= 10
-        AND RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) IN (
-          SELECT DISTINCT RIGHT(REGEXP_REPLACE(ocr.callerPhone, '[^0-9]', ''), 10)
-          FROM openphone_call_recordings ocr
-          WHERE ocr.direction = 'outgoing'
-            AND UNIX_TIMESTAMP(ocr.callStartedAt) > 0
-            AND CHAR_LENGTH(REGEXP_REPLACE(ocr.callerPhone, '[^0-9]', '')) >= 10
-        )
+      const retainedOutboundCallActivityFilter = sql`EXISTS (
+        SELECT 1
+        FROM openphone_call_recordings ocr
+        WHERE ocr.direction = 'outgoing'
+          AND (CASE WHEN CHAR_LENGTH(REGEXP_REPLACE(ocr.callerPhone, '[^0-9]', '')) >= 10 THEN RIGHT(REGEXP_REPLACE(ocr.callerPhone, '[^0-9]', ''), 10) ELSE NULL END) = (CASE WHEN CHAR_LENGTH(REGEXP_REPLACE(conversation_sessions.leadPhone, '[^0-9]', '')) >= 10 THEN RIGHT(REGEXP_REPLACE(conversation_sessions.leadPhone, '[^0-9]', ''), 10) ELSE NULL END)
+          AND UNIX_TIMESTAMP(ocr.callStartedAt) > 0
       )`;
       const csTouchedOutboundFilter = eq(conversationSessions.csQueue as any, "CS");
       const sessions = await db

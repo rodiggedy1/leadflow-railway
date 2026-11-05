@@ -274,12 +274,16 @@ describe("Command Chat retained outgoing Called marker", () => {
     expect(filters[0]).toContain("UNIX_TIMESTAMP(ocr.callStartedAt) > 0");
     expect(filters[0]).toContain("CHAR_LENGTH(REGEXP_REPLACE");
     expect(filters[0]).toContain(
-      "SELECT DISTINCT RIGHT(REGEXP_REPLACE(ocr.callerPhone"
+      "CASE WHEN CHAR_LENGTH(REGEXP_REPLACE(ocr.callerPhone"
     );
     const membershipSubquery = body.slice(
-      body.indexOf("SELECT DISTINCT"),
+      body.indexOf("const retainedOutboundCallActivityFilter"),
       body.indexOf("const csTouchedOutboundFilter")
     );
+    expect(membershipSubquery).toContain("sql`EXISTS (");
+    expect(membershipSubquery).toContain("SELECT 1");
+    expect(membershipSubquery).toContain("REGEXP_REPLACE(conversation_sessions.leadPhone");
+    expect(membershipSubquery).not.toContain("SELECT DISTINCT");
     expect(membershipSubquery).not.toContain("conversationSessions.");
     expect(body).toContain(
       "and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt))"
