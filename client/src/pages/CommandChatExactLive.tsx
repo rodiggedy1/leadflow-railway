@@ -74,6 +74,9 @@ import "./command-chat-exact-live.css";
 type ModalKind = "issue" | "reminder" | "pin" | "booking" | null;
 type ChannelKey = "command" | "urgent" | "dispatch" | "general" | "cleaners";
 const MAX_MANUAL_BOOKING_DOLLARS = Math.floor(Number.MAX_SAFE_INTEGER / 100);
+// Temporary Preview diagnostic: set true to restore this page's email inbox.
+// Gmail services and the separate Email workspace remain unchanged.
+const COMMAND_CHAT_EMAIL_INBOX_ENABLED = false;
 type ChannelMessage = {
   id: number;
   ts: number;
@@ -1124,7 +1127,7 @@ export default function CommandChatExactLive() {
   );
   const { data: emailInboxData, isLoading: emailInboxLoading } = trpc.opsChat.listEmailInboxThreads.useQuery(
     undefined,
-    { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
+    { enabled: isAuthenticated && COMMAND_CHAT_EMAIL_INBOX_ENABLED, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: COMMAND_CHAT_EMAIL_INBOX_ENABLED ? 15_000 : false, ...(!COMMAND_CHAT_EMAIL_INBOX_ENABLED ? { retry: false } : {}) },
   );
   const smsInbox = useMemo(() => (smsInboxRows as unknown as SmsInboxConversation[])
     .filter((conversation) => Boolean(conversation.leadPhone))
@@ -1140,7 +1143,7 @@ export default function CommandChatExactLive() {
     ].some((value) => value?.toLowerCase().includes(query)));
   }, [smsInbox, smsSearch]);
   const emailInbox = useMemo(
-    () => [...((emailInboxData?.threads ?? []) as EmailInboxThread[])].sort((left, right) => right.lastMessageAt - left.lastMessageAt),
+    () => COMMAND_CHAT_EMAIL_INBOX_ENABLED ? [...((emailInboxData?.threads ?? []) as EmailInboxThread[])].sort((left, right) => right.lastMessageAt - left.lastMessageAt) : [],
     [emailInboxData?.threads],
   );
   const visibleEmailInbox = useMemo(() => {
@@ -1325,13 +1328,13 @@ export default function CommandChatExactLive() {
     { agentId: selectedAgentPerformanceId ?? 0, agentName: selectedAgentPerformanceName, range: agentPerformanceRange }, "query"),
   [agentPerformanceRange, selectedAgentPerformanceId, selectedAgentPerformanceName]);
   const activeCommandQueryKeys = useMemo(() => {
-    const keys: QueryKey[] = Object.values(commandQueryKeys);
+    const keys: QueryKey[] = Object.values(commandQueryKeys).filter((key) => COMMAND_CHAT_EMAIL_INBOX_ENABLED || key !== commandQueryKeys.emailInbox);
     if (threadId !== null) keys.push(getQueryKey(trpc.opsChat.getThreadReplies, { parentId: threadId }, "query"));
     if (leftTeamSmsSessionIds.length) keys.push(getQueryKey(trpc.commandCenter.listInboundTeamSmsEvents, { sessionIds: leftTeamSmsSessionIds }, "query"));
     if (smsInboxFetched && commandLeadSessionIds.length) keys.push(leadStatusQueryKey);
     if (selectedAgentPerformanceId !== null && selectedAgentPerformanceId > 0 && selectedAgentPerformanceName) keys.push(selectedPerformanceQueryKey);
     if (selectedSmsConversation && selectedSmsConversation.id > 0) keys.push(getQueryKey(trpc.leads.getCsConversation, { sessionId: selectedSmsConversation.id }, "query"));
-    if (selectedEmailThreadId) {
+    if (COMMAND_CHAT_EMAIL_INBOX_ENABLED && selectedEmailThreadId) {
       keys.push(getQueryKey(trpc.gmail.getThread, { threadId: selectedEmailThreadId }, "query"));
       keys.push(getQueryKey(trpc.opsChat.getEmailDraftByThreadId, { threadId: selectedEmailThreadId }, "query"));
     }
@@ -1699,6 +1702,7 @@ export default function CommandChatExactLive() {
       requestCommandRefresh(leadStatusQueryKey);
     },
     onGmailNewMessages: () => {
+      if (!COMMAND_CHAT_EMAIL_INBOX_ENABLED) return;
       requestCommandRefresh(commandQueryKeys.emailInbox);
       if (selectedEmailThreadId) {
         requestCommandRefresh(getQueryKey(trpc.gmail.getThread, { threadId: selectedEmailThreadId }, "query"));
@@ -1829,7 +1833,7 @@ export default function CommandChatExactLive() {
           <aside className="ccc-command-panel ccc-left-panel">
             <div className="ccc-left-section ccc-conversations-section ccc-live-left-rail">
               <header className="ccc-live-sms-header">
-                <div className="ccc-live-sms-title"><span><strong>{leftRailTab === "email" ? "Email" : "SMS"}</strong><b>{leftRailTab === "email" ? emailInbox.length : smsInbox.length}</b></span><a href={leftRailTab === "email" ? "/admin/emails" : "/admin/sms"} aria-label={leftRailTab === "email" ? "Open Email workspace" : "Open SMS workspace to compose a new message"}><SquarePen /></a></div>
+                <div className="ccc-live-sms-title"><span><strong>{leftRailTab === "email" ? "Email" : "SMS"}</strong><b>{leftRailTab === "email" ? COMMAND_CHAT_EMAIL_INBOX_ENABLED ? emailInbox.length : "—" : smsInbox.length}</b></span><a href={leftRailTab === "email" ? "/admin/emails" : "/admin/sms"} aria-label={leftRailTab === "email" ? "Open Email workspace" : "Open SMS workspace to compose a new message"}><SquarePen /></a></div>
                 <div className="ccc-live-sms-filter-tabs" role="tablist" aria-label="Command Chat conversation views">
                   <button type="button" className={leftRailTab === "sms" ? "active" : ""} aria-selected={leftRailTab === "sms"} onClick={() => { setLeftRailTab("sms"); setSelectedEmailThreadId(null); }}>SMS</button><button type="button" className={leftRailTab === "email" ? "active" : ""} aria-selected={leftRailTab === "email"} onClick={() => { setLeftRailTab("email"); setSelectedSmsConversation(null); }}>Email</button>
                 </div>
@@ -1838,7 +1842,7 @@ export default function CommandChatExactLive() {
               <div className="ccc-live-left-rail-content">
                 {leftRailTab === "email" ? <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Email conversations">
                   {visibleEmailInbox.map((thread) => <EmailInboxRow thread={thread} key={thread.threadId} onOpen={() => setSelectedEmailThreadId(thread.threadId)} />)}
-                  {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
+                  {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{!COMMAND_CHAT_EMAIL_INBOX_ENABLED ? "Email inbox temporarily unavailable during Preview diagnostics." : emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
                 </div> : <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
                   {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />)}
                   {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
@@ -1884,7 +1888,7 @@ export default function CommandChatExactLive() {
       </section>
       {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} lead={selectedConversationLead} onNotice={showNotice} onRefreshConversation={(sessionId) => { void reconcileCommandQuery(commandQueryKeys.inbox); void reconcileCommandQuery(getQueryKey(trpc.leads.getCsConversation, { sessionId }, "query")); }} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadDetail(null); }} />}
       {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} onUnclaim={unclaimLeadFromQueue} claimPending={claimCommandLead.isPending || unclaimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending || unbookLeadMutation.isPending} onMarkBooked={requestLeadBooked} onUnbook={unbookLeadFromQueue} onOpenSms={openSmsDrawerFromLead} onTestBridge={testBridgeFromQueue} bridgePending={testBridgeMutation.isPending} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
-      {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
+      {COMMAND_CHAT_EMAIL_INBOX_ENABLED && selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       {activeSuperAlert && <SuperAlertOverlay alert={activeSuperAlert} pending={acknowledgeSuperAlert.isPending} onReply={() => { acknowledgeSuperAlert.mutate({ alertId: activeSuperAlert.id }); setThreadId(activeSuperAlert.messageId); }} />}
