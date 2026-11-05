@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { captureCommandChatApiDebugEligibility, createCommandChatApiDebugLink, isCommandChatApiDebugSuppressed } from "@/lib/commandChatApiDebug";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
@@ -17,6 +18,7 @@ const queryClient = new QueryClient({
       // Never retry on 429 (rate limit) — retrying makes it worse.
       // Allow 1 retry on other transient errors.
       retry: (failureCount, error) => {
+        if (isCommandChatApiDebugSuppressed(error)) return false;
         if (error instanceof TRPCClientError) {
           if (error.message === "Rate exceeded.") return false;
           if (error.data?.httpStatus === 429) return false;
@@ -47,6 +49,7 @@ const EXPECTED_AUTH_ERRORS = new Set([
 ]);
 
 const isExpectedAuthError = (error: unknown): boolean => {
+  if (isCommandChatApiDebugSuppressed(error)) return true;
   if (!(error instanceof TRPCClientError)) return false;
   return EXPECTED_AUTH_ERRORS.has(error.message);
 };
@@ -109,15 +112,18 @@ const _origInvalidate = queryClient.invalidateQueries.bind(queryClient);
 
 const trpcClient = trpc.createClient({
   links: [
+    createCommandChatApiDebugLink(),
     httpBatchLink({
       url: "/api/trpc",
       methodOverride: "POST",
       transformer: superjson,
-      fetch(input, init) {
-        return globalThis.fetch(input, {
+      async fetch(input, init) {
+        const response = await globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
         });
+        captureCommandChatApiDebugEligibility(response, input);
+        return response;
       },
     }),
   ],

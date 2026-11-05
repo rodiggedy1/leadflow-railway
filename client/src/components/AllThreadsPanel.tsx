@@ -14,6 +14,7 @@ import { CheckCheck, MessageSquare, Loader2, MessageCircle } from "lucide-react"
 import { trpc } from "@/lib/trpc";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { senderHex } from "@/lib/senderColor";
+import { useCommandChatApiDebug } from "@/lib/commandChatApiDebug";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -131,16 +132,25 @@ export default function AllThreadsPanel({
   onClose,
   onOpenThread,
 }: AllThreadsPanelProps) {
-  const { data: threads = [], isLoading } = trpc.opsChat.listActiveThreads.useQuery(undefined, {
-    enabled: open,
-    refetchInterval: open ? 15_000 : false,
+  const { controller } = useCommandChatApiDebug();
+  const activeThreadsEnabled = controller.isEnabled("opsChat.listActiveThreads");
+  const { data: threads = [], isLoading, dataUpdatedAt } = trpc.opsChat.listActiveThreads.useQuery(undefined, {
+    enabled: open && activeThreadsEnabled,
+    refetchInterval: open && activeThreadsEnabled ? 15_000 : false,
+    ...(!activeThreadsEnabled ? { refetchOnWindowFocus: false as const, refetchOnReconnect: false as const } : {}),
+    ...(controller.eligible ? { retry: (failureCount: number, error: unknown) => controller.retry("opsChat.listActiveThreads", failureCount, error) } : {}),
+    trpc: { context: controller.context },
   });
   const utils = trpc.useUtils();
   const markThreadRead = trpc.opsChat.markRead.useMutation({
-    onSuccess: () => utils.opsChat.listActiveThreads.invalidate(),
+    onSuccess: () => {
+      if (controller.isEnabled("opsChat.listActiveThreads")) return utils.opsChat.listActiveThreads.invalidate();
+    },
   });
   const markAllThreadsRead = trpc.opsChat.markAllActiveThreadsRead.useMutation({
-    onSuccess: () => utils.opsChat.listActiveThreads.invalidate(),
+    onSuccess: () => {
+      if (controller.isEnabled("opsChat.listActiveThreads")) return utils.opsChat.listActiveThreads.invalidate();
+    },
   });
 
   const unreadCount = (threads as ThreadSummary[]).filter(t => t.hasUnread).length;
@@ -163,6 +173,9 @@ export default function AllThreadsPanel({
           <SheetTitle className="flex items-center gap-2 text-sm text-[#eeeeef]">
             <MessageSquare className="w-4 h-4 text-[#b8a8ff]" />
             Threads
+            {!activeThreadsEnabled && <span className="text-[10px] font-normal text-amber-300" title={`OFF — existing request may still finish${dataUpdatedAt ? ` · Last success ${new Date(dataUpdatedAt).toLocaleTimeString()}` : ""}`}>
+              OFF · {dataUpdatedAt ? "last known" : "unavailable"}
+            </span>}
             {unreadCount > 0 ? (
               <span className="px-1.5 py-0.5 rounded-full bg-[#4c9dff] text-white text-[10px] font-bold leading-none">
                 {unreadCount} unread
@@ -187,7 +200,11 @@ export default function AllThreadsPanel({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto min-h-0">
-          {isLoading ? (
+          {!activeThreadsEnabled && threads.length === 0 ? (
+            <div className="px-6 py-16 text-center text-sm text-[#c0c0c6]" role="status">
+              {dataUpdatedAt ? "Threads paused — last known list is empty." : "Threads paused — no cached list available."}
+            </div>
+          ) : isLoading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-5 h-5 animate-spin text-[#8d8d95]" />
             </div>

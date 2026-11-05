@@ -51,6 +51,8 @@ import { getQueryKey } from "@trpc/react-query";
 import { hashKey, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useCommandChatLeadStatuses } from "@/hooks/useCommandChatLeadStatuses";
 import { createCommandChatRefreshManager } from "@/lib/commandChatRefresh";
+import { CommandChatApiDebugProvider, useCommandChatApiDebugScope, useCommandChatApiDebug, useCommandChatApiDebugServerEligibility } from "@/lib/commandChatApiDebug";
+import CommandChatApiDebugPanel from "@/components/CommandChatApiDebugPanel";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
@@ -74,9 +76,6 @@ import "./command-chat-exact-live.css";
 type ModalKind = "issue" | "reminder" | "pin" | "booking" | null;
 type ChannelKey = "command" | "urgent" | "dispatch" | "general" | "cleaners";
 const MAX_MANUAL_BOOKING_DOLLARS = Math.floor(Number.MAX_SAFE_INTEGER / 100);
-// Temporary Preview diagnostic: set true to restore this page's email inbox.
-// Gmail services and the separate Email workspace remain unchanged.
-const COMMAND_CHAT_EMAIL_INBOX_ENABLED = false;
 type ChannelMessage = {
   id: number;
   ts: number;
@@ -844,15 +843,18 @@ function leadCardStatus(lead: CommandLead, smsInbox: SmsInboxConversation[]) {
 
 function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingPending, callPending, bridgePending, onClaim, onUnclaim, onMarkBooked, onUnbook, onCall, onTestBridge, onOpenSms }: { title: string; description: string; leads: CommandLead[]; smsInbox: SmsInboxConversation[]; claimPending: boolean; bookingPending: boolean; callPending: boolean; bridgePending: boolean; onClaim: (lead: CommandLead) => void; onUnclaim: (lead: CommandLead) => void; onMarkBooked: (lead: CommandLead) => void; onUnbook: (lead: CommandLead) => void; onCall: (lead: CommandLead) => void; onTestBridge: (lead: CommandLead) => void; onOpenSms: (lead: CommandLead) => void }) {
 
+  const { controller: leadApiDebug } = useCommandChatApiDebug();
+  const leadInboxPaused = !leadApiDebug.isEnabled("commandCenter.listCommandChatInbox");
+  const leadStatusesPaused = !leadApiDebug.isEnabled("opsChat.getLeadSessionStatuses");
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
   useEffect(() => {
     setSelectedLead((current) => current ? leads.find((lead) => lead.id === current.id) ?? current : current);
   }, [leads]);
   const copyPhone = (phone: string) => { void navigator.clipboard?.writeText(phone); };
-  const renderLeadCard = (lead: CommandLead) => { const status = leadCardStatus(lead, smsInbox); const conversation = leadCardConversation(lead, smsInbox); return <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}${status.kind === "booked" ? " is-booked" : ""}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
-    <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em className={`is-${status.kind}`}><i /> <span>{status.label}</span><time>{formatRelative(status.ts)}</time></em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
-    <div className="ccc-live-lead-activity"><span>Received {formatRelative(lead.receivedAt ?? lead.ts)}</span>{conversation?.calledAt && <span>Called {formatRelative(conversation.calledAt)}</span>}</div>
+  const renderLeadCard = (lead: CommandLead) => { const conversation = leadCardConversation(lead, smsInbox); const status = leadInboxPaused && !conversation && !lead.isBooked ? { kind: "unknown", label: "SMS status unavailable", ts: lead.ts } : leadCardStatus(lead, smsInbox); return <section className={`ccc-live-lead-primary${lead.claimedBy ? "" : " is-unclaimed"}${status.kind === "booked" ? " is-booked" : ""}`} key={lead.id} role="button" tabIndex={0} onClick={() => setSelectedLead(lead)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedLead(lead); } }}>
+    <div className="ccc-live-lead-primary-identity"><img src={customerPortraitFor(lead.name)} alt={`Client portrait illustration for ${lead.name}`} /><span><strong>{lead.name}</strong><small>{lead.queue === "web" ? `Quote requested · ${lead.sourceLabel}` : `${lead.sourceLabel} · ${lead.detail}`}</small><em className={`is-${status.kind}`}><i /> <span>{status.label}{leadInboxPaused && conversation ? " · last known" : ""}{leadStatusesPaused && lead.isBooked ? " · status paused" : ""}</span><time>{status.kind === "unknown" ? "" : formatRelative(status.ts)}</time></em></span>{lead.priceLabel && <b>{lead.priceLabel}</b>}</div>
+    <div className="ccc-live-lead-activity"><span>Received {formatRelative(lead.receivedAt ?? lead.ts)}</span>{conversation?.calledAt && <span>Called {formatRelative(conversation.calledAt)}{leadInboxPaused ? " · last known" : ""}</span>}{leadInboxPaused && !conversation && <span>Call history unavailable</span>}</div>
     {lead.phone && <div className="ccc-live-lead-primary-contact"><span><Phone />{formatPhoneDisplay(lead.phone)}</span><div><button type="button" aria-label={`Open text conversation with ${lead.name}`} title="Open text conversation" onClick={(event) => { event.stopPropagation(); onOpenSms(lead); }}><MessageSquare /></button><button type="button" aria-label={`Call ${lead.name} through office`} title="Call through office" disabled={callPending} onClick={(event) => { event.stopPropagation(); onCall(lead); }}><Phone /></button></div></div>}
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
@@ -863,6 +865,7 @@ function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingP
     <article className={`ccc-context-card ccc-live-lead-queue ${orderedLeads.length ? "has-leads" : ""}`}>
       <header><span><Users />{title}</span><b>{leads.length}</b></header>
       <p className="ccc-live-lead-queue-description">{description}</p>
+      {leadStatusesPaused && <p className="ccc-live-card-empty" role="status">Lead status API OFF — booking/status values are last known or unavailable. Booking and assignment actions remain available.</p>}
       {orderedLeads.length ? <div className="ccc-live-lead-list">{orderedLeads.map(renderLeadCard)}</div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
       {selectedLead && <LeadDetailPanel lead={selectedLead} onClose={() => setSelectedLead(null)} onClaim={onClaim} onUnclaim={onUnclaim} claimPending={claimPending} bookingPending={bookingPending} onMarkBooked={onMarkBooked} onUnbook={onUnbook} onOpenSms={onOpenSms} onTestBridge={onTestBridge} bridgePending={bridgePending} onCopyPhone={copyPhone} />}
     </article>
@@ -972,6 +975,18 @@ export default function CommandChatExactLive() {
     refetchOnWindowFocus: true,
   });
   const isAuthenticated = Boolean(agentMe);
+  const serverApiDebugEligible = useCommandChatApiDebugServerEligibility();
+  const { controller: apiDebug, snapshot: apiDebugSnapshot } = useCommandChatApiDebugScope({
+    eligible: serverApiDebugEligible && agentMe?.isAdmin === true && Boolean(agentMe?.isActive),
+    agentId: agentMe?.id ?? null,
+  });
+  const inboxEnabled = apiDebug.isEnabled("commandCenter.listCommandChatInbox");
+  const statusesEnabled = apiDebug.isEnabled("opsChat.getLeadSessionStatuses");
+  const alertsEnabled = apiDebug.isEnabled("opsChat.getPendingSuperAlerts");
+  const threadsEnabled = apiDebug.isEnabled("opsChat.listActiveThreads");
+  const emailInboxEnabled = apiDebug.isEnabled("opsChat.listEmailInboxThreads");
+  const voiceEnabled = apiDebug.isEnabled("voice.listCalls");
+  const teamSmsEnabled = apiDebug.isEnabled("commandCenter.listInboundTeamSmsEvents");
   const queryClient = useQueryClient();
   // Effects own the manager, so StrictMode cleanup/setup never reuses a disposed owner.
   const refreshScope = useMemo(() => ({ manager: null as ReturnType<typeof createCommandChatRefreshManager> | null, statusKey: null as QueryKey | null, performanceKey: null as QueryKey | null }), [queryClient, agentMe?.id]);
@@ -989,19 +1004,19 @@ export default function CommandChatExactLive() {
     };
   }, [isAuthenticated, queryClient, refreshScope]);
   const requestCommandRefresh = useCallback((key: QueryKey, immediate = false) => {
-    refreshScope.manager?.request(key, immediate);
-  }, [refreshScope]);
-  const reconcileCommandQuery = useCallback((key: QueryKey) => refreshScope.manager?.reconcile(key) ?? Promise.resolve(), [refreshScope]);
+    if (apiDebug.allowsQueryKey(key)) refreshScope.manager?.request(key, immediate);
+  }, [apiDebug, refreshScope]);
+  const reconcileCommandQuery = useCallback((key: QueryKey) => apiDebug.allowsQueryKey(key) ? refreshScope.manager?.reconcile(key) ?? Promise.resolve() : Promise.resolve(), [apiDebug, refreshScope]);
   const reconcileLeadStatuses = useCallback(async () => {
     // Same-auth cohort changes may retire a key while an action waits. Follow the
     // current cohort's fence, but never revive a retired authenticated owner.
     const manager = refreshScope.manager;
-    while (manager && refreshScope.manager === manager && refreshScope.statusKey) {
+    while (manager && refreshScope.manager === manager && refreshScope.statusKey && apiDebug.isEnabled("opsChat.getLeadSessionStatuses")) {
       const key = refreshScope.statusKey;
       await manager.reconcile(key);
       if (refreshScope.manager !== manager || !refreshScope.statusKey || hashKey(refreshScope.statusKey) === hashKey(key)) return;
     }
-  }, [refreshScope]);
+  }, [apiDebug, refreshScope]);
   const callerName = agentMe?.name || "MIB Team";
   const channel: ChannelKey = "command";
   const commandQueryKeys = useMemo(() => ({
@@ -1111,23 +1126,23 @@ export default function CommandChatExactLive() {
   const { data: openIssues = [] } = trpc.opsChat.listIssues.useQuery({ status: "open", limit: 12 }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
   const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 60_000 });
-  const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 30_000 });
+  const { data: activeThreads = [], dataUpdatedAt: threadsUpdatedAt } = trpc.opsChat.listActiveThreads.useQuery(undefined, { enabled: isAuthenticated && threadsEnabled, refetchInterval: threadsEnabled ? 30_000 : false, retry: (count, error) => apiDebug.retry("opsChat.listActiveThreads", count, error), trpc: { context: apiDebug.context } });
   const { data: todayBookingStats } = trpc.bookings.todayStats.useQuery(undefined, {
     enabled: isAuthenticated,
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
   });
-  const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(undefined, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 3_000, refetchIntervalInBackground: false });
+  const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(undefined, { enabled: isAuthenticated && alertsEnabled, staleTime: 0, refetchInterval: alertsEnabled ? 3_000 : false, refetchIntervalInBackground: false, retry: (count, error) => apiDebug.retry("opsChat.getPendingSuperAlerts", count, error), trpc: { context: apiDebug.context } });
   const { data: superAlertMessageIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery({ channel }, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 60_000 });
   const { data: threadDetail } = trpc.opsChat.getThreadReplies.useQuery({ parentId: threadId ?? 0 }, { enabled: isAuthenticated && threadId !== null });
-  const { data: smsInboxRows = [], isLoading: smsInboxLoading, isFetched: smsInboxFetched } = trpc.commandCenter.listCommandChatInbox.useQuery(
+  const { data: smsInboxRows = [], isLoading: smsInboxLoading, isFetched: smsInboxFetched, dataUpdatedAt: inboxUpdatedAt } = trpc.commandCenter.listCommandChatInbox.useQuery(
     undefined,
-    { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
+    { enabled: isAuthenticated && inboxEnabled, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: inboxEnabled ? 15_000 : false, retry: (count, error) => apiDebug.retry("commandCenter.listCommandChatInbox", count, error), trpc: { context: apiDebug.context } },
   );
-  const { data: emailInboxData, isLoading: emailInboxLoading } = trpc.opsChat.listEmailInboxThreads.useQuery(
+  const { data: emailInboxData, isLoading: emailInboxLoading, dataUpdatedAt: emailUpdatedAt } = trpc.opsChat.listEmailInboxThreads.useQuery(
     undefined,
-    { enabled: isAuthenticated && COMMAND_CHAT_EMAIL_INBOX_ENABLED, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: COMMAND_CHAT_EMAIL_INBOX_ENABLED ? 15_000 : false, ...(!COMMAND_CHAT_EMAIL_INBOX_ENABLED ? { retry: false } : {}) },
+    { enabled: isAuthenticated && emailInboxEnabled, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: emailInboxEnabled ? 15_000 : false, retry: (count, error) => apiDebug.retry("opsChat.listEmailInboxThreads", count, error), trpc: { context: apiDebug.context } },
   );
   const smsInbox = useMemo(() => (smsInboxRows as unknown as SmsInboxConversation[])
     .filter((conversation) => Boolean(conversation.leadPhone))
@@ -1143,7 +1158,7 @@ export default function CommandChatExactLive() {
     ].some((value) => value?.toLowerCase().includes(query)));
   }, [smsInbox, smsSearch]);
   const emailInbox = useMemo(
-    () => COMMAND_CHAT_EMAIL_INBOX_ENABLED ? [...((emailInboxData?.threads ?? []) as EmailInboxThread[])].sort((left, right) => right.lastMessageAt - left.lastMessageAt) : [],
+    () => [...((emailInboxData?.threads ?? []) as EmailInboxThread[])].sort((left, right) => right.lastMessageAt - left.lastMessageAt),
     [emailInboxData?.threads],
   );
   const visibleEmailInbox = useMemo(() => {
@@ -1166,11 +1181,11 @@ export default function CommandChatExactLive() {
   );
   const { data: teamSmsEvents = [] } = trpc.commandCenter.listInboundTeamSmsEvents.useQuery(
     { sessionIds: leftTeamSmsSessionIds },
-    { enabled: isAuthenticated && leftTeamSmsSessionIds.length > 0, staleTime: 15_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
+    { enabled: isAuthenticated && teamSmsEnabled && leftTeamSmsSessionIds.length > 0, staleTime: 15_000, refetchOnWindowFocus: false, refetchInterval: teamSmsEnabled ? 15_000 : false, retry: (count, error) => apiDebug.retry("commandCenter.listInboundTeamSmsEvents", count, error), trpc: { context: apiDebug.context } },
   );
   const { data: inboundVoiceCallHistory } = trpc.voice.listCalls.useQuery(
     { limit: 50, offset: 0 },
-    { enabled: isAuthenticated, staleTime: 30_000, refetchInterval: 30_000, refetchIntervalInBackground: false },
+    { enabled: isAuthenticated && voiceEnabled, staleTime: 30_000, refetchInterval: voiceEnabled ? 30_000 : false, refetchIntervalInBackground: false, retry: (count, error) => apiDebug.retry("voice.listCalls", count, error), trpc: { context: apiDebug.context } },
   );
   const voiceCallIdentityByVapiId = useMemo(() => new Map<string, VoiceCallerIdentity>(
     (inboundVoiceCallHistory?.calls ?? [])
@@ -1276,7 +1291,7 @@ export default function CommandChatExactLive() {
     return Object.values(byFirstName).sort();
   }, [agents.agents, callerName, photoMap]);
   const superAlertMessageIdSet = useMemo(() => new Set(superAlertMessageIds), [superAlertMessageIds]);
-  const activeSuperAlert = pendingSuperAlerts[0] ?? null;
+  const activeSuperAlert = alertsEnabled ? pendingSuperAlerts[0] ?? null : null;
   const todayBookingCount = todayBookingStats?.bookedCount ?? 0;
   const todayRevenue = todayBookingStats?.bookedRevenue ?? 0;
   const todayBookingDetails = todayBookingStats?.bookingDetails ?? [];
@@ -1317,34 +1332,36 @@ export default function CommandChatExactLive() {
     () => rawCommandLeads.map((lead) => lead.sessionId).filter((id): id is number => id !== null),
     [rawCommandLeads],
   );
-  // Supplemental status requests cannot join or delay the primary inbox's first attempt.
-  // Neither the workspace nor its inbox render waits for this aggregate query.
+  // Normal startup keeps statuses supplemental; intentionally pausing the inbox
+  // must not silently pause independent status reads with valid lead IDs.
+  const supplementalStatusesReady = !inboxEnabled || smsInboxFetched;
   const { data: leadSessionStatuses = [], queryKey: leadStatusQueryKey } = useCommandChatLeadStatuses({
     sessionIds: commandLeadSessionIds,
     identity: agentMe?.id ?? null,
-    enabled: isAuthenticated && smsInboxFetched,
+    enabled: isAuthenticated && statusesEnabled && supplementalStatusesReady,
+    apiDebugController: apiDebug,
   });
   const selectedPerformanceQueryKey = useMemo(() => getQueryKey(trpc.commandCenter.getAgentPerformance,
     { agentId: selectedAgentPerformanceId ?? 0, agentName: selectedAgentPerformanceName, range: agentPerformanceRange }, "query"),
   [agentPerformanceRange, selectedAgentPerformanceId, selectedAgentPerformanceName]);
   const activeCommandQueryKeys = useMemo(() => {
-    const keys: QueryKey[] = Object.values(commandQueryKeys).filter((key) => COMMAND_CHAT_EMAIL_INBOX_ENABLED || key !== commandQueryKeys.emailInbox);
+    const keys: QueryKey[] = Object.values(commandQueryKeys).filter((key) => apiDebug.allowsQueryKey(key));
     if (threadId !== null) keys.push(getQueryKey(trpc.opsChat.getThreadReplies, { parentId: threadId }, "query"));
     if (leftTeamSmsSessionIds.length) keys.push(getQueryKey(trpc.commandCenter.listInboundTeamSmsEvents, { sessionIds: leftTeamSmsSessionIds }, "query"));
-    if (smsInboxFetched && commandLeadSessionIds.length) keys.push(leadStatusQueryKey);
+    if (supplementalStatusesReady && commandLeadSessionIds.length) keys.push(leadStatusQueryKey);
     if (selectedAgentPerformanceId !== null && selectedAgentPerformanceId > 0 && selectedAgentPerformanceName) keys.push(selectedPerformanceQueryKey);
     if (selectedSmsConversation && selectedSmsConversation.id > 0) keys.push(getQueryKey(trpc.leads.getCsConversation, { sessionId: selectedSmsConversation.id }, "query"));
-    if (COMMAND_CHAT_EMAIL_INBOX_ENABLED && selectedEmailThreadId) {
+    if (selectedEmailThreadId) {
       keys.push(getQueryKey(trpc.gmail.getThread, { threadId: selectedEmailThreadId }, "query"));
       keys.push(getQueryKey(trpc.opsChat.getEmailDraftByThreadId, { threadId: selectedEmailThreadId }, "query"));
     }
-    return keys;
-  }, [commandQueryKeys, commandLeadSessionIds.length, leadStatusQueryKey, leftTeamSmsSessionIds, selectedAgentPerformanceId, selectedAgentPerformanceName, selectedEmailThreadId, selectedPerformanceQueryKey, selectedSmsConversation?.id, smsInboxFetched, threadId]);
+    return keys.filter((key) => apiDebug.allowsQueryKey(key));
+  }, [apiDebug, apiDebugSnapshot.enabled, commandQueryKeys, commandLeadSessionIds.length, leadStatusQueryKey, leftTeamSmsSessionIds, selectedAgentPerformanceId, selectedAgentPerformanceName, selectedEmailThreadId, selectedPerformanceQueryKey, selectedSmsConversation?.id, supplementalStatusesReady, threadId]);
   useEffect(() => {
     refreshScope.manager?.sync(isAuthenticated ? activeCommandQueryKeys : []);
-    refreshScope.statusKey = isAuthenticated && smsInboxFetched && commandLeadSessionIds.length ? leadStatusQueryKey : null;
+    refreshScope.statusKey = isAuthenticated && statusesEnabled && supplementalStatusesReady && commandLeadSessionIds.length ? leadStatusQueryKey : null;
     refreshScope.performanceKey = isAuthenticated && selectedAgentPerformanceId !== null && selectedAgentPerformanceId > 0 && selectedAgentPerformanceName ? selectedPerformanceQueryKey : null;
-  }, [activeCommandQueryKeys, commandLeadSessionIds.length, isAuthenticated, leadStatusQueryKey, refreshScope, selectedAgentPerformanceId, selectedAgentPerformanceName, selectedPerformanceQueryKey, smsInboxFetched]);
+  }, [activeCommandQueryKeys, commandLeadSessionIds.length, isAuthenticated, leadStatusQueryKey, refreshScope, selectedAgentPerformanceId, selectedAgentPerformanceName, selectedPerformanceQueryKey, statusesEnabled, supplementalStatusesReady]);
   const commandLeads = useMemo(() => {
     const statusById = new Map(leadSessionStatuses.map((status) => [status.id, status]));
     return rawCommandLeads.map((lead) => {
@@ -1702,7 +1719,6 @@ export default function CommandChatExactLive() {
       requestCommandRefresh(leadStatusQueryKey);
     },
     onGmailNewMessages: () => {
-      if (!COMMAND_CHAT_EMAIL_INBOX_ENABLED) return;
       requestCommandRefresh(commandQueryKeys.emailInbox);
       if (selectedEmailThreadId) {
         requestCommandRefresh(getQueryKey(trpc.gmail.getThread, { threadId: selectedEmailThreadId }, "query"));
@@ -1827,13 +1843,18 @@ export default function CommandChatExactLive() {
   if (!agentMe) return <LoginGate onSuccess={() => void refetchAgent()} />;
 
   return (
+    <CommandChatApiDebugProvider controller={apiDebug}>
     <main className="ccc-app ccc-widget-app ccc-live" aria-label="MIB Command workspace">
+      <CommandChatApiDebugPanel controller={apiDebug} waitingFor={{
+        ...(!leftTeamSmsSessionIds.length ? { "commandCenter.listInboundTeamSmsEvents": "Waiting for inbox team IDs" } : {}),
+        ...(!commandLeadSessionIds.length ? { "opsChat.getLeadSessionStatuses": "Waiting for lead session IDs" } : !supplementalStatusesReady ? { "opsChat.getLeadSessionStatuses": "Waiting for first inbox attempt" } : {}),
+      }} />
       <section className="ccc-workspace">
         <div className="ccc-command-grid">
           <aside className="ccc-command-panel ccc-left-panel">
             <div className="ccc-left-section ccc-conversations-section ccc-live-left-rail">
               <header className="ccc-live-sms-header">
-                <div className="ccc-live-sms-title"><span><strong>{leftRailTab === "email" ? "Email" : "SMS"}</strong><b>{leftRailTab === "email" ? COMMAND_CHAT_EMAIL_INBOX_ENABLED ? emailInbox.length : "—" : smsInbox.length}</b></span><a href={leftRailTab === "email" ? "/admin/emails" : "/admin/sms"} aria-label={leftRailTab === "email" ? "Open Email workspace" : "Open SMS workspace to compose a new message"}><SquarePen /></a></div>
+                <div className="ccc-live-sms-title"><span><strong>{leftRailTab === "email" ? "Email" : "SMS"}</strong><b>{leftRailTab === "email" ? !emailInboxEnabled && !emailUpdatedAt ? "—" : emailInbox.length : !inboxEnabled && !inboxUpdatedAt ? "—" : smsInbox.length}</b></span><a href={leftRailTab === "email" ? "/admin/emails" : "/admin/sms"} aria-label={leftRailTab === "email" ? "Open Email workspace" : "Open SMS workspace to compose a new message"}><SquarePen /></a></div>
                 <div className="ccc-live-sms-filter-tabs" role="tablist" aria-label="Command Chat conversation views">
                   <button type="button" className={leftRailTab === "sms" ? "active" : ""} aria-selected={leftRailTab === "sms"} onClick={() => { setLeftRailTab("sms"); setSelectedEmailThreadId(null); }}>SMS</button><button type="button" className={leftRailTab === "email" ? "active" : ""} aria-selected={leftRailTab === "email"} onClick={() => { setLeftRailTab("email"); setSelectedSmsConversation(null); }}>Email</button>
                 </div>
@@ -1841,18 +1862,20 @@ export default function CommandChatExactLive() {
               </header>
               <div className="ccc-live-left-rail-content">
                 {leftRailTab === "email" ? <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Email conversations">
+                  {!emailInboxEnabled && <p className="ccc-live-card-empty" role="status">Email inbox API OFF — {emailUpdatedAt ? "last-known data; not refreshing." : "unavailable; no cached result."} Email sending and existing thread details remain available.</p>}
                   {visibleEmailInbox.map((thread) => <EmailInboxRow thread={thread} key={thread.threadId} onOpen={() => setSelectedEmailThreadId(thread.threadId)} />)}
-                  {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{!COMMAND_CHAT_EMAIL_INBOX_ENABLED ? "Email inbox temporarily unavailable during Preview diagnostics." : emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
+                  {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{!emailInboxEnabled ? "Email inbox API disabled for this diagnostic." : emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
                 </div> : <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
+                  {!inboxEnabled && <p className="ccc-live-card-empty" role="status">SMS inbox API OFF — {inboxUpdatedAt ? "last-known conversations and call/reply labels; not refreshing." : "unavailable; no cached result."} Direct texting and calls remain available.</p>}
                   {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />)}
-                  {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
+                  {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{!inboxEnabled ? "SMS conversation list API disabled for this diagnostic." : smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
                 </div>}
               </div>
             </div>
           </aside>
 
           <section className="ccc-command-panel ccc-center-panel">
-            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all unread command threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare /><b>{unreadThreadCount}</b> Threads</button><span className="ccc-header-metric-bookings ccc-header-booking-hover" tabIndex={0} aria-label={`${todayBookingCount} bookings today`}><CalendarClock /><b>{todayBookingCount}</b> Booked{todayBookingDetails.length > 0 && <span className="ccc-header-booking-popover" role="tooltip"><strong>Today&apos;s bookings</strong>{todayBookingDetails.map((booking, index) => <span className="ccc-header-booking-row" key={`${booking.customerName ?? "customer"}-${index}`}><span><b>{booking.customerName?.trim() || "Customer"}</b><small>{booking.bookedByAgentName?.trim() ? `Booked by ${booking.bookedByAgentName.trim()}` : "Public booking"}</small></span><em>${(Number(booking.totalCents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</em></span>)}</span>}</span>{selectedAgentPerformanceId !== null && <span ref={agentPerformanceDropdownRef} className="ccc-header-metric-bookings ccc-header-booking-hover" tabIndex={0} aria-label={`${selectedAgentPerformanceName} performance`}>
+            <div className="ccc-reference-chat-header"><div className="ccc-reference-chat-top"><div className="ccc-reference-chat-identity"><span className="ccc-command-glyph"><MessageSquare /></span><div className="ccc-reference-command-info"><strong>{CHANNELS.find((item) => item.key === channel)?.label || "MIB Command"}</strong><div className="ccc-reference-header-metrics" aria-label="Live command workspace metrics"><button type="button" className={`ccc-header-metric-control ccc-header-metric-threads ${allThreadsOpen ? "active" : ""}`} aria-label="Open all unread command threads" onClick={() => setAllThreadsOpen(true)}><MessageSquare /><b>{!threadsEnabled && !threadsUpdatedAt ? "—" : unreadThreadCount}</b> Threads{!threadsEnabled && <small> · last known / paused</small>}</button><span className="ccc-header-metric-bookings ccc-header-booking-hover" tabIndex={0} aria-label={`${todayBookingCount} bookings today`}><CalendarClock /><b>{todayBookingCount}</b> Booked{todayBookingDetails.length > 0 && <span className="ccc-header-booking-popover" role="tooltip"><strong>Today&apos;s bookings</strong>{todayBookingDetails.map((booking, index) => <span className="ccc-header-booking-row" key={`${booking.customerName ?? "customer"}-${index}`}><span><b>{booking.customerName?.trim() || "Customer"}</b><small>{booking.bookedByAgentName?.trim() ? `Booked by ${booking.bookedByAgentName.trim()}` : "Public booking"}</small></span><em>${(Number(booking.totalCents ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</em></span>)}</span>}</span>{selectedAgentPerformanceId !== null && <span ref={agentPerformanceDropdownRef} className="ccc-header-metric-bookings ccc-header-booking-hover" tabIndex={0} aria-label={`${selectedAgentPerformanceName} performance`}>
   <BarChart3 /> <b>{selectedAgentPerformanceName}</b>{selectedAgentPerformanceId !== null && <span className="ccc-header-booking-popover" role="tooltip">
     <strong>{selectedAgentPerformanceName}</strong>
     <span className="ccc-agent-performance-ranges" role="group" aria-label="Performance date range">{(["today", "week", "month"] as const).map((option) => <button type="button" className={`ccc-agent-performance-range ${agentPerformanceRange === option ? "active" : ""}`} aria-pressed={agentPerformanceRange === option} key={option} aria-label={`Show ${option} performance`} onClick={() => setAgentPerformanceRange(option)}>{option === "today" ? "Today" : option === "week" ? "This week" : "This month"}</button>)}</span>
@@ -1862,6 +1885,12 @@ export default function CommandChatExactLive() {
             <>
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Remove pinned note" disabled={dismissPin.isPending} onClick={() => dismissPin.mutate({ channel })}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
+              {(!teamSmsEnabled || (teamSmsEnabled && !leftTeamSmsSessionIds.length && !inboxEnabled) || !voiceEnabled || !alertsEnabled) && <p className="ccc-live-card-empty" role="status">
+                {!teamSmsEnabled && "Team SMS timeline API OFF — shown events are last known or unavailable. "}
+                {teamSmsEnabled && !leftTeamSmsSessionIds.length && !inboxEnabled && "Team SMS API ON — waiting for inbox team IDs. "}
+                {!voiceEnabled && "Voice history API OFF — call evidence is last known or unavailable; calls still work. "}
+                {!alertsEnabled && "Pending alert API OFF — new pending alerts are not being checked here. "}
+              </p>}
               <div className="ccc-message-stream" ref={messageStreamRef} onScroll={trackCommandFeedScroll}>
                 <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} voiceCallEvidenceByVapiId={voiceCallEvidenceByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />
               </div>
@@ -1888,7 +1917,7 @@ export default function CommandChatExactLive() {
       </section>
       {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} lead={selectedConversationLead} onNotice={showNotice} onRefreshConversation={(sessionId) => { void reconcileCommandQuery(commandQueryKeys.inbox); void reconcileCommandQuery(getQueryKey(trpc.leads.getCsConversation, { sessionId }, "query")); }} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadDetail(null); }} />}
       {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} onUnclaim={unclaimLeadFromQueue} claimPending={claimCommandLead.isPending || unclaimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending || unbookLeadMutation.isPending} onMarkBooked={requestLeadBooked} onUnbook={unbookLeadFromQueue} onOpenSms={openSmsDrawerFromLead} onTestBridge={testBridgeFromQueue} bridgePending={testBridgeMutation.isPending} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
-      {COMMAND_CHAT_EMAIL_INBOX_ENABLED && selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
+      {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
       {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       {activeSuperAlert && <SuperAlertOverlay alert={activeSuperAlert} pending={acknowledgeSuperAlert.isPending} onReply={() => { acknowledgeSuperAlert.mutate({ alertId: activeSuperAlert.id }); setThreadId(activeSuperAlert.messageId); }} />}
@@ -1957,6 +1986,7 @@ export default function CommandChatExactLive() {
       {notice && <div className="ccc-notice" role="status"><CircleDot />{notice}</div>}
       {showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void reconcileCommandQuery(commandQueryKeys.inbox); }} />}
     </main>
+    </CommandChatApiDebugProvider>
   );
 }
 

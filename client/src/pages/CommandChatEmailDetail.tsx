@@ -3,6 +3,7 @@ import DOMPurify from "dompurify";
 import { Bell, Check, ChevronDown, ChevronLeft, Mail, MoreHorizontal, Search, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useCommandChatApiDebug } from "@/lib/commandChatApiDebug";
 import "./emails-review.css";
 import "./emails-detail-review.css";
 import "./emails-detail-compact-header.css";
@@ -194,6 +195,8 @@ function DetailThreadCard({ thread, lane, selected, onPick }: { thread: LiveEmai
 }
 
 function DetailSidebar({ groups, selectedId, onPick, close }: { groups: Array<{ lane: Lane; threads: LiveEmailThread[] }>; selectedId: string; onPick: (threadId: string) => void; close: () => void }) {
+  const { controller } = useCommandChatApiDebug();
+  const emailInboxEnabled = controller.isEnabled("opsChat.listEmailInboxThreads");
   return (
     <aside className="email-detail-list" aria-label="Email detail list">
       <header>
@@ -204,9 +207,10 @@ function DetailSidebar({ groups, selectedId, onPick, close }: { groups: Array<{ 
         <nav><button type="button" onClick={close}>Inbox</button><button type="button" className="is-active">Email</button></nav>
       </header>
       <section>
-        <h2>Email Kanban <span>{groups.reduce((total, group) => total + group.threads.length, 0)}</span></h2>
+        <h2>Email Kanban <span>{!emailInboxEnabled && !groups.some(group => group.threads.length) ? "—" : groups.reduce((total, group) => total + group.threads.length, 0)}</span></h2>
+        {!emailInboxEnabled && <p className="text-[10px] text-amber-300" role="status">Email list paused (OFF) · {groups.some(group => group.threads.length) ? "last known" : "no retained rows"}</p>}
         {groups.map(group => <div className="email-detail-lane" key={group.lane}>
-          <header><span style={{ background: LANE_COLORS[group.lane] }} /><b>{group.lane}</b><small>{group.threads.length}</small><ChevronDown size={13} /></header>
+          <header><span style={{ background: LANE_COLORS[group.lane] }} /><b>{group.lane}</b><small>{!emailInboxEnabled && group.threads.length === 0 ? "—" : group.threads.length}</small><ChevronDown size={13} /></header>
           <div>{group.threads.map(thread => <DetailThreadCard key={thread.threadId} thread={thread} lane={group.lane} selected={thread.threadId === selectedId} onPick={() => onPick(thread.threadId)} />)}</div>
         </div>)}
       </section>
@@ -233,6 +237,9 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
   onClose: () => void;
   showClose?: boolean;
 }) {
+  const { controller, snapshot } = useCommandChatApiDebug();
+  const emailInboxEnabled = controller.isEnabled("opsChat.listEmailInboxThreads");
+  const lastInboxSuccess = snapshot.endpoints["opsChat.listEmailInboxThreads"].lastSuccessAt;
   // Direct visual/body treatment copied from CsInbox2 Email detail.
   const thread = detail;
   const inboxEmail = (thread?.inboxEmail ?? "").toLowerCase();
@@ -275,6 +282,9 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
         <div className="em2-title-wrap"><div className="em2-subject">{subject}</div><span className="em2-badge">{status}</span></div>
         <div className="em2-head-actions"><button type="button" className="em2-btn" onClick={onResolve} disabled={isResolving}>{isResolving ? "Resolving…" : "✓ Resolve"}</button><button type="button" className="em2-btn emails-live-disabled-control" aria-label="More email actions" title="Additional actions remain in the existing Inbox route"><MoreHorizontal size={16} /></button>{showClose && <button type="button" className="em2-btn em2-close" aria-label="Close email conversation" onClick={onClose}><X size={15} /></button>}</div>
       </div>
+      {!emailInboxEnabled && <div className="text-[10px] text-amber-300" role="status" title={`OFF — existing request may still finish${lastInboxSuccess ? ` · Last list success ${new Date(lastInboxSuccess).toLocaleTimeString()}` : ""}`}>
+        Email list paused (OFF). Thread and reply remain active.
+      </div>}
       <div className="em2-sender-row">
         <div className="em2-sender-left"><div className="em2-avatar">{initials}</div><div><div className="em2-sender-name">{senderName} {senderEmail ? <span className="em2-sender-email">&lt;{senderEmail}&gt;</span> : null}</div><div className="em2-to-line">to: {inboxEmail || "inbox"}⌄</div></div></div>
         <div className="em2-message-age">{ago(lastMessage?.date)}</div>
@@ -433,7 +443,16 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
   const [sentCelebrationOpen, setSentCelebrationOpen] = useState(false);
   const [sentRecipient, setSentRecipient] = useState<EmailIdentity | null>(null);
   const utils = trpc.useUtils();
-  const emailInbox = trpc.opsChat.listEmailInboxThreads.useQuery(undefined, { staleTime: 30_000, refetchOnWindowFocus: true });
+  const { controller } = useCommandChatApiDebug();
+  const emailInboxEnabled = controller.isEnabled("opsChat.listEmailInboxThreads");
+  const emailInbox = trpc.opsChat.listEmailInboxThreads.useQuery(undefined, {
+    enabled: emailInboxEnabled,
+    staleTime: 30_000,
+    refetchOnWindowFocus: emailInboxEnabled,
+    ...(!emailInboxEnabled ? { refetchInterval: false as const, refetchOnReconnect: false as const } : {}),
+    ...(controller.eligible ? { retry: (failureCount: number, error: unknown) => controller.retry("opsChat.listEmailInboxThreads", failureCount, error) } : {}),
+    trpc: { context: controller.context },
+  });
   const emailThread = trpc.gmail.getThread.useQuery(
     { threadId: selectedThreadId! },
     { enabled: !!selectedThreadId, staleTime: 60_000, refetchOnWindowFocus: false },
@@ -448,7 +467,7 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
   const sendEmailReply = trpc.gmail.sendReply.useMutation({
     onSuccess: () => {
       setEmailReply("");
-      utils.opsChat.listEmailInboxThreads.invalidate();
+      if (controller.isEnabled("opsChat.listEmailInboxThreads")) utils.opsChat.listEmailInboxThreads.invalidate();
       if (selectedThreadId) utils.gmail.getThread.invalidate({ threadId: selectedThreadId });
     },
     onError: error => toast.error(error.message || "Failed to send email reply"),
@@ -458,7 +477,7 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
       if (emailAiDraft.data?.id) dismissEmailDraft.mutate({ draftId: emailAiDraft.data.id, dismissedBy: "agent" });
       if (onCloseDetail) onCloseDetail();
       else setSelectedThreadId(null);
-      utils.opsChat.listEmailInboxThreads.invalidate();
+      if (controller.isEnabled("opsChat.listEmailInboxThreads")) utils.opsChat.listEmailInboxThreads.invalidate();
     },
     onError: error => toast.error(error.message || "Failed to resolve thread"),
   });
@@ -523,10 +542,11 @@ export default function EmailsExactLive({ initialThreadId = null, onCloseDetail,
     {!selectedThreadId && <header className="emails-utility"><label><Search size={17} /><input aria-label="Search email threads" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search emails…" /><kbd>⌘ K</kbd></label><div><button type="button" className="emails-live-disabled-control" aria-label="Email notifications"><Bell size={18} /></button><span>MIB</span></div></header>}
     {selectedThreadId ? <EmailDetailWorkspace groups={groups} selectedId={selectedThreadId} detail={detail} detailError={threadLoadError} isDetailLoading={emailThread.isLoading} onRetry={retryThreadLoad} detailOnly={detailOnly} reply={emailReply} setReply={setEmailReply} draft={emailAiDraft.data} draftDismissed={dismissedDrafts.has(selectedThreadId)} onPick={openThread} onClose={closeThread} onInsertDraft={insertDraft} onDismissDraft={dismissDraft} onSend={sendReply} onResolve={resolveThread} isSending={sendEmailReply.isPending} isResolving={resolveEmailThread.isPending} /> : <div className="emails-content">
       <section className="emails-head"><div><span>Customer communication · Live workspace</span><h1><Mail size={27} />Emails</h1><p>Review the live email queue, open thread context, and prepare replies without leaving the customer communication workspace.</p></div><p><Sparkles size={14} />Live threads are grouped by the existing queue rules.</p></section>
-      <section className="emails-board-shell"><header><div><span>Inbox board</span><h2>Email Kanban <b>{visibleThreads.length}</b></h2></div><div><button type="button" className="emails-live-disabled-control" title="The live queue keeps its current automatic grouping">Live queue <ChevronDown size={14} /></button><button type="button" className="emails-live-disabled-control" title="Filtering is available through search">Filters</button></div></header><div className="emails-board">
-        {emailInbox.isLoading && <div className="emails-live-board-state">Loading emails…</div>}
-        {!emailInbox.isLoading && allThreads.length === 0 && <div className="emails-live-board-state">No email conversations yet.</div>}
-        {!emailInbox.isLoading && groups.map(group => <section className="emails-lane" key={group.lane}><header><span style={{ background: LANE_COLORS[group.lane] }} /><b>{group.lane}</b><small>{group.threads.length}</small><ChevronDown size={13} /></header><div>{group.threads.map(thread => <EmailCard key={thread.threadId} thread={thread} lane={group.lane} selected={false} onPick={() => openThread(thread.threadId)} />)}{group.threads.length === 0 && <p className="emails-lane-empty">No conversations</p>}</div></section>)}
+      <section className="emails-board-shell"><header><div><span>Inbox board</span><h2>Email Kanban <b>{!emailInboxEnabled && !emailInbox.data ? "—" : visibleThreads.length}</b></h2>{!emailInboxEnabled && <span className="text-[10px] text-amber-300" role="status" title={`OFF — existing request may still finish${emailInbox.dataUpdatedAt ? ` · Last success ${new Date(emailInbox.dataUpdatedAt).toLocaleTimeString()}` : ""}`}>Email list OFF · {emailInbox.data ? "last known" : "unavailable"}</span>}</div><div><button type="button" className="emails-live-disabled-control" title="The live queue keeps its current automatic grouping">Live queue <ChevronDown size={14} /></button><button type="button" className="emails-live-disabled-control" title="Filtering is available through search">Filters</button></div></header><div className="emails-board">
+        {!emailInboxEnabled && !emailInbox.data && <div className="emails-live-board-state">Email list paused — no cached list available.</div>}
+        {emailInboxEnabled && emailInbox.isLoading && <div className="emails-live-board-state">Loading emails…</div>}
+        {emailInboxEnabled && !emailInbox.isLoading && allThreads.length === 0 && <div className="emails-live-board-state">No email conversations yet.</div>}
+        {!emailInbox.isLoading && (emailInboxEnabled || emailInbox.data) && groups.map(group => <section className="emails-lane" key={group.lane}><header><span style={{ background: LANE_COLORS[group.lane] }} /><b>{group.lane}</b><small>{group.threads.length}</small><ChevronDown size={13} /></header><div>{group.threads.map(thread => <EmailCard key={thread.threadId} thread={thread} lane={group.lane} selected={false} onPick={() => openThread(thread.threadId)} />)}{group.threads.length === 0 && <p className="emails-lane-empty">{emailInboxEnabled ? "No conversations" : "Last known: no conversations"}</p>}</div></section>)}
       </div></section>
     </div>}
     {detailOnly && sentCelebrationOpen && sentRecipient && <EmailSentCelebration recipientName={sentRecipient.name} recipientEmail={sentRecipient.email} onDone={() => setSentCelebrationOpen(false)} onViewMessage={() => { setSentCelebrationOpen(false); void emailThread.refetch().finally(scrollToLatestMessage); }} />}

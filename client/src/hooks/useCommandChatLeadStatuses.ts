@@ -12,6 +12,10 @@ import { getQueryKey } from "@trpc/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
 import { trpc } from "../lib/trpc";
+import {
+  isCommandChatApiDebugSuppressed,
+  type CommandChatApiDebugController,
+} from "../lib/commandChatApiDebug";
 
 export type CommandChatLeadStatuses = inferRouterOutputs<AppRouter>["opsChat"]["getLeadSessionStatuses"];
 export type CommandChatLeadStatus = CommandChatLeadStatuses[number];
@@ -37,6 +41,12 @@ function checkCancelled(signal: AbortSignal): void {
   if (signal.aborted) throw new CancelledError({ revert: true });
 }
 
+function checkStatusReadEnabled(controller?: CommandChatApiDebugController): void {
+  if (controller && !controller.isEnabled("opsChat.getLeadSessionStatuses")) {
+    throw new CancelledError({ silent: true, revert: true });
+  }
+}
+
 class SerialGate {
   private tail: Promise<unknown> = Promise.resolve();
 
@@ -59,8 +69,10 @@ function gateFor(queryClient: QueryClient): SerialGate {
 }
 
 type RetryPolicy = boolean | number | ((failureCount: number, error: Error) => boolean) | undefined;
-export function scopedStatusRetry(defaultRetry: RetryPolicy): (failureCount: number, error: Error) => boolean {
+export function scopedStatusRetry(defaultRetry: RetryPolicy, apiDebugController?: CommandChatApiDebugController): (failureCount: number, error: Error) => boolean {
   return (failureCount, error) => {
+    if (apiDebugController && (!apiDebugController.isEnabled("opsChat.getLeadSessionStatuses")
+      || isCommandChatApiDebugSuppressed(error) || error instanceof CancelledError)) return false;
     if (error instanceof TRPCClientError && error.data?.code === "BAD_REQUEST") return false;
     if (typeof defaultRetry === "function") return defaultRetry(failureCount, error);
     if (typeof defaultRetry === "number") return failureCount < defaultRetry;
@@ -76,30 +88,54 @@ export function statusQueryOptions<R extends { id: number }>(args: {
   sessionIds: readonly number[];
   enabled: boolean;
   request: (input: { sessionIds: number[] }) => Promise<R[]>;
+  apiDebugController?: CommandChatApiDebugController;
 }) {
   const queryKey = statusQueryKey(args.baseKey, args.scope);
   const defaultRetry = args.queryClient.defaultQueryOptions({ queryKey }).retry;
   const sessionIds = canonicalSessionIds(args.sessionIds);
+  const statusReadEnabled = args.apiDebugController?.isEnabled("opsChat.getLeadSessionStatuses") ?? true;
   return {
     queryKey,
-    enabled: args.enabled && args.scope !== null && sessionIds.length > 0,
-    refetchInterval: 30_000,
+    enabled: args.enabled && statusReadEnabled && args.scope !== null && sessionIds.length > 0,
+    refetchInterval: statusReadEnabled ? 30_000 : false as const,
     refetchIntervalInBackground: false,
-    retry: scopedStatusRetry(defaultRetry),
+    ...(!statusReadEnabled ? { refetchOnWindowFocus: false as const, refetchOnReconnect: false as const } : {}),
+    retry: scopedStatusRetry(defaultRetry, args.apiDebugController),
     queryFn: ({ signal }: { signal: AbortSignal }) => gateFor(args.queryClient).run(async () => {
       // Queued obsolete work must not issue even its first request.
       checkCancelled(signal);
+      checkStatusReadEnabled(args.apiDebugController);
       const rows: R[] = [];
       for (let offset = 0; offset < sessionIds.length; offset += 50) {
         checkCancelled(signal);
+        checkStatusReadEnabled(args.apiDebugController);
         // Do NOT pass the consumed signal to transport: keep the gate occupied
         // until this already-started promise settles, even after cancellation.
-        const batch = await args.request({ sessionIds: sessionIds.slice(offset, offset + 50) });
+        let batch: R[];
+        try {
+          batch = await args.request({ sessionIds: sessionIds.slice(offset, offset + 50) });
+        } catch (error) {
+          checkStatusReadEnabled(args.apiDebugController);
+          if (args.apiDebugController && isCommandChatApiDebugSuppressed(error)) {
+            throw new CancelledError({ silent: true, revert: true });
+          }
+          throw error;
+        }
         checkCancelled(signal);
+        checkStatusReadEnabled(args.apiDebugController);
         rows.push(...batch);
       }
       checkCancelled(signal);
+      checkStatusReadEnabled(args.apiDebugController);
       return rows; // No partial cache publication or fabricated missing rows.
+    }).catch(error => {
+      if (args.apiDebugController && error instanceof CancelledError && error.silent && !signal.aborted) {
+        // QueryCore treats a thrown silent cancellation as a replacement fetch;
+        // here no replacement is started. Settle only its fetch indicator after
+        // transport drains; do not cancel/abort, publish rows, or set an API error.
+        args.queryClient.getQueryCache().find({ queryKey, exact: true })?.setState({ fetchStatus: "idle" });
+      }
+      throw error;
     }),
   };
 }
@@ -124,6 +160,7 @@ export function useCommandChatLeadStatuses(args: {
   sessionIds: readonly (number | null)[];
   identity: number | null;
   enabled: boolean;
+  apiDebugController?: CommandChatApiDebugController;
 }) {
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
@@ -158,13 +195,16 @@ export function useCommandChatLeadStatuses(args: {
     scope,
     sessionIds: canonicalIds,
     enabled: args.enabled,
-    request: (input) => utils.client.opsChat.getLeadSessionStatuses.query(input),
+    apiDebugController: args.apiDebugController,
+    request: (input) => utils.client.opsChat.getLeadSessionStatuses.query(input,
+      args.apiDebugController ? { context: args.apiDebugController.context } : undefined),
   });
   // Ordinary useQuery: supplemental status loading never suspends the inbox.
   const result = useQuery(options);
   return {
     ...result,
-    data: scope !== null && args.enabled ? result.data : undefined,
+    data: scope !== null && (args.enabled || args.apiDebugController?.isEnabled("opsChat.getLeadSessionStatuses") === false)
+      ? result.data : undefined,
     canonicalIds,
     queryKey: options.queryKey,
   };
