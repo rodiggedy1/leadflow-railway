@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -56,7 +56,28 @@ if (corePredicate !== integratedPredicate || body.split(corePredicate).length !=
 // Portable original control: replace precisely one predicate. Freeze every other
 // handler byte against baseline 01bf6d8687de63b3136425bc350657d5d4c4c0de.
 const originalBody = body.replace(corePredicate, originalPredicate);
-const protectedBody = body.replace(corePredicate, "      /* retained-call predicate */");
+const reviewedGuardPrefix = [
+  "\n      // Temporary diagnostic: pause only the two lead-card retained-recording reads in Preview.",
+  "      // Set this local flag to false to restore them; all other environments remain unchanged.",
+  "      const pauseRetainedCallReadsInPreview = true;",
+  "      const retainedCallReadsEnabled = !(pauseRetainedCallReadsInPreview",
+  '        && process.env.RAILWAY_ENVIRONMENT_NAME === "preview"',
+  '        && process.env.PREVIEW_MODE === "true");',
+].join("\n");
+const reviewedGates = [
+  ["retainedCallReadsEnabled ? and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt)) : undefined,",
+    "and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt)),"],
+  ["if (retainedCallReadsEnabled && calledPhoneDigits.length > 0) {", "if (calledPhoneDigits.length > 0) {"],
+] as const;
+function canonicalProtectedBody(text: string, predicate: string) {
+  for (const exact of [reviewedGuardPrefix, ...reviewedGates.map(([guarded]) => guarded), predicate]) {
+    if (text.split(exact).length !== 2) throw new Error("Reviewed handler substitution must occur exactly once");
+  }
+  let canonical = text.replace(reviewedGuardPrefix, "");
+  for (const [guarded, previous] of reviewedGates) canonical = canonical.replace(guarded, previous);
+  return canonical.replace(predicate, "      /* retained-call predicate */");
+}
+const protectedBody = canonicalProtectedBody(body, corePredicate);
 const protectedHash = "3ea66d1b3aee4ca2684b683c471b699edac60704021dc1efc26efb8033ee3b0d";
 
 const selectedKeys = [
@@ -141,10 +162,12 @@ function fakeDb(options: Options, membership: typeof integratedMembership) {
       from: (table: typeof conversationSessions) => ({
         where: async (predicate: SQL | undefined) => {
           if (!predicate) throw new Error("Core predicate required");
-          queries.push(compiler.select(selection).from(table).where(predicate).toSQL());
+          const query = compiler.select(selection).from(table).where(predicate).toSQL();
+          queries.push(query);
+          const includesRetainedMembership = /FROM openphone_call_recordings ocr/i.test(query.sql);
           selected = sessions.filter(s => {
             const inbound = (s.messageHistory ?? []).some(m => m.role === "user" || m.role === "customer");
-            return ((inbound || s.csQueue === "CS" || membership(s.leadPhone, recordings)) && s.csResolvedAt === null) ||
+            return ((inbound || s.csQueue === "CS" || (includesRetainedMembership && membership(s.leadPhone, recordings))) && s.csResolvedAt === null) ||
               s.lastCalledAt !== null || (options.voices ?? []).some(v => v.sessionId === s.id);
           });
           expect(Object.keys(selection).sort()).toEqual([...selectedKeys].sort());
@@ -208,10 +231,14 @@ function compileHandler(text: string): HandlerFactory {
 }
 const integratedFactory = compileHandler(body);
 const originalFactory = compileHandler(originalBody);
-async function run(options: Options = {}, original = false) {
+const localFlag = "const pauseRetainedCallReadsInPreview = true;";
+if (body.split(localFlag).length !== 2) throw new Error("Expected one reversible local flag");
+const restoredFactory = compileHandler(body.replace(localFlag, "const pauseRetainedCallReadsInPreview = false;"));
+afterEach(() => vi.unstubAllEnvs());
+async function run(options: Options = {}, original = false, restored = false) {
   const { db, queries } = fakeDb(options, original ? originalMembership : integratedMembership);
   const getDb = vi.fn(async () => db);
-  const handler = (original ? originalFactory : integratedFactory)(getDb, conversationSessions, and, eq, inArray, isNotNull, isNull, or, sql);
+  const handler = (restored ? restoredFactory : original ? originalFactory : integratedFactory)(getDb, conversationSessions, and, eq, inArray, isNotNull, isNull, or, sql);
   const result = await handler();
   expect(getDb).toHaveBeenCalledTimes(1);
   for (const name of ["insert", "update", "delete", "transaction"] as const) expect(db[name]).not.toHaveBeenCalled();
@@ -273,7 +300,7 @@ describe("Command Chat zero-schema actual-handler contracts", () => {
   it("changes precisely the frozen original predicate and preserves every protected handler byte", () => {
     expect(corePredicate).toBe(integratedPredicate);
     expect(createHash("sha256").update(protectedBody).digest("hex")).toBe(protectedHash);
-    expect(originalBody.replace(originalPredicate, "      /* retained-call predicate */")).toBe(protectedBody);
+    expect(canonicalProtectedBody(originalBody, originalPredicate)).toBe(protectedBody);
     expect(originalBody.replace(originalPredicate, corePredicate)).toBe(body);
   });
 
@@ -491,5 +518,115 @@ describe("Command Chat complete ordered original-versus-integrated response equa
         expect(integrated.queries.slice(1)).toStrictEqual(original.queries.slice(1));
       }
     }
+  });
+});
+
+describe("Command Chat Preview-only retained-call diagnostic pause", () => {
+  const preview = () => {
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "preview");
+    vi.stubEnv("PREVIEW_MODE", "true");
+  };
+  const expectPaused = (queries: Query[]) => {
+    expect(core(queries).sql).not.toMatch(/openphone_call_recordings/i);
+    expect(lateCall(queries)).toEqual([]);
+  };
+
+  it("skips both retained reads but preserves history/CS eligibility, manual stamps, voice reads and all 19 fields", async () => {
+    preview();
+    const { result, queries, db } = await run({ sessions: [
+      session({ id: 1, lastMessageTs: 10 }),
+      session({ id: 2, csQueue: null, leadPhone: "+13025551234", lastMessageTs: 20, messageHistory: [{ role: "customer" }, { role: "assistant" }] }),
+      session({ id: 3, csQueue: null, csResolvedAt: new Date(at), leadPhone: "+12025550040", lastMessageTs: 30, lastCalledAt: new Date(at + 5) }),
+      session({ id: 4, csQueue: null, csResolvedAt: new Date(at), leadPhone: "+12025550041", lastMessageTs: 40 }),
+      session({ id: 5, csQueue: null, leadPhone: "+12025550042" }),
+      session({ id: 6, csResolvedAt: new Date(at), leadPhone: "+12025550043" }),
+      session({ id: 7, csQueue: null, leadPhone: "+12025550044", messageHistory: [{ role: "assistant", content: "user customer" }] }),
+    ], voices: [{ sessionId: 4, createdAt: at + 10 }], recordings: [
+      recording({ callStartedAt: at + 900 }), recording({ callerPhone: "+12025550040", callStartedAt: at + 900 }),
+      recording({ callerPhone: "+12025550042" }),
+    ] });
+    expectPaused(queries);
+    expect(result.map(r => r.id)).toEqual([4, 3, 2, 1]);
+    expect(result.map(r => r.calledAt)).toEqual([null, at + 5, null, null]);
+    expect(responseKeys).toHaveLength(19);
+    for (const row of result) {
+      expect(Object.keys(row).sort()).toEqual(responseKeys);
+      expect(row.createdAt).toBeInstanceOf(Date);
+      expect(row.updatedAt).toBeInstanceOf(Date);
+    }
+    for (const role of ["user", "customer"])
+      expect(core(queries).sql).toContain(`JSON_SEARCH(\`conversation_sessions\`.\`messageHistory\`, 'one', '${role}', NULL, '$[*].role') IS NOT NULL`);
+    expect(core(queries).params).toEqual(["CS"]);
+    expect(phases(queries)).toEqual(["core", "voice", "profiles"]);
+    expect(db.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it("intentionally excludes a retained-recording-only conversation and makes no late reads for that empty cohort", async () => {
+    preview();
+    for (const original of [false, true]) {
+      const { result, queries, db } = await run({ sessions: [session({ csQueue: null })], recordings: [recording()] }, original);
+      expect(result).toEqual([]);
+      expectPaused(queries);
+      expect(phases(queries)).toEqual(["core"]);
+      expect(db.execute).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    { environment: "production", mode: "true" },
+    { environment: "preview", mode: "false" },
+    { environment: "preview", mode: undefined },
+    { environment: undefined, mode: undefined },
+  ])("retains historical reads with environment=$environment mode=$mode", async ({ environment, mode }) => {
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", environment);
+    vi.stubEnv("PREVIEW_MODE", mode);
+    const options = { sessions: [session({ csQueue: null })], recordings: [recording()] };
+    const actual = await run(options);
+    const original = await run(options, true);
+    expect(actual.result).toStrictEqual(original.result);
+    expect(actual.result[0].calledAt).toBe(at);
+    expect(core(actual.queries).sql).toContain("FROM openphone_call_recordings ocr");
+    expect(phases(actual.queries)).toEqual(["core", "voice", "Called", "profiles"]);
+    expect(actual.queries.slice(1)).toStrictEqual(original.queries.slice(1));
+  });
+
+  it("restores both reads in actual Preview handler by replacing exactly the local flag literal in the test factory", async () => {
+    preview();
+    const options = { sessions: [session({ csQueue: null })], recordings: [recording()] };
+    const paused = await run(options);
+    expect(paused.result).toEqual([]);
+    const restored = await run(options, false, true);
+    expect(restored.result[0].calledAt).toBe(at);
+    expect(phases(restored.queries)).toEqual(["core", "voice", "Called", "profiles"]);
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "production");
+    const historical = await run(options);
+    expect(restored.result).toStrictEqual(historical.result);
+    expect(restored.queries).toStrictEqual(historical.queries);
+  });
+
+  it("keeps strict JavaScript canonical ties, stable display ordering and exact response equality during the pause", async () => {
+    preview();
+    for (const ids of [[22, 21], [21, 22]]) for (const distinct of [false, true]) {
+      const options: Options = {
+        sessions: ids.map((id, index) => session({ id, leadPhone: distinct && index ? "+13025551234" : "+18137063381", lastMessageTs: 10 })),
+        voices: ids.map(sessionId => ({ sessionId, createdAt: 10 })),
+      };
+      const actual = await run(options);
+      const original = await run(options, true);
+      expectPaused(actual.queries);
+      expect(actual.result).toStrictEqual(original.result);
+      expect(actual.result.map(r => r.id)).toEqual(distinct ? ids : [ids[0]]);
+      expect(actual.queries).toStrictEqual(original.queries);
+      for (const row of actual.result) expect(Object.keys(row).sort()).toEqual(responseKeys);
+    }
+  });
+
+  it("skips every late read for a genuinely empty selected fixture in Preview", async () => {
+    preview();
+    const { result, queries, db } = await run({ sessions: [], recordings: [recording()] });
+    expect(result).toEqual([]);
+    expectPaused(queries);
+    expect(phases(queries)).toEqual(["core"]);
+    expect(db.execute).not.toHaveBeenCalled();
   });
 });
