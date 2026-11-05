@@ -199,6 +199,8 @@ Choose the single most accurate status. When the last message is a simple acknow
 
 const SCORER_CONCURRENCY = 3;
 const SCORER_MAX_BACKLOG = 500;
+// Background status scoring is disabled; saved labels and message-writing AI stay unchanged.
+const BACKGROUND_STATUS_SCORING_ENABLED = false;
 
 let _active = 0;
 let _queued = 0;
@@ -231,6 +233,8 @@ function _drain(): void {
  *   - Never throws; safe to call fire-and-forget.
  */
 export function enqueueScoring(sessionId: number, isTeam: boolean): void {
+  if (!BACKGROUND_STATUS_SCORING_ENABLED) return;
+
   if (_inFlight.has(sessionId)) return; // already queued or running
   if (_queued >= SCORER_MAX_BACKLOG) {
     console.warn(`[csStatusScorer] Backlog full (${SCORER_MAX_BACKLOG}) — dropping session ${sessionId}`);
