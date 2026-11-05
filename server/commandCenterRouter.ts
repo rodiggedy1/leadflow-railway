@@ -12,9 +12,10 @@
  */
 
 import { z } from "zod";
-import { adminAgentProcedure, agentPageProcedure, agentProcedure, router } from "./_core/trpc";
+import { adminAgentProcedure, agentPageProcedure, agentProcedure, publicProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
+import { inboxTimingStage, inboxTimingLocal, inboxTimingSkipped, commandChatInboxTimingReadAllowed, getCommandChatInboxTimingSnapshot } from "./_core/commandChatInboxTiming";
 import {
   conversationSessions,
   bookings,
@@ -310,7 +311,7 @@ export const commandCenterRouter = router({
       const retainedCallReadsEnabled = !(pauseRetainedCallReadsInPreview
         && process.env.RAILWAY_ENVIRONMENT_NAME === "preview"
         && process.env.PREVIEW_MODE === "true");
-      const db = await getDb();
+      const db = await inboxTimingStage("get_db_handle", () => getDb());
       if (!db) throw new Error("Database unavailable");
 
       const inboundMessageActivityFilter = sql`(
@@ -329,7 +330,7 @@ export const commandCenterRouter = router({
           AND UNIX_TIMESTAMP(ocr.callStartedAt) > 0
       )`;
       const csTouchedOutboundFilter = eq(conversationSessions.csQueue as any, "CS");
-      const sessions = await db
+      const sessions = await inboxTimingStage("sessions", () => db
         .select({
           id: conversationSessions.id,
           leadPhone: conversationSessions.leadPhone,
@@ -351,9 +352,9 @@ export const commandCenterRouter = router({
           inboundVoiceCallActivityFilter,
           isNotNull(conversationSessions.lastCalledAt),
           retainedCallReadsEnabled ? and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt)) : undefined,
-        ));
+        )));
 
-      const augmented = sessions.map((session) => {
+      const augmented = inboxTimingLocal("projection", () => sessions.map((session) => {
         const lastMsgTs = session.lastMessageTs && session.lastMessageTs > 0
           ? session.lastMessageTs
           : session.updatedAt.getTime();
@@ -370,22 +371,25 @@ export const commandCenterRouter = router({
           hasUnanswered: session.lastMessageRole === "user",
           lastSenderRole,
         };
-      });
+      }));
 
-      const sessionIds = augmented.map((session) => session.id);
+      const sessionIds = inboxTimingLocal("voice_cohort", () => augmented.map((session) => session.id));
       const latestCallBySession = new Map<number, number>();
       if (sessionIds.length > 0) {
-        const rows = await db.execute(sql`
+        const rows = await inboxTimingStage("latest_voice", () => db.execute(sql`
           SELECT sessionId, MAX(UNIX_TIMESTAMP(createdAt) * 1000) AS latestCallTs
           FROM voice_calls
           WHERE sessionId IN (${sql.raw(sessionIds.join(","))})
           GROUP BY sessionId
-        `);
+        `));
+        inboxTimingLocal("voice_map", () => {
         for (const row of (rows as any)[0] as Array<{ sessionId: number; latestCallTs: number }>) {
           if (row.sessionId) latestCallBySession.set(Number(row.sessionId), Number(row.latestCallTs));
         }
-      }
+        });
+      } else inboxTimingSkipped("latest_voice");
 
+      const { normalizePhone, latestCalledAtByPhone, calledPhoneDigits } = inboxTimingLocal("called_cohort", () => {
       const normalizePhone = (phone: string) => phone.replace(/[^\d]/g, "").slice(-10);
       const latestCalledAtByPhone = new Map<string, number>();
       for (const session of augmented) {
@@ -397,8 +401,10 @@ export const commandCenterRouter = router({
       const calledPhoneDigits = Array.from(new Set(augmented
         .map((session) => normalizePhone(session.leadPhone ?? ""))
         .filter((phone) => phone.length === 10)));
+      return { normalizePhone, latestCalledAtByPhone, calledPhoneDigits };
+      });
       if (retainedCallReadsEnabled && calledPhoneDigits.length > 0) {
-        const rows = await db.execute(sql`
+        const rows = await inboxTimingStage("retained_outbound", () => db.execute(sql`
           SELECT RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10) AS phone10,
             MAX(UNIX_TIMESTAMP(callStartedAt) * 1000) AS latestCalledTs
           FROM openphone_call_recordings
@@ -406,7 +412,8 @@ export const commandCenterRouter = router({
             AND CHAR_LENGTH(REGEXP_REPLACE(callerPhone, '[^0-9]', '')) >= 10
             AND ${inArray(sql`RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10)`, calledPhoneDigits)}
           GROUP BY RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10)
-        `);
+        `));
+        inboxTimingLocal("called_map", () => {
         for (const row of (rows as any)[0] as Array<{ phone10: string; latestCalledTs: number | string | null }>) {
           const phone = String(row.phone10 ?? "");
           const calledAt = Number(row.latestCalledTs);
@@ -414,7 +421,9 @@ export const commandCenterRouter = router({
           const current = latestCalledAtByPhone.get(phone) ?? 0;
           if (calledAt > current) latestCalledAtByPhone.set(phone, calledAt);
         }
-      }
+        });
+      } else inboxTimingSkipped("retained_outbound");
+      const canonicalSessions = inboxTimingLocal("grouping", () => {
       const sessionsByPhone = new Map<string, typeof augmented>();
       for (const session of augmented) {
         const phone = session.leadPhone?.trim() || "__no_phone__";
@@ -428,26 +437,33 @@ export const commandCenterRouter = router({
           ? candidate
           : current,
       ));
+      return canonicalSessions;
+      });
 
+      const { phoneDigits, teamPhoneSet } = inboxTimingLocal("team_cohort", () => {
       const phoneDigits = canonicalSessions
         .map((session) => session.leadPhone?.trim())
         .filter((phone): phone is string => Boolean(phone))
         .map(normalizePhone)
         .filter(Boolean);
       const teamPhoneSet = new Set<string>();
+      return { phoneDigits, teamPhoneSet };
+      });
       if (phoneDigits.length > 0) {
-        const profiles = await db.execute(sql`
+        const profiles = await inboxTimingStage("team_profiles", () => db.execute(sql`
           SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) AS phone10
           FROM cleaner_profiles
           WHERE isActive = 1
             AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) IN (${sql.raw(phoneDigits.map((phone) => `'${phone}'`).join(","))})
-        `);
+        `));
+        inboxTimingLocal("team_map", () => {
         for (const row of (profiles as any)[0] as Array<{ phone10: string | null }>) {
           if (row.phone10) teamPhoneSet.add(String(row.phone10));
         }
-      }
+        });
+      } else inboxTimingSkipped("team_profiles");
 
-      return canonicalSessions
+      const classifiedSessions = inboxTimingLocal("classification", () => canonicalSessions
         .map((session) => ({
           ...session,
           calledAt: Math.max(
@@ -457,8 +473,18 @@ export const commandCenterRouter = router({
           personType: session.csQueue === "Teams" || teamPhoneSet.has(normalizePhone(session.leadPhone ?? ""))
             ? "team" as const
             : "customer" as const,
-        }))
-        .sort((left, right) => right.lastMsgTs - left.lastMsgTs);
+        })));
+      return inboxTimingLocal("sort", () => classifiedSessions
+        .sort((left, right) => right.lastMsgTs - left.lastMsgTs));
+    }),
+
+  // Collect as a standalone cookie-free request; optional session auth otherwise may read the DB.
+  getCommandChatInboxTiming: publicProcedure
+    .query(({ ctx }) => {
+      if (!commandChatInboxTimingReadAllowed(ctx.req.headers["x-command-chat-inbox-diagnostic-key"])) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Inbox timing diagnostics unavailable" });
+      }
+      return getCommandChatInboxTimingSnapshot();
     }),
 
   /**

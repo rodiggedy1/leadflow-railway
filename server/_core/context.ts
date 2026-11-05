@@ -2,6 +2,7 @@ import type { CreateExpressContextOptions } from "@trpc/server/adapters/express"
 import type { User } from "../../drizzle/schema";
 import { sdk } from "./sdk";
 import { getAgentFromRequest } from "./agentAuth";
+import { beginInboxTimingRequest, observeInboxContext, inboxTimingStage } from "./commandChatInboxTiming";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -12,10 +13,12 @@ export type TrpcContext = {
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
+  const inboxTimingBatch = beginInboxTimingRequest(opts.req, opts.res);
+  return observeInboxContext(inboxTimingBatch, async () => {
   let user: User | null = null;
 
   try {
-    user = await sdk.authenticateRequest(opts.req);
+    user = await inboxTimingStage("optional_auth", () => sdk.authenticateRequest(opts.req));
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;
@@ -39,4 +42,5 @@ export async function createContext(
     res: opts.res,
     user,
   };
+  });
 }

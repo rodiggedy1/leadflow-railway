@@ -4,6 +4,7 @@ import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import { getAgentFromRequest } from "./agentAuth";
 import { getCleanerFromRequest } from "./cleanerAuth";
+import { COMMAND_CHAT_INBOX_PATH, observeInboxProcedure, observeInboxHandler, inboxTimingStage, serializeInboxTiming } from "./commandChatInboxTiming";
 
 // ── lastSeenAt throttle ───────────────────────────────────────────────────────
 // Prevents a DB write on every opsChatProcedure call.
@@ -28,7 +29,10 @@ function shouldWriteLastSeenAt(key: string): boolean {
 }
 
 const t = initTRPC.context<TrpcContext>().create({
-  transformer: superjson,
+  transformer: {
+    input: superjson,
+    output: { deserialize: superjson.deserialize, serialize: (data) => serializeInboxTiming(data, superjson.serialize) },
+  },
 });
 
 export const router = t.router;
@@ -101,9 +105,13 @@ export const adminProcedure = t.procedure.use(
  * Use this for procedures accessible to all agents.
  */
 export const agentProcedure = t.procedure.use(
+  t.middleware(opts => observeInboxProcedure(opts.ctx.req, opts.path, () => opts.next())),
+).use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
-    const agent = await getAgentFromRequest(ctx.req);
+    const agent = opts.path === COMMAND_CHAT_INBOX_PATH
+      ? await inboxTimingStage("agent_auth", () => getAgentFromRequest(ctx.req))
+      : await getAgentFromRequest(ctx.req);
     if (!agent) {
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Agent login required" });
     }
@@ -114,7 +122,7 @@ export const agentProcedure = t.procedure.use(
       },
     });
   }),
-);
+).use(t.middleware(opts => observeInboxHandler(opts.path, () => opts.next())));
 
 /**
  * Requires the same active-agent page permission that AdminPageGuard uses for

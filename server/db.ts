@@ -4,6 +4,7 @@ import mysql from "mysql2/promise";
 import { InsertUser, users, agents, type Agent, cleanerMagicLinkTokens } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { randomBytes } from "crypto";
+import { captureInboxAcquisition, completeInboxAcquisition } from "./_core/commandChatInboxTiming";
 
 // ── Pool health tracking ──────────────────────────────────────────────────────
 
@@ -67,8 +68,10 @@ function wrapPoolInstrumentation(pool: mysql.Pool): void {
 
   corePool.getConnection = function (cb: (err: Error | null, conn: any) => void) {
     const startedAt = Date.now();
+    const inboxAcquisition = captureInboxAcquisition();
     originalGetConnection(function (err: any, conn: any) {
       const durationMs = Date.now() - startedAt;
+      completeInboxAcquisition(inboxAcquisition, !err);
       if (err) {
         const errorCode: string =
           err.code ??

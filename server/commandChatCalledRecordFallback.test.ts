@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { inboxTimingStage, inboxTimingLocal, inboxTimingSkipped } from "./_core/commandChatInboxTiming";
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { conversationSessions } from "../drizzle/schema";
@@ -15,9 +16,115 @@ const start = source.indexOf("listCommandChatInbox: agentProcedure");
 const bodyStart =
   source.indexOf(".query(async () => {", start) + ".query(async () => {".length;
 const bodyEnd = source.indexOf("\n    }),", bodyStart);
-const body = source.slice(bodyStart, bodyEnd);
+const observationWrappers: ReadonlyArray<readonly [string, string]> = [
+  [
+    "      const classifiedSessions = inboxTimingLocal(\"classification\", () => canonicalSessions\n        .map((session) => ({\n          ...session,\n          calledAt: Math.max(\n            session.calledAt ?? 0,\n            latestCalledAtByPhone.get(normalizePhone(session.leadPhone ?? \"\")) ?? 0,\n          ) || null,\n          personType: session.csQueue === \"Teams\" || teamPhoneSet.has(normalizePhone(session.leadPhone ?? \"\"))\n            ? \"team\" as const\n            : \"customer\" as const,\n        })));\n      return inboxTimingLocal(\"sort\", () => classifiedSessions\n        .sort((left, right) => right.lastMsgTs - left.lastMsgTs));",
+    "      return canonicalSessions\n        .map((session) => ({\n          ...session,\n          calledAt: Math.max(\n            session.calledAt ?? 0,\n            latestCalledAtByPhone.get(normalizePhone(session.leadPhone ?? \"\")) ?? 0,\n          ) || null,\n          personType: session.csQueue === \"Teams\" || teamPhoneSet.has(normalizePhone(session.leadPhone ?? \"\"))\n            ? \"team\" as const\n            : \"customer\" as const,\n        }))\n        .sort((left, right) => right.lastMsgTs - left.lastMsgTs);"
+  ],
+  [
+    "        });\n      } else inboxTimingSkipped(\"team_profiles\");\n\n      return canonicalSessions",
+    "      }\n\n      return canonicalSessions"
+  ],
+  [
+    "        `));\n        inboxTimingLocal(\"team_map\", () => {\n        for (const row of (profiles",
+    "        `);\n        for (const row of (profiles"
+  ],
+  [
+    "const profiles = await inboxTimingStage(\"team_profiles\", () => db.execute(sql`",
+    "const profiles = await db.execute(sql`"
+  ],
+  [
+    "      return { phoneDigits, teamPhoneSet };\n      });\n      if (phoneDigits.length > 0) {",
+    "      if (phoneDigits.length > 0) {"
+  ],
+  [
+    "      const { phoneDigits, teamPhoneSet } = inboxTimingLocal(\"team_cohort\", () => {\n      const phoneDigits = canonicalSessions",
+    "      const phoneDigits = canonicalSessions"
+  ],
+  [
+    "      ));\n      return canonicalSessions;\n      });\n\n      const phoneDigits",
+    "      ));\n\n      const phoneDigits"
+  ],
+  [
+    "      const canonicalSessions = inboxTimingLocal(\"grouping\", () => {\n      const sessionsByPhone = new Map",
+    "      const sessionsByPhone = new Map"
+  ],
+  [
+    "        });\n      } else inboxTimingSkipped(\"retained_outbound\");\n      const sessionsByPhone",
+    "      }\n      const sessionsByPhone"
+  ],
+  [
+    "        inboxTimingLocal(\"called_map\", () => {\n        for (const row of (rows as any)[0] as Array<{ phone10: string; latestCalledTs:",
+    "        for (const row of (rows as any)[0] as Array<{ phone10: string; latestCalledTs:"
+  ],
+  [
+    "          GROUP BY RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10)\n        `));",
+    "          GROUP BY RIGHT(REGEXP_REPLACE(callerPhone, '[^0-9]', ''), 10)\n        `);"
+  ],
+  [
+    "const rows = await inboxTimingStage(\"retained_outbound\", () => db.execute(sql`\n          SELECT RIGHT(REGEXP_REPLACE(callerPhone,",
+    "const rows = await db.execute(sql`\n          SELECT RIGHT(REGEXP_REPLACE(callerPhone,"
+  ],
+  [
+    "      return { normalizePhone, latestCalledAtByPhone, calledPhoneDigits };\n      });\n      if (retainedCallReadsEnabled && calledPhoneDigits.length > 0) {",
+    "      if (retainedCallReadsEnabled && calledPhoneDigits.length > 0) {"
+  ],
+  [
+    "      const { normalizePhone, latestCalledAtByPhone, calledPhoneDigits } = inboxTimingLocal(\"called_cohort\", () => {\n      const normalizePhone = (phone: string)",
+    "      const normalizePhone = (phone: string)"
+  ],
+  [
+    "        }\n        });\n      } else inboxTimingSkipped(\"latest_voice\");\n\n      const normalizePhone",
+    "        }\n      }\n\n      const normalizePhone"
+  ],
+  [
+    "        inboxTimingLocal(\"voice_map\", () => {\n        for (const row of (rows as any)[0] as Array<{ sessionId:",
+    "        for (const row of (rows as any)[0] as Array<{ sessionId:"
+  ],
+  [
+    "          GROUP BY sessionId\n        `));",
+    "          GROUP BY sessionId\n        `);"
+  ],
+  [
+    "const rows = await inboxTimingStage(\"latest_voice\", () => db.execute(sql`\n          SELECT sessionId,",
+    "const rows = await db.execute(sql`\n          SELECT sessionId,"
+  ],
+  [
+    "const sessionIds = inboxTimingLocal(\"voice_cohort\", () => augmented.map((session) => session.id));",
+    "const sessionIds = augmented.map((session) => session.id);"
+  ],
+  [
+    "      }));\n\n      const sessionIds",
+    "      });\n\n      const sessionIds"
+  ],
+  [
+    "const augmented = inboxTimingLocal(\"projection\", () => sessions.map((session) => {",
+    "const augmented = sessions.map((session) => {"
+  ],
+  [
+    "        )));\n\n      const augmented",
+    "        ));\n\n      const augmented"
+  ],
+  [
+    "const sessions = await inboxTimingStage(\"sessions\", () => db\n",
+    "const sessions = await db\n"
+  ],
+  [
+    "const db = await inboxTimingStage(\"get_db_handle\", () => getDb());",
+    "const db = await getDb();"
+  ]
+];
+function stripObservationWrappers(text: string): string {
+  for (const [observed, original] of observationWrappers) {
+    if (text.split(observed).length !== 2) throw new Error("Observation wrapper must occur exactly once");
+    text = text.replace(observed, original);
+  }
+  return text;
+}
+const observedBody = source.slice(bodyStart, bodyEnd);
+const body = stripObservationWrappers(observedBody);
 // Execute the real query handler without importing unrelated router side effects.
-const compiled = ts.transpileModule(`const run = async () => {${body}\n};`, {
+const compiled = ts.transpileModule(`const run = async () => {${observedBody}\n};`, {
   compilerOptions: {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.None,
@@ -33,6 +140,7 @@ const makeHandler = new Function(
   "isNull",
   "or",
   "sql",
+  "inboxTimingStage", "inboxTimingLocal", "inboxTimingSkipped",
   `${compiled}\nreturn run;`
 );
 const dialect = new MySqlDialect();
@@ -167,7 +275,8 @@ async function run(
     isNotNull,
     isNull,
     or,
-    sql
+    sql,
+    inboxTimingStage, inboxTimingLocal, inboxTimingSkipped
   );
   const result = await handler();
   expect(db.insert).not.toHaveBeenCalled();
