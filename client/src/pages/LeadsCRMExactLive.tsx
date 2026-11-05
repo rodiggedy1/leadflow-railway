@@ -15,13 +15,18 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { getQueryKey } from "@trpc/react-query";
 import { trpc } from "@/lib/trpc";
+import { createLeadListRefreshCoordinator } from "@/lib/leadListRefreshCoordinator";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { useLocation, useSearch } from "wouter";
 import "./operations-crm-review.css";
 import "./operations-crm-reference-fit.css";
 import "./operations-crm-owner-portraits.css";
 import "./leads-crm-exact-live.css";
+
+const incomingLeadsQueryKey = getQueryKey(trpc.commandCenter.listIncomingLeads, undefined, "query");
 
 type LeadRow = {
   id: number;
@@ -214,7 +219,8 @@ function LeadDetailDrawer({ lead, ownerPhoto, canEdit, agents, onLeadUpdated, on
 }
 
 export default function LeadsCRMExactLive() {
-  const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
+  const leadRefreshRef = useRef<ReturnType<typeof createLeadListRefreshCoordinator> | null>(null);
   const { data: agentMe, isLoading: agentLoading, isError: agentError, refetch: refetchAgent } = trpc.agents.me.useQuery(undefined, { staleTime: 5 * 60 * 1000, retry: false });
   const authenticated = Boolean(agentMe);
   const { data: leadRows = [], isLoading: leadsLoading } = trpc.commandCenter.listIncomingLeads.useQuery(undefined, { enabled: authenticated, refetchInterval: 30_000, refetchIntervalInBackground: false });
@@ -241,7 +247,18 @@ export default function LeadsCRMExactLive() {
   const handledLeadDeepLinkRef = useRef<string | null>(null);
   const detailWasOpenRef = useRef(false);
 
-  useOpsStream({ onLeadUpdate: () => void utils.commandCenter.listIncomingLeads.invalidate() }, { enabled: authenticated, label: "LeadsCRMExactLive" });
+  useEffect(() => {
+    if (!authenticated) return;
+    const coordinator = createLeadListRefreshCoordinator({
+      queryClient,
+      queryKey: incomingLeadsQueryKey,
+      refresh: () => queryClient.invalidateQueries({ queryKey: incomingLeadsQueryKey, exact: true }, { cancelRefetch: false }),
+    });
+    leadRefreshRef.current = coordinator;
+    return () => { leadRefreshRef.current = null; coordinator.dispose(); };
+  }, [authenticated, queryClient]);
+
+  useOpsStream({ onLeadUpdate: () => leadRefreshRef.current?.request() }, { enabled: authenticated, label: "LeadsCRMExactLive" });
 
   const rows = leadRows as LeadRow[];
   useEffect(() => { setLeadSearch(requestedSearch); }, [requestedSearch]);
@@ -305,7 +322,7 @@ export default function LeadsCRMExactLive() {
 
   const applyLeadDetailUpdate = (changes: Partial<Pick<LeadRow, "ownerName" | "phone">>) => {
     setDetailLead((current) => current ? { ...current, ...changes } : current);
-    void utils.commandCenter.listIncomingLeads.invalidate();
+    leadRefreshRef.current?.request({ immediate: true });
   };
 
   return <div className="operations-crm-review leads-crm-live"><main className="ocr-workspace"><header className="ocr-header"><div className="ocr-page-title"><h1>Leads</h1><span><i />Live queue</span></div><div className="ocr-header-actions"><label className="ocr-live-lead-search"><Search size={16} /><input value={leadSearch} onChange={(event) => setLeadSearch(event.target.value)} placeholder="Search leads" aria-label="Search leads by name, phone, email, source, service, address, or owner" /></label><button type="button" aria-label="Lead notifications" className={rows.some((lead) => lead.hasUnread) ? "has-notification" : ""} onClick={() => setStageFilter("all")}><Bell size={18} /></button><button type="button" className="ocr-profile"><i>{initials(agentMe.name || "Agent")}</i><span>{agentMe.name || "Agent"}</span><ChevronDown size={14} /></button></div></header><section className="ocr-tabs" aria-label="CRM workspace tabs">{["Leads", "Deals", "Forecast"].map((tab) => <button type="button" key={tab} className={activeTab === tab ? "is-active" : ""} onClick={() => { if (tab === "Leads") setActiveTab(tab); else inactiveNotice(tab); }}>{tab}</button>)}</section><section className="ocr-toolbar" aria-label="Leads CRM toolbar"><div className="ocr-toolbar-filters"><FilterControl label="Sort by" value={filterLabel("sort")} isOpen={menu === "sort"} onClick={() => setMenu(menu === "sort" ? null : "sort")}><button type="button" onClick={() => choose(() => setSortMode("newest"))}>Newest activity</button><button type="button" onClick={() => choose(() => setSortMode("oldest"))}>Oldest activity</button><button type="button" onClick={() => choose(() => setSortMode("newest-created"))}>Newest lead</button></FilterControl><FilterControl label="Filter" value={filterLabel("owner")} isOpen={menu === "owner"} onClick={() => setMenu(menu === "owner" ? null : "owner")}><button type="button" onClick={() => choose(() => setOwnerFilter("all"))}>All owners</button><button type="button" onClick={() => choose(() => setOwnerFilter("unassigned"))}>Unassigned</button>{ownerNames.map((owner) => <button type="button" key={owner} onClick={() => choose(() => setOwnerFilter(owner))}>{owner}</button>)}</FilterControl><FilterControl label="Stage" value={filterLabel("stage")} isOpen={menu === "stage"} onClick={() => setMenu(menu === "stage" ? null : "stage")}><button type="button" onClick={() => choose(() => setStageFilter("all"))}>Any</button>{stageNames.map((stage) => <button type="button" key={stage} onClick={() => choose(() => setStageFilter(stage))}>{displayStage(stage)}</button>)}</FilterControl><FilterControl label="Last Activity" value={filterLabel("period")} isOpen={menu === "period"} onClick={() => setMenu(menu === "period" ? null : "period")}><button type="button" onClick={() => choose(() => setPeriod("all"))}>All time</button><button type="button" onClick={() => choose(() => setPeriod("90d"))}>90 days</button><button type="button" onClick={() => choose(() => setPeriod("30d"))}>30 days</button><button type="button" onClick={() => choose(() => setPeriod("7d"))}>7 days</button></FilterControl></div><div className="ocr-toolbar-actions"><button type="button" className="ocr-export" onClick={() => inactiveNotice("Export")}><Download size={16} />Export</button><button type="button" className="ocr-new-company" onClick={() => inactiveNotice("New Lead")}><Plus size={14} />New Lead</button></div></section><section className="ocr-table-shell" aria-label="Incoming lead table"><div className="ocr-table-scroll"><table className="ocr-table ocr-live-table"><thead><tr><th className="ocr-checkbox-column"><button type="button" className={`ocr-checkbox ${allSelected ? "is-selected" : ""}`} onClick={toggleAll} aria-label="Select all visible leads">{allSelected && "✓"}</button></th><th>Leads</th><th>Source &amp; Stage</th><th>Account owner</th><th>Messages</th><th>Pipeline value</th><th>Win probability</th><th>Activity trend</th><th>Last interaction</th><th aria-label="Actions" /></tr></thead><tbody>{leadsLoading ? <tr><td colSpan={10}><div className="ocr-live-empty">Loading incoming leads…</div></td></tr> : visibleRows.length === 0 ? <tr><td colSpan={10}><div className="ocr-live-empty"><Filter size={16} />No incoming leads match these filters or search.</div></td></tr> : visibleRows.map((lead) => { const name = lead.name || lead.phone; const source = humanize(lead.source); const stage = displayStage(lead.stage); const owner = lead.ownerName || "Unassigned"; const photo = lead.ownerName ? ownerPhotos[lead.ownerName] ?? null : null; const selectedRow = selected.includes(lead.id); return <tr key={lead.id} className={selectedRow ? "is-selected" : ""} onClick={() => setDetailLead(lead)}><td className="ocr-checkbox-column"><button type="button" className={`ocr-checkbox ${selectedRow ? "is-selected" : ""}`} onClick={(event) => { event.stopPropagation(); toggleRow(lead.id); }} aria-label={`Select ${name}`}>{selectedRow && "✓"}</button></td><td className="ocr-company"><button type="button" onClick={() => setDetailLead(lead)}><img className="ocr-lead-portrait" src={customerPortraitFor(name)} alt={`Portrait illustration for ${name}`} /><span>{name}</span></button></td><td><div className="ocr-pill-group"><span className={`ocr-pill ocr-pill-${toneFor(source)}`}>{source}</span><span className={`ocr-pill ocr-pill-${toneFor(stage)}`}>{stage}</span></div></td><td><button type="button" className="ocr-owner" onClick={() => setDetailLead(lead)}>{photo ? <img className="ocr-owner-portrait" src={photo} alt={owner} /> : <i>{initials(owner)}</i>}<span>{owner}</span></button></td><td className="ocr-number">{lead.messageCount}</td><td className="ocr-money">{formatMoney(lead.quotedPrice)}</td><td><ProbabilityMeter value={DEFAULT_WIN_PROBABILITY} /></td><td><LeadActivityBars values={lead.activity} /></td><td><div className="ocr-interaction"><CalendarDays size={15} /><span>{formatDate(lead.lastActivityAt)}</span><i />{lead.hasUnread && <b className="ocr-live-unread">New reply</b>}{!lead.hasUnread && <strong>{lastActivityLabel(lead)}</strong>}</div></td><td><button type="button" className="ocr-overflow" aria-label={`Open ${name} details`} onClick={() => setDetailLead(lead)}><MoreHorizontal size={19} /></button></td></tr>; })}</tbody></table></div><footer className="ocr-calculation-footer"><div>{visibleRows.length} incoming lead{visibleRows.length === 1 ? "" : "s"} in view</div><div><Plus size={13} />Unread <strong>{visibleRows.filter((lead) => lead.hasUnread).length}</strong></div><div><Plus size={13} />Booked <strong>{visibleRows.filter((lead) => lead.isBooked).length}</strong></div><button type="button" onClick={() => inactiveNotice("Calculations")}><Plus size={13} />Add calculation</button></footer></section>{notice && <div className="ocr-live-notice" role="status">{notice}<button type="button" aria-label="Dismiss notice" onClick={() => setNotice("")}><X size={13} /></button></div>}</main>{detailLead && <LeadDetailDrawer lead={detailLead} ownerPhoto={detailLead.ownerName ? ownerPhotos[detailLead.ownerName] ?? null : null} canEdit={agentMe.isAdmin} agents={editorAgents} onLeadUpdated={applyLeadDetailUpdate} onClose={() => setDetailLead(null)} />}</div>;

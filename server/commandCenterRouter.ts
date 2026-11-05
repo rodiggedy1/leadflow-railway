@@ -594,7 +594,30 @@ export const commandCenterRouter = router({
         sql`${conversationSessions.leadSource} NOT IN (${excludedSources})`,
       );
       const sessions = await db
-        .select()
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
+          leadSource: conversationSessions.leadSource,
+          stage: conversationSessions.stage,
+          assignedAgentName: conversationSessions.assignedAgentName,
+          serviceType: conversationSessions.serviceType,
+          bedrooms: conversationSessions.bedrooms,
+          bathrooms: conversationSessions.bathrooms,
+          address: conversationSessions.address,
+          quotedPrice: conversationSessions.quotedPrice,
+          bookedAmount: conversationSessions.bookedAmount,
+          isBooked: conversationSessions.isBooked,
+          messageCount: conversationSessions.messageCount,
+          messageHistory: conversationSessions.messageHistory,
+          lastMessageText: conversationSessions.lastMessageText,
+          lastMessageRole: conversationSessions.lastMessageRole,
+          lastMessageTs: conversationSessions.lastMessageTs,
+          lastCustomerMessageTs: conversationSessions.lastCustomerMessageTs,
+          lastReadAt: conversationSessions.lastReadAt,
+          updatedAt: conversationSessions.updatedAt,
+          createdAt: conversationSessions.createdAt,
+        })
         .from(conversationSessions)
         .where(leadOnly)
         .orderBy(desc(sql`COALESCE(${conversationSessions.lastCustomerMessageTs}, ${conversationSessions.lastMessageTs}, UNIX_TIMESTAMP(${conversationSessions.createdAt}) * 1000)`))
