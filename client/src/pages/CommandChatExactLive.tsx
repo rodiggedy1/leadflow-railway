@@ -47,6 +47,10 @@ import {
   Zap,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { getQueryKey } from "@trpc/react-query";
+import { hashKey, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useCommandChatLeadStatuses } from "@/hooks/useCommandChatLeadStatuses";
+import { createCommandChatRefreshManager } from "@/lib/commandChatRefresh";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
@@ -958,7 +962,6 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export default function CommandChatExactLive() {
-  const utils = trpc.useUtils();
   const { data: agentMe, isLoading: agentLoading, isError: agentError, refetch: refetchAgent } = trpc.agents.me.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
     retry: 2,
@@ -966,8 +969,65 @@ export default function CommandChatExactLive() {
     refetchOnWindowFocus: true,
   });
   const isAuthenticated = Boolean(agentMe);
+  const queryClient = useQueryClient();
+  // Effects own the manager, so StrictMode cleanup/setup never reuses a disposed owner.
+  const refreshScope = useMemo(() => ({ manager: null as ReturnType<typeof createCommandChatRefreshManager> | null, statusKey: null as QueryKey | null, performanceKey: null as QueryKey | null }), [queryClient, agentMe?.id]);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const manager = createCommandChatRefreshManager(queryClient);
+    refreshScope.manager = manager;
+    return () => {
+      if (refreshScope.manager === manager) {
+        refreshScope.manager = null;
+        refreshScope.statusKey = null;
+        refreshScope.performanceKey = null;
+      }
+      manager.dispose();
+    };
+  }, [isAuthenticated, queryClient, refreshScope]);
+  const requestCommandRefresh = useCallback((key: QueryKey, immediate = false) => {
+    refreshScope.manager?.request(key, immediate);
+  }, [refreshScope]);
+  const reconcileCommandQuery = useCallback((key: QueryKey) => refreshScope.manager?.reconcile(key) ?? Promise.resolve(), [refreshScope]);
+  const reconcileLeadStatuses = useCallback(async () => {
+    // Same-auth cohort changes may retire a key while an action waits. Follow the
+    // current cohort's fence, but never revive a retired authenticated owner.
+    const manager = refreshScope.manager;
+    while (manager && refreshScope.manager === manager && refreshScope.statusKey) {
+      const key = refreshScope.statusKey;
+      await manager.reconcile(key);
+      if (refreshScope.manager !== manager || !refreshScope.statusKey || hashKey(refreshScope.statusKey) === hashKey(key)) return;
+    }
+  }, [refreshScope]);
   const callerName = agentMe?.name || "MIB Team";
   const channel: ChannelKey = "command";
+  const commandQueryKeys = useMemo(() => ({
+    messages: getQueryKey(trpc.opsChat.listChannelMessages, { channel }, "query"),
+    nativeLeads: getQueryKey(trpc.thumbtackLead.listNative, undefined, "query"),
+    issues: getQueryKey(trpc.opsChat.listIssues, { status: "open", limit: 12 }, "query"),
+    pin: getQueryKey(trpc.opsChat.getChannelPin, { channel }, "query"),
+    agents: getQueryKey(trpc.opsChat.getAgentStatusList, undefined, "query"),
+    activeThreads: getQueryKey(trpc.opsChat.listActiveThreads, undefined, "query"),
+    bookings: getQueryKey(trpc.bookings.todayStats, undefined, "query"),
+    superAlerts: getQueryKey(trpc.opsChat.getPendingSuperAlerts, undefined, "query"),
+    superAlertIds: getQueryKey(trpc.opsChat.getSuperAlertMessageIds, { channel }, "query"),
+    inbox: getQueryKey(trpc.commandCenter.listCommandChatInbox, undefined, "query"),
+    emailInbox: getQueryKey(trpc.opsChat.listEmailInboxThreads, undefined, "query"),
+    voice: getQueryKey(trpc.voice.listCalls, { limit: 50, offset: 0 }, "query"),
+    channelCounts: getQueryKey(trpc.opsChat.getChannelCounts, undefined, "query"),
+    revenue: getQueryKey(trpc.opsChat.getTodayRevenue, undefined, "query"),
+  }), [channel]);
+  // Preserve the existing header-booking utility contract, with refresh-only
+  // adapters that share the same exact-key owner as polling and SSE events.
+  const utils = useMemo(() => ({
+    bookings: { todayStats: { invalidate: () => reconcileCommandQuery(commandQueryKeys.bookings) } },
+    commandCenter: { getAgentPerformance: { invalidate: () => {
+      const manager = refreshScope.manager;
+      if (!manager) return Promise.resolve();
+      void queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.commandCenter.getAgentPerformance, undefined, "query"), refetchType: "none" });
+      return refreshScope.performanceKey ? manager.reconcile(refreshScope.performanceKey) : Promise.resolve();
+    } } },
+  }), [commandQueryKeys, queryClient, reconcileCommandQuery, refreshScope]);
   const LEAD_ALERT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bMcVRxTSaTukZing.wav";
   const [smsSearch, setSmsSearch] = useState("");
   const [leftRailTab, setLeftRailTab] = useState<"sms" | "email">("sms");
@@ -1058,7 +1118,7 @@ export default function CommandChatExactLive() {
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(undefined, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 3_000, refetchIntervalInBackground: false });
   const { data: superAlertMessageIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery({ channel }, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 60_000 });
   const { data: threadDetail } = trpc.opsChat.getThreadReplies.useQuery({ parentId: threadId ?? 0 }, { enabled: isAuthenticated && threadId !== null });
-  const { data: smsInboxRows = [], isLoading: smsInboxLoading } = trpc.commandCenter.listCommandChatInbox.useQuery(
+  const { data: smsInboxRows = [], isLoading: smsInboxLoading, isFetched: smsInboxFetched } = trpc.commandCenter.listCommandChatInbox.useQuery(
     undefined,
     { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
   );
@@ -1146,7 +1206,7 @@ export default function CommandChatExactLive() {
   });
   const toggleReaction = trpc.opsChat.toggleReaction.useMutation({
     onSuccess: () => {
-      void utils.opsChat.listChannelMessages.invalidate({ channel });
+      void reconcileCommandQuery(commandQueryKeys.messages);
       if (messageIds.length) void reactionsMutation.mutateAsync({ messageIds }).then((result) => setReactionRows(result.reactions));
     },
   });
@@ -1158,7 +1218,7 @@ export default function CommandChatExactLive() {
     setAwayStatusMutation.mutate({ status }, {
       onSuccess: () => {
         void refetchAgent();
-        void utils.opsChat.getAgentStatusList.invalidate();
+        void reconcileCommandQuery(commandQueryKeys.agents);
         const body = selectedStatus
           ? `${selectedStatus.emoji} ${profile?.name || callerName} — ${selectedStatus.label}`
           : `✅ ${profile?.name || callerName} — I'm Back`;
@@ -1171,33 +1231,33 @@ export default function CommandChatExactLive() {
         });
       },
     });
-  }, [callerName, profile?.name, refetchAgent, sendAwayStatusMessage, setAwayStatusMutation, utils]);
+  }, [callerName, profile?.name, refetchAgent, sendAwayStatusMessage, setAwayStatusMutation, commandQueryKeys, reconcileCommandQuery]);
   const createIssue = trpc.opsChat.createIssue.useMutation({
     onSuccess: () => {
       setModal(null);
       setIssueTitle("");
       setIssueNotes("");
-      void utils.opsChat.listIssues.invalidate({ status: "open", limit: 12 });
-      void utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+      void reconcileCommandQuery(commandQueryKeys.issues);
+      void reconcileCommandQuery(commandQueryKeys.messages);
     },
     onError: () => showNotice("Issue could not be created. Please try again."),
   });
   const setReminder = trpc.opsChat.setReminder.useMutation({ onSuccess: () => { setModal(null); setReminderBody(""); showNotice("Reminder scheduled."); } });
-  const pinNote = trpc.opsChat.pinNote.useMutation({ onSuccess: () => { setModal(null); setPinBody(""); void utils.opsChat.getChannelPin.invalidate({ channel }); } });
+  const pinNote = trpc.opsChat.pinNote.useMutation({ onSuccess: () => { setModal(null); setPinBody(""); void reconcileCommandQuery(commandQueryKeys.pin); } });
   const dismissPin = trpc.opsChat.dismissPin.useMutation({
     onSuccess: () => {
-      void utils.opsChat.getChannelPin.invalidate({ channel });
+      void reconcileCommandQuery(commandQueryKeys.pin);
       showNotice("Pinned note removed.");
     },
     onError: (error) => showNotice(`Pinned note could not be removed: ${error.message}`),
   });
-  const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: (result) => { setModal(null); setBookingPerson(""); setBookingAmount(""); void utils.opsChat.listChannelMessages.invalidate({ channel: "command" }); if (result.manualHeaderBooking) { void utils.bookings.todayStats.invalidate(); void utils.commandCenter.getAgentPerformance.invalidate(); } } });
+  const announceBooking = trpc.opsChat.announceBooking.useMutation({ onSuccess: (result) => { setModal(null); setBookingPerson(""); setBookingAmount(""); void reconcileCommandQuery(commandQueryKeys.messages); if (result.manualHeaderBooking) { void utils.bookings.todayStats.invalidate(); void utils.commandCenter.getAgentPerformance.invalidate(); } } });
   const markLeadBookedMutation = trpc.opsChat.markLeadBooked.useMutation();
   const testBridgeMutation = trpc.commandCenter.startTwilioLeadBridge.useMutation();
   const callLeadMutation = testBridgeMutation;
 
   const acknowledgeSuperAlert = trpc.opsChat.acknowledgeSuperAlert.useMutation({
-    onSuccess: () => { void utils.opsChat.getPendingSuperAlerts.invalidate(); },
+    onSuccess: () => { void reconcileCommandQuery(commandQueryKeys.superAlerts); },
     onError: () => showNotice("Super Alert could not be acknowledged. Please try again."),
   });
 
@@ -1254,10 +1314,34 @@ export default function CommandChatExactLive() {
     () => rawCommandLeads.map((lead) => lead.sessionId).filter((id): id is number => id !== null),
     [rawCommandLeads],
   );
-  const { data: leadSessionStatuses = [] } = trpc.opsChat.getLeadSessionStatuses.useQuery(
-    { sessionIds: commandLeadSessionIds },
-    { enabled: isAuthenticated && commandLeadSessionIds.length > 0, refetchInterval: 30_000, refetchIntervalInBackground: false },
-  );
+  // Supplemental status requests cannot join or delay the primary inbox's first attempt.
+  // Neither the workspace nor its inbox render waits for this aggregate query.
+  const { data: leadSessionStatuses = [], queryKey: leadStatusQueryKey } = useCommandChatLeadStatuses({
+    sessionIds: commandLeadSessionIds,
+    identity: agentMe?.id ?? null,
+    enabled: isAuthenticated && smsInboxFetched,
+  });
+  const selectedPerformanceQueryKey = useMemo(() => getQueryKey(trpc.commandCenter.getAgentPerformance,
+    { agentId: selectedAgentPerformanceId ?? 0, agentName: selectedAgentPerformanceName, range: agentPerformanceRange }, "query"),
+  [agentPerformanceRange, selectedAgentPerformanceId, selectedAgentPerformanceName]);
+  const activeCommandQueryKeys = useMemo(() => {
+    const keys: QueryKey[] = Object.values(commandQueryKeys);
+    if (threadId !== null) keys.push(getQueryKey(trpc.opsChat.getThreadReplies, { parentId: threadId }, "query"));
+    if (leftTeamSmsSessionIds.length) keys.push(getQueryKey(trpc.commandCenter.listInboundTeamSmsEvents, { sessionIds: leftTeamSmsSessionIds }, "query"));
+    if (smsInboxFetched && commandLeadSessionIds.length) keys.push(leadStatusQueryKey);
+    if (selectedAgentPerformanceId !== null && selectedAgentPerformanceId > 0 && selectedAgentPerformanceName) keys.push(selectedPerformanceQueryKey);
+    if (selectedSmsConversation && selectedSmsConversation.id > 0) keys.push(getQueryKey(trpc.leads.getCsConversation, { sessionId: selectedSmsConversation.id }, "query"));
+    if (selectedEmailThreadId) {
+      keys.push(getQueryKey(trpc.gmail.getThread, { threadId: selectedEmailThreadId }, "query"));
+      keys.push(getQueryKey(trpc.opsChat.getEmailDraftByThreadId, { threadId: selectedEmailThreadId }, "query"));
+    }
+    return keys;
+  }, [commandQueryKeys, commandLeadSessionIds.length, leadStatusQueryKey, leftTeamSmsSessionIds, selectedAgentPerformanceId, selectedAgentPerformanceName, selectedEmailThreadId, selectedPerformanceQueryKey, selectedSmsConversation?.id, smsInboxFetched, threadId]);
+  useEffect(() => {
+    refreshScope.manager?.sync(isAuthenticated ? activeCommandQueryKeys : []);
+    refreshScope.statusKey = isAuthenticated && smsInboxFetched && commandLeadSessionIds.length ? leadStatusQueryKey : null;
+    refreshScope.performanceKey = isAuthenticated && selectedAgentPerformanceId !== null && selectedAgentPerformanceId > 0 && selectedAgentPerformanceName ? selectedPerformanceQueryKey : null;
+  }, [activeCommandQueryKeys, commandLeadSessionIds.length, isAuthenticated, leadStatusQueryKey, refreshScope, selectedAgentPerformanceId, selectedAgentPerformanceName, selectedPerformanceQueryKey, smsInboxFetched]);
   const commandLeads = useMemo(() => {
     const statusById = new Map(leadSessionStatuses.map((status) => [status.id, status]));
     return rawCommandLeads.map((lead) => {
@@ -1331,8 +1415,8 @@ export default function CommandChatExactLive() {
         setOptimisticClaimedBy((current) => ({ ...current, [variables.messageId]: result.alreadyClaimedBy ?? null }));
         showNotice(`Already claimed by ${result.alreadyClaimedBy ?? "another agent"}`);
         void Promise.all([
-          utils.opsChat.listChannelMessages.invalidate({ channel }),
-          utils.thumbtackLead.listNative.invalidate(),
+          reconcileCommandQuery(commandQueryKeys.messages),
+          reconcileCommandQuery(commandQueryKeys.nativeLeads),
         ]).finally(() => setOptimisticClaimedBy((current) => {
           const { [variables.messageId]: _removed, ...next } = current;
           return next;
@@ -1342,8 +1426,8 @@ export default function CommandChatExactLive() {
       setOptimisticClaimedBy((current) => ({ ...current, [variables.messageId]: result.claimedBy ?? null }));
       showNotice(`Lead claimed by ${result.claimedBy ?? "you"}`);
       void Promise.all([
-        utils.opsChat.listChannelMessages.invalidate({ channel }),
-        utils.thumbtackLead.listNative.invalidate(),
+        reconcileCommandQuery(commandQueryKeys.messages),
+        reconcileCommandQuery(commandQueryKeys.nativeLeads),
       ]).finally(() => setOptimisticClaimedBy((current) => {
         const { [variables.messageId]: _removed, ...next } = current;
         return next;
@@ -1370,8 +1454,8 @@ export default function CommandChatExactLive() {
     try {
       await unclaimCommandLead.mutateAsync({ messageId: lead.id, ...(lead.sessionId ? { sessionId: lead.sessionId } : {}) });
       await Promise.all([
-        utils.opsChat.listChannelMessages.invalidate({ channel }),
-        utils.thumbtackLead.listNative.invalidate(),
+        reconcileCommandQuery(commandQueryKeys.messages),
+        reconcileCommandQuery(commandQueryKeys.nativeLeads),
       ]);
       showNotice(`${lead.name} is unclaimed.`);
     } catch (error) {
@@ -1386,7 +1470,7 @@ export default function CommandChatExactLive() {
         return next;
       });
     }
-  }, [channel, showNotice, unclaimCommandLead, utils]);
+  }, [commandQueryKeys, reconcileCommandQuery, showNotice, unclaimCommandLead]);
   const markLeadBookedFromQueue = useCallback(async (lead: CommandLead, bookedAmount: number) => {
     if (lead.isBooked || !lead.sessionId || markLeadBookedMutation.isPending) return;
     let marked = false;
@@ -1394,9 +1478,9 @@ export default function CommandChatExactLive() {
       await markLeadBookedMutation.mutateAsync({ sessionId: lead.sessionId, bookedAmount });
       marked = true;
       setOptimisticBookedBySession((current) => ({ ...current, [lead.sessionId!]: callerName }));
-      void utils.bookings.todayStats.invalidate();
-      void utils.opsChat.getLeadSessionStatuses.invalidate({ sessionIds: commandLeadSessionIds });
-      void utils.thumbtackLead.listNative.invalidate();
+      void reconcileCommandQuery(commandQueryKeys.bookings);
+      void reconcileLeadStatuses();
+      void reconcileCommandQuery(commandQueryKeys.nativeLeads);
       await announceBooking.mutateAsync({
         channel: "command",
         personName: lead.name,
@@ -1414,7 +1498,7 @@ export default function CommandChatExactLive() {
       }
       showNotice(marked ? "Lead marked booked, but the Command Chat announcement failed." : error instanceof Error ? `Booking update failed: ${error.message}` : "Booking update failed.");
     }
-  }, [announceBooking, callerName, commandLeadSessionIds, markLeadBookedMutation, profile?.name, showNotice, utils]);
+  }, [announceBooking, callerName, commandQueryKeys, markLeadBookedMutation, profile?.name, reconcileCommandQuery, reconcileLeadStatuses, showNotice]);
   const requestLeadBooked = useCallback((lead: CommandLead) => {
     if (lead.isBooked || !lead.sessionId || markLeadBookedMutation.isPending) return;
     setLeadBookingDraft({ lead, amount: "", error: "" });
@@ -1426,10 +1510,10 @@ export default function CommandChatExactLive() {
     try {
       await unbookLeadMutation.mutateAsync({ sessionId: lead.sessionId });
       await Promise.all([
-        utils.bookings.todayStats.invalidate(),
-        utils.opsChat.getTodayRevenue.invalidate(),
-        utils.opsChat.getLeadSessionStatuses.invalidate({ sessionIds: commandLeadSessionIds }),
-        utils.thumbtackLead.listNative.invalidate(),
+        reconcileCommandQuery(commandQueryKeys.bookings),
+        reconcileCommandQuery(commandQueryKeys.revenue),
+        reconcileLeadStatuses(),
+        reconcileCommandQuery(commandQueryKeys.nativeLeads),
       ]);
       showNotice(`${lead.name} was unbooked.`);
     } catch (error) {
@@ -1444,7 +1528,7 @@ export default function CommandChatExactLive() {
         return next;
       });
     }
-  }, [commandLeadSessionIds, showNotice, unbookLeadMutation, utils]);
+  }, [commandQueryKeys, reconcileCommandQuery, reconcileLeadStatuses, showNotice, unbookLeadMutation]);
   const confirmLeadBooked = useCallback(async () => {
     if (!leadBookingDraft) return;
     const amountText = leadBookingDraft.amount.trim().replace(/[$,\s]/g, "");
@@ -1573,34 +1657,61 @@ export default function CommandChatExactLive() {
   }, [mentionMessages, mentionStorageKey]);
 
   useOpsStream({
+    onConnected: () => refreshScope.manager?.reconnect(),
     onNewMessage: (updatedChannel) => {
-      if (!updatedChannel || updatedChannel === channel) void utils.opsChat.listChannelMessages.invalidate({ channel });
+      if (!updatedChannel || updatedChannel === channel) requestCommandRefresh(commandQueryKeys.messages);
       if (!updatedChannel || updatedChannel === "command") {
-        void utils.bookings.todayStats.invalidate();
+        requestCommandRefresh(commandQueryKeys.bookings);
         if (selectedAgentPerformanceId !== null) void utils.commandCenter.getAgentPerformance.invalidate();
       }
-      void utils.opsChat.listActiveThreads.invalidate();
-      void utils.opsChat.getChannelCounts.invalidate();
+      requestCommandRefresh(commandQueryKeys.activeThreads);
+      requestCommandRefresh(commandQueryKeys.channelCounts);
     },
     onLeadUpdate: () => {
-      void utils.commandCenter.listCommandChatInbox.invalidate();
-      if (leftTeamSmsSessionIds.length) void utils.commandCenter.listInboundTeamSmsEvents.invalidate({ sessionIds: leftTeamSmsSessionIds });
-      if (selectedSmsConversation) void utils.leads.getCsConversation.invalidate({ sessionId: selectedSmsConversation.id });
+      requestCommandRefresh(commandQueryKeys.inbox);
+      requestCommandRefresh(commandQueryKeys.messages);
+      requestCommandRefresh(commandQueryKeys.nativeLeads);
+      requestCommandRefresh(leadStatusQueryKey);
+      if (leftTeamSmsSessionIds.length) requestCommandRefresh(getQueryKey(trpc.commandCenter.listInboundTeamSmsEvents, { sessionIds: leftTeamSmsSessionIds }, "query"));
+      if (selectedSmsConversation) requestCommandRefresh(getQueryKey(trpc.leads.getCsConversation, { sessionId: selectedSmsConversation.id }, "query"));
+    },
+    onLeadAssignment: () => {
+      requestCommandRefresh(commandQueryKeys.messages);
+      requestCommandRefresh(commandQueryKeys.nativeLeads);
+      requestCommandRefresh(commandQueryKeys.inbox);
+      requestCommandRefresh(leadStatusQueryKey);
+    },
+    onAgentStatus: () => requestCommandRefresh(commandQueryKeys.agents),
+    onMissedCall: () => {
+      requestCommandRefresh(commandQueryKeys.inbox);
+      requestCommandRefresh(commandQueryKeys.voice);
+      requestCommandRefresh(commandQueryKeys.messages);
+    },
+    onMissedCallResolved: () => {
+      requestCommandRefresh(commandQueryKeys.inbox);
+      requestCommandRefresh(commandQueryKeys.voice);
+    },
+    onBookingFunnelUpdate: () => {
+      requestCommandRefresh(commandQueryKeys.bookings);
+      requestCommandRefresh(commandQueryKeys.messages);
+      requestCommandRefresh(commandQueryKeys.nativeLeads);
+      requestCommandRefresh(commandQueryKeys.inbox);
+      requestCommandRefresh(leadStatusQueryKey);
     },
     onGmailNewMessages: () => {
-      void utils.opsChat.listEmailInboxThreads.invalidate();
+      requestCommandRefresh(commandQueryKeys.emailInbox);
       if (selectedEmailThreadId) {
-        void utils.gmail.getThread.invalidate({ threadId: selectedEmailThreadId });
-        void utils.opsChat.getEmailDraftByThreadId.invalidate({ threadId: selectedEmailThreadId });
+        requestCommandRefresh(getQueryKey(trpc.gmail.getThread, { threadId: selectedEmailThreadId }, "query"));
+        requestCommandRefresh(getQueryKey(trpc.opsChat.getEmailDraftByThreadId, { threadId: selectedEmailThreadId }, "query"));
       }
     },
     onReactionUpdate: () => {
       if (messageIds.length) void reactionsMutation.mutateAsync({ messageIds }).then((result) => setReactionRows(result.reactions));
     },
-    onReminderUpdate: () => void utils.opsChat.listChannelMessages.invalidate({ channel }),
+    onReminderUpdate: () => requestCommandRefresh(commandQueryKeys.messages),
     onSuperAlert: () => {
-      void utils.opsChat.getPendingSuperAlerts.invalidate();
-      void utils.opsChat.getSuperAlertMessageIds.invalidate({ channel });
+      requestCommandRefresh(commandQueryKeys.superAlerts);
+      requestCommandRefresh(commandQueryKeys.superAlertIds);
     },
   }, { enabled: isAuthenticated, label: "CommandChatExactLive" });
 
@@ -1680,8 +1791,8 @@ export default function CommandChatExactLive() {
     }, {
       onSuccess: () => {
         setThreadDraft("");
-        void utils.opsChat.getThreadReplies.invalidate({ parentId: parent.id });
-        void utils.opsChat.listChannelMessages.invalidate({ channel });
+        void reconcileCommandQuery(getQueryKey(trpc.opsChat.getThreadReplies, { parentId: parent.id }, "query"));
+        void reconcileCommandQuery(commandQueryKeys.messages);
       },
       onError: () => showNotice("Message could not be sent. Please try again."),
     });
@@ -1761,6 +1872,7 @@ export default function CommandChatExactLive() {
                 onOptimisticMessage={addPendingOutgoingMessage}
                 onOutgoingFailure={restoreFailedOutgoingMessage}
                 onNotice={showNotice}
+                onRefreshChannel={() => { void reconcileCommandQuery(commandQueryKeys.messages); void reconcileCommandQuery(commandQueryKeys.channelCounts); }}
               />
             </>
           </section>
@@ -1770,7 +1882,7 @@ export default function CommandChatExactLive() {
           </aside>
         </div>
       </section>
-      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} lead={selectedConversationLead} onNotice={showNotice} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadDetail(null); }} />}
+      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} lead={selectedConversationLead} onNotice={showNotice} onRefreshConversation={(sessionId) => { void reconcileCommandQuery(commandQueryKeys.inbox); void reconcileCommandQuery(getQueryKey(trpc.leads.getCsConversation, { sessionId }, "query")); }} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadDetail(null); }} />}
       {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} onUnclaim={unclaimLeadFromQueue} claimPending={claimCommandLead.isPending || unclaimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending || unbookLeadMutation.isPending} onMarkBooked={requestLeadBooked} onUnbook={unbookLeadFromQueue} onOpenSms={openSmsDrawerFromLead} onTestBridge={testBridgeFromQueue} bridgePending={testBridgeMutation.isPending} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
       {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
@@ -1839,7 +1951,7 @@ export default function CommandChatExactLive() {
         />
       </button>}
       {notice && <div className="ccc-notice" role="status"><CircleDot />{notice}</div>}
-      {showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void utils.commandCenter.listCommandChatInbox.invalidate(); }} />}
+      {showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void reconcileCommandQuery(commandQueryKeys.inbox); }} />}
     </main>
   );
 }
@@ -2164,6 +2276,7 @@ const CommandComposer = memo(function CommandComposer({
   onOptimisticMessage,
   onOutgoingFailure,
   onNotice,
+  onRefreshChannel,
 }: {
   authorName: string;
   mentionNames: string[];
@@ -2173,6 +2286,7 @@ const CommandComposer = memo(function CommandComposer({
   onOptimisticMessage: (message: ChannelMessage) => void;
   onOutgoingFailure: (messageId: number) => void;
   onNotice: (message: string) => void;
+  onRefreshChannel: () => void;
 }) {
   const utils = trpc.useUtils();
   const [draft, setDraft] = useState("");
@@ -2303,8 +2417,7 @@ const CommandComposer = memo(function CommandComposer({
     }, {
       onSuccess: () => {
         if (sentReplyTarget) onClearReplyTarget(sentReplyTarget.id);
-        void utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
-        void utils.opsChat.getChannelCounts.invalidate();
+        onRefreshChannel();
       },
       onError: () => {
         onOutgoingFailure(localMessage.id);
@@ -2312,7 +2425,7 @@ const CommandComposer = memo(function CommandComposer({
         setAttachmentUrls((current) => current.length ? current : sentAttachments);
       },
     });
-  }, [attachmentUrls, authorName, draft, onClearReplyTarget, onOptimisticMessage, onOutgoingFailure, replyTarget, sendMessage, utils]);
+  }, [attachmentUrls, authorName, draft, onClearReplyTarget, onOptimisticMessage, onOutgoingFailure, onRefreshChannel, replyTarget, sendMessage]);
 
   const stageImage = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const image = event.target.files?.[0];
@@ -2381,7 +2494,7 @@ function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; o
   </div>;
 }
 
-function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, leadDraft, lead, onNotice, onOpenLeadDetails, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; leadDraft?: { scenario: string; jobContext: string } | null; lead: CommandLead | null; onNotice: (message: string) => void; onOpenLeadDetails: (lead: CommandLead) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
+function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, leadDraft, lead, onNotice, onRefreshConversation, onOpenLeadDetails, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; leadDraft?: { scenario: string; jobContext: string } | null; lead: CommandLead | null; onNotice: (message: string) => void; onRefreshConversation: (sessionId: number) => void; onOpenLeadDetails: (lead: CommandLead) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
   const utils = trpc.useUtils();
   const isTeamConversation = conversation.personType === "team";
   const contextPhone = conversation.leadPhone || "0000000";
@@ -2619,8 +2732,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
         scrollAfterSendRef.current = true;
         setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, senderName: callerName, ts: Date.now() }]);
       }
-      void utils.commandCenter.listCommandChatInbox.invalidate();
-      void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
+      onRefreshConversation(conversation.id);
     },
   });
   const sendWorkspaceMessage = trpc.leads.sendWorkspaceMessage.useMutation({
@@ -2628,8 +2740,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       setDraft("");
       scrollAfterSendRef.current = true;
       setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, senderName: callerName, ts: Date.now() }]);
-      void utils.commandCenter.listCommandChatInbox.invalidate();
-      void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
+      onRefreshConversation(conversation.id);
       if (leadCardPhone && result.sessionId > 0) onSessionResolved(result.sessionId);
       if (!result.success) onNotice("Message was not sent.");
     },
