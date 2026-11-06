@@ -16,6 +16,7 @@ import { registerCallCenterCronRoute } from "../callCommandCenterCron";
 import { bootstrapVapiAssistant } from "../vapiService";
 import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
+import { registerWebsiteHeroLeadRoute } from "../websiteHeroLeadRoute";
 import { registerStripeWebhookRoute } from "../stripeWebhookRoute";
 import { registerSseTestRoutes } from "../sseTest";
 import { registerOpsStreamRoute } from "../opsStream";
@@ -992,6 +993,7 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  registerWebsiteHeroLeadRoute(app);
   // CORS — must be before all other middleware so preflight OPTIONS requests are handled
   app.use(corsMiddleware);
   app.options("*", corsMiddleware); // handle preflight for all routes

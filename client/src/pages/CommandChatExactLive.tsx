@@ -554,9 +554,9 @@ function leadFromCommandMessage(message: ChannelMessage): CommandLead | null {
   const getText = (key: string) => typeof metadata[key] === "string" ? metadata[key] : "";
   const source = getText("source") || getText("utmSource");
   const sourceKey = source.trim().toLowerCase();
-  const isWebOrQuoteForm = !sourceKey || ["widget", "widget-popup", "webform", "quoteform", "quote_form"].includes(sourceKey);
+  const isWebOrQuoteForm = !sourceKey || ["widget", "widget-popup", "webform", "quoteform", "quote_form", "website hero section"].includes(sourceKey);
   const isIncoming = !isWebOrQuoteForm;
-  const sourceLabel = isIncoming
+  const sourceLabel = sourceKey === "website hero section" ? "Website hero section" : isIncoming
     ? (source.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) || message.from.replace(/^[^A-Za-z0-9]+/, "") || "Incoming lead")
     : (sourceKey === "widget" || sourceKey === "widget-popup" ? "Web form" : "Quote form");
   const name = getText("leadName") || "New lead";
@@ -588,6 +588,7 @@ function normalizedLeadPhone(value: string | null) {
 
 function displayLeadSource(source: string | null | undefined) {
   const normalized = source?.trim().toLowerCase() ?? "";
+  if (normalized === "website hero section") return "Website hero section";
   if (!normalized || ["form", "quote", "quoteform", "quote_form", "widget", "widget-popup", "webform"].includes(normalized)) return "Quote";
   if (normalized.includes("thumbtack")) return "Thumbtack";
   if (normalized === "bark") return "Bark.com";
