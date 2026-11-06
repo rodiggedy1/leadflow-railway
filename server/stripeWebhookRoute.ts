@@ -30,7 +30,7 @@ async function findBoundProfile(object: Stripe.SetupIntent | Stripe.PaymentInten
 }
 
 /**
- * New manual holds are locally persisted in `pending` before Stripe is called.
+ * New manual holds are locally persisted in `pending_card` before Stripe is called.
  * This signed-event branch can only promote that same row after every provider
  * identity matches. Historical PaymentIntents without this marker are ignored.
  */
@@ -50,7 +50,7 @@ async function promoteMarkedPendingAuthorization(object: Stripe.PaymentIntent): 
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const [pending] = await db.select().from(paymentAuthorizations)
-    .where(and(eq(paymentAuthorizations.id, attemptId), eq(paymentAuthorizations.status, "pending")))
+    .where(and(eq(paymentAuthorizations.id, attemptId), eq(paymentAuthorizations.status, "pending_card")))
     .limit(1);
   if (!pending) return false;
 
@@ -89,7 +89,7 @@ async function promoteMarkedPendingAuthorization(object: Stripe.PaymentIntent): 
       errorMessage: null,
       authorizedAt: Date.now(),
       captureBefore,
-    }).where(and(eq(paymentAuthorizations.id, pending.id), eq(paymentAuthorizations.status, "pending")));
+    }).where(and(eq(paymentAuthorizations.id, pending.id), eq(paymentAuthorizations.status, "pending_card")));
     if (bookingProfile) {
       await tx.update(bookingPaymentProfiles).set({
         paymentStatus: "authorized",

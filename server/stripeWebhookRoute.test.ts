@@ -30,7 +30,7 @@ describe("booking Stripe webhook route", () => {
     const webhook = read("server/stripeWebhookRoute.ts");
     expect(webhook).toContain("promoteMarkedPendingAuthorization");
     expect(webhook).toContain('object.metadata?.leadflowAuthorizationAttempt !== "v1"');
-    expect(webhook).toContain('eq(paymentAuthorizations.status, "pending")');
+    expect(webhook).toContain('eq(paymentAuthorizations.status, "pending_card")');
     expect(webhook).toContain("object.amount_capturable === pending.amountCents");
     expect(webhook).toContain("object.metadata.customerPhone !== pending.customerPhone");
     expect(webhook).toContain("status: \"authorized\"");

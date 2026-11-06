@@ -140,7 +140,7 @@ async function activePortalRequestHold(
         eq(paymentAuthorizations.customerPortalServiceRequestId, requestId),
         or(
           eq(paymentAuthorizations.status, "authorized"),
-          eq(paymentAuthorizations.status, "pending")
+          eq(paymentAuthorizations.status, "pending_card")
         )
       )
     )
@@ -473,7 +473,7 @@ export const bookingPaymentAdminRouter = router({
             eq(paymentAuthorizations.bookingPaymentProfileId, profile.id),
             or(
               eq(paymentAuthorizations.status, "authorized"),
-              eq(paymentAuthorizations.status, "pending")
+              eq(paymentAuthorizations.status, "pending_card")
             )
           )
         )
@@ -497,7 +497,7 @@ export const bookingPaymentAdminRouter = router({
         amountCents: booking.firstCleaningTotalCents,
         currency: "usd",
         operation: "authorization",
-        status: "pending",
+        status: "pending_card",
         errorMessage: null,
         createdBy: agentName,
         authorizedAt: null,
@@ -830,7 +830,7 @@ export const bookingPaymentAdminRouter = router({
         amountCents: request.estimatedTotalCents,
         currency: "usd",
         operation: "authorization",
-        status: "pending",
+        status: "pending_card",
         errorMessage: null,
         createdBy: agentName,
         authorizedAt: null,

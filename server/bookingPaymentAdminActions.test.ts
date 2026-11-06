@@ -43,16 +43,16 @@ describe("manual booking payment actions", () => {
     const source = read("server/bookingPaymentAdminRouter.ts");
     const bookingStart = source.indexOf("placeHold: agentProcedure");
     const bookingStripeCall = source.indexOf("authorizeCanonicalBookingHold", bookingStart);
-    const bookingPending = source.indexOf('status: "pending"', bookingStart);
+    const bookingPending = source.indexOf('status: "pending_card"', bookingStart);
     const portalStart = source.indexOf("placePortalRequestHold: agentProcedure");
     const portalStripeCall = source.indexOf("stripe.paymentIntents.create", portalStart);
-    const portalPending = source.indexOf('status: "pending"', portalStart);
+    const portalPending = source.indexOf('status: "pending_card"', portalStart);
 
     expect(bookingPending).toBeGreaterThan(bookingStart);
     expect(bookingPending).toBeLessThan(bookingStripeCall);
     expect(portalPending).toBeGreaterThan(portalStart);
     expect(portalPending).toBeLessThan(portalStripeCall);
-    expect(source).toContain('eq(paymentAuthorizations.status, "pending")');
+    expect(source).toContain('eq(paymentAuthorizations.status, "pending_card")');
     expect(source).toContain("where(eq(paymentAuthorizations.id, Number(pending.id)))");
   });
 

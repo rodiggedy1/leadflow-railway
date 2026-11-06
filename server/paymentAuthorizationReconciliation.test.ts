@@ -35,7 +35,7 @@ describe("payment authorization reconciliation", () => {
       "authorizeCanonicalBookingHold",
       bookingStart
     );
-    const bookingPending = booking.indexOf('status: "pending"', bookingStart);
+    const bookingPending = booking.indexOf('status: "pending_card"', bookingStart);
     expect(bookingPending).toBeGreaterThan(bookingStart);
     expect(bookingPending).toBeLessThan(bookingCreate);
 
@@ -46,7 +46,7 @@ describe("payment authorization reconciliation", () => {
       "stripe.paymentIntents.create",
       portalStart
     );
-    const portalPending = booking.indexOf('status: "pending"', portalStart);
+    const portalPending = booking.indexOf('status: "pending_card"', portalStart);
     expect(portalPending).toBeGreaterThan(portalStart);
     expect(portalPending).toBeLessThan(portalCreate);
   });
@@ -101,7 +101,7 @@ describe("payment authorization reconciliation", () => {
     expect(webhook).toContain(
       'object.metadata?.leadflowAuthorizationAttempt !== "v1"'
     );
-    expect(webhook).toContain('eq(paymentAuthorizations.status, "pending")');
+    expect(webhook).toContain('eq(paymentAuthorizations.status, "pending_card")');
     expect(webhook).toContain(
       "object.amount_capturable === pending.amountCents"
     );
