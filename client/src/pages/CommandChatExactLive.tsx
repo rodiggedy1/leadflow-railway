@@ -620,11 +620,22 @@ function leadForConversation(conversation: SmsInboxConversation, leads: CommandL
   if (conversation.personType === "team") return null;
   const phone = normalizedLeadPhone(conversation.leadPhone);
   const name = conversation.leadName?.trim().toLowerCase() ?? "";
-  const matched = leads.find((lead) => (
-    (conversation.id > 0 && lead.sessionId === conversation.id)
-    || (phone && normalizedLeadPhone(lead.phone) === phone)
-    || (name && (lead.name.trim().toLowerCase() === name || leadNamesMatch(name, lead.name)))
-  ));
+  const sessionMatch = conversation.id > 0
+    ? leads.find((lead) => lead.sessionId === conversation.id)
+    : undefined;
+  const phoneMatch = !sessionMatch && phone
+    ? leads.find((lead) => normalizedLeadPhone(lead.phone) === phone)
+    : undefined;
+  const nameMatches = !sessionMatch && !phoneMatch && name
+    ? leads.filter((lead) => lead.name.trim().toLowerCase() === name || leadNamesMatch(name, lead.name))
+    : [];
+  const nameMatch = nameMatches.length === 1 ? nameMatches[0] : undefined;
+  const namePhone = nameMatch ? normalizedLeadPhone(nameMatch.phone) : "";
+  const nameConflicts = nameMatch && (
+    (phone && namePhone && phone !== namePhone)
+    || (conversation.id > 0 && nameMatch.sessionId !== null && nameMatch.sessionId > 0 && nameMatch.sessionId !== conversation.id)
+  );
+  const matched = sessionMatch ?? phoneMatch ?? (nameConflicts ? undefined : nameMatch);
   if (matched) return matched;
   return {
     id: conversation.id,
