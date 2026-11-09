@@ -72,6 +72,32 @@ beforeEach(() => { hooks.slots = []; hooks.cursor = 0; hooks.effectCursor = 0; h
 afterEach(() => { hooks.cleanups.forEach(cleanup => cleanup()); vi.unstubAllGlobals(); });
 
 describe("local invoice builder", () => {
+  it("pulls and lists jobs with phone only, without requiring an email", async () => {
+    await startAdmin(); change("Billing email", "");
+    fetchMock.mockImplementation(() => response(lookup));
+    await button("Pull bookings").props.onClick(); render();
+    expect(lastPayload()).toMatchObject({ phone: lookup.client.phone, email: "" });
+    expect(serviceInputs()).toHaveLength(3);
+    expectSummary("$675.00", "$225.00", "$450.00", 2);
+  });
+  it("pulls and lists jobs with email only, without requiring a phone", async () => {
+    await startAdmin(); change("Client phone", "");
+    fetchMock.mockImplementation(() => response(lookup));
+    await button("Pull bookings").props.onClick(); render();
+    expect(lastPayload()).toMatchObject({ phone: "", email: lookup.client.email });
+    expect(serviceInputs()).toHaveLength(3);
+    expectSummary("$675.00", "$225.00", "$450.00", 2);
+  });
+  it("lists all returned jobs and original paid amounts even with no portal account", async () => {
+    await startAdmin();
+    fetchMock.mockImplementation(() => response({ client: null, services: lookup.services, reviewHash: "" }));
+    await button("Pull bookings").props.onClick(); render();
+    expect(serviceInputs()).toHaveLength(3);
+    expectRowPrice(0, "$225.00", "Paid");
+    expectSummary("$675.00", "$225.00", "$450.00", 2);
+    expect(text(tree)).not.toContain("An account must already exist");
+    expectOnlyAdminCalls("status", "lookup", "lookup");
+  });
   it("keeps loaded staff-paid service prices visible with a Paid label and unchanged period balance", async () => {
     await startAdmin(); expectRowPrice(0, "$225.00", "Paid"); expectRowPrice(1, "$225.00", "Unpaid");
     expect(text(serviceRow(0))).toContain("Paid — recorded by staff");

@@ -8,7 +8,7 @@ export const INVOICE_PAYMENT_MARKER = "leadflow_invoice_v1";
 export type InvoiceIssueInput = z.infer<typeof invoiceIssueSchema>;
 export type InvoiceMarkPaidInput = z.infer<typeof invoiceMarkPaidSchema>;
 export type InvoiceRepository = {
-  lookup(phone: string, email: string, from: string, to: string): Promise<{ client: InvoiceClient; services: InvoiceService[] }>;
+  lookup(phone: string, email: string, from: string, to: string): Promise<{ client: InvoiceClient | null; services: InvoiceService[] }>;
   services(clientId: number, from: string, to: string): Promise<{ client: InvoiceClient; services: InvoiceService[] }>;
   issue(input: InvoiceIssueInput, client: InvoiceClient, services: InvoiceService[], tokenHash: string, payloadHash: string): Promise<PayableInvoice>;
   byToken(tokenHash: string): Promise<PayableInvoice | null>;
@@ -43,7 +43,7 @@ export class PayableInvoiceService {
   }
   async lookup(phone: string, email: string, from: string, to: string) {
     const result = await this.deps.repo.lookup(phone, email, from, to);
-    return { ...result, reviewHash: invoiceReviewHash(result.client, result.services, from, to) };
+    return { ...result, reviewHash: result.client ? invoiceReviewHash(result.client, result.services, from, to) : "" };
   }
   async markAlreadyPaid(input: InvoiceMarkPaidInput, agentId: number) {
     if (!this.deps.repo.markAlreadyPaid) throw new InvoiceError("INVOICE_STORAGE_UNAVAILABLE", 503, "Invoice payment records are unavailable.");

@@ -168,7 +168,7 @@ function expectRolledBack(h: ReturnType<typeof fakeSql>) {
 }
 
 describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
-  it("uses exact account identity and billing-email source ownership with full US phone fallback", async () => {
+  it("lists exact phone OR email contacts with an optional real account and full US phone digits", async () => {
     const h = fakeSql();
     expect(h.poolFactory).not.toHaveBeenCalled();
     h.state.jobs = [jobRow({ customerPhone: "(202) 555-0123", customerEmail: " OWNER@example.test " })];
@@ -180,29 +180,33 @@ describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
     ]);
     const [sql, params] = h.execute.mock.calls[1];
     expect(sql).toContain("FROM leadflow_jobs j FORCE INDEX");
-    expect(sql).toContain("LOWER(TRIM(j.customerEmail)) = ? OR");
-    expect(sql).toContain("COALESCE(TRIM(j.customerEmail), '') = '' AND");
-    expect(sql).toContain("REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)");
+    expect(sql).toMatch(/LOWER\(TRIM\(j\.customerEmail\)\) = (?:\?|NULLIF\(\?, ''\)) OR/);
+    expect(sql).not.toContain("COALESCE(TRIM(j.customerEmail), '') = '' AND");
+    expect(sql).toContain("REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (");
     expect(sql).not.toMatch(/LIKE|RIGHT\s*\(/i);
     expect(params).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
     expect(h.execute.mock.calls[2][1]).toEqual(params);
     expect(h.execute.mock.calls[2][0]).toContain("FROM bookings b FORCE INDEX (idx_bookings_requested_date)");
-    expect(h.execute.mock.calls[2][0]).toContain("COALESCE(TRIM(b.customerEmail), '') = '' AND");
+    expect(h.execute.mock.calls[2][0]).not.toContain("COALESCE(TRIM(b.customerEmail), '') = '' AND");
     expect(h.getConnection).not.toHaveBeenCalled();
     expect(h.mutations()).toEqual([]);
   });
 
-  it("rejects wrong phone/email ownership and duplicate phone accounts before reading service sources", async () => {
-    const cases: Array<{ accounts?: FakeRow[]; email?: string; code: string }> = [
-      { accounts: [accountRow({ customerPhone: "+12025550124" })], code: "CLIENT_IDENTITY_MISMATCH" },
-      { email: "other@example.test", code: "CLIENT_IDENTITY_MISMATCH" },
-      { accounts: [accountRow(), accountRow({ id: 18 })], code: "CLIENT_NOT_FOUND" },
+  it("lists sources without an account when portal contacts mismatch, are missing, or are duplicated", async () => {
+    const cases: Array<{ accounts?: FakeRow[]; email?: string }> = [
+      { accounts: [accountRow({ customerPhone: "+12025550124" })] },
+      { email: "other@example.test" },
+      { accounts: [] },
+      { accounts: [accountRow(), accountRow({ id: 18 })] },
     ];
     for (const fixture of cases) {
       const h = fakeSql();
       if (fixture.accounts) h.state.accounts = fixture.accounts;
-      await expect(h.repo.lookup(PHONE, fixture.email ?? EMAIL, FROM, TO)).rejects.toMatchObject({ code: fixture.code });
-      expect(h.execute.mock.calls.every(([sql]) => sql.includes("FROM customer_portal_accounts"))).toBe(true);
+      const result = await h.repo.lookup(PHONE, fixture.email ?? EMAIL, FROM, TO);
+      expect(result.client).toBeNull();
+      expect(result.services).toMatchObject([{ id: "job:101", eligible: true, amountCents: 12_345 }]);
+      expect(h.execute.mock.calls.some(([sql]) => sql.includes("FROM leadflow_jobs j FORCE INDEX"))).toBe(true);
+      expect(h.execute.mock.calls.some(([sql]) => sql.includes("FROM bookings b FORCE INDEX"))).toBe(true);
       expect(h.mutations()).toEqual([]);
     }
   });

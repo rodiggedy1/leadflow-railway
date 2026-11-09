@@ -78,13 +78,18 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
   async lookup(phoneInput: string, emailInput: string, from: string, to: string) {
     const phone = normalizePhone(phoneInput);
     const email = normalizedEmail(emailInput);
-    if (!phone || !email) return fail("INVALID_CUSTOMER", "An exact valid US phone and email are required.", 400);
+    if (!phone && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("INVALID_CUSTOMER", "Enter a phone or email.", 400);
     const db = await this.pool();
-    const accounts = await rows(db, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE customerPhone = ? LIMIT 2", [phone]);
-    if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", accounts.length === 0 ? "No existing customer account matches this phone. An account must already exist before invoice lookup." : "Multiple customer accounts match this phone; identity needs review.", 404);
-    const client = clientFrom(accounts[0]);
-    if (client.phone !== phone || client.email !== email) return fail("CLIENT_IDENTITY_MISMATCH", "The exact email and phone do not identify the same customer.");
-    return { client, services: await this.readServices(db, client, from, to) };
+    // A portal account is optional for search. Never create one while listing.
+    const accounts = phone
+      ? await rows(db, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE customerPhone = ? LIMIT 2", [phone])
+      : await rows(db, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE LOWER(TRIM(customerEmail)) = ? LIMIT 2", [email]);
+    let client: InvoiceClient | null = null;
+    if (accounts.length === 1) {
+      const candidate = clientFrom(accounts[0]);
+      if ((!phone || candidate.phone === phone) && (!email || candidate.email === email)) client = candidate;
+    }
+    return { client, services: await this.readServices(db, { phone: phone || "", email: email || null }, from, to, false, true) };
   }
 
   async services(clientId: number, from: string, to: string) {
@@ -96,13 +101,15 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
     return { client, services: await this.readServices(db, client, from, to) };
   }
 
-  private async readServices(db: SqlClient, client: InvoiceClient, from: string, to: string, current = false): Promise<InvoiceService[]> {
+  private async readServices(db: SqlClient, client: { phone: string; email: string | null; id?: number }, from: string, to: string, current = false, listing = false): Promise<InvoiceService[]> {
     if (!invoicePeriodSchema.safeParse({ from, to }).success) return fail("INVALID_PERIOD", "Choose a valid service period.", 400);
     const local = extractUSDigits(client.phone);
-    if (!local) return fail("CLIENT_IDENTITY_MISMATCH", "Customer phone needs review.");
+    if (!local && !listing) return fail("CLIENT_IDENTITY_MISMATCH", "Customer phone needs review.");
     // Billing email owns the service even when its service-contact phone differs.
     // Only email-less services fall back to exact full US phone digits. Both source
     // kinds use date indexes and the same rule; never silently truncate visits.
+    const listingContact = (alias: string) => `(LOWER(TRIM(${alias}.customerEmail)) = NULLIF(?, '') OR REGEXP_REPLACE(${alias}.customerPhone, '[^0-9]', '') IN (NULLIF(?, ''), NULLIF(?, '')))`;
+    const contactValues = [from, to, client.email || "", local || "", local ? `1${local}` : ""];
     const loadJobs = () => rows(db, `SELECT j.id, j.bookingId, j.jobDate, j.customerPhone, j.customerEmail,
       j.serviceName, j.jobAddress, j.jobTotalCents, j.bookingStatus, j.missingFromLaunch27At,
       b.id AS nativeId, b.requestedLocalDate AS nativeDate, b.customerPhone AS nativePhone,
@@ -113,9 +120,9 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       FROM leadflow_jobs j FORCE INDEX (idx_leadflow_jobs_job_date)
       LEFT JOIN bookings b ON b.id = j.bookingId
       WHERE j.jobDate >= ? AND j.jobDate <= ?
-        AND (LOWER(TRIM(j.customerEmail)) = ? OR
-          (COALESCE(TRIM(j.customerEmail), '') = '' AND REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)))
-      ORDER BY j.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, [from, to, client.email, local, `1${local}`]);
+        AND ${listing ? listingContact("j") : `(LOWER(TRIM(j.customerEmail)) = ? OR
+          (COALESCE(TRIM(j.customerEmail), '') = '' AND REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)))`}
+      ORDER BY j.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, contactValues);
     const loadBookings = () => rows(db, `SELECT b.id, b.requestedLocalDate, b.customerPhone, b.customerEmail,
       b.serviceName, b.address, b.firstCleaningTotalCents, b.status,
       (SELECT COUNT(*) FROM leadflow_jobs c WHERE c.jobDate = b.requestedLocalDate AND c.bookingId = b.id) AS firstProjectionCount,
@@ -125,19 +132,19 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       FROM bookings b FORCE INDEX (idx_bookings_requested_date)
       LEFT JOIN leadflow_jobs p ON p.bookingId = b.id AND p.jobDate = b.requestedLocalDate
       WHERE b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?
-        AND (LOWER(TRIM(b.customerEmail)) = ? OR
-          (COALESCE(TRIM(b.customerEmail), '') = '' AND REGEXP_REPLACE(b.customerPhone, '[^0-9]', '') IN (?, ?)))
+        AND ${listing ? listingContact("b") : `(LOWER(TRIM(b.customerEmail)) = ? OR
+          (COALESCE(TRIM(b.customerEmail), '') = '' AND REGEXP_REPLACE(b.customerPhone, '[^0-9]', '') IN (?, ?)))`}
         AND (p.id IS NULL OR p.id = (SELECT MIN(j.id) FROM leadflow_jobs j FORCE INDEX (idx_leadflow_jobs_job_date)
           WHERE j.jobDate = b.requestedLocalDate AND j.bookingId = b.id))
-      ORDER BY b.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, [from, to, client.email, local, `1${local}`]);
+      ORDER BY b.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, contactValues);
     // Issue locks native rows in stable primary-key order BEFORE locking jobs or
     // reading profile/hold state, matching the cross-collector booking lock.
     let jobs: Row[], bookings: Row[];
     if (current) { bookings = bounded(await loadBookings()); jobs = bounded(await loadJobs()); }
     else { jobs = bounded(await loadJobs()); bookings = bounded(await loadBookings()); }
-    const matches = (phone: unknown, email: unknown) => normalizedEmail(email)
-      ? normalizedEmail(email) === client.email
-      : normalizePhone(text(phone)) === client.phone;
+    const matches = (phone: unknown, email: unknown) => listing
+      ? (!!client.email && normalizedEmail(email) === client.email) || (!!client.phone && normalizePhone(text(phone)) === client.phone)
+      : normalizedEmail(email) ? normalizedEmail(email) === client.email : normalizePhone(text(phone)) === client.phone;
     const blockedStatus = (status: unknown) => !validServiceStatus(status);
     const result: InvoiceService[] = [];
     const seen = new Set<string>();
@@ -182,7 +189,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       const manual = await rows(db, `SELECT occurrenceKey, sourceServiceId, accountId, serviceDate, amountCents, requestId, payloadHash, reviewHash, recordedByAgentId, recordedAtMs FROM payable_invoice_manual_payments WHERE occurrenceKey = ?${current ? " FOR UPDATE" : ""}`, [service.occurrenceKey]);
       if (manual.length) {
         const mark = manual[0];
-        if (manual.length !== 1 || integer(mark.accountId) !== client.id || mark.sourceServiceId !== service.id || mark.serviceDate !== service.date || integer(mark.amountCents) !== service.amountCents) return fail("MANUAL_PAYMENT_CONFLICT", "A recorded manual payment no longer matches the service/account snapshot.");
+        if (manual.length !== 1 || (client.id != null && integer(mark.accountId) !== client.id) || mark.sourceServiceId !== service.id || mark.serviceDate !== service.date || integer(mark.amountCents) !== service.amountCents) return fail("MANUAL_PAYMENT_CONFLICT", "A recorded manual payment no longer matches the service/account snapshot.");
         service.paidCents = service.amountCents;
         service.paymentSource = "manual";
         if (service.eligible) service.reason = "Already paid — explicitly recorded by an agent before invoice creation.";
@@ -192,7 +199,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       const ownedLines = await rows(db, "SELECT l.sourceServiceId, l.serviceDate, l.amountCents, l.paidCents, l.manualPaidCents, i.accountId, i.status FROM payable_invoice_lines l INNER JOIN payable_invoices i ON i.id = l.invoiceId WHERE l.occurrenceKey = ?", [service.occurrenceKey]);
       if (ownedLines.length) {
         const line = ownedLines[0];
-        if (ownedLines.length !== 1 || integer(line.accountId) !== client.id || line.sourceServiceId !== service.id || line.serviceDate !== service.date || integer(line.amountCents) !== service.amountCents) return fail("INVALID_SNAPSHOT", "An existing invoice claim conflicts with this service/account.");
+        if (ownedLines.length !== 1 || (client.id != null && integer(line.accountId) !== client.id) || line.sourceServiceId !== service.id || line.serviceDate !== service.date || integer(line.amountCents) !== service.amountCents) return fail("INVALID_SNAPSHOT", "An existing invoice claim conflicts with this service/account.");
         const paid = integer(line.paidCents);
         if (paid > service.amountCents) return fail("CORRUPT_SNAPSHOT", "Existing invoice payment amounts need review.");
         if (paid > 0) { service.paidCents = paid; service.paymentSource = integer(line.manualPaidCents ?? 0) === paid ? "manual" : "stripe"; }

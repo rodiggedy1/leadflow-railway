@@ -35,7 +35,7 @@ function booking(overrides: Row = {}): Row {
     projectionAmount: null, projectionPhone: null, projectionEmail: null,
     projectionStatus: null, projectionMissing: null, paymentStatus: "not_started", ...overrides };
 }
-function fixture() {
+function fixture(lookupEmail = EMAIL) {
   const state = {
     accounts: [account(), account({ id: 18, customerName: "Other customer", customerPhone: OTHER_PHONE })],
     accountResult: null as Row[] | null,
@@ -60,10 +60,10 @@ function fixture() {
       // Both accounts share the email: the old global veto must fail this fixture.
       result = state.accounts.map(row => ({ id: row.id, customerEmail: row.customerEmail }));
     } else if (sql.startsWith("SELECT j.id, j.bookingId, j.jobDate,") && sql.includes("FROM leadflow_jobs j FORCE INDEX")) {
-      expect(values).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
+      expect(values).toEqual([FROM, TO, lookupEmail, "2025550123", "12025550123"]);
       result = state.jobsByPhone.get(PHONE) ?? [];
     } else if (sql.startsWith("SELECT b.id, b.requestedLocalDate,") && sql.includes("FROM bookings b FORCE INDEX")) {
-      expect(values).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
+      expect(values).toEqual([FROM, TO, lookupEmail, "2025550123", "12025550123"]);
       result = state.bookingsByPhone.get(PHONE) ?? [];
     } else if (sql.startsWith("SELECT id, paymentStatus FROM bookings WHERE id = ? LIMIT 1")) {
       result = [...state.bookingsByPhone.values()].flat().filter(row => row.id === values[0]);
@@ -104,13 +104,14 @@ describe("shared billing email remains scoped to the exact owned account (offlin
     expect(h.trace[0]).toEqual({ sql: ACCOUNT_PHONE, values: [PHONE] });
     const jobs = h.trace.find(({ sql }) => sql.includes("FROM leadflow_jobs j FORCE INDEX"))!;
     expect(jobs.sql).toContain("j.jobDate >= ? AND j.jobDate <= ?");
-    expect(jobs.sql).toContain("REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)");
+    expect(jobs.sql).toContain("REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (NULLIF(?, ''), NULLIF(?, ''))");
     expect(jobs.sql).not.toMatch(/LIKE|RIGHT\s*\(/i);
-    expect(jobs.sql).toContain("LOWER(TRIM(j.customerEmail)) = ? OR");
+    expect(jobs.sql).toContain("LOWER(TRIM(j.customerEmail)) = NULLIF(?, '') OR");
     expect(jobs.values).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
     const native = h.trace.find(({ sql }) => sql.includes("FROM bookings b FORCE INDEX"))!;
     expect(native.sql).toContain("b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?");
-    expect(native.sql).toContain("LOWER(TRIM(b.customerEmail)) = ? OR");
+    expect(native.sql).toContain("LOWER(TRIM(b.customerEmail)) = NULLIF(?, '') OR");
+    expect(native.sql).toContain("REGEXP_REPLACE(b.customerPhone, '[^0-9]', '') IN (NULLIF(?, ''), NULLIF(?, ''))");
     expect(native.values).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
     expectReadOnly(h);
   });
@@ -142,38 +143,49 @@ describe("shared billing email remains scoped to the exact owned account (offlin
     expectReadOnly(h);
   });
 
-  it("rejects a mismatched submitted email before any service reads", async () => {
-    const h = fixture();
-    await expect(h.repo.lookup(PHONE, "wrong@example.test", FROM, TO)).rejects.toMatchObject({ code: "CLIENT_IDENTITY_MISMATCH" });
-    expect(h.trace).toEqual([{ sql: ACCOUNT_PHONE, values: [PHONE] }]);
+  it("lists phone matches with a null client when the submitted email does not match the account", async () => {
+    const h = fixture("wrong@example.test");
+    const result = await h.repo.lookup(PHONE, "wrong@example.test", FROM, TO);
+    expect(result.client).toBeNull();
+    expect(result.services.map(s => s.id)).toEqual(["job:101", "job:102"]);
+    expect(result.services.every(s => s.eligible)).toBe(true);
+    expect(h.trace[0]).toEqual({ sql: ACCOUNT_PHONE, values: [PHONE] });
     expectReadOnly(h);
   });
 
-  it("still rejects duplicate account phones even when both rows share the billing email", async () => {
+  it("lists matches with a null client when duplicate account phones share the billing email", async () => {
     const h = fixture();
     h.state.accounts[1].customerPhone = PHONE;
-    await expect(h.repo.lookup(PHONE, EMAIL, FROM, TO)).rejects.toMatchObject({ code: "CLIENT_NOT_FOUND" });
-    expect(h.trace).toEqual([{ sql: ACCOUNT_PHONE, values: [PHONE] }]);
+    const result = await h.repo.lookup(PHONE, EMAIL, FROM, TO);
+    expect(result.client).toBeNull();
+    expect(result.services.map(s => s.id)).toEqual(["job:101", "job:102"]);
+    expect(result.services.every(s => s.eligible)).toBe(true);
+    expect(h.trace[0]).toEqual({ sql: ACCOUNT_PHONE, values: [PHONE] });
     expectReadOnly(h);
   });
 
-  it("rejects a malicious account result with the wrong phone before service reads", async () => {
+  it("does not select a malicious wrong-phone account result but still lists contact matches", async () => {
     const h = fixture();
     h.state.accountResult = [account({ customerPhone: OTHER_PHONE })];
-    await expect(h.repo.lookup(PHONE, EMAIL, FROM, TO)).rejects.toMatchObject({ code: "CLIENT_IDENTITY_MISMATCH" });
-    expect(h.trace).toEqual([{ sql: ACCOUNT_PHONE, values: [PHONE] }]);
+    const result = await h.repo.lookup(PHONE, EMAIL, FROM, TO);
+    expect(result.client).toBeNull();
+    expect(result.services.map(s => s.id)).toEqual(["job:101", "job:102"]);
+    expect(result.services.every(s => s.eligible)).toBe(true);
+    expect(h.trace[0]).toEqual({ sql: ACCOUNT_PHONE, values: [PHONE] });
     expectReadOnly(h);
   });
 
-  it("accepts a different service phone under the billing email but blocks a conflicting email", async () => {
+  it("lists matching phone OR email contacts while the owned-ID billing reread still blocks conflicting email", async () => {
     const h = fixture();
     h.state.jobsByPhone.set(PHONE, [job(), job({ id: 103, customerPhone: OTHER_PHONE }), job({ id: 104, customerEmail: "wrong@example.test" })]);
-    for (const result of [await h.repo.lookup(PHONE, EMAIL, FROM, TO), await h.repo.services(17, FROM, TO)]) {
-      expect(result.services.map(s => s.id)).toEqual(["job:101", "job:103", "job:104"]);
-      expect(result.services[0].eligible).toBe(true);
-      expect(result.services[1].eligible).toBe(true);
-      expectIdentityConflict(result.services[2]);
-    }
+    const listing = await h.repo.lookup(PHONE, EMAIL, FROM, TO);
+    expect(listing.services.map(s => s.id)).toEqual(["job:101", "job:103", "job:104"]);
+    expect(listing.services.every(s => s.eligible)).toBe(true);
+    const result = await h.repo.services(17, FROM, TO);
+    expect(result.services.map(s => s.id)).toEqual(["job:101", "job:103", "job:104"]);
+    expect(result.services[0].eligible).toBe(true);
+    expect(result.services[1].eligible).toBe(true);
+    expectIdentityConflict(result.services[2]);
     expectReadOnly(h);
   });
 
@@ -214,7 +226,8 @@ describe("shared billing email remains scoped to the exact owned account (offlin
     expect(source).toContain(ACCOUNT_PHONE);
     expect(source).toContain(ACCOUNT_ID);
     expect(source).toContain("accounts.length !== 1");
-    expect(source).toContain("client.phone !== phone || client.email !== email");
+    expect(source).toContain("let client: InvoiceClient | null = null");
+    expect(source).toContain("(!phone || candidate.phone === phone) && (!email || candidate.email === email)");
     expect(source).toContain("currentClient.phone !== client.phone || currentClient.email !== client.email");
     expect(source).toContain("j.jobDate >= ? AND j.jobDate <= ?");
     expect(source).toContain("b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?");

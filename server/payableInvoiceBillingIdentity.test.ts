@@ -35,17 +35,23 @@ function booking(overrides: Row = {}): Row {
 function identityPredicate(alias: string): string {
   return `(LOWER(TRIM(${alias}.customerEmail)) = ? OR (COALESCE(TRIM(${alias}.customerEmail), '') = '' AND REGEXP_REPLACE(${alias}.customerPhone, '[^0-9]', '') IN (?, ?)))`;
 }
+function listingPredicate(alias: string): string {
+  return `(LOWER(TRIM(${alias}.customerEmail)) = NULLIF(?, '') OR REGEXP_REPLACE(${alias}.customerPhone, '[^0-9]', '') IN (NULLIF(?, ''), NULLIF(?, '')))`;
+}
 function filtered(candidates: Row[], kind: Kind, sql: string, values: Values): Row[] {
   const alias = kind === "job" ? "j" : "b";
   const dateColumn = kind === "job" ? "jobDate" : "requestedLocalDate";
   const modern = sql.includes(identityPredicate(alias));
+  const listing = sql.includes(listingPredicate(alias));
   const legacy = kind === "job"
     ? sql.includes("AND REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)")
     : sql.includes("WHERE b.customerPhone = ? AND b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?");
-  if (!modern && !legacy) throw new Error(`Unrecognized source predicate: ${sql}`);
-  const [from, to] = !modern && kind === "booking" ? values.slice(1, 3) : values;
+  if (!modern && !listing && !legacy) throw new Error(`Unrecognized source predicate: ${sql}`);
+  const [from, to] = !modern && !listing && kind === "booking" ? values.slice(1, 3) : values;
   return candidates.filter(row => {
     if (String(row[dateColumn]) < String(from) || String(row[dateColumn]) > String(to)) return false;
+    if (listing) return (!!values[2] && email(row.customerEmail) === values[2]) ||
+      values.slice(3, 5).filter(value => !!value).includes(digits(row.customerPhone));
     if (modern) return email(row.customerEmail) === values[2] ||
       (!email(row.customerEmail) && values.slice(3, 5).includes(digits(row.customerPhone)));
     return kind === "job" ? values.slice(2, 4).includes(digits(row.customerPhone)) : row.customerPhone === values[0];
@@ -153,17 +159,21 @@ async function reviewed(h: ReturnType<typeof fixture>) {
 }
 
 describe("billing identity correction — real repository, offline filtering SQL mock", () => {
-  it("captures both inclusive date-index-bounded email OR (no-email AND full-phone) predicates and values", async () => {
+  it("captures inclusive date-index-bounded listing OR and separate strict billing predicates and values", async () => {
     const h = fixture();
     await h.repo.lookup("(202) 555-0100", " BILLING@example.test ", FROM, TO);
     expect(h.trace[0]).toEqual({ sql: "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE customerPhone = ? LIMIT 2", values: [PHONE] });
+    await h.repo.services(17, FROM, TO);
     for (const [alias, table, index, date] of [["j", "leadflow_jobs", "idx_leadflow_jobs_job_date", "jobDate"], ["b", "bookings", "idx_bookings_requested_date", "requestedLocalDate"]]) {
-      const query = h.trace.find(t => t.sql.includes(`FROM ${table} ${alias} FORCE INDEX`))!;
-      expect(query.sql).toContain(`FORCE INDEX (${index})`);
-      expect(query.sql).toContain(`WHERE ${alias}.${date} >= ? AND ${alias}.${date} <= ? AND ${identityPredicate(alias)}`);
-      expect(query.values).toEqual([FROM, TO, EMAIL, "2025550100", "12025550100"]);
-      expect(query.sql).toContain("LIMIT 1001");
-      expect(query.sql).not.toMatch(/\bLIKE\b|RIGHT\s*\(|customerName\s*=/i);
+      const queries = h.trace.filter(t => t.sql.startsWith(`SELECT ${alias}.id,`) && t.sql.includes(`FROM ${table} ${alias} FORCE INDEX`));
+      expect(queries).toHaveLength(2);
+      queries.forEach((query, i) => {
+        expect(query.sql).toContain(`FORCE INDEX (${index})`);
+        expect(query.sql).toContain(`WHERE ${alias}.${date} >= ? AND ${alias}.${date} <= ? AND ${i === 0 ? listingPredicate(alias) : identityPredicate(alias)}`);
+        expect(query.values).toEqual([FROM, TO, EMAIL, "2025550100", "12025550100"]);
+        expect(query.sql).toContain("LIMIT 1001");
+        expect(query.sql).not.toMatch(/\bLIKE\b|RIGHT\s*\(|customerName\s*=/i);
+      });
     }
     expect(h.writes()).toEqual([]);
     expect(h.getConnection).not.toHaveBeenCalled();
@@ -209,6 +219,11 @@ describe("billing identity correction — real repository, offline filtering SQL
       const services = (await h.repo.services(17, FROM, TO)).services;
       expect(services.map(s => [s.date, s.eligible])).toEqual([[FROM, true], [TO, true]]);
       expect(services.map(s => s.id)).toEqual(kind === "job" ? ["job:101", "job:102"] : [`booking:101:first:${FROM}`, `booking:102:first:${TO}`]);
+      const listing = await h.repo.lookup(PHONE, EMAIL, FROM, TO);
+      expect(listing.services.map(s => s.id)).toEqual(kind === "job"
+        ? ["job:101", "job:103", "job:102"]
+        : [`booking:101:first:${FROM}`, `booking:103:first:${DATE}`, `booking:102:first:${TO}`]);
+      expect(listing.services.every(s => s.eligible)).toBe(true);
     });
     it("rejects a stale service email at checkout before reserving any payment", async () => {
       const h = fixture(kind);
@@ -249,11 +264,16 @@ describe("billing identity correction — real repository, offline filtering SQL
     });
   });
 
-  it.each([[PHONE, "wrong@example.test", "CLIENT_IDENTITY_MISMATCH"], [OTHER_PHONE, EMAIL, "CLIENT_NOT_FOUND"]])("still requires the exact selected account phone/email pair (%s, %s)", async (phone, address, code) => {
+  it.each([[PHONE, "wrong@example.test", ["job:101", "job:103"]], [OTHER_PHONE, EMAIL, ["job:101", "job:102"]]] as const)("lists all phone OR email matches without an exact account pair (%s, %s)", async (phone, address, ids) => {
     const h = fixture();
-    await expect(h.repo.lookup(phone, address, FROM, TO)).rejects.toMatchObject({ code });
-    expect(h.trace).toHaveLength(1);
+    h.state.jobs = [job(), job({ id: 102, customerPhone: OTHER_PHONE }), job({ id: 103, customerEmail: "wrong@example.test" })];
+    const result = await h.repo.lookup(phone, address, FROM, TO);
+    expect(result.client).toBeNull();
+    expect(result.services.map(s => s.id)).toEqual(ids);
+    expect(result.services.every(s => s.eligible)).toBe(true);
+    expect(h.trace[0].values).toEqual([phone]);
     expect(h.writes()).toEqual([]);
+    expect(h.getConnection).not.toHaveBeenCalled();
   });
 
   it("merges only one trusted same-date native projection despite differing service phones", async () => {
