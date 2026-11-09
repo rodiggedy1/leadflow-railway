@@ -20,6 +20,7 @@ import {
   type PublicBookingPricingInput,
   type PublicBookingPriceSnapshot,
 } from "../shared/publicBookingPricing";
+import { bookingArrivalPreferenceSchema } from "../shared/bookingArrival";
 import { normalizePhone } from "./utils/phone";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
 
@@ -287,9 +288,17 @@ export function buildPreparedPublicBooking(
   if (!phone)
     throw new NativeBookingInputError("Enter a valid US phone number.");
 
+  const arrival = input.pricing.arrivalPreference === undefined
+    ? undefined
+    : bookingArrivalPreferenceSchema.safeParse(input.pricing.arrivalPreference);
+  if (arrival && !arrival.success) {
+    throw new NativeBookingInputError("Select a supported arrival window.");
+  }
+  const arrivalPreference = arrival?.success ? arrival.data : undefined;
+  const requestedLocalTime = arrivalPreference?.startLocalTime ?? input.requestedSchedule.localTime;
   const requestedStartAt = businessLocalDateTimeToUtcMs(
     input.requestedSchedule.localDate,
-    input.requestedSchedule.localTime,
+    requestedLocalTime,
     options.timeZone
   );
   if (requestedStartAt <= options.nowMs)
@@ -363,7 +372,7 @@ export function buildPreparedPublicBooking(
     address,
     requestedSchedule: {
       localDate: input.requestedSchedule.localDate,
-      localTime: input.requestedSchedule.localTime,
+      localTime: requestedLocalTime,
       timeZone: options.timeZone,
       requestedStartAt,
     },
@@ -382,11 +391,12 @@ export function buildPreparedPublicBooking(
           : `${input.service.bedrooms} bed · ${input.service.bathrooms} bath${input.service.bathrooms === 1 ? "" : "s"}`,
     address,
     requestedLocalDate: input.requestedSchedule.localDate,
-    requestedLocalTime: input.requestedSchedule.localTime,
+    requestedLocalTime,
     requestedTimeZone: options.timeZone,
     totalCents: breakdown.firstCleaningTotalCents,
     recurrence: input.recurrence,
     futureVisitTotalCents: breakdown.futureVisitTotalCents,
+    ...(arrivalPreference !== undefined ? { arrivalPreference } : {}),
   };
 
   return {
@@ -412,7 +422,7 @@ export function buildPreparedPublicBooking(
       specialRequestNotes,
       address,
       requestedLocalDate: input.requestedSchedule.localDate,
-      requestedLocalTime: input.requestedSchedule.localTime,
+      requestedLocalTime,
       requestedTimeZone: options.timeZone,
       requestedStartAt,
       recurrence: input.recurrence,

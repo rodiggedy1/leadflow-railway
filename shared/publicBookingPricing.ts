@@ -2,6 +2,7 @@ import type {
   BookingWidgetRecurringFrequency,
   BookingWidgetServiceId,
 } from "./bookingWidgetConfig";
+import { bookingArrivalPreferenceSchema, type BookingArrivalPreference } from "./bookingArrival";
 
 export const PUBLIC_BOOKING_PRICING_VERSION = "public-book-v2" as const;
 export const PUBLIC_BOOKING_HOURLY_RATE = 70;
@@ -67,6 +68,8 @@ export type PublicBookingPricingInput = {
   recurrence: BookingWidgetRecurringFrequency;
   /** Optional agent-entered first-cleaning total, in cents. */
   customPriceCents?: number;
+  /** Explicit public /book preference only; absent for legacy/internal quotes. */
+  arrivalPreference?: BookingArrivalPreference;
 };
 
 export type PublicBookingPricedExtra = {
@@ -90,6 +93,9 @@ export type PublicBookingPriceBreakdown = {
   futureVisitTotalCents: number | null;
   discountPercent: number;
   extras: PublicBookingPricedExtra[];
+  /** Present only for an explicit arrival preference. */
+  arrivalDiscountPercent?: number;
+  arrivalDiscountCents?: number;
 };
 
 export type PublicBookingPriceSnapshot = {
@@ -181,6 +187,12 @@ export function calculatePublicBookingPrice(
   assertIntegerRange(input.condition, "Home condition", 1, 10);
   assertIntegerRange(input.maidCount, "Number of maids", 1, 4);
   assertIntegerRange(input.hourCount, "Number of hours", 1, 8);
+  const arrivalPreference = input.arrivalPreference === undefined
+    ? undefined
+    : bookingArrivalPreferenceSchema.safeParse(input.arrivalPreference);
+  if (arrivalPreference && !arrivalPreference.success) {
+    throw new Error("Select a supported arrival window.");
+  }
 
   const seenExtras = new Set<string>();
   const extras = input.extras
@@ -232,8 +244,15 @@ export function calculatePublicBookingPrice(
   if (input.customPriceCents !== undefined) {
     assertIntegerRange(input.customPriceCents, "Custom first-cleaning price", 1, 1_000_000);
   }
+  // Agent-entered totals remain authoritative; never turn an override into an arrival rule.
+  const arrivalDiscountPercent = input.customPriceCents !== undefined ? 0
+    : arrivalPreference?.success && arrivalPreference.data.mode === "flexible" ? 10
+      : arrivalPreference?.success && arrivalPreference.data.mode === "preferred" ? 5 : 0;
+  const arrivalDiscountCents = Math.round(
+    (serviceSubtotalCents + extrasTotalCents) * arrivalDiscountPercent / 100
+  );
   const firstCleaningTotalCents =
-    input.customPriceCents ?? serviceSubtotalCents + extrasTotalCents;
+    input.customPriceCents ?? serviceSubtotalCents + extrasTotalCents - arrivalDiscountCents;
   const futureVisitBaseTotalCents =
     input.pricingMode === "hourly"
       ? hourlyServiceTotalCents
@@ -263,6 +282,9 @@ export function calculatePublicBookingPrice(
     futureVisitTotalCents,
     discountPercent,
     extras,
+    ...(input.arrivalPreference !== undefined
+      ? { arrivalDiscountPercent, arrivalDiscountCents }
+      : {}),
   };
 }
 
@@ -274,6 +296,9 @@ export function createPublicBookingPriceSnapshot(
     input: {
       ...input,
       extras: input.extras.map(extra => ({ ...extra })),
+      ...(input.arrivalPreference !== undefined
+        ? { arrivalPreference: { ...input.arrivalPreference } }
+        : {}),
     },
     serviceName: getPublicBookingServiceName(input.serviceId),
     breakdown: calculatePublicBookingPrice(input),
@@ -291,4 +316,13 @@ export function isPublicBookingPriceSnapshot(
     Boolean(snapshot.breakdown && typeof snapshot.breakdown === "object") &&
     typeof snapshot.serviceName === "string"
   );
+}
+
+/** Read an explicit requested window without inferring one from a legacy start. */
+export function getPublicBookingArrivalPreference(
+  value: unknown
+): BookingArrivalPreference | undefined {
+  if (!isPublicBookingPriceSnapshot(value)) return undefined;
+  const preference = bookingArrivalPreferenceSchema.safeParse(value.input.arrivalPreference);
+  return preference.success ? preference.data : undefined;
 }

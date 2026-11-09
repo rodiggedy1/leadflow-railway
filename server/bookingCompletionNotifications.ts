@@ -9,6 +9,7 @@ import {
 import { getDb } from "./db";
 import { sendSms } from "./openphone";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { getPublicBookingArrivalPreference } from "../shared/publicBookingPricing";
 
 const CS_SUPPORT_NUMBER = "+12028885362";
 const OWNER_ALERT_NUMBER = "+13029816191";
@@ -51,10 +52,14 @@ function displayConfirmationTime(hour: number, minute: number): string {
   return `${displayHour}:${String(minute).padStart(2, "0")} ${suffix}`.replace(/:00 /, " ");
 }
 
-function displayArrivalWindow(localTime: string): string {
+function displayArrivalWindow(localTime: string, endLocalTime?: string): string {
   const [hourText, minuteText] = localTime.split(":");
   const startHour = Number(hourText);
   const startMinute = Number(minuteText);
+  if (endLocalTime !== undefined) {
+    const [endHour, endMinute] = endLocalTime.split(":").map(Number);
+    return `${displayConfirmationTime(startHour, startMinute)} to ${displayConfirmationTime(endHour, endMinute)}`;
+  }
   return `${displayConfirmationTime(startHour, startMinute)} to ${displayConfirmationTime(startHour + 2, startMinute)}`;
 }
 
@@ -84,7 +89,13 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
 
   const amount = displayAmount(booking.firstCleaningTotalCents);
   const name = booking.customerName;
-  const schedule = `${booking.requestedLocalDate} at ${booking.requestedLocalTime}`;
+  const arrivalPreference = getPublicBookingArrivalPreference(booking.priceSnapshot);
+  const arrivalWindow = arrivalPreference
+    ? displayArrivalWindow(arrivalPreference.startLocalTime, arrivalPreference.endLocalTime)
+    : displayArrivalWindow(booking.requestedLocalTime);
+  const schedule = arrivalPreference
+    ? `${booking.requestedLocalDate} at ${arrivalWindow}`
+    : `${booking.requestedLocalDate} at ${booking.requestedLocalTime}`;
   const confirmationAmount = displayConfirmationAmount(booking.firstCleaningTotalCents);
   const isCashAppPaidToday =
     booking.paymentStatus === "captured" && booking.paymentMethod === "cashapp";
@@ -95,7 +106,7 @@ export async function sendBookingCompletionNotifications(bookingId: number): Pro
     "You're booked! 🎉 Your Maids in Black cleaning is confirmed.",
     [
       `📅 ${displayConfirmationDate(booking.requestedLocalDate)}`,
-      `🕚 Arrival window: ${displayArrivalWindow(booking.requestedLocalTime)}`,
+      `🕚 Arrival window: ${arrivalWindow}`,
       `📍 ${booking.address}`,
       `🧼 ${booking.serviceName}, ${booking.bedrooms} bed / ${booking.bathrooms} bath`,
       `➕ Add-on: ${displayExtras(booking.extras)}`,

@@ -6,10 +6,11 @@ const root = path.resolve(import.meta.dirname, "..");
 const read = (relative: string) =>
   fs.readFileSync(path.join(root, relative), "utf8");
 
-describe("approved eight-step public booking flow", () => {
+describe("approved three-screen public booking flow", () => {
   const page = read("client/src/pages/Book.tsx");
   const reviewCss = read("client/src/pages/booking-flow-review.css");
   const headerCss = read("client/src/components/public-booking-header.css");
+  const approvedPayment = read("client/src/components/approved-book/ApprovedBookPayment.tsx");
   const pricing = read("shared/publicBookingPricing.ts");
   const paymentRouter = read("server/bookingPaymentRouter.ts");
   const paymentTarget = read("server/bookingPaymentTargetService.ts");
@@ -18,15 +19,20 @@ describe("approved eight-step public booking flow", () => {
   const persistence = read("server/canonicalBookingPersistence.ts");
   const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
 
-  it("uses the review canvas on /book while leaving /book-now available", () => {
+  it("uses the approved three-screen surface on /book while leaving /book-now available", () => {
     const app = read("client/src/App.tsx");
     expect(app).toContain('import PublicBookingHeader from "./components/PublicBookingHeader";');
     expect(app).toContain("function PublicBookingRoute()");
     expect(app).toContain("<PublicBookingHeader /><Book />");
     expect(app).toContain('<Route path={"/book"} component={PublicBookingRoute} />');
     expect(app).toContain('<Route path={"/book-now"} component={BookNow} />');
-    expect(page).toContain("STEP {step} OF 8");
-    expect(page).toContain("booking-review-page booking-live-page");
+    expect(page).toContain('<ApprovedBookFirstPage />');
+    expect(page).toContain('<ApprovedBookSecondPage />');
+    expect(page).toContain('<ApprovedBookPayment');
+    expect(page).toContain('const visibleStep = step === 1 ? 1 : step === 2 ? 2 : 3;');
+    expect(page).toContain('onNext: () => setStep(step === 1 ? 2 : 6)');
+    expect(page).toContain('aria-label="Booking progress"');
+    expect(approvedPayment).toContain('STEP 3 OF 3');
     expect(page).not.toContain("VISUAL REVIEW ONLY");
     expect(reviewCss).toContain("grid-template-columns: 261px 1fr;");
     expect(reviewCss).toContain("max-width: 1044px;");
@@ -98,9 +104,7 @@ describe("approved eight-step public booking flow", () => {
   it("finalizes the booking immediately after Stripe confirms the card", () => {
     const literalCheckoutController = page.slice(
       page.indexOf("const finalizeConfirmedCard = async () =>"),
-      page.indexOf(
-        '  return (\n    <main className="booking-review-page booking-live-page">'
-      )
+      page.indexOf("\nfunction LiteralPageThree(")
     );
     expect(literalCheckoutController).toMatch(
       /const finalizeConfirmedCard = async \(\) => \{[\s\S]*finalizeBookingMutation\.mutateAsync\([\s\S]*setComplete\(true\);/
@@ -109,7 +113,7 @@ describe("approved eight-step public booking flow", () => {
       /const finalizeConfirmedCard = async \(\) => \{\s*if \(step === 8\)/
     );
     expect(literalCheckoutController).toMatch(
-      /onCardReady=\{\(brand, last4\) => \{[\s\S]*setCardOnFile\(true\);[\s\S]*void finalizeConfirmedCard\(\);[\s\S]*\}\}/
+      /card: cardOnFile[\s\S]*onComplete=\{result => \{[\s\S]*setCardOnFile\(true\);[\s\S]*void finalizeConfirmedCard\(\);[\s\S]*\}\}/
     );
     expect(literalCheckoutController).not.toContain(
       "onReviewBooking={() => setStep(8)}"
