@@ -27,6 +27,7 @@ import { broadcastOpsUpdate } from "./sseBroadcast";
 import { finalizeCanonicalBooking, finalizeCanonicalCardOnFile, startCanonicalCardSetup } from "./bookingPaymentEngine";
 import { verifyCanonicalCardSetup } from "./bookingPaymentVerification";
 import { authorizeCanonicalBookingHold, captureCanonicalPaymentIntent, cancelCanonicalPaymentIntent, chargeCanonicalSavedCard } from "./bookingPaymentActionsEngine";
+import { withUnclaimedNativeFirstVisit } from "./payableInvoiceBookingGuard";
 
 const confirmedBookingInput = z.object({
   bookingId: z.number().int().positive(),
@@ -457,52 +458,53 @@ export const bookingPaymentAdminRouter = router({
   placeHold: agentProcedure
     .input(confirmedBookingInput)
     .mutation(async ({ input, ctx }) => {
-      const { db, booking, profile } = await paymentTargetOrThrow(
-        input.bookingId
-      );
-      if (profile.paymentStatus !== "card_on_file")
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "A verified card on file is required before placing a hold.",
-        });
-      const existing = await db
-        .select()
-        .from(paymentAuthorizations)
-        .where(
-          and(
-            eq(paymentAuthorizations.bookingPaymentProfileId, profile.id),
-            or(
-              eq(paymentAuthorizations.status, "authorized"),
-              eq(paymentAuthorizations.status, "pending_card")
+      const { db } = await paymentTargetOrThrow(input.bookingId);
+      const agentName = ctx.agent?.agentName ?? "admin";
+      const { booking, profile, pending } = await withUnclaimedNativeFirstVisit(db, input.bookingId, async (tx, { booking, profile }) => {
+        if (profile.paymentStatus !== "card_on_file")
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A verified card on file is required before placing a hold.",
+          });
+        const existing = await tx
+          .select()
+          .from(paymentAuthorizations)
+          .where(
+            and(
+              eq(paymentAuthorizations.bookingPaymentProfileId, profile.id),
+              or(
+                eq(paymentAuthorizations.status, "authorized"),
+                eq(paymentAuthorizations.status, "pending_card")
+              )
             )
           )
-        )
-        .limit(1);
-      if (existing[0])
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "An active hold already exists for this booking.",
-        });
+          .limit(1).for("update");
+        if (existing[0])
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "An active hold already exists for this booking.",
+          });
+        const [pending] = await tx.insert(paymentAuthorizations).values({
+          bookingPaymentProfileId: profile.id,
+          cleanerJobId: null,
+          jobLabel: `Booking ${booking.publicBookingNumber}`,
+          customerPhone: booking.customerPhone,
+          customerName: booking.customerName,
+          stripeCustomerId: profile.stripeCustomerId,
+          stripePaymentMethodId: profile.stripePaymentMethodId,
+          stripePaymentIntentId: null,
+          amountCents: booking.firstCleaningTotalCents,
+          currency: "usd",
+          operation: "authorization",
+          status: "pending_card",
+          errorMessage: null,
+          createdBy: agentName,
+          authorizedAt: null,
+          notes: null,
+        }).$returningId();
+        return { booking, profile, pending };
+      });
       const stripe = getStripeClient();
-      const agentName = ctx.agent?.agentName ?? "admin";
-      const [pending] = await db.insert(paymentAuthorizations).values({
-        bookingPaymentProfileId: profile.id,
-        cleanerJobId: null,
-        jobLabel: `Booking ${booking.publicBookingNumber}`,
-        customerPhone: booking.customerPhone,
-        customerName: booking.customerName,
-        stripeCustomerId: profile.stripeCustomerId,
-        stripePaymentMethodId: profile.stripePaymentMethodId,
-        stripePaymentIntentId: null,
-        amountCents: booking.firstCleaningTotalCents,
-        currency: "usd",
-        operation: "authorization",
-        status: "pending_card",
-        errorMessage: null,
-        createdBy: agentName,
-        authorizedAt: null,
-        notes: null,
-      }).$returningId();
       let intent: Stripe.PaymentIntent;
       try {
         intent = await authorizeCanonicalBookingHold(stripe, {
@@ -518,7 +520,8 @@ export const bookingPaymentAdminRouter = router({
         });
       } catch (error) {
         const message = stripeFailureMessage(error, "Stripe hold failed");
-        const definitiveProviderFailure = typeof (error as Stripe.StripeRawError | undefined)?.statusCode === "number";
+        const statusCode = (error as Stripe.StripeRawError | undefined)?.statusCode;
+        const definitiveProviderFailure = typeof statusCode === "number" && statusCode >= 400 && statusCode < 500 && statusCode !== 409 && statusCode !== 429;
         await db.update(paymentAuthorizations).set(
           definitiveProviderFailure
             ? { status: "failed", errorMessage: message }
@@ -539,7 +542,7 @@ export const bookingPaymentAdminRouter = router({
       }
       if (intent.status !== "requires_capture") {
         await db.update(paymentAuthorizations).set({
-          status: "failed",
+          status: intent.status === "canceled" || intent.status === "requires_payment_method" ? "failed" : "pending_card",
           stripePaymentIntentId: intent.id,
           errorMessage: "PaymentIntent did not reach requires_capture",
         }).where(eq(paymentAuthorizations.id, Number(pending.id)));
@@ -592,25 +595,26 @@ export const bookingPaymentAdminRouter = router({
   captureHold: agentProcedure
     .input(confirmedBookingInput)
     .mutation(async ({ input, ctx }) => {
-      const { db, booking, profile } = await paymentTargetOrThrow(
-        input.bookingId
-      );
-      const [authorization] = await db
-        .select()
-        .from(paymentAuthorizations)
-        .where(
-          and(
-            eq(paymentAuthorizations.bookingPaymentProfileId, profile.id),
-            eq(paymentAuthorizations.status, "authorized")
+      const { db } = await paymentTargetOrThrow(input.bookingId);
+      const { booking, profile, authorization } = await withUnclaimedNativeFirstVisit(db, input.bookingId, async (tx, { booking, profile }) => {
+        const [authorization] = await tx
+          .select()
+          .from(paymentAuthorizations)
+          .where(
+            and(
+              eq(paymentAuthorizations.bookingPaymentProfileId, profile.id),
+              eq(paymentAuthorizations.status, "authorized")
+            )
           )
-        )
-        .orderBy(desc(paymentAuthorizations.createdAt))
-        .limit(1);
-      if (!authorization?.stripePaymentIntentId)
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "No active booking hold is available to capture.",
-        });
+          .orderBy(desc(paymentAuthorizations.createdAt))
+          .limit(1).for("update");
+        if (!authorization?.stripePaymentIntentId)
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No active booking hold is available to capture.",
+          });
+        return { booking, profile, authorization: { ...authorization, stripePaymentIntentId: authorization.stripePaymentIntentId } };
+      });
       const stripe = getStripeClient();
       const agentName = ctx.agent?.agentName ?? "admin";
       try {
@@ -618,7 +622,9 @@ export const bookingPaymentAdminRouter = router({
       } catch (error) {
         const message = stripeFailureMessage(error, "Stripe capture failed");
         await db.transaction(async tx => {
-          await tx.update(paymentAuthorizations).set({ status: "failed", errorMessage: message, actionBy: agentName }).where(eq(paymentAuthorizations.id, authorization.id));
+          // Keep the durable hold active until provider outcome is verified;
+          // a failed HTTP request cannot grant invoice collection ownership.
+          await tx.update(paymentAuthorizations).set({ errorMessage: message, actionBy: agentName }).where(eq(paymentAuthorizations.id, authorization.id));
           await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: message, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
           await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
         });
@@ -712,16 +718,40 @@ export const bookingPaymentAdminRouter = router({
   chargeSavedCard: agentProcedure
     .input(confirmedBookingInput)
     .mutation(async ({ input, ctx }) => {
-      const { db, booking, profile } = await paymentTargetOrThrow(
-        input.bookingId
-      );
-      if (profile.paymentStatus !== "card_on_file")
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "A verified card on file is required before charging.",
-        });
-      const stripe = getStripeClient();
+      const { db } = await paymentTargetOrThrow(input.bookingId);
       const agentName = ctx.agent?.agentName ?? "admin";
+      const { booking, profile, pending } = await withUnclaimedNativeFirstVisit(db, input.bookingId, async (tx, { booking, profile }) => {
+        if (profile.paymentStatus !== "card_on_file")
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A verified card on file is required before charging.",
+          });
+        const [active] = await tx.select().from(paymentAuthorizations).where(and(
+          eq(paymentAuthorizations.bookingPaymentProfileId, profile.id),
+          or(eq(paymentAuthorizations.status, "authorized"), eq(paymentAuthorizations.status, "pending_card"))
+        )).limit(1).for("update");
+        if (active) throw new TRPCError({ code: "CONFLICT", message: "An active payment attempt already exists for this booking. Review it before charging again." });
+        const [pending] = await tx.insert(paymentAuthorizations).values({
+          bookingPaymentProfileId: profile.id,
+          cleanerJobId: null,
+          jobLabel: `Booking ${booking.publicBookingNumber}`,
+          customerPhone: booking.customerPhone,
+          customerName: booking.customerName,
+          stripeCustomerId: profile.stripeCustomerId!,
+          stripePaymentMethodId: profile.stripePaymentMethodId!,
+          stripePaymentIntentId: null,
+          amountCents: booking.firstCleaningTotalCents,
+          currency: "usd",
+          operation: "direct_charge",
+          status: "pending_card",
+          errorMessage: null,
+          createdBy: agentName,
+          authorizedAt: null,
+          notes: JSON.stringify({ bookingId: booking.id, profileId: profile.id, profileVersion: profile.version, idempotencyKey: bookingPaymentIdempotencyKey(booking.id, "direct_charge", profile.version) }),
+        }).$returningId();
+        return { booking, profile, pending };
+      });
+      const stripe = getStripeClient();
       let intent: Stripe.PaymentIntent;
       try {
         intent = await chargeCanonicalSavedCard(stripe, {
@@ -736,6 +766,9 @@ export const bookingPaymentAdminRouter = router({
         });
       } catch (error) {
         const message = stripeFailureMessage(error, "Stripe charge failed");
+        // No new idempotency key or attempt may replace an unverified outcome.
+        // Explicit review/signed provider evidence is required to release it.
+        await db.update(paymentAuthorizations).set({ errorMessage: `Stripe outcome requires review. ${message}` }).where(eq(paymentAuthorizations.id, Number(pending.id)));
         await db.transaction(async tx => {
           await tx.update(bookingPaymentProfiles).set({ paymentStatus: "failed", failureMessage: message, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, profile.id));
           await syncNativeBookingPaymentState(tx, { bookingId: booking.id, paymentStatus: "failed" });
@@ -745,34 +778,24 @@ export const bookingPaymentAdminRouter = router({
           message: `Stripe charge failed: ${message}`,
         });
       }
-      if (intent.status !== "succeeded")
+      if (intent.status !== "succeeded") {
+        await db.update(paymentAuthorizations).set({ stripePaymentIntentId: intent.id, errorMessage: "Stripe requires further action; payment outcome requires review." }).where(eq(paymentAuthorizations.id, Number(pending.id)));
         throw new TRPCError({
           code: "CONFLICT",
           message:
             "Stripe requires further action before this card can be charged.",
         });
+      }
       const now = Date.now();
       await db.transaction(async tx => {
-        await tx.insert(paymentAuthorizations).values({
-          bookingPaymentProfileId: profile.id,
-          cleanerJobId: null,
-          jobLabel: `Booking ${booking.publicBookingNumber}`,
-          customerPhone: booking.customerPhone,
-          customerName: booking.customerName,
-          stripeCustomerId: profile.stripeCustomerId,
-          stripePaymentMethodId: profile.stripePaymentMethodId,
+        await tx.update(paymentAuthorizations).set({
           stripePaymentIntentId: intent.id,
-          amountCents: booking.firstCleaningTotalCents,
-          currency: "usd",
-          operation: "direct_charge",
           status: "captured",
           errorMessage: null,
-          createdBy: agentName,
           actionBy: agentName,
           authorizedAt: now,
           capturedAt: now,
-          notes: null,
-        });
+        }).where(eq(paymentAuthorizations.id, Number(pending.id)));
         await tx
           .update(bookingPaymentProfiles)
           .set({

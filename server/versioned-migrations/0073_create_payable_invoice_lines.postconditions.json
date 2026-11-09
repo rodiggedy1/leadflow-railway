@@ -1,0 +1,92 @@
+{
+  "format": 1,
+  "table": "payable_invoice_lines",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "int unsigned",
+      "nullable": false,
+      "autoIncrement": true
+    },
+    {
+      "name": "invoiceId",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "sourceServiceId",
+      "columnType": "varchar(100)",
+      "nullable": false
+    },
+    {
+      "name": "occurrenceKey",
+      "columnType": "varchar(100)",
+      "nullable": false
+    },
+    {
+      "name": "serviceDate",
+      "columnType": "varchar(10)",
+      "nullable": false
+    },
+    {
+      "name": "description",
+      "columnType": "varchar(500)",
+      "nullable": false
+    },
+    {
+      "name": "address",
+      "columnType": "varchar(500)",
+      "nullable": false
+    },
+    {
+      "name": "amountCents",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "paidCents",
+      "columnType": "int unsigned",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "name": "manualPaidCents",
+      "columnType": "int unsigned",
+      "nullable": false,
+      "default": "0"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_payable_line_occurrence",
+      "columns": [
+        "occurrenceKey"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_payable_line_invoice_id",
+      "columns": [
+        "invoiceId",
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_payable_line_invoice_date",
+      "columns": [
+        "invoiceId",
+        "serviceDate",
+        "id"
+      ],
+      "unique": false
+    }
+  ]
+}

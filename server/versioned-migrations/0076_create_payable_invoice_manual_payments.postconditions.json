@@ -1,0 +1,81 @@
+{
+  "format": 1,
+  "table": "payable_invoice_manual_payments",
+  "columns": [
+    {
+      "name": "occurrenceKey",
+      "columnType": "varchar(100)",
+      "nullable": false
+    },
+    {
+      "name": "sourceServiceId",
+      "columnType": "varchar(100)",
+      "nullable": false
+    },
+    {
+      "name": "accountId",
+      "columnType": "int",
+      "nullable": false
+    },
+    {
+      "name": "serviceDate",
+      "columnType": "varchar(10)",
+      "nullable": false
+    },
+    {
+      "name": "amountCents",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "requestId",
+      "columnType": "char(36)",
+      "nullable": false
+    },
+    {
+      "name": "payloadHash",
+      "columnType": "char(64)",
+      "nullable": false
+    },
+    {
+      "name": "reviewHash",
+      "columnType": "char(64)",
+      "nullable": false
+    },
+    {
+      "name": "recordedByAgentId",
+      "columnType": "int",
+      "nullable": false
+    },
+    {
+      "name": "recordedAtMs",
+      "columnType": "bigint unsigned",
+      "nullable": false
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "occurrenceKey"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_payable_manual_request_occurrence",
+      "columns": [
+        "requestId",
+        "occurrenceKey"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_payable_manual_account_date",
+      "columns": [
+        "accountId",
+        "serviceDate"
+      ],
+      "unique": false
+    }
+  ]
+}

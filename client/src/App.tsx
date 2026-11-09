@@ -89,6 +89,8 @@ const CustomerProfileExactLive = lazy(() => import("./pages/CustomerProfileExact
 const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsExactLive"));
 const AiCallsExactLive = lazy(() => import("./pages/AiCallsExactLive"));
 const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
+const InvoiceCollection = lazy(() => import("./pages/InvoiceCollection").then(module => ({ default: module.InvoiceCollectionPage })));
+const CustomerInvoice = lazy(() => import("./pages/InvoiceCollection").then(module => ({ default: module.CustomerInvoicePage })));
 const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
 const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashboardExactLive"));
 const AiTeamReview = lazy(() => import("./pages/AiTeamReview"));
@@ -290,6 +292,8 @@ function Router() {
         <Route path={"/admin/payments"} component={AdminPaymentsExactReviewRoute} />
         <Route path={"/admin/sms-campaigns"} component={SmsCampaigns} />
         <Route path={"/admin/readiness"} component={ReadinessDashboard} />
+        <Route path={"/admin/invoices/collect"} component={() => <AdminPageGuard pageId="invoices"><InvoiceCollection /></AdminPageGuard>} />
+        <Route path={"/invoice/:token"} component={() => <CustomerInvoice />} />
         <Route path={"/admin/invoices"} component={AdminInvoicesExactReviewRoute} />
         <Route path={"/admin/team"} component={AdminTeamExactLiveRoute} />
         <Route path={"/admin/ai-actions"} component={AiActionsControlCenterRoute} />
@@ -322,12 +326,14 @@ function PollingInstrumentation() {
 
 function DayBoardSafePollingInstrumentation() {
   const [location] = useLocation();
+  if (location.startsWith("/invoice/") || location === "/admin/invoices/collect") return null;
   if (isDayBoardExactLiveRoute(location)) return null;
   return <PollingInstrumentation />;
 }
 
 function DayBoardSafeRuntimeWatchers() {
   const [location] = useLocation();
+  if (location.startsWith("/invoice/") || location === "/admin/invoices/collect") return null;
   if (isDayBoardExactLiveRoute(location)) return null;
   return <LeadAssignmentWatcher />;
 }

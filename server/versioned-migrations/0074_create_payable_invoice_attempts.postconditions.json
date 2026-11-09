@@ -1,0 +1,113 @@
+{
+  "format": 1,
+  "table": "payable_invoice_attempts",
+  "columns": [
+    {
+      "name": "id",
+      "columnType": "char(36)",
+      "nullable": false
+    },
+    {
+      "name": "invoiceId",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "requestId",
+      "columnType": "char(36)",
+      "nullable": false
+    },
+    {
+      "name": "selectedLineIds",
+      "columnType": "json",
+      "nullable": false
+    },
+    {
+      "name": "amountCents",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "currency",
+      "columnType": "char(3)",
+      "nullable": false,
+      "default": "usd"
+    },
+    {
+      "name": "state",
+      "columnType": "enum('pending','session_open','paid','expired')",
+      "nullable": false,
+      "default": "pending"
+    },
+    {
+      "name": "sessionId",
+      "columnType": "varchar(255)",
+      "nullable": true
+    },
+    {
+      "name": "sessionUrl",
+      "columnType": "varchar(2048)",
+      "nullable": true
+    },
+    {
+      "name": "paymentId",
+      "columnType": "varchar(255)",
+      "nullable": true
+    },
+    {
+      "name": "createdAtMs",
+      "columnType": "bigint unsigned",
+      "nullable": false
+    },
+    {
+      "name": "paidAtMs",
+      "columnType": "bigint unsigned",
+      "nullable": true
+    },
+    {
+      "name": "refundedCents",
+      "columnType": "int unsigned",
+      "nullable": false,
+      "default": "0"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_payable_attempt_request",
+      "columns": [
+        "invoiceId",
+        "requestId"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_payable_attempt_invoice_id",
+      "columns": [
+        "invoiceId",
+        "id"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_payable_attempt_session",
+      "columns": [
+        "sessionId"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_payable_attempt_payment",
+      "columns": [
+        "paymentId"
+      ],
+      "unique": true
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import { markCashAppPaymentUnavailable, settleSucceededCashAppPayment } from "./bookingCashAppEngine";
+import { isPayableInvoiceEvent, reconcilePayableInvoiceEvent, registerPayableInvoiceRoutes } from "./payableInvoiceRoutes";
 
 function isDuplicateEntry(error: unknown): boolean {
   const candidate = error as { code?: string; errno?: number; message?: string };
@@ -217,6 +218,7 @@ async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
 }
 
 export function registerStripeWebhookRoute(app: Express) {
+  registerPayableInvoiceRoutes(app);
   app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "1mb" }), async (req: Request, res: Response) => {
     if (!ENV.stripeWebhookSecret) return res.status(503).json({ error: "Stripe webhook is not configured" });
     const signature = req.header("stripe-signature");
@@ -226,6 +228,10 @@ export function registerStripeWebhookRoute(app: Express) {
       event = getStripeClient().webhooks.constructEvent(req.body, signature, ENV.stripeWebhookSecret);
     } catch {
       return res.status(400).json({ error: "Invalid Stripe signature" });
+    }
+    if (isPayableInvoiceEvent(event)) {
+      try { await reconcilePayableInvoiceEvent(event); return res.status(200).json({ received: true, status: "processed" }); }
+      catch { return res.status(500).json({ error: "Invoice payment reconciliation failed; retry the signed event" }); }
     }
     const db = await getDb();
     if (!db) return res.status(503).json({ error: "Database unavailable" });

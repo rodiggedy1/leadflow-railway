@@ -1,0 +1,70 @@
+{
+  "format": 1,
+  "table": "payable_invoice_allocations",
+  "columns": [
+    {
+      "name": "invoiceId",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "attemptId",
+      "columnType": "char(36)",
+      "nullable": false
+    },
+    {
+      "name": "lineId",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "paymentId",
+      "columnType": "varchar(255)",
+      "nullable": false
+    },
+    {
+      "name": "amountCents",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "paidAtMs",
+      "columnType": "bigint unsigned",
+      "nullable": false
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "attemptId",
+        "lineId"
+      ],
+      "unique": true
+    },
+    {
+      "name": "uq_payable_allocation_line",
+      "columns": [
+        "lineId"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_payable_allocation_invoice",
+      "columns": [
+        "invoiceId",
+        "paidAtMs",
+        "attemptId",
+        "lineId"
+      ],
+      "unique": false
+    },
+    {
+      "name": "idx_payable_allocation_payment",
+      "columns": [
+        "paymentId"
+      ],
+      "unique": false
+    }
+  ]
+}

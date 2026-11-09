@@ -1,0 +1,64 @@
+{
+  "format": 1,
+  "table": "payable_invoice_deliveries",
+  "columns": [
+    {
+      "name": "requestId",
+      "columnType": "char(36)",
+      "nullable": false
+    },
+    {
+      "name": "invoiceId",
+      "columnType": "int unsigned",
+      "nullable": false
+    },
+    {
+      "name": "recipient",
+      "columnType": "varchar(320)",
+      "nullable": false
+    },
+    {
+      "name": "payloadHash",
+      "columnType": "char(64)",
+      "nullable": false
+    },
+    {
+      "name": "state",
+      "columnType": "enum('pending','sent','unknown')",
+      "nullable": false,
+      "default": "pending"
+    },
+    {
+      "name": "providerMessageId",
+      "columnType": "varchar(255)",
+      "nullable": true
+    },
+    {
+      "name": "createdAtMs",
+      "columnType": "bigint unsigned",
+      "nullable": false
+    },
+    {
+      "name": "sentAtMs",
+      "columnType": "bigint unsigned",
+      "nullable": true
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PRIMARY",
+      "columns": [
+        "requestId"
+      ],
+      "unique": true
+    },
+    {
+      "name": "idx_payable_delivery_invoice",
+      "columns": [
+        "invoiceId",
+        "createdAtMs"
+      ],
+      "unique": false
+    }
+  ]
+}

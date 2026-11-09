@@ -1,0 +1,26 @@
+-- Invoice feature: new table only. No shared-database execution authorized.
+CREATE TABLE IF NOT EXISTS `payable_invoice_attempts` (
+  id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  invoiceId INT UNSIGNED NOT NULL,
+  requestId CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  selectedLineIds JSON NOT NULL,
+  amountCents INT UNSIGNED NOT NULL,
+  currency CHAR(3) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'usd',
+  state ENUM('pending','session_open','paid','expired') NOT NULL DEFAULT 'pending',
+  sessionId VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  sessionUrl VARCHAR(2048) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  paymentId VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  createdAtMs BIGINT UNSIGNED NOT NULL,
+  paidAtMs BIGINT UNSIGNED NULL,
+  refundedCents INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_payable_attempt_request (invoiceId, requestId),
+  UNIQUE KEY uq_payable_attempt_invoice_id (invoiceId, id),
+  UNIQUE KEY uq_payable_attempt_session (sessionId),
+  UNIQUE KEY uq_payable_attempt_payment (paymentId),
+  CONSTRAINT fk_payable_attempt_invoice FOREIGN KEY (invoiceId) REFERENCES payable_invoices (id) ON DELETE RESTRICT,
+  CONSTRAINT ck_payable_attempt_selection CHECK (JSON_TYPE(selectedLineIds) = 'ARRAY' AND JSON_LENGTH(selectedLineIds) BETWEEN 1 AND 1000),
+  CONSTRAINT ck_payable_attempt_amount CHECK (amountCents BETWEEN 50 AND 99999999),
+  CONSTRAINT ck_payable_attempt_currency CHECK (currency = 'usd'),
+  CONSTRAINT ck_payable_attempt_paid CHECK ((state = 'paid' AND paymentId IS NOT NULL AND sessionId IS NOT NULL AND paidAtMs IS NOT NULL) OR (state <> 'paid' AND paymentId IS NULL AND paidAtMs IS NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;

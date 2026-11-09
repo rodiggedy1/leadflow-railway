@@ -543,6 +543,54 @@
       "sha256": "7c84994445e3684de91e019efd38ec0da916f4d2a96d5e30ae8e2819d6e9768b",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0071_create_booking_cash_app_payments.postconditions.json"
+    },
+    {
+      "id": "0072_create_payable_invoices",
+      "mode": "create-table",
+      "sqlFile": "0072_create_payable_invoices.sql",
+      "sha256": "8e416d6a1905350034a8ed3ffe66a85609ffc9acdfd9f8ed2f1c6a03cee4d51f",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0072_create_payable_invoices.postconditions.json"
+    },
+    {
+      "id": "0073_create_payable_invoice_lines",
+      "mode": "create-table",
+      "sqlFile": "0073_create_payable_invoice_lines.sql",
+      "sha256": "e74b62e0a70d476270dc2c2546486a4635aa7224eef2f2a1db279145751ab104",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0073_create_payable_invoice_lines.postconditions.json"
+    },
+    {
+      "id": "0074_create_payable_invoice_attempts",
+      "mode": "create-table",
+      "sqlFile": "0074_create_payable_invoice_attempts.sql",
+      "sha256": "6e86b1987811df952517ca005075c25870964d600b5fcb1010cf3da9d013078c",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0074_create_payable_invoice_attempts.postconditions.json"
+    },
+    {
+      "id": "0075_create_payable_invoice_allocations",
+      "mode": "create-table",
+      "sqlFile": "0075_create_payable_invoice_allocations.sql",
+      "sha256": "9c2914c27c40516ce807011673887f0e323fb8b7387c4313bf63cd5b370f6092",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0075_create_payable_invoice_allocations.postconditions.json"
+    },
+    {
+      "id": "0076_create_payable_invoice_manual_payments",
+      "mode": "create-table",
+      "sqlFile": "0076_create_payable_invoice_manual_payments.sql",
+      "sha256": "9ef6556d1a23ca31c20766ca79a1c7d949ffdbb8e813b3f3f6e468646f4094dc",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0076_create_payable_invoice_manual_payments.postconditions.json"
+    },
+    {
+      "id": "0077_create_payable_invoice_deliveries",
+      "mode": "create-table",
+      "sqlFile": "0077_create_payable_invoice_deliveries.sql",
+      "sha256": "0801aaf2aaf81b57983ea58511257c3f8f35dc293f69169b0a604913afd57bfe",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0077_create_payable_invoice_deliveries.postconditions.json"
     }
   ]
 }
