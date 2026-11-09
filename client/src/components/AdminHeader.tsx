@@ -397,7 +397,7 @@ const NAV_ENTRIES: NavEntry[] = [
     id: "invoices",
     label: "Invoices",
     icon: <Receipt className="w-3.5 h-3.5" />,
-    href: "/admin/invoices",
+    href: "/admin/invoices/collect",
     tabId: "invoices" as AdminTab,
   },
   {
