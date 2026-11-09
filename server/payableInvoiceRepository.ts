@@ -100,8 +100,9 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
     if (!invoicePeriodSchema.safeParse({ from, to }).success) return fail("INVALID_PERIOD", "Choose a valid service period.", 400);
     const local = extractUSDigits(client.phone);
     if (!local) return fail("CLIENT_IDENTITY_MISMATCH", "Customer phone needs review.");
-    // Exact full US digit strings, never suffix matching. Date index bounds the
-    // imported-job scan. Retain all real source rows; never silently truncate visits.
+    // Billing email owns the service even when its service-contact phone differs.
+    // Only email-less services fall back to exact full US phone digits. Both source
+    // kinds use date indexes and the same rule; never silently truncate visits.
     const loadJobs = () => rows(db, `SELECT j.id, j.bookingId, j.jobDate, j.customerPhone, j.customerEmail,
       j.serviceName, j.jobAddress, j.jobTotalCents, j.bookingStatus, j.missingFromLaunch27At,
       b.id AS nativeId, b.requestedLocalDate AS nativeDate, b.customerPhone AS nativePhone,
@@ -112,26 +113,31 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       FROM leadflow_jobs j FORCE INDEX (idx_leadflow_jobs_job_date)
       LEFT JOIN bookings b ON b.id = j.bookingId
       WHERE j.jobDate >= ? AND j.jobDate <= ?
-        AND REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)
-      ORDER BY j.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, [from, to, local, `1${local}`]);
+        AND (LOWER(TRIM(j.customerEmail)) = ? OR
+          (COALESCE(TRIM(j.customerEmail), '') = '' AND REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)))
+      ORDER BY j.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, [from, to, client.email, local, `1${local}`]);
     const loadBookings = () => rows(db, `SELECT b.id, b.requestedLocalDate, b.customerPhone, b.customerEmail,
       b.serviceName, b.address, b.firstCleaningTotalCents, b.status,
       (SELECT COUNT(*) FROM leadflow_jobs c WHERE c.jobDate = b.requestedLocalDate AND c.bookingId = b.id) AS firstProjectionCount,
       p.id AS firstProjectionId, p.jobTotalCents AS projectionAmount, p.customerPhone AS projectionPhone,
       p.customerEmail AS projectionEmail, p.bookingStatus AS projectionStatus,
       p.missingFromLaunch27At AS projectionMissing
-      FROM bookings b FORCE INDEX (idx_bookings_customer_phone)
+      FROM bookings b FORCE INDEX (idx_bookings_requested_date)
       LEFT JOIN leadflow_jobs p ON p.bookingId = b.id AND p.jobDate = b.requestedLocalDate
-      WHERE b.customerPhone = ? AND b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?
+      WHERE b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?
+        AND (LOWER(TRIM(b.customerEmail)) = ? OR
+          (COALESCE(TRIM(b.customerEmail), '') = '' AND REGEXP_REPLACE(b.customerPhone, '[^0-9]', '') IN (?, ?)))
         AND (p.id IS NULL OR p.id = (SELECT MIN(j.id) FROM leadflow_jobs j FORCE INDEX (idx_leadflow_jobs_job_date)
           WHERE j.jobDate = b.requestedLocalDate AND j.bookingId = b.id))
-      ORDER BY b.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, [client.phone, from, to]);
+      ORDER BY b.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, [from, to, client.email, local, `1${local}`]);
     // Issue locks native rows in stable primary-key order BEFORE locking jobs or
     // reading profile/hold state, matching the cross-collector booking lock.
     let jobs: Row[], bookings: Row[];
     if (current) { bookings = bounded(await loadBookings()); jobs = bounded(await loadJobs()); }
     else { jobs = bounded(await loadJobs()); bookings = bounded(await loadBookings()); }
-    const matches = (phone: unknown, email: unknown) => normalizePhone(text(phone)) === client.phone && (!normalizedEmail(email) || normalizedEmail(email) === client.email);
+    const matches = (phone: unknown, email: unknown) => normalizedEmail(email)
+      ? normalizedEmail(email) === client.email
+      : normalizePhone(text(phone)) === client.phone;
     const blockedStatus = (status: unknown) => !validServiceStatus(status);
     const result: InvoiceService[] = [];
     const seen = new Set<string>();

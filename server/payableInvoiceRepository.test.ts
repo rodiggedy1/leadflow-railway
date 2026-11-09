@@ -168,7 +168,7 @@ function expectRolledBack(h: ReturnType<typeof fakeSql>) {
 }
 
 describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
-  it("uses exact normalized account phone/email and full US digit source predicates, not suffix matching", async () => {
+  it("uses exact account identity and billing-email source ownership with full US phone fallback", async () => {
     const h = fakeSql();
     expect(h.poolFactory).not.toHaveBeenCalled();
     h.state.jobs = [jobRow({ customerPhone: "(202) 555-0123", customerEmail: " OWNER@example.test " })];
@@ -180,10 +180,14 @@ describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
     ]);
     const [sql, params] = h.execute.mock.calls[1];
     expect(sql).toContain("FROM leadflow_jobs j FORCE INDEX");
+    expect(sql).toContain("LOWER(TRIM(j.customerEmail)) = ? OR");
+    expect(sql).toContain("COALESCE(TRIM(j.customerEmail), '') = '' AND");
     expect(sql).toContain("REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)");
     expect(sql).not.toMatch(/LIKE|RIGHT\s*\(/i);
-    expect(params).toEqual([FROM, TO, "2025550123", "12025550123"]);
-    expect(h.execute.mock.calls[2][1]).toEqual([PHONE, FROM, TO]);
+    expect(params).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
+    expect(h.execute.mock.calls[2][1]).toEqual(params);
+    expect(h.execute.mock.calls[2][0]).toContain("FROM bookings b FORCE INDEX (idx_bookings_requested_date)");
+    expect(h.execute.mock.calls[2][0]).toContain("COALESCE(TRIM(b.customerEmail), '') = '' AND");
     expect(h.getConnection).not.toHaveBeenCalled();
     expect(h.mutations()).toEqual([]);
   });
@@ -228,7 +232,7 @@ describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
       jobRow({ id: 102, bookingId: 999 }),
     ];
     h.state.bookings = [bookingRow({ firstProjectionId: 103, projectionAmount: 6789, firstProjectionCount: 1, projectionPhone: "+12025550124",
-      projectionEmail: EMAIL, projectionStatus: "completed" })];
+      projectionEmail: "other@example.test", projectionStatus: "completed" })];
     const result = await h.repo.services(17, FROM, TO);
     expect(result.services).toHaveLength(3);
     expect(result.services.map(row => row.id).sort()).toEqual(["booking:201:first:2026-11-03", "job:101", "job:102"]);

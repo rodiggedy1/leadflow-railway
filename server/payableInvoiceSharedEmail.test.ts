@@ -60,11 +60,11 @@ function fixture() {
       // Both accounts share the email: the old global veto must fail this fixture.
       result = state.accounts.map(row => ({ id: row.id, customerEmail: row.customerEmail }));
     } else if (sql.startsWith("SELECT j.id, j.bookingId, j.jobDate,") && sql.includes("FROM leadflow_jobs j FORCE INDEX")) {
-      expect(values).toEqual([FROM, TO, "2025550123", "12025550123"]);
+      expect(values).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
       result = state.jobsByPhone.get(PHONE) ?? [];
     } else if (sql.startsWith("SELECT b.id, b.requestedLocalDate,") && sql.includes("FROM bookings b FORCE INDEX")) {
-      expect(values).toEqual([PHONE, FROM, TO]);
-      result = state.bookingsByPhone.get(String(values[0])) ?? [];
+      expect(values).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
+      result = state.bookingsByPhone.get(PHONE) ?? [];
     } else if (sql.startsWith("SELECT id, paymentStatus FROM bookings WHERE id = ? LIMIT 1")) {
       result = [...state.bookingsByPhone.values()].flat().filter(row => row.id === values[0]);
     } else if (sql.includes("FROM booking_payment_profiles WHERE bookingId = ?") ||
@@ -94,7 +94,7 @@ function expectIdentityConflict(service: { eligible: boolean; reason: string | n
 }
 
 describe("shared billing email remains scoped to the exact owned account (offline)", () => {
-  it("selects account 17 by exact normalized phone/email and loads only its boundary-date jobs", async () => {
+  it("selects account 17 by exact normalized phone/email and returns the supplied boundary-date services", async () => {
     const h = fixture();
     const result = await h.repo.lookup("(202) 555-0123", " BILLING@example.test ", FROM, TO);
     expect(h.state.accounts.map(row => row.customerEmail)).toEqual([EMAIL, EMAIL]);
@@ -106,10 +106,12 @@ describe("shared billing email remains scoped to the exact owned account (offlin
     expect(jobs.sql).toContain("j.jobDate >= ? AND j.jobDate <= ?");
     expect(jobs.sql).toContain("REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)");
     expect(jobs.sql).not.toMatch(/LIKE|RIGHT\s*\(/i);
-    expect(jobs.values).toEqual([FROM, TO, "2025550123", "12025550123"]);
+    expect(jobs.sql).toContain("LOWER(TRIM(j.customerEmail)) = ? OR");
+    expect(jobs.values).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
     const native = h.trace.find(({ sql }) => sql.includes("FROM bookings b FORCE INDEX"))!;
-    expect(native.sql).toContain("b.customerPhone = ? AND b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?");
-    expect(native.values).toEqual([PHONE, FROM, TO]);
+    expect(native.sql).toContain("b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?");
+    expect(native.sql).toContain("LOWER(TRIM(b.customerEmail)) = ? OR");
+    expect(native.values).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
     expectReadOnly(h);
   });
 
@@ -163,21 +165,22 @@ describe("shared billing email remains scoped to the exact owned account (offlin
     expectReadOnly(h);
   });
 
-  it("retains wrong-phone and wrong-email job rows as ineligible, never merged into owned visits", async () => {
+  it("accepts a different service phone under the billing email but blocks a conflicting email", async () => {
     const h = fixture();
     h.state.jobsByPhone.set(PHONE, [job(), job({ id: 103, customerPhone: OTHER_PHONE }), job({ id: 104, customerEmail: "wrong@example.test" })]);
     for (const result of [await h.repo.lookup(PHONE, EMAIL, FROM, TO), await h.repo.services(17, FROM, TO)]) {
       expect(result.services.map(s => s.id)).toEqual(["job:101", "job:103", "job:104"]);
       expect(result.services[0].eligible).toBe(true);
-      result.services.slice(1).forEach(expectIdentityConflict);
+      expect(result.services[1].eligible).toBe(true);
+      expectIdentityConflict(result.services[2]);
     }
     expectReadOnly(h);
   });
 
-  it("preserves native, linked-job and projection phone/email ownership checks instead of aliasing conflicts", async () => {
+  it("uses billing-email ownership for native, linked-job and projection contacts without aliasing email conflicts", async () => {
     const h = fixture();
     h.state.bookingsByPhone.set(PHONE, [
-      booking({ customerPhone: OTHER_PHONE }),
+      booking({ customerPhone: OTHER_PHONE, firstCleaningTotalCents: 12345 }),
       booking({ id: 202, customerEmail: "wrong@example.test" }),
       booking({ id: 203, firstProjectionId: 103, firstProjectionCount: 1, projectionAmount: 6789,
         projectionPhone: OTHER_PHONE, projectionEmail: EMAIL, projectionStatus: "completed" }),
@@ -193,10 +196,15 @@ describe("shared billing email remains scoped to the exact owned account (offlin
     const result = await h.repo.services(17, FROM, TO);
     expect(result.services.map(s => s.id)).toEqual([
       `booking:201:first:${FROM}`, `booking:202:first:${FROM}`, `booking:203:first:${FROM}`, `booking:204:first:${FROM}`,
-      "job:101", "job:105", "job:106",
+      "job:101", "job:106",
     ]);
     expect(result.services.find(s => s.id === "job:101")!.eligible).toBe(true);
-    result.services.filter(s => s.id !== "job:101").forEach(expectIdentityConflict);
+    for (const id of [`booking:201:first:${FROM}`, `booking:203:first:${FROM}`]) {
+      expect(result.services.find(s => s.id === id)!.eligible).toBe(true);
+    }
+    for (const id of [`booking:202:first:${FROM}`, `booking:204:first:${FROM}`, "job:106"]) {
+      expectIdentityConflict(result.services.find(s => s.id === id)!);
+    }
     expectReadOnly(h);
   });
 
@@ -209,6 +217,7 @@ describe("shared billing email remains scoped to the exact owned account (offlin
     expect(source).toContain("client.phone !== phone || client.email !== email");
     expect(source).toContain("currentClient.phone !== client.phone || currentClient.email !== client.email");
     expect(source).toContain("j.jobDate >= ? AND j.jobDate <= ?");
-    expect(source).toContain("b.customerPhone = ? AND b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?");
+    expect(source).toContain("b.requestedLocalDate >= ? AND b.requestedLocalDate <= ?");
+    expect(source).toContain("COALESCE(TRIM(b.customerEmail), '') = '' AND");
   });
 });
