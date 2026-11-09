@@ -178,29 +178,25 @@ describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
     expect(h.execute.mock.calls[0]).toEqual([
       "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE customerPhone = ? LIMIT 2", [PHONE],
     ]);
-    expect(h.execute.mock.calls[1][1]).toEqual([EMAIL]);
-    const [sql, params] = h.execute.mock.calls[2];
+    const [sql, params] = h.execute.mock.calls[1];
     expect(sql).toContain("FROM leadflow_jobs j FORCE INDEX");
     expect(sql).toContain("REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)");
     expect(sql).not.toMatch(/LIKE|RIGHT\s*\(/i);
     expect(params).toEqual([FROM, TO, "2025550123", "12025550123"]);
-    expect(h.execute.mock.calls[3][1]).toEqual([PHONE, FROM, TO]);
+    expect(h.execute.mock.calls[2][1]).toEqual([PHONE, FROM, TO]);
     expect(h.getConnection).not.toHaveBeenCalled();
     expect(h.mutations()).toEqual([]);
   });
 
-  it("rejects wrong or ambiguous phone/email ownership before reading service sources", async () => {
-    const cases: Array<{ accounts?: FakeRow[]; emailAccounts?: FakeRow[]; email?: string; code: string }> = [
+  it("rejects wrong phone/email ownership and duplicate phone accounts before reading service sources", async () => {
+    const cases: Array<{ accounts?: FakeRow[]; email?: string; code: string }> = [
       { accounts: [accountRow({ customerPhone: "+12025550124" })], code: "CLIENT_IDENTITY_MISMATCH" },
       { email: "other@example.test", code: "CLIENT_IDENTITY_MISMATCH" },
       { accounts: [accountRow(), accountRow({ id: 18 })], code: "CLIENT_NOT_FOUND" },
-      { emailAccounts: [{ id: 18, customerEmail: EMAIL }], code: "CLIENT_IDENTITY_MISMATCH" },
-      { emailAccounts: [{ id: 17, customerEmail: "collation-conflict@example.test" }], code: "CLIENT_IDENTITY_MISMATCH" },
     ];
     for (const fixture of cases) {
       const h = fakeSql();
       if (fixture.accounts) h.state.accounts = fixture.accounts;
-      if (fixture.emailAccounts) h.state.emailAccounts = fixture.emailAccounts;
       await expect(h.repo.lookup(PHONE, fixture.email ?? EMAIL, FROM, TO)).rejects.toMatchObject({ code: fixture.code });
       expect(h.execute.mock.calls.every(([sql]) => sql.includes("FROM customer_portal_accounts"))).toBe(true);
       expect(h.mutations()).toEqual([]);
@@ -211,7 +207,7 @@ describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
     const h = fakeSql();
     h.state.jobs = Array.from({ length: 1001 }, (_, i) => jobRow({ id: i + 1 }));
     await expect(h.repo.services(17, FROM, TO)).rejects.toMatchObject({ code: "PERIOD_TOO_LARGE" });
-    expect(h.execute.mock.calls[2][0]).toContain("LIMIT 1001");
+    expect(h.execute.mock.calls[1][0]).toContain("LIMIT 1001");
     expect(h.mutations()).toEqual([]);
   });
 
@@ -220,7 +216,7 @@ describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
     h.state.jobs = [];
     h.state.bookings = Array.from({ length: 1001 }, (_, i) => bookingRow({ id: i + 1 }));
     await expect(h.repo.services(17, FROM, TO)).rejects.toMatchObject({ code: "PERIOD_TOO_LARGE" });
-    expect(h.execute.mock.calls[3][0]).toContain("LIMIT 1001");
+    expect(h.execute.mock.calls[2][0]).toContain("LIMIT 1001");
     expect(h.mutations()).toEqual([]);
   });
 

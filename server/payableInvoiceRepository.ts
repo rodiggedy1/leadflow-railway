@@ -84,8 +84,6 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
     if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", accounts.length === 0 ? "No existing customer account matches this phone. An account must already exist before invoice lookup." : "Multiple customer accounts match this phone; identity needs review.", 404);
     const client = clientFrom(accounts[0]);
     if (client.phone !== phone || client.email !== email) return fail("CLIENT_IDENTITY_MISMATCH", "The exact email and phone do not identify the same customer.");
-    const emailAccounts = await rows(db, "SELECT id, customerEmail FROM customer_portal_accounts WHERE customerEmail = ? LIMIT 2", [email]);
-    if (emailAccounts.some(row => normalizedEmail(row.customerEmail) !== email || integer(row.id) !== client.id)) return fail("CLIENT_IDENTITY_MISMATCH", "This email is shared or ambiguously matched across customer accounts and needs review.");
     return { client, services: await this.readServices(db, client, from, to) };
   }
 
@@ -95,8 +93,6 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
     if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", "Customer account unavailable.", 404);
     const client = clientFrom(accounts[0]);
     if (!client.email) return fail("CLIENT_IDENTITY_MISMATCH", "Customer email must be reviewed before billing.");
-    const conflicts = await rows(db, "SELECT id, customerEmail FROM customer_portal_accounts WHERE customerEmail = ? LIMIT 2", [client.email]);
-    if (conflicts.some(row => normalizedEmail(row.customerEmail) !== client.email || integer(row.id) !== client.id)) return fail("CLIENT_IDENTITY_MISMATCH", "Customer email is shared or ambiguously matched across accounts.");
     return { client, services: await this.readServices(db, client, from, to) };
   }
 
