@@ -36,9 +36,9 @@ export class PayableInvoiceService {
   constructor(private readonly deps: InvoiceDependencies) {
     const url = new URL(deps.origin);
     if (url.origin !== deps.origin || (url.protocol !== "https:" && url.hostname !== "localhost")) throw new Error("Invalid invoice origin");
-    if (deps.tokenSecret.length < 32) throw new Error("Invoice token signing configuration unavailable");
   }
   private token(clientId: number, requestId: string) {
+    if (this.deps.tokenSecret.length < 32) throw new InvoiceError("INVOICE_SIGNING_NOT_CONFIGURED", 503, "INVOICE_TOKEN_SECRET must be configured with at least 32 characters before creating invoice links.");
     return createHmac("sha256", this.deps.tokenSecret).update(`invoice:${clientId}:${requestId}`).digest("hex");
   }
   async lookup(phone: string, email: string, from: string, to: string) {

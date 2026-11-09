@@ -13,9 +13,9 @@ const LOOKUP = { phone: "+12025550100", email: "example@example.test", from: "20
 function fixture(isAdmin = true) {
   const fake = { lookup: vi.fn().mockResolvedValue({ client: { id: 1, name: "Example" }, services: [] }), issue: vi.fn().mockResolvedValue({ url: `${ORIGIN}/invoice/${TOKEN}` }), view: vi.fn().mockResolvedValue({ id: 1, lines: [] }), checkout: vi.fn().mockResolvedValue({ url: "https://checkout.stripe.com/c/pay/cs_test_invoice" }), resume: vi.fn().mockResolvedValue({ refresh: true }), reconcile: vi.fn().mockResolvedValue(undefined) };
   const refresh = vi.fn(async (token: string) => fake.view(token));
-  const constructEvent = vi.fn().mockReturnValue({ type: "checkout.session.completed", data: { object: { id: "cs_test_invoice" } }, livemode: false });
+  const constructEvent = vi.fn().mockReturnValue({ type: "checkout.session.completed", data: { object: { id: "cs_test_invoice", metadata: { leadflowInvoice: "leadflow_invoice_v1" } } }, livemode: false });
   const app = express();
-  registerPayableInvoiceRoutes(app, { origin: ORIGIN, admin: async () => isAdmin ? 17 : false, service: { ...fake, refresh } as unknown as PayableInvoiceService, stripe: () => ({ webhooks: { constructEvent } }) as unknown as Stripe, webhookSecret: "test-only-signature-secret" });
+  registerPayableInvoiceRoutes(app, { origin: ORIGIN, admin: async () => isAdmin ? 17 : false, service: { ...fake, refresh } as unknown as PayableInvoiceService, stripe: () => ({ webhooks: { constructEvent } }) as unknown as Stripe, webhookSecret: "test-only-signature-secret", paymentsReady: true });
   // A permissive global CORS imitates the old app after this route: it must never bypass invoice protection.
   app.use((_req, res, _next) => res.setHeader("Access-Control-Allow-Origin", "*"));
   return { app, fake, constructEvent };

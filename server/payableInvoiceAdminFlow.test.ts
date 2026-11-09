@@ -10,7 +10,7 @@ function fixture(admin=true){
  const fake={markAlreadyPaid:vi.fn(async()=>({client:{id:1},services:[],reviewHash})),issue:vi.fn(async()=>({invoice,url:origin+"/invoice/"+reviewHash})),adminInvoice:vi.fn(async()=>({invoice,client:{id:1,name:"Example",phone:"+12025550100",email:"verified@example.test"},requestId:uuid,url:origin+"/invoice/"+reviewHash}))};
  const send=vi.fn(async()=>({messageId:"mail_example",threadId:"thread_example"}));
  const outbox={send:vi.fn(async(_requestId:string,_id:number,_recipient:string,_url:string,deliver:()=>Promise<{messageId:string}>)=>{await deliver();return{sent:true};})};
- const app=express();registerPayableInvoiceRoutes(app,{origin,admin:async()=>admin?17:false,service:fake as unknown as PayableInvoiceService,outbox:outbox as unknown as InvoiceMailOutbox,send});
+ const app=express();registerPayableInvoiceRoutes(app,{origin,admin:async()=>admin?17:false,service:fake as unknown as PayableInvoiceService,outbox:outbox as unknown as InvoiceMailOutbox,send,paymentsReady:true});
  return{app,fake,send,outbox};
 }
 const mark={requestId:uuid,clientId:1,from:"2026-07-22",to:"2026-11-07",serviceIds:["job:1"],reviewHash};
