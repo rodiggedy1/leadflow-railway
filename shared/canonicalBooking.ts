@@ -9,6 +9,7 @@ import {
   type PublicBookingPricingMode,
 } from "./publicBookingPricing";
 import type { PrepareBookingInput } from "./booking";
+import { bookingArrivalPreferenceSchema, type BookingArrivalPreference } from "./bookingArrival";
 
 export const CANONICAL_BOOKING_STEPS = [
   "cleaning-type",
@@ -86,6 +87,7 @@ export type CanonicalBookingDraft = {
   requestedLocalDate: string;
   requestedLocalTime: string;
   specialRequestNotes: string[];
+  arrivalPreference?: BookingArrivalPreference;
 };
 
 export function selectedCanonicalExtras(
@@ -110,6 +112,8 @@ export function createCanonicalPricingInput(
     | "hourCount"
     | "extras"
     | "frequency"
+    | "customPriceCents"
+    | "arrivalPreference"
   >
 ): PublicBookingPricingInput {
   return {
@@ -126,6 +130,9 @@ export function createCanonicalPricingInput(
       : {}),
     extras: selectedCanonicalExtras(draft.extras),
     recurrence: draft.frequency,
+    ...(draft.arrivalPreference !== undefined
+      ? { arrivalPreference: bookingArrivalPreferenceSchema.parse(draft.arrivalPreference) }
+      : {}),
   };
 }
 
@@ -164,7 +171,9 @@ export function createCanonicalBookingInput<
     address: draft.address.trim(),
     requestedSchedule: {
       localDate: draft.requestedLocalDate,
-      localTime: draft.requestedLocalTime,
+      localTime: draft.arrivalPreference !== undefined
+        ? bookingArrivalPreferenceSchema.parse(draft.arrivalPreference).startLocalTime
+        : draft.requestedLocalTime,
     },
     recurrence: draft.frequency,
     acceptedPricing: {

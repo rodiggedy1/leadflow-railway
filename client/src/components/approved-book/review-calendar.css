@@ -1,0 +1,321 @@
+/* Isolated page-two calendar: intentionally separate from existing date styles. */
+.approved-book-surface .br-second-page .br-calendar {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  min-width: 0;
+  margin-bottom: 21px;
+  color: #273e30;
+  font: inherit;
+}
+
+.approved-book-surface .br-second-page .br-calendar-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 78px;
+  padding: 15px;
+  border: 1px solid #d4dfd5;
+  border-radius: 10px;
+  background: #fff;
+  color: #273e30;
+  text-align: left;
+  font: inherit;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.approved-book-surface .br-second-page .br-calendar-trigger:hover,
+.approved-book-surface
+  .br-second-page
+  .br-calendar-trigger[aria-expanded="true"] {
+  border-color: #96ad9b;
+  box-shadow: 0 0 0 3px #edf4ee;
+}
+
+.approved-book-surface .br-second-page .br-calendar-field-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #edf4ee;
+  color: #54715b;
+}
+
+.approved-book-surface .br-second-page .br-calendar-field-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.approved-book-surface .br-second-page .br-calendar-field-copy {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.approved-book-surface .br-second-page .br-calendar-field-label {
+  color: #627667;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.approved-book-surface .br-second-page .br-calendar-field-value {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.approved-book-surface .br-second-page .br-calendar-placeholder {
+  color: #859185;
+  font-weight: 400;
+}
+.approved-book-surface .br-second-page .br-calendar-chevron {
+  width: 16px;
+  height: 16px;
+  color: #6a806e;
+  transition: transform 0.15s ease;
+}
+.approved-book-surface
+  .br-second-page
+  .br-calendar-trigger[aria-expanded="true"]
+  .br-calendar-chevron {
+  transform: rotate(180deg);
+}
+
+.approved-book-surface .br-second-page .br-calendar-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 9px);
+  left: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 18px;
+  border: 1px solid #dce5db;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow:
+    0 14px 42px #17262320,
+    0 3px 9px #17262308;
+}
+
+.approved-book-surface .br-second-page .br-calendar-heading {
+  padding-bottom: 15px;
+  border-bottom: 1px solid #edf0eb;
+}
+.approved-book-surface .br-second-page .br-calendar-eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #7b8e7e;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 1.2px;
+}
+.approved-book-surface .br-second-page .br-calendar-heading h3 {
+  margin: 0;
+  color: #2c4533;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.3px;
+}
+.approved-book-surface .br-second-page .br-calendar-month-nav {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 5px;
+  margin: 14px 0 10px;
+}
+.approved-book-surface .br-second-page .br-calendar-month {
+  min-width: 0;
+  color: #304c37;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+}
+.approved-book-surface .br-second-page .br-calendar-nav-button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid #e1e8df;
+  border-radius: 9px;
+  background: #f7faf6;
+  color: #54715b;
+}
+.approved-book-surface
+  .br-second-page
+  .br-calendar-nav-button:hover:not(:disabled) {
+  background: #edf4ee;
+  border-color: #b9ccbc;
+}
+.approved-book-surface .br-second-page .br-calendar-nav-button:disabled {
+  opacity: 1;
+  color: #bcc7bc;
+  background: #fafbf9;
+  border-color: #eff2ec;
+}
+
+.approved-book-surface .br-second-page .br-calendar-grid {
+  width: 100%;
+  min-width: 0;
+}
+.approved-book-surface .br-second-page .br-calendar-weekdays,
+.approved-book-surface .br-second-page .br-calendar-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.approved-book-surface .br-second-page .br-calendar-weekdays {
+  margin-bottom: 5px;
+  color: #849180;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 28px;
+  text-align: center;
+}
+.approved-book-surface .br-second-page .br-calendar-week + .br-calendar-week {
+  margin-top: 4px;
+}
+.approved-book-surface .br-second-page .br-calendar-cell {
+  min-width: 0;
+}
+.approved-book-surface .br-second-page .br-calendar-day {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #f8faf6;
+  color: #3d5843;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.approved-book-surface
+  .br-second-page
+  .br-calendar-day:hover:not(:disabled):not(.br-calendar-selected) {
+  border-color: #c8d9c9;
+  background: #edf4ee;
+}
+.approved-book-surface .br-second-page .br-calendar-day:disabled {
+  opacity: 1;
+  color: #bac3b7;
+  background: #fcfdfb;
+}
+.approved-book-surface
+  .br-second-page
+  .br-calendar-day.br-calendar-selected:not(:disabled) {
+  border-color: #f46e54;
+  background: #f46e54;
+  color: #172623;
+  font-weight: 600;
+  box-shadow: 0 3px 8px #f46e5426;
+}
+.approved-book-surface .br-second-page .br-calendar-day:focus-visible {
+  outline: 2px solid #314f38;
+  outline-offset: 1px;
+}
+
+.approved-book-surface .br-second-page .br-calendar-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid #edf0eb;
+}
+.approved-book-surface .br-second-page .br-calendar-clear {
+  min-height: 38px;
+  padding: 6px 3px;
+  border: 0;
+  background: transparent;
+  color: #6a7d6b;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.approved-book-surface .br-second-page .br-calendar-clear:disabled {
+  opacity: 1;
+  color: #b6c0b1;
+}
+.approved-book-surface .br-second-page .br-calendar-clear:hover:not(:disabled) {
+  color: #304c37;
+}
+.approved-book-surface .br-second-page .br-calendar-done {
+  min-height: 38px;
+  padding: 8px 18px;
+  border: 1px solid #dae5d9;
+  border-radius: 8px;
+  background: #edf4ee;
+  color: #3f6047;
+  font-size: 11px;
+  font-weight: 600;
+}
+.approved-book-surface .br-second-page .br-calendar-done:hover {
+  border-color: #afc5b1;
+  background: #e4eee4;
+}
+.approved-book-surface .br-second-page .br-calendar-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 720px) {
+  .approved-book-surface .br-second-page .br-calendar {
+    max-width: none;
+  }
+}
+
+@media (max-width: 440px) {
+  .approved-book-surface .br-second-page .br-calendar-trigger {
+    gap: 9px;
+    padding: 12px;
+  }
+  .approved-book-surface .br-second-page .br-calendar-field-icon {
+    width: 32px;
+    height: 36px;
+    flex-basis: 32px;
+  }
+  .approved-book-surface .br-second-page .br-calendar-popover {
+    padding: 12px;
+  }
+  .approved-book-surface .br-second-page .br-calendar-heading h3 {
+    font-size: 14px;
+  }
+  .approved-book-surface .br-second-page .br-calendar-weekdays,
+  .approved-book-surface .br-second-page .br-calendar-week {
+    gap: 2px;
+  }
+  .approved-book-surface .br-second-page .br-calendar-day {
+    min-height: 38px;
+    border-radius: 7px;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .approved-book-surface .br-second-page .br-calendar-trigger,
+  .approved-book-surface .br-second-page .br-calendar-chevron {
+    transition: none;
+  }
+}

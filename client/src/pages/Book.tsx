@@ -6,6 +6,13 @@ import {
 import { BookingWalletCardOnFileCheckout } from "@/components/BookingApplePayCheckout";
 import { BookingCashAppCheckout } from "@/components/BookingCashAppCheckout";
 import { useCanonicalBookingFlow } from "@/components/useCanonicalBookingFlow";
+import { ApprovedBookProvider, type ApprovedBookLocation } from "@/components/approved-book/ApprovedBookContext";
+import ApprovedBookFirstPage from "@/components/approved-book/FirstPage";
+import ApprovedBookSecondPage from "@/components/approved-book/SecondPage";
+import ApprovedBookPayment from "@/components/approved-book/ApprovedBookPayment";
+import { createBookingArrivalPreference, formatBookingArrivalPreference, type BookingArrivalMode, type BookingArrivalPeriod } from "@shared/bookingArrival";
+import brandLogo from "@/assets/book-cohesion/maids-in-black-logo.svg";
+import "@/components/approved-book/approved-chrome.css";
 import {
   ArrowLeft,
   ArrowRight,
@@ -323,7 +330,8 @@ const TIME_SLOTS = CANONICAL_TIME_SLOT_LABELS;
 const REVIEW_OPENING_COUNTS = [2, 4, 3] as const;
 
 function money(cents: number) {
-  return `$${Math.round(cents / 100)}`;
+  const amount = cents / 100;
+  return Number.isInteger(amount) ? `$${amount}` : `$${amount.toFixed(2)}`;
 }
 
 function createBookingAttemptId(): string {
@@ -346,7 +354,21 @@ function firstBookableDate(): Date {
   return parseEasternDate(easternDateIso(new Date(), 1));
 }
 
+const PUBLIC_BOOK_DRAFT_OVERRIDES = {
+  requestedLocalTime: "08:30",
+  arrivalPreference: createBookingArrivalPreference("flexible"),
+};
+const APPROVED_BOOK_ASSETS = {
+  rootLogo: brandLogo,
+  teamPhoto: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/GxVwmbRkdmqSzvCr.webp",
+  basement: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/dLYjCwQUwgiBBTUo.webp",
+  organizing: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/KzvupqlwSRBlJFkl.webp",
+  wipeWalls: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/DOFnQaAcWGSxHFVi.webp",
+  sweepGarage: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/nMMgySdZZGazKyYw.webp",
+};
+
 export default function Book() {
+  const flow = useCanonicalBookingFlow({ stepCount: 8, overrides: PUBLIC_BOOK_DRAFT_OVERRIDES });
   const {
     step,
     setStep,
@@ -393,7 +415,21 @@ export default function Book() {
     setRequestedLocalDate,
     requestedLocalTime,
     setRequestedLocalTime,
-  } = useCanonicalBookingFlow({ stepCount: 8 });
+  } = flow;
+  const [bookingLocation, setBookingLocation] = useState<ApprovedBookLocation>({ zip: "", street: "", apt: "", city: "", region: "" });
+  const [bookingAccessMethod, setBookingAccessMethod] = useState("I’ll be at home");
+  const [dateCleared, setDateCleared] = useState(false);
+  const arrivalPreference = flow.draft.arrivalPreference ?? PUBLIC_BOOK_DRAFT_OVERRIDES.arrivalPreference;
+  const onArrivalChange = (mode: BookingArrivalMode, period?: BookingArrivalPeriod, start?: string) => {
+    const preference = createBookingArrivalPreference(mode, period, start);
+    flow.setDraft(current => ({ ...current, arrivalPreference: preference, requestedLocalTime: preference.startLocalTime }));
+  };
+  const setBookingLocationFields = (change: Partial<ApprovedBookLocation>) => {
+    const nextLocation = { ...bookingLocation, ...change };
+    setBookingLocation(nextLocation);
+    // ZIP is presentation state until a real street address exists.
+    setAddress(nextLocation.street.trim() ? [nextLocation.street, nextLocation.apt, nextLocation.city, nextLocation.region, nextLocation.zip].map(value => value.trim()).filter(Boolean).join(", ") : "");
+  };
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const firstDate = firstBookableDate();
     return easternMonthDate(
@@ -415,6 +451,8 @@ export default function Book() {
   const [formError, setFormError] = useState("");
   const [cardOnFile, setCardOnFile] = useState(false);
   const [cardLabel, setCardLabel] = useState("");
+  const [bookingDetailsLocked, setBookingDetailsLocked] = useState(false);
+  const bookingPreparationRef = useRef({ pending: 0, prepared: false });
   const [applePayAvailable, setApplePayAvailable] = useState(false);
   const [googlePayAvailable, setGooglePayAvailable] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
@@ -493,10 +531,10 @@ export default function Book() {
     bedrooms,
     bathrooms,
     extras: selectedCanonicalExtras(extras),
-    specialRequestNotes: notes.trim() ? [notes.trim()] : [],
+    specialRequestNotes: [...(notes.trim() ? [notes.trim()] : []), `Access: ${bookingAccessMethod}`],
     address,
     requestedLocalDate: dateIso,
-    requestedLocalTime: timeLabelTo24Hour(selectedTime),
+    requestedLocalTime,
     requestedTimeZone: "America/New_York",
     recurrence: frequency,
     pricingVersion: PUBLIC_BOOKING_PRICING_VERSION,
@@ -555,6 +593,20 @@ export default function Book() {
         return null;
       }
     };
+  const prepareLockedBooking = async (): Promise<BookingFunnelPublicResult | null> => {
+    bookingPreparationRef.current.pending += 1;
+    setBookingDetailsLocked(true);
+    try {
+      const record = await reserveBooking();
+      // The real checkout may now retain this reservation or create its native target.
+      if (record) bookingPreparationRef.current.prepared = true;
+      return record;
+    } finally {
+      bookingPreparationRef.current.pending -= 1;
+      // A pre-reservation validation/save failure has no checkout target to retain.
+      setBookingDetailsLocked(bookingPreparationRef.current.prepared || bookingPreparationRef.current.pending > 0);
+    }
+  };
   const finalizeConfirmedCard = async () => {
     const current = funnelRecordRef.current;
     if (!current) {
@@ -600,7 +652,7 @@ export default function Book() {
         bedrooms={bedrooms}
         bathrooms={bathrooms}
         dateLabel={dateLabel}
-        time={selectedTime}
+        time={formatBookingArrivalPreference(arrivalPreference)}
         total={priceBreakdown.firstCleaningTotalCents}
         futureTotal={priceBreakdown.futureVisitTotalCents}
         frequencyLabel={selectedFrequency.label}
@@ -608,561 +660,118 @@ export default function Book() {
       />
     );
 
-  if (step === 1)
-    return (
-      <main className="literal-book-page-one">
-        <div className="literal-book-shell">
-          <aside className="literal-book-side" aria-label="Booking progress">
-            <a
-              className="literal-book-logo"
-              href="https://maidsinblack.com/"
-              aria-label="Visit Maids in Black"
-            >
-              MAIDS <span>IN BLACK</span>
-              <div className="literal-book-subbrand">SNAPCLEAN</div>
-            </a>
-            <div className="literal-book-brand-intro">
-              <span className="literal-book-accent-line" />
-              <p className="literal-book-promise">
-                A clean home, <em>without the hassle.</em>
-              </p>
-              <p className="literal-book-support">
-                Choose your service. See your price. Book in minutes.
-              </p>
-            </div>
-            <div className="literal-book-stepnav">
-              {[
-                "Your home",
-                "Cleaning details",
-                "Your quote",
-                "Schedule",
-                "Checkout",
-                "Confirmation",
-              ].map((label, index) => (
-                <div
-                  className={`literal-book-navitem${index === 0 ? " active" : ""}`}
-                  key={label}
-                >
-                  <span className="literal-book-num">{index + 1}</span>
-                  {label}
-                </div>
-              ))}
-            </div>
-          </aside>
-          <section className="literal-book-main">
-            <div className="literal-book-top">
-              <span>STEP 1 OF 6</span>
-              <div
-                className="literal-book-clock"
-                aria-label="Quote and time hold preview"
-              >
-                <span className="literal-book-clock-icon" aria-hidden="true">
-                  ◷
-                </span>
-                <span className="literal-book-clock-copy">
-                  <span className="literal-book-clock-label">
-                    Quote &amp; time hold
-                  </span>
-                  <span className="literal-book-clock-note">
-                    We&apos;ll keep your estimate while you finish
-                  </span>
-                </span>
-                <span className="literal-book-clock-value">
-                  {quoteHoldCountdown}
-                </span>
-              </div>
-            </div>
-
-            <div className="literal-book-eyebrow">Book with confidence</div>
-            <h1>Let&apos;s get your home cleaned.</h1>
-            <p className="literal-book-lead">
-              Choose how you&apos;d like to book your cleaning. You&apos;ll see
-              the estimate after you tell us what you need.
-            </p>
-
-            <div className="literal-book-field">
-              <label>How would you like to book?</label>
-              <div
-                className="literal-book-options"
-                role="radiogroup"
-                aria-label="Booking price type"
-              >
-                <button
-                  type="button"
-                  className={`literal-book-choice${pricingMode === "home" ? " selected" : ""}`}
-                  role="radio"
-                  aria-checked={pricingMode === "home"}
-                  onClick={() => setPricingMode("home")}
-                >
-                  <span>
-                    <b>By bedrooms &amp; bathrooms</b>
-                    <small>
-                      A cleaning price based on the size of your home
-                    </small>
-                  </span>
-                  <span className="literal-book-toggle">
-                    {pricingMode === "home" ? "✓" : ""}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`literal-book-choice${pricingMode === "hourly" ? " selected" : ""}`}
-                  role="radio"
-                  aria-checked={pricingMode === "hourly"}
-                  onClick={() => setPricingMode("hourly")}
-                >
-                  <span>
-                    <b>By the hour</b>
-                    <small>Choose how many cleaners and how many hours</small>
-                  </span>
-                  <span className="literal-book-toggle">
-                    {pricingMode === "hourly" ? "✓" : ""}
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            {pricingMode === "home" ? (
-              <div className="literal-book-counter-grid">
-                <LiteralPageOneCounter
-                  label="Bedrooms"
-                  value={bedrooms}
-                  minimum={0}
-                  maximum={7}
-                  onChange={setBedrooms}
-                />
-                <LiteralPageOneCounter
-                  label="Bathrooms"
-                  value={bathrooms}
-                  minimum={1}
-                  maximum={5}
-                  onChange={setBathrooms}
-                />
-              </div>
-            ) : (
-              <div className="literal-book-counter-grid">
-                <LiteralPageOneCounter
-                  label="# of maids"
-                  value={maidCount}
-                  minimum={1}
-                  maximum={4}
-                  onChange={setMaidCount}
-                />
-                <LiteralPageOneCounter
-                  label="# of hours"
-                  value={hourCount}
-                  minimum={1}
-                  maximum={8}
-                  onChange={setHourCount}
-                />
-              </div>
-            )}
-
-            <div className="literal-book-microproof">
-              <span>✓ 200% satisfaction guarantee</span>
-              <span>✓ Insured cleaning teams</span>
-            </div>
-            <div className="literal-book-actions">
-              <button type="button" onClick={() => void next()}>
-                Continue →
-              </button>
-            </div>
-            <div className="literal-book-powered">Powered by Baseboard</div>
-          </section>
-        </div>
-      </main>
-    );
-
-  if (step === 2)
-    return (
-      <LiteralPageTwo
-        condition={condition}
-        onCondition={setCondition}
-        pricingMode={pricingMode}
-        maidCount={maidCount}
-        hourCount={hourCount}
-        bedrooms={bedrooms}
-        bathrooms={bathrooms}
-        quoteHoldCountdown={quoteHoldCountdown}
-        onBack={() => setStep(1)}
-        onContinue={() => void next()}
-        reviewStoryIndex={reviewStoryIndex}
-        onReviewStoryChange={setReviewStoryIndex}
-      />
-    );
-
-  if (step === 3)
-    return (
-      <LiteralPageThree
-        service={service}
-        onService={setService}
-        pricingMode={pricingMode}
-        bedrooms={bedrooms}
-        bathrooms={bathrooms}
-        maidCount={maidCount}
-        hourCount={hourCount}
-        extras={extras}
-        onExtraChange={changeExtra}
-        frequency={frequency}
-        onFrequency={setFrequency}
-        priceBreakdown={priceBreakdown}
-        quoteHoldCountdown={quoteHoldCountdown}
-        showAllExtras={showAllExtras}
-        onShowAllExtrasChange={setShowAllExtras}
-        onBack={() => setStep(2)}
-        onContinue={() => setStep(5)}
-      />
-    );
-  if (step === 5)
-    return (
-      <LiteralPageFour
-        selectedDate={selectedDate}
-        selectedTime={selectedTime}
-        visibleMonth={visibleMonth}
-        address={address}
-        quoteHoldCountdown={quoteHoldCountdown}
-        onSelectDate={date => {
-          setSelectedDate(date);
-          setVisibleMonth(
-            easternMonthDate(date.getUTCFullYear(), date.getUTCMonth(), 1)
-          );
-        }}
-        onVisibleMonthChange={setVisibleMonth}
-        onSelectTime={setSelectedTime}
-        onAddress={setAddress}
-        onBack={() => setStep(3)}
-        onContinue={() => void next()}
-      />
-    );
-  if (step === 6 || step === 7)
-    return (
-      <LiteralPageFive
-        phase={step}
-        service={selectedService.title}
-        pricingMode={pricingMode}
-        bedrooms={bedrooms}
-        bathrooms={bathrooms}
-        maidCount={maidCount}
-        hourCount={hourCount}
-        condition={condition}
-        frequencyLabel={selectedFrequency.label}
-        selectedDate={selectedDate}
-        selectedTime={selectedTime}
-        total={priceBreakdown.firstCleaningTotalCents}
-        customerName={customerName}
-        firstName={firstName}
-        lastName={lastName}
-        phone={phone}
-        email={email}
-        notes={notes}
-        onCustomerName={setCustomerName}
-        onPhone={setPhone}
-        onEmail={setEmail}
-        onNotes={setNotes}
-        quoteHoldCountdown={quoteHoldCountdown}
-        onEditSchedule={() => setStep(5)}
-        onBack={() =>
-          setStep(current => (current === 6 ? 5 : current === 7 ? 6 : 7))
-        }
-        onPrepareReservation={reserveBooking}
-        isSaving={isSaving}
-        formError={formError}
-        cardOnFile={cardOnFile}
-        applePayAvailable={applePayAvailable}
-        googlePayAvailable={googlePayAvailable}
-        selectedPaymentMethod={selectedPaymentMethod}
-        onPaymentMethodChange={choosePaymentMethod}
-        allowCashAppSwitch={
-          selectedPaymentMethod === "cashapp" &&
-          cashAppBusy &&
-          cashAppExitRequest === null
-        }
-        cashAppExitRequest={cashAppExitRequest}
-        onApplePayAvailable={setApplePayAvailable}
-        onGooglePayAvailable={setGooglePayAvailable}
-        onWalletBusyChange={setWalletBusy}
-        onWalletReady={(wallet, brand, last4) => {
-          setCardLabel(
-            `${wallet === "apple_pay" ? "Apple Pay" : "Google Pay"} · ${brand} ending in ${last4}`
-          );
-          setCardOnFile(true);
-          setFormError("");
-          void finalizeConfirmedCard();
-        }}
-        onCashAppBusyChange={setCashAppBusy}
-        onCashAppPaid={totalCents => {
-          setCardLabel(`Cash App · ${money(totalCents)} paid today`);
-          setFormError("");
-          setComplete(true);
-        }}
-        onCashAppExited={(destination, notice) => {
-          setCashAppExitRequest(null);
-          setSelectedPaymentMethod(destination);
-          setFormError(notice ?? "");
-        }}
-        onCardReady={(brand, last4) => {
-          setCardLabel(`${brand} ending in ${last4}`);
-          setCardOnFile(true);
-          setFormError("");
-          void finalizeConfirmedCard();
-        }}
-        onRetryFinalization={() => void finalizeConfirmedCard()}
-      />
-    );
+  const allowCashAppSwitch = selectedPaymentMethod === "cashapp" && cashAppBusy && cashAppExitRequest === null;
+  const visibleStep = step === 1 ? 1 : step === 2 ? 2 : 3;
   return (
-    <main className="booking-review-page booking-live-page">
-      <header className="booking-review-header">
-        <a
-          href="/"
-          className="booking-review-brand"
-          aria-label="Maids in Black home"
-        >
-          <strong>
-            Maids in Black<sup>®</sup>
-          </strong>
-          <span>CLEAN HOMES. BRIGHTER LIVES.</span>
-        </a>
-        <div className="booking-review-help">
-          <MessageCircle /> <span>Need help? Text us</span>
-          <i /> <strong>(202) 888-5362</strong>
-        </div>
-      </header>
-      <section className="booking-review-shell">
-        <aside
-          className="booking-review-progress"
-          aria-label="Booking progress"
-        >
-          <ol>
-            {BOOKING_PHASES.map(
-              ({ title, subtitle, icon: Icon, steps }, index) => {
-                const phaseNumber = index + 1;
-                const isDone = steps.every(itemStep => itemStep < step);
-                const isCurrent =
-                  !isDone &&
-                  (step === 1
-                    ? index === 0
-                    : steps.includes(step as (typeof steps)[number]));
-                return (
-                  <li
-                    key={title}
-                    className={
-                      isDone ? "done" : isCurrent ? "current" : "future"
-                    }
-                  >
-                    <span className="booking-review-progress-number">
-                      {isDone ? <Check /> : phaseNumber}
-                    </span>
-                    <div>
-                      <span className="booking-review-progress-icon">
-                        <Icon />
-                      </span>
-                      <strong>{title}</strong>
-                      <small>{subtitle}</small>
-                    </div>
-                  </li>
-                );
-              }
-            )}
-          </ol>
-        </aside>
-        <section className="booking-review-stage">
-          <div
-            className={`booking-review-card${step === 1 ? " booking-review-card--service" : step === 3 ? " booking-review-card--condition" : ""}`}
-          >
-            <div className="booking-review-card-main">
-              <div className="booking-review-overline">STEP {step} OF 8</div>
-              {step === 1 && (
-                <CleaningType selected={service} onSelect={setService} />
-              )}
-              {step === 2 && (
-                <HomeDetails
-                  bedrooms={bedrooms}
-                  bathrooms={bathrooms}
-                  homeType={homeType}
-                  frequency={frequency}
-                  pricingMode={pricingMode}
-                  maidCount={maidCount}
-                  hourCount={hourCount}
-                  firstTotal={priceBreakdown.firstCleaningTotalCents}
-                  futureTotal={priceBreakdown.futureVisitTotalCents}
-                  onBedrooms={setBedrooms}
-                  onBathrooms={setBathrooms}
-                  onHomeType={setHomeType}
-                  onFrequency={setFrequency}
-                  onPricingMode={setPricingMode}
-                  onMaidCount={setMaidCount}
-                  onHourCount={setHourCount}
-                />
-              )}
-              {step === 3 && (
-                <HomeCondition value={condition} onChange={setCondition} />
-              )}
-              {step === 4 && <Extras extras={extras} onChange={changeExtra} />}
-              {step === 5 && (
-                <DateTime
-                  selectedDate={selectedDate}
-                  selectedTime={selectedTime}
-                  visibleMonth={visibleMonth}
-                  onSelectDate={date => {
-                    setSelectedDate(date);
-                    setVisibleMonth(
-                      easternMonthDate(
-                        date.getUTCFullYear(),
-                        date.getUTCMonth(),
-                        1
-                      )
-                    );
-                  }}
-                  onVisibleMonthChange={setVisibleMonth}
-                  onSelectTime={setSelectedTime}
-                />
-              )}
-              {step === 6 && (
-                <YourInformation
-                  firstName={firstName}
-                  lastName={lastName}
-                  phone={phone}
-                  email={email}
-                  address={address}
-                  notes={notes}
-                  onFirstName={setFirstName}
-                  onLastName={setLastName}
-                  onPhone={setPhone}
-                  onEmail={setEmail}
-                  onAddress={setAddress}
-                  onNotes={setNotes}
-                />
-              )}
-              {step === 7 && (
-                <Payment
-                  funnelRecord={funnelRecord}
-                  fullName={fullName}
-                  amountCents={priceBreakdown.firstCleaningTotalCents}
-                  cardOnFile={cardOnFile}
-                  onCardReady={(brand, last4) => {
-                    setCardLabel(`${brand} ending in ${last4}`);
+    <ApprovedBookProvider value={{
+      flow,
+      location: bookingLocation,
+      setLocation: setBookingLocationFields,
+      arrival: arrivalPreference,
+      onArrivalChange,
+      dateValue: dateCleared ? "" : requestedLocalDate,
+      dateMin: easternDateIso(new Date(), 1),
+      onDateChange: value => { setDateCleared(!value); if (value) setRequestedLocalDate(value); },
+      onNext: () => setStep(step === 1 ? 2 : 6),
+      onBack: () => { if (!bookingPreparationRef.current.prepared && bookingPreparationRef.current.pending === 0) setStep(step === 2 ? 1 : 2); },
+      assets: APPROVED_BOOK_ASSETS,
+      entryMethod: { value: bookingAccessMethod, onChange: setBookingAccessMethod },
+    }}>
+      <div className="approved-book-ui">
+        <nav className="br2-progress-nav" aria-label="Booking progress"><div className="br2-progress-inner">{[
+          { title: "Your home", detail: "Size, service and frequency" },
+          { title: "Your clean", detail: "Date, extras and your details" },
+          { title: "Payment", detail: "Review and secure checkout" },
+        ].map((item, index) => <div key={item.title} className={`br2-progress-item${visibleStep === index + 1 ? " is-active" : visibleStep > index + 1 ? " is-done" : ""}`} aria-current={visibleStep === index + 1 ? "step" : undefined}><span>{visibleStep > index + 1 ? <Check /> : index + 1}</span><div><strong>{item.title}</strong><small>{item.detail}</small></div></div>)}</div></nav>
+        {step === 1 ? <ApprovedBookFirstPage /> : step === 2 ? <ApprovedBookSecondPage /> : (
+          <ApprovedBookPayment
+            selectedPaymentMethod={selectedPaymentMethod}
+            onPaymentMethodChange={choosePaymentMethod}
+            isSaving={isSaving}
+            bookingDetailsLocked={bookingDetailsLocked}
+            allowCashAppSwitch={allowCashAppSwitch}
+            cardOnFile={cardOnFile}
+            formError={formError}
+            onRetryFinalization={() => void finalizeConfirmedCard()}
+            panels={{
+              card: cardOnFile ? <div className="literal-book-card-message"><Check /> Your card is securely on file. Confirming your booking now.</div> : (
+                <PublicBookingCardSetupBeforeReservation
+                  customerName={customerName}
+                  onPrepareReservation={prepareLockedBooking}
+                  creatingBooking={isSaving}
+                  onComplete={result => {
+                    setCardLabel(`${result.cardBrand} ending in ${result.cardLast4}`);
                     setCardOnFile(true);
                     setFormError("");
-                    setStep(8);
+                    void finalizeConfirmedCard();
                   }}
                 />
-              )}
-              {step === 8 && (
-                <ReviewAndBook
-                  service={selectedService.title}
-                  bedrooms={bedrooms}
-                  bathrooms={bathrooms}
-                  homeType={homeType}
-                  pricingMode={pricingMode}
-                  maidCount={maidCount}
-                  hourCount={hourCount}
-                  condition={condition}
-                  extras={selectedExtras}
-                  quantities={extras}
-                  total={priceBreakdown.firstCleaningTotalCents}
-                  futureTotal={priceBreakdown.futureVisitTotalCents}
-                  frequencyLabel={selectedFrequency.label}
-                  onEdit={setStep}
+              ),
+              apple_pay: <>
+                <p className="literal-book-apple-pay-note">Use Apple Pay to securely save your card. You’re charged after the cleaning.</p>
+                {!applePayAvailable ? <p className="literal-book-apple-pay-unavailable" role="status">Apple Pay is not available in this browser or Wallet. You can use Card on file or Google Pay instead.</p> : null}
+                <BookingWalletCardOnFileCheckout
+                  wallet="apple_pay"
+                  active={selectedPaymentMethod === "apple_pay"}
+                  customerName={customerName}
+                  deferredAmountCents={priceBreakdown.firstCleaningTotalCents}
+                  deferredPaymentDate={selectedDate}
+                  onAvailabilityChange={setApplePayAvailable}
+                  onPrepareReservation={prepareLockedBooking}
+                  onComplete={({ cardBrand, cardLast4 }) => {
+                    setCardLabel(`Apple Pay · ${cardBrand} ending in ${cardLast4}`);
+                    setCardOnFile(true);
+                    setFormError("");
+                    void finalizeConfirmedCard();
+                  }}
+                  onBusyChange={setWalletBusy}
                 />
-              )}
-              {formError && (
-                <div className="booking-live-error" role="alert">
-                  {formError}
-                </div>
-              )}
-            </div>
-            {step !== 1 && step !== 3 && (
-              <aside className="booking-review-rail">
-                {step === 7 || step === 8 ? (
-                  <BookingSummary
-                    service={selectedService.title}
-                    bedrooms={bedrooms}
-                    bathrooms={bathrooms}
-                    homeType={homeType}
-                    condition={condition}
-                    extras={selectedExtras}
-                    quantities={extras}
-                    dateLabel={dateLabel}
-                    time={selectedTime}
-                    pricingMode={pricingMode}
-                    homeServiceBaseTotalCents={
-                      priceBreakdown.homeServiceBaseTotalCents
-                    }
-                    hourlyServiceTotalCents={
-                      priceBreakdown.hourlyServiceTotalCents
-                    }
-                    conditionAdjustmentCents={
-                      priceBreakdown.conditionAdjustmentCents
-                    }
-                    conditionMultiplier={priceBreakdown.conditionMultiplier}
-                    total={priceBreakdown.firstCleaningTotalCents}
-                    futureTotal={priceBreakdown.futureVisitTotalCents}
-                    frequencyLabel={selectedFrequency.label}
-                  />
-                ) : (
-                  <ReassuranceRail
-                    image={
-                      step === 2
-                        ? homeDetailsRail
-                        : step === 4
-                          ? extrasBathroomRail
-                          : stillLife
-                    }
-                    step={step}
-                  />
-                )}
-              </aside>
-            )}
-            <footer className="booking-review-actions">
-              <button
-                type="button"
-                className="booking-review-back"
-                onClick={() =>
-                  setStep(current =>
-                    current === 5 ? 3 : Math.max(1, current - 1)
-                  )
-                }
-                disabled={step === 1 || isSaving}
-              >
-                <ArrowLeft />
-                Back
-              </button>
-              <div>
-                <Heart />
-                <span>
-                  {step === 8
-                    ? "You won’t be charged until after your cleaning."
-                    : "A cleaner, happier home is just a few steps away."}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="booking-review-next"
-                disabled={isSaving || (step === 7 && !cardOnFile)}
-                onClick={() => void next()}
-              >
-                {isSaving ? (
-                  "Saving…"
-                ) : step === 8 ? (
-                  <>
-                    <Check />
-                    Everything looks good
-                  </>
-                ) : step === 7 ? (
-                  <>
-                    Continue to final review <ArrowRight />
-                  </>
-                ) : (
-                  <>
-                    Continue <ArrowRight />
-                  </>
-                )}
-              </button>
-            </footer>
-          </div>
-        </section>
-      </section>
-    </main>
+              </>,
+              cashapp: <>
+                <p className="literal-book-cashapp-note">Cash App securely charges {money(priceBreakdown.firstCleaningTotalCents)} today for the first cleaning only.</p>
+                <BookingCashAppCheckout
+                  active={selectedPaymentMethod === "cashapp"}
+                  totalCents={priceBreakdown.firstCleaningTotalCents}
+                  exitRequest={selectedPaymentMethod === "cashapp" ? cashAppExitRequest : null}
+                  onPrepareReservation={prepareLockedBooking}
+                  onBusyChange={setCashAppBusy}
+                  onPaid={totalCents => {
+                    setCardLabel(`Cash App · ${money(totalCents)} paid today`);
+                    setFormError("");
+                    setComplete(true);
+                  }}
+                  onExited={(destination, notice) => {
+                    setCashAppExitRequest(null);
+                    setSelectedPaymentMethod(destination);
+                    setFormError(notice ?? "");
+                  }}
+                />
+              </>,
+              google_pay: <>
+                <p className="literal-book-google-pay-note">Use Google Pay to securely save your card. You’re charged after the cleaning.</p>
+                {!googlePayAvailable ? <p className="literal-book-google-pay-unavailable" role="status">Google Pay is not available in this browser or Wallet. You can use Card on file or Apple Pay instead.</p> : null}
+                <BookingWalletCardOnFileCheckout
+                  wallet="google_pay"
+                  active={selectedPaymentMethod === "google_pay"}
+                  customerName={customerName}
+                  deferredAmountCents={priceBreakdown.firstCleaningTotalCents}
+                  deferredPaymentDate={selectedDate}
+                  onAvailabilityChange={setGooglePayAvailable}
+                  onPrepareReservation={prepareLockedBooking}
+                  onComplete={({ cardBrand, cardLast4 }) => {
+                    setCardLabel(`Google Pay · ${cardBrand} ending in ${cardLast4}`);
+                    setCardOnFile(true);
+                    setFormError("");
+                    void finalizeConfirmedCard();
+                  }}
+                  onBusyChange={setWalletBusy}
+                />
+              </>,
+            }}
+          />
+        )}
+      </div>
+    </ApprovedBookProvider>
   );
 }
 
@@ -3541,7 +3150,7 @@ function CashAppBookingReturn({ returnToken }: { returnToken: string }) {
   const booking = payment.data?.booking;
   if (booking) {
     const time =
-      TIME_SLOTS.find(
+      booking.arrivalPreference ? formatBookingArrivalPreference(booking.arrivalPreference) : TIME_SLOTS.find(
         slot => timeLabelTo24Hour(slot) === booking.requestedLocalTime
       ) ?? booking.requestedLocalTime;
     return (

@@ -92,8 +92,8 @@ describe("public booking Cash App immediate payment", () => {
     expect(book).toContain("<BookingCashAppCheckout");
     expect(book).toContain('"card" | "apple_pay" | "cashapp" | "google_pay" | null');
     expect(book).toContain('selectedPaymentMethod === "cashapp" ? " is-open" : ""');
-    expect(book).toContain("onCashAppPaid={totalCents =>");
-    expect(book).toContain('onPaid={onCashAppPaid}');
+    expect(book).toContain("onPaid={totalCents => {");
+    expect(book).toMatch(/onPaid=\{totalCents => \{[\s\S]*setComplete\(true\);/);
     expect(book).toContain('className="literal-book-cashapp-return"');
     expect(book).toContain("123 Google reviews");
     expect(cashRouter).toContain("booking: bookingCashAppRouter");
@@ -118,7 +118,7 @@ describe("public booking Cash App immediate payment", () => {
     expect(book).toContain("setCashAppExitRequest(method)");
     expect(book).toContain('method === "google_pay"');
     expect(book).toContain("allowCashAppSwitch");
-    expect(book).toContain("onCashAppExited={(destination, notice) =>");
+    expect(book).toContain("onExited={(destination, notice) => {");
     expect(engine).toContain("markCashAppPaymentUnavailable(db, cancelled, \"cancelled\")");
     expect(abandonBlock).toContain('intent.status === "requires_payment_method"');
     expect(abandonBlock).toContain('markCashAppPaymentUnavailable(db, intent, "failed")');

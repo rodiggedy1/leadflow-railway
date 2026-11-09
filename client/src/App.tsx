@@ -217,7 +217,7 @@ function AdminLeadsCRMExactLiveRoute() {
 }
 
 function PublicBookingRoute() {
-  return <div className="public-booking-cohesion"><PublicBookingHeader /><Book /></div>;
+  return <div className="public-booking-cohesion approved-book-surface"><PublicBookingHeader /><Book /></div>;
 }
 
 function Router() {

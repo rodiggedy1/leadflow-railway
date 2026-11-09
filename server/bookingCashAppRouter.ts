@@ -6,7 +6,8 @@ import {
   bookingFunnelRecords,
   bookings,
 } from "../drizzle/schema";
-import { createPublicBookingPriceSnapshot, PUBLIC_BOOKING_PRICING_VERSION } from "../shared/publicBookingPricing";
+import { createPublicBookingPriceSnapshot, getPublicBookingArrivalPreference, PUBLIC_BOOKING_PRICING_VERSION } from "../shared/publicBookingPricing";
+import { bookingArrivalPreferenceSchema } from "../shared/bookingArrival";
 import { router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import {
@@ -50,6 +51,7 @@ const publicQuoteInput = z.object({
       .max(50),
     recurrence: z.enum(["one-time", "weekly", "biweekly", "monthly"]),
     customPriceCents: z.number().int().min(1).max(1_000_000).optional(),
+    arrivalPreference: bookingArrivalPreferenceSchema.optional(),
   }),
 });
 
@@ -229,6 +231,7 @@ export const bookingCashAppRouter = router({
           message: "Booking record not found.",
         });
       }
+      const arrivalPreference = getPublicBookingArrivalPreference(booking.priceSnapshot);
       return {
         paymentStatus: booking.paymentStatus,
         paymentMethod: booking.paymentMethod,
@@ -245,6 +248,7 @@ export const bookingCashAppRouter = router({
                 firstCleaningTotalCents: booking.firstCleaningTotalCents,
                 futureVisitTotalCents: booking.futureVisitTotalCents,
                 recurrence: booking.recurrence,
+                ...(arrivalPreference ? { arrivalPreference } : {}),
               }
             : null,
       };

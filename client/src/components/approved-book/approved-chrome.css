@@ -1,0 +1,13 @@
+/* Layout isolation only: approved header/progress declarations live in the copied page CSS. */
+.public-booking-cohesion.approved-book-surface:has(.approved-book-ui) {
+  background: #f8f9f7;
+  background-image: none;
+}
+.approved-book-surface .approved-book-ui {
+  font-family: "MIB Book Poppins", Arial, sans-serif;
+  color: #182323;
+}
+.approved-book-surface .br2-progress-item svg {
+  width: 14px;
+  height: 14px;
+}

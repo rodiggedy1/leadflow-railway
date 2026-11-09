@@ -15,7 +15,7 @@ describe("approved /book visual cohesion", () => {
   const book = read("client/src/pages/Book.tsx");
 
   it("confines the wrapper to the existing standalone public booking route", () => {
-    expect(app.match(/className="public-booking-cohesion"/g)).toHaveLength(1);
+    expect(app.match(/className="public-booking-cohesion approved-book-surface"/g)).toHaveLength(1);
     expect(app).toContain(
       '<Route path={"/book"} component={PublicBookingRoute} />'
     );
@@ -53,7 +53,8 @@ describe("approved /book visual cohesion", () => {
   it("keeps the header stateless with only approved static links", () => {
     expect(header).toContain('href="https://maidsinblack.com/"');
     expect(header).toContain('href="tel:+12028885362"');
-    expect(header).toContain("Secure booking");
+    expect(header).toContain('className="br-site-header"');
+    expect(header).toContain("Back to website");
     expect(header).not.toMatch(/useState|useEffect|trpc|onClick|fetch\(/);
   });
 

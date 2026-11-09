@@ -4,6 +4,7 @@ import type {
   BookingWidgetRecurringFrequency,
   BookingWidgetServiceId,
 } from "./bookingWidgetConfig";
+import type { BookingArrivalPreference } from "./bookingArrival";
 
 export const NATIVE_BOOKING_PRICING_VERSION = "booking-widget-v1" as const;
 
@@ -84,6 +85,7 @@ export type SafePreparedBookingSummary = {
   totalCents: number;
   recurrence: BookingWidgetRecurringFrequency;
   futureVisitTotalCents: number | null;
+  arrivalPreference?: BookingArrivalPreference;
 };
 
 export type PrepareBookingResult =
