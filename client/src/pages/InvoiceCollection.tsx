@@ -93,7 +93,7 @@ export function InvoiceCollectionPage({ review = false, onPreview }: { review?: 
     if (busy || !client || !reviewHash || !paidConfirmed || !currentlyUnpaid.length || issued) return;
     const abort = begin("mark");
     try {
-      const data: LookupResult = review ? { client, reviewHash: "sample-review-only", services: services.map(row => currentlyUnpaid.some(selectedRow => selectedRow.id === row.id) ? { ...row, paidCents: row.amountCents, paymentSource: "manual", status: "Paid — recorded by staff" } : row) } : await request<LookupResult>("/admin/mark-paid", "POST", { requestId: markKey.current, clientId: client.id, from, to, serviceIds: currentlyUnpaid.map(row => row.id), reviewHash }, abort.signal);
+      const data: LookupResult = review ? { client, reviewHash: "sample-review-only", services: services.map(row => currentlyUnpaid.some(selectedRow => selectedRow.id === row.id) ? { ...row, paidCents: row.amountCents, paymentSource: "manual", status: "Paid — recorded by staff" } : row) } : await request<LookupResult>("/admin/mark-paid", "POST", { requestId: markKey.current, clientId: client.id, ...(client.id === 0 ? { phone: client.phone, email: client.email || "" } : {}), from, to, serviceIds: currentlyUnpaid.map(row => row.id), reviewHash }, abort.signal);
       if (!current(abort)) return;
       setClient(data.client); setServices(data.services); setReviewHash(data.reviewHash);
       setSelected([]);
@@ -109,7 +109,7 @@ export function InvoiceCollectionPage({ review = false, onPreview }: { review?: 
     }
     const abort = begin("issue");
     try {
-      const result = await request<IssuedResult>("/admin/issue", "POST", { requestId: issueKey.current, clientId: client.id, from, to, dueDate, serviceIds: invoiceRows.map(row => row.id), reviewHash, confirmedUnpaid: true }, abort.signal);
+      const result = await request<IssuedResult>("/admin/issue", "POST", { requestId: issueKey.current, clientId: client.id, ...(client.id === 0 ? { phone: client.phone, email: client.email || "" } : {}), from, to, dueDate, serviceIds: invoiceRows.map(row => row.id), reviewHash, confirmedUnpaid: true }, abort.signal);
       if (!current(abort)) return;
       setIssued(result); setSendConfirmed(false); setSent(false); sendKey.current = crypto.randomUUID();
     } catch (value) { if (current(abort)) setError(value instanceof Error ? value.message : "Invoice could not be issued."); }
@@ -162,7 +162,8 @@ export function CustomerInvoicePage({ review = false, reviewInvoice = sampleInvo
       if (!current(abort)) return;
       setInvoice(data.invoice); setReady(data.paymentsReady); setStatusMessage(data.message || "");
       const unpaid = data.invoice.lines.filter(row => row.paidCents < row.amountCents).map(row => row.id);
-      setIds(old => data.invoice.activeAttemptId ? (data.invoice.activeLineIds || unpaid).filter(id => unpaid.includes(id)) : initialized.current ? old.filter(id => unpaid.includes(id)) : unpaid);
+      const wasInitialized = initialized.current;
+      setIds(old => data.invoice.activeAttemptId ? (data.invoice.activeLineIds || unpaid).filter(id => unpaid.includes(id)) : wasInitialized ? old.filter(id => unpaid.includes(id)) : unpaid);
       initialized.current = true;
     } catch (value) { if (current(abort)) setError(value instanceof Error ? value.message : "Invoice unavailable."); }
   };

@@ -39,7 +39,7 @@ function lineRow(): FakeRow {
 }
 function jobRow(overrides: FakeRow = {}): FakeRow {
   return { id: 101, bookingId: null, jobDate: "2026-11-02", customerPhone: PHONE, customerEmail: EMAIL,
-    serviceName: "Example service", jobAddress: "Example address", jobTotalCents: 12_345,
+    customerName: "Example owner", serviceName: "Example service", jobAddress: "Example address", jobTotalCents: 12_345,
     bookingStatus: "completed", missingFromLaunch27At: null, nativeId: null, nativeDate: null,
     nativePhone: null, nativeEmail: null, nativeStatus: null, nativeAmount: null, firstProjectionCount: 0, firstProjectionId: null, ...overrides };
 }
@@ -52,7 +52,7 @@ function bookingRow(overrides: FakeRow = {}): FakeRow {
 
 function fakeSql() {
   const state = {
-    accounts: [accountRow()], emailAccounts: [{ id: 17, customerEmail: EMAIL }] as FakeRow[],
+    accounts: [accountRow()],
     jobs: [jobRow()] as FakeRow[], bookings: [] as FakeRow[], invoices: [invoiceRow()],
     attempts: [] as FakeRow[], lines: [lineRow()], allocations: [] as FakeRow[],
     issuedProjection: [] as FakeRow[], profiles: [] as FakeRow[], authorizations: [] as FakeRow[], cashApp: [] as FakeRow[], manual: [] as FakeRow[], claims: [{ invoiceId: 42, occurrenceKey: "job:101" }] as FakeRow[],
@@ -63,12 +63,9 @@ function fakeSql() {
     const sql = rawSql.replace(/\s+/g, " ").trim();
     trace.push(sql);
     let result: FakeRow[] | { affectedRows: number; insertId: number };
-    if (sql === "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE customerPhone = ? LIMIT 2" ||
-        sql === "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1" ||
+    if (sql === "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1" ||
         sql === "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1 FOR UPDATE") {
       result = state.accounts;
-    } else if (sql === "SELECT id, customerEmail FROM customer_portal_accounts WHERE customerEmail = ? LIMIT 2") {
-      result = state.emailAccounts;
     } else if (sql.startsWith("SELECT j.id, j.bookingId, j.jobDate,") && sql.includes("FROM leadflow_jobs j FORCE INDEX")) {
       result = state.jobs;
     } else if (sql.startsWith("SELECT b.id, b.requestedLocalDate,") && sql.includes("FROM bookings b FORCE INDEX")) {
@@ -98,7 +95,7 @@ function fakeSql() {
     } else if (sql.startsWith("SELECT id, number, accountId,") && sql.endsWith("FROM payable_invoices WHERE id = ? LIMIT 1")) {
       result = state.invoices.filter(row => row.id === values[0]);
     } else if (sql.startsWith("INSERT INTO payable_invoices (")) {
-      const cols = ["number", "accountId", "clientName", "clientPhone", "clientEmail", "periodFrom", "periodTo", "dueDate", "status", "requestId", "payloadHash", "tokenHash", "tokenExpiresAt", "createdAtMs", "paidAtMs"];
+      const cols = ["number", "accountId", "clientName", "clientPhone", "clientEmail", "periodFrom", "periodTo", "dueDate", "status", "requestId", "payloadHash", "reviewHash", "tokenHash", "tokenExpiresAt", "createdAtMs", "paidAtMs"];
       state.invoices.push({ id: 42, currency: "usd", activeAttemptId: null, ...Object.fromEntries(cols.map((col,i) => [col, values[i]])) });
       result = { affectedRows: 1, insertId: 42 };
     } else if (sql.startsWith("INSERT INTO payable_invoice_lines (")) {
@@ -168,31 +165,29 @@ function expectRolledBack(h: ReturnType<typeof fakeSql>) {
 }
 
 describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
-  it("lists exact phone OR email contacts with an optional real account and full US phone digits", async () => {
+  it("lists exact phone OR email contacts with a contact snapshot and full US phone digits, without reading portal accounts", async () => {
     const h = fakeSql();
     expect(h.poolFactory).not.toHaveBeenCalled();
     h.state.jobs = [jobRow({ customerPhone: "(202) 555-0123", customerEmail: " OWNER@example.test " })];
     const result = await h.repo.lookup("(202) 555-0123", " OWNER@example.test ", FROM, TO);
-    expect(result.client).toMatchObject({ id: 17, phone: PHONE, email: EMAIL });
+    expect(result.client).toEqual({ id: 0, name: "Example owner", phone: PHONE, email: EMAIL });
     expect(result.services).toMatchObject([{ id: "job:101", eligible: true, amountCents: 12_345 }]);
-    expect(h.execute.mock.calls[0]).toEqual([
-      "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE customerPhone = ? LIMIT 2", [PHONE],
-    ]);
-    const [sql, params] = h.execute.mock.calls[1];
+    expect(h.execute.mock.calls.some(([sql]) => sql.includes("customer_portal_accounts"))).toBe(false);
+    const [sql, params] = h.execute.mock.calls[0];
     expect(sql).toContain("FROM leadflow_jobs j FORCE INDEX");
     expect(sql).toMatch(/LOWER\(TRIM\(j\.customerEmail\)\) = (?:\?|NULLIF\(\?, ''\)) OR/);
     expect(sql).not.toContain("COALESCE(TRIM(j.customerEmail), '') = '' AND");
     expect(sql).toContain("REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (");
     expect(sql).not.toMatch(/LIKE|RIGHT\s*\(/i);
     expect(params).toEqual([FROM, TO, EMAIL, "2025550123", "12025550123"]);
-    expect(h.execute.mock.calls[2][1]).toEqual(params);
-    expect(h.execute.mock.calls[2][0]).toContain("FROM bookings b FORCE INDEX (idx_bookings_requested_date)");
-    expect(h.execute.mock.calls[2][0]).not.toContain("COALESCE(TRIM(b.customerEmail), '') = '' AND");
+    expect(h.execute.mock.calls[1][1]).toEqual(params);
+    expect(h.execute.mock.calls[1][0]).toContain("FROM bookings b FORCE INDEX (idx_bookings_requested_date)");
+    expect(h.execute.mock.calls[1][0]).not.toContain("COALESCE(TRIM(b.customerEmail), '') = '' AND");
     expect(h.getConnection).not.toHaveBeenCalled();
     expect(h.mutations()).toEqual([]);
   });
 
-  it("lists sources without an account when portal contacts mismatch, are missing, or are duplicated", async () => {
+  it("derives the same contact snapshot regardless of mismatching, missing, or duplicated portal accounts", async () => {
     const cases: Array<{ accounts?: FakeRow[]; email?: string }> = [
       { accounts: [accountRow({ customerPhone: "+12025550124" })] },
       { email: "other@example.test" },
@@ -203,8 +198,9 @@ describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
       const h = fakeSql();
       if (fixture.accounts) h.state.accounts = fixture.accounts;
       const result = await h.repo.lookup(PHONE, fixture.email ?? EMAIL, FROM, TO);
-      expect(result.client).toBeNull();
+      expect(result.client).toEqual({ id: 0, name: "Example owner", phone: PHONE, email: fixture.email ?? EMAIL });
       expect(result.services).toMatchObject([{ id: "job:101", eligible: true, amountCents: 12_345 }]);
+      expect(h.execute.mock.calls.some(([sql]) => sql.includes("customer_portal_accounts"))).toBe(false);
       expect(h.execute.mock.calls.some(([sql]) => sql.includes("FROM leadflow_jobs j FORCE INDEX"))).toBe(true);
       expect(h.execute.mock.calls.some(([sql]) => sql.includes("FROM bookings b FORCE INDEX"))).toBe(true);
       expect(h.mutations()).toEqual([]);

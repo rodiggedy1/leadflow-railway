@@ -26,12 +26,12 @@ function account(overrides: Row = {}): Row {
 }
 function job(overrides: Row = {}): Row {
   return { id: 101, bookingId: null, jobDate: "2026-11-03", customerPhone: PHONE, customerEmail: EMAIL,
-    serviceName: "Same service label", jobAddress: "Same fixture address", jobTotalCents: 12_345,
+    customerName: "Fixture owner", serviceName: "Same service label", jobAddress: "Same fixture address", jobTotalCents: 12_345,
     bookingStatus: "completed", missingFromLaunch27At: null, ...overrides };
 }
 function booking(overrides: Row = {}): Row {
   return { id: 201, requestedLocalDate: "2026-11-03", customerPhone: PHONE, customerEmail: EMAIL,
-    serviceName: "Same service label", address: "Same fixture address", firstCleaningTotalCents: 6_789,
+    customerName: "Fixture owner", serviceName: "Same service label", address: "Same fixture address", firstCleaningTotalCents: 6_789,
     status: "completed", paymentStatus: "not_started", ...overrides };
 }
 
@@ -67,9 +67,7 @@ function fixture() {
     if (!sql.startsWith("SELECT ")) throw new Error(`Listing attempted a write: ${sql}`);
     let result: Row[];
     if (sql.includes("FROM customer_portal_accounts")) {
-      if (sql.includes("WHERE customerPhone = ?")) result = state.accounts.filter(a => a.customerPhone === values[0]).slice(0, 2);
-      else if (sql.includes("WHERE LOWER(TRIM(customerEmail)) = ?")) result = state.accounts.filter(a => emailOf(a.customerEmail) === values[0]).slice(0, 2);
-      else if (sql.includes("WHERE id = ?")) result = state.accounts.filter(a => a.id === values[0]).slice(0, 1);
+      if (sql.includes("WHERE id = ?")) result = state.accounts.filter(a => a.id === values[0]).slice(0, 1);
       else throw new Error(`Unexpected account SELECT: ${sql}`);
     } else if (sql.startsWith("SELECT j.id, j.bookingId, j.jobDate,") && sql.includes("FROM leadflow_jobs j FORCE INDEX")) {
       result = selected(state.jobs, sql, values, "j", "jobDate").map(j => {
@@ -131,6 +129,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function expectContactSnapshot(h: ReturnType<typeof fixture>, result: Awaited<ReturnType<PayableInvoiceService["lookup"]>>, phone = PHONE, email: string | null = EMAIL, name = "Fixture owner") {
+  expect(result.client).toEqual({ id: 0, name, phone, email });
+  expect(result.reviewHash).toMatch(/^[a-f0-9]{64}$/);
+  expect(result.reviewHash).toBe(invoiceReviewHash(result.client!, result.services, FROM, TO));
+  expect(h.execute.mock.calls.some(([sql]) => sql.includes("customer_portal_accounts"))).toBe(false);
+}
+
 describe("offline exact invoice contact listing", () => {
   it.each([
     { label: "phone correct, email different", contacts: { customerPhone: "(202) 555-0123", customerEmail: OTHER_EMAIL } },
@@ -138,7 +143,7 @@ describe("offline exact invoice contact listing", () => {
   ])("lists both owned source kinds when $label, without a portal account", async ({ contacts }) => {
     const h = fixture(); h.state.jobs = [job(contacts)]; h.state.bookings = [booking(contacts)];
     const result = await h.service.lookup("(202) 555-0123", " OWNER@example.test ", FROM, TO);
-    expect(result.client).toBeNull(); expect(result.reviewHash).toBe("");
+    expectContactSnapshot(h, result);
     expect(result.services.map(s => s.id)).toEqual(["booking:201:first:2026-11-03", "job:101"]);
     expect(result.services.every(s => s.eligible)).toBe(true);
     expect(result.services.map(s => s.amountCents)).toEqual([6_789, 12_345]);
@@ -157,7 +162,7 @@ describe("offline exact invoice contact listing", () => {
     h.state.bookings = [booking(contacts), booking({ id: 202, customerPhone: "", customerEmail: "" }),
       booking({ id: 203, customerPhone: null, customerEmail: null }), booking({ id: 204, customerPhone: OTHER_PHONE, customerEmail: " " })];
     const result = await h.service.lookup(phone, email, FROM, TO);
-    expect(result.client).toBeNull(); expect(result.reviewHash).toBe("");
+    expectContactSnapshot(h, result, phone ? PHONE : "", email ? EMAIL : null);
     expect(result.services.map(s => s.id)).toEqual(["booking:201:first:2026-11-03", "job:101"]);
     expect(result.services.every(s => s.eligible)).toBe(true);
     expect(h.sourceCalls().map(([, values]) => values)).toEqual([params, params]);
@@ -196,18 +201,19 @@ describe("offline exact invoice contact listing", () => {
     { label: "exact phone", phone: PHONE, email: "" },
     { label: "exact email", phone: "", email: " OWNER@example.test " },
     { label: "both exact contacts", phone: PHONE, email: EMAIL },
-  ])("returns only a real account identified by $label", async ({ phone, email }) => {
+  ])("returns a source-named billing snapshot from $label without reading an existing account", async ({ phone, email }) => {
     const h = fixture(); h.state.accounts = [account()]; h.state.jobs = [job()];
     const result = await h.service.lookup(phone, email, FROM, TO);
-    expect(result.client).toEqual({ id: 17, name: "Fixture owner", phone: PHONE, email: EMAIL });
-    expect(result.reviewHash).toBe(invoiceReviewHash(result.client!, result.services, FROM, TO));
+    expectContactSnapshot(h, result, phone ? PHONE : "", email ? EMAIL : null);
+    expect(await h.repo.contactServices(phone, email, FROM, TO)).toEqual({ client: result.client, services: result.services });
+    expect(h.execute.mock.calls.some(([sql]) => sql.includes("customer_portal_accounts"))).toBe(false);
   });
 
-  it("lists independently when accounts are absent, duplicated, or do not identify both supplied contacts", async () => {
+  it("returns the same reviewed billing snapshot when accounts are absent, duplicated, or contact-mismatched", async () => {
     for (const accounts of [[], [account(), account({ id: 18 })], [account({ customerEmail: OTHER_EMAIL })]]) {
       const h = fixture(); h.state.accounts = accounts; h.state.jobs = [job({ customerEmail: OTHER_EMAIL })];
       const result = await h.service.lookup(PHONE, EMAIL, FROM, TO);
-      expect(result.client).toBeNull(); expect(result.reviewHash).toBe("");
+      expectContactSnapshot(h, result);
       expect(result.services).toMatchObject([{ id: "job:101", eligible: true }]);
     }
   });
@@ -225,6 +231,39 @@ describe("offline exact invoice contact listing", () => {
     expect(new Set(before.map(s => s.occurrenceKey)).size).toBe(3);
   });
 
+  it("coalesces one verified first projection when each source matches a different supplied contact", async () => {
+    const h = fixture();
+    h.state.bookings = [booking({ customerPhone: OTHER_PHONE })];
+    h.state.jobs = [job({ bookingId: 201, customerEmail: OTHER_EMAIL, jobTotalCents: 6_789 })];
+    const result = await h.service.lookup(PHONE, EMAIL, FROM, TO);
+    expectContactSnapshot(h, result);
+    expect(result.services).toMatchObject([{ id: "booking:201:first:2026-11-03", amountCents: 6_789, eligible: true }]);
+    expect(result.services).toHaveLength(1);
+  });
+
+  it.each(["native", "projection"] as const)("blocks a linked first-service %s matching neither contact rather than coalescing it", async kind => {
+    const h = fixture();
+    const conflict = { customerPhone: OTHER_PHONE, customerEmail: OTHER_EMAIL };
+    h.state.bookings = [booking(kind === "native" ? conflict : {})];
+    h.state.jobs = [job({ bookingId: 201, jobTotalCents: 6_789, ...(kind === "projection" ? conflict : {}) })];
+    const result = await h.service.lookup(PHONE, EMAIL, FROM, TO);
+    expectContactSnapshot(h, result);
+    expect(result.services).toHaveLength(1);
+    expect(result.services[0]).toMatchObject({ id: kind === "native" ? "job:101" : "booking:201:first:2026-11-03",
+      eligible: false, reason: "Customer email/phone conflict: review required." });
+  });
+
+  it.each([
+    { phone: " (202) 555-0123 ", email: "", expected: { phone: PHONE, email: null, name: PHONE } },
+    { phone: "", email: " OWNER@example.test ", expected: { phone: "", email: EMAIL, name: EMAIL } },
+  ])("uses the normalized supplied contact as the name fallback without portal or source names: %j", async ({ phone, email, expected }) => {
+    const h = fixture();
+    h.state.accounts = [account()]; h.state.jobs = [job({ customerName: " " })];
+    const result = await h.service.lookup(phone, email, FROM, TO);
+    expectContactSnapshot(h, result, expected.phone, expected.email, expected.name);
+    expect(result.services).toMatchObject([{ id: "job:101", eligible: true }]);
+  });
+
   it("preserves manual, partially paid retained invoice, and captured native amounts without an account", async () => {
     const h = fixture(); h.state.jobs = [job(), job({ id: 102, jobTotalCents: 20_000 })]; h.state.bookings = [booking()];
     h.state.manual = [{ occurrenceKey: "job:101", sourceServiceId: "job:101", accountId: 81,
@@ -234,7 +273,7 @@ describe("offline exact invoice contact listing", () => {
     h.state.profiles = [{ id: 301, bookingId: 201, paymentStatus: "captured" }];
     const before = structuredClone(h.state);
     const result = await h.service.lookup(PHONE, EMAIL, FROM, TO);
-    expect(result.client).toBeNull(); expect(result.reviewHash).toBe("");
+    expectContactSnapshot(h, result);
     expect(result.services).toMatchObject([
       { id: "booking:201:first:2026-11-03", amountCents: 6_789, paidCents: 6_789, paymentSource: "stripe", eligible: false },
       { id: "job:101", amountCents: 12_345, paidCents: 12_345, paymentSource: "manual" },

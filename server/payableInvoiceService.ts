@@ -10,6 +10,7 @@ export type InvoiceMarkPaidInput = z.infer<typeof invoiceMarkPaidSchema>;
 export type InvoiceRepository = {
   lookup(phone: string, email: string, from: string, to: string): Promise<{ client: InvoiceClient | null; services: InvoiceService[] }>;
   services(clientId: number, from: string, to: string): Promise<{ client: InvoiceClient; services: InvoiceService[] }>;
+  contactServices?: (phone: string, email: string, from: string, to: string) => Promise<{ client: InvoiceClient; services: InvoiceService[] }>;
   issue(input: InvoiceIssueInput, client: InvoiceClient, services: InvoiceService[], tokenHash: string, payloadHash: string): Promise<PayableInvoice>;
   byToken(tokenHash: string): Promise<PayableInvoice | null>;
   reserve(invoiceId: number, requestId: string, lineIds: number[]): Promise<InvoiceAttempt>;
@@ -45,18 +46,23 @@ export class PayableInvoiceService {
     const result = await this.deps.repo.lookup(phone, email, from, to);
     return { ...result, reviewHash: result.client ? invoiceReviewHash(result.client, result.services, from, to) : "" };
   }
+  private billingServices(input: { clientId: number; phone?: string; email?: string; from: string; to: string }) {
+    if (input.clientId > 0) return this.deps.repo.services(input.clientId, input.from, input.to);
+    if (input.clientId !== 0 || !this.deps.repo.contactServices) throw new InvoiceError("INVALID_CUSTOMER", 400, "Enter a phone or email to find the invoice services.");
+    return this.deps.repo.contactServices(input.phone || "", input.email || "", input.from, input.to);
+  }
   async markAlreadyPaid(input: InvoiceMarkPaidInput, agentId: number) {
     if (!this.deps.repo.markAlreadyPaid) throw new InvoiceError("INVOICE_STORAGE_UNAVAILABLE", 503, "Invoice payment records are unavailable.");
     if (!Number.isSafeInteger(agentId) || agentId <= 0) throw new InvoiceError("ADMIN_REQUIRED", 403, "An active staff administrator is required.");
     await this.deps.repo.markAlreadyPaid(input, agentId);
-    const result = await this.deps.repo.services(input.clientId, input.from, input.to);
+    const result = await this.billingServices(input);
     return { ...result, reviewHash: invoiceReviewHash(result.client, result.services, input.from, input.to) };
   }
   async issue(input: InvoiceIssueInput) {
     const token = this.token(input.clientId, input.requestId);
     const replay = await this.deps.repo.replayIssue?.(input, invoiceTokenHash(token));
     if (replay) return { invoice: replay, url: `${this.deps.origin}/invoice/${token}` };
-    const { client, services } = await this.deps.repo.services(input.clientId, input.from, input.to);
+    const { client, services } = await this.billingServices(input);
     if (input.reviewHash !== invoiceReviewHash(client, services, input.from, input.to)) throw new InvoiceError("REVIEW_CHANGED", 409, "Service dates, amounts or paid status changed. Pull bookings again before creating the invoice.");
     if (new Set(input.serviceIds).size !== input.serviceIds.length) throw new InvoiceError("INVALID_SELECTION", 400, "Select each service only once.");
     const selected = input.serviceIds.map(id => services.find(service => service.id === id));
@@ -65,7 +71,7 @@ export class PayableInvoiceService {
     const total = safeSum(rows.map(row => row.amountCents));
     if (total < 50) throw new InvoiceError("INVALID_AMOUNT", 409, "Select a payable service total.");
     await this.deps.assertCollectionReady(rows);
-    const payloadHash = createHash("sha256").update(JSON.stringify({ clientId: input.clientId, from: input.from, to: input.to, dueDate: input.dueDate, services: rows.slice().sort((a,b) => a.id.localeCompare(b.id)).map(row => [row.occurrenceKey,row.date,row.amountCents,row.paidCents ?? 0]) })).digest("hex");
+    const payloadHash = createHash("sha256").update(JSON.stringify({ clientId: input.clientId, ...(input.clientId === 0 ? { billing: [client.phone, client.email, client.name] } : {}), from: input.from, to: input.to, dueDate: input.dueDate, services: rows.slice().sort((a,b) => a.id.localeCompare(b.id)).map(row => [row.occurrenceKey,row.date,row.amountCents,row.paidCents ?? 0]) })).digest("hex");
     const invoice = await this.deps.repo.issue(input, client, rows, invoiceTokenHash(token), payloadHash);
     return { invoice, url: `${this.deps.origin}/invoice/${token}` };
   }

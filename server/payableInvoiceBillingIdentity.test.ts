@@ -24,12 +24,12 @@ const digits = (value: unknown) => String(value ?? "").replace(/[^0-9]/g, "");
 const idFor = (kind: Kind) => kind === "job" ? "job:101" : `booking:201:first:${DATE}`;
 function job(overrides: Row = {}): Row {
   return { id: 101, bookingId: null, jobDate: DATE, customerPhone: PHONE, customerEmail: EMAIL,
-    serviceName: "Synthetic service", jobAddress: "Synthetic address", jobTotalCents: 23000,
+    customerName: "Synthetic billing client", serviceName: "Synthetic service", jobAddress: "Synthetic address", jobTotalCents: 23000,
     bookingStatus: "completed", missingFromLaunch27At: null, ...overrides };
 }
 function booking(overrides: Row = {}): Row {
   return { id: 201, requestedLocalDate: DATE, customerPhone: PHONE, customerEmail: EMAIL,
-    serviceName: "Synthetic service", address: "Synthetic address", firstCleaningTotalCents: 23000,
+    customerName: "Synthetic billing client", serviceName: "Synthetic service", address: "Synthetic address", firstCleaningTotalCents: 23000,
     status: "completed", paymentStatus: "not_started", ...overrides };
 }
 function identityPredicate(alias: string): string {
@@ -70,7 +70,8 @@ function fixture(kind: Kind = "job") {
     trace.push({ sql, values: [...values] });
     let result: Row[] | { affectedRows: number; insertId: number };
     if (sql.includes("FROM customer_portal_accounts WHERE")) {
-      result = state.accounts.filter(a => sql.includes("WHERE customerPhone = ?") ? a.customerPhone === values[0] : a.id === values[0]);
+      if (!sql.includes("WHERE id = ?")) throw new Error(`Contact lookup must not read portal accounts: ${sql}`);
+      result = state.accounts.filter(a => a.id === values[0]);
     } else if (sql.startsWith("SELECT j.id,") && sql.includes("FROM leadflow_jobs j FORCE INDEX")) {
       result = filtered(state.jobs, "job", sql, values).map(j => {
         const b = state.bookings.find(b => b.id === j.bookingId);
@@ -161,9 +162,13 @@ async function reviewed(h: ReturnType<typeof fixture>) {
 describe("billing identity correction — real repository, offline filtering SQL mock", () => {
   it("captures inclusive date-index-bounded listing OR and separate strict billing predicates and values", async () => {
     const h = fixture();
-    await h.repo.lookup("(202) 555-0100", " BILLING@example.test ", FROM, TO);
-    expect(h.trace[0]).toEqual({ sql: "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE customerPhone = ? LIMIT 2", values: [PHONE] });
+    const lookup = await h.repo.lookup("(202) 555-0100", " BILLING@example.test ", FROM, TO);
+    expect(lookup.client).toEqual({ id: 0, name: "Synthetic billing client", phone: PHONE, email: EMAIL });
+    expect(h.trace.some(t => t.sql.includes("customer_portal_accounts"))).toBe(false);
     await h.repo.services(17, FROM, TO);
+    expect(h.trace.filter(t => t.sql.includes("customer_portal_accounts"))).toEqual([
+      { sql: "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1", values: [17] },
+    ]);
     for (const [alias, table, index, date] of [["j", "leadflow_jobs", "idx_leadflow_jobs_job_date", "jobDate"], ["b", "bookings", "idx_bookings_requested_date", "requestedLocalDate"]]) {
       const queries = h.trace.filter(t => t.sql.startsWith(`SELECT ${alias}.id,`) && t.sql.includes(`FROM ${table} ${alias} FORCE INDEX`));
       expect(queries).toHaveLength(2);
@@ -185,7 +190,9 @@ describe("billing identity correction — real repository, offline filtering SQL
     else h.state.bookings = [booking({ id: 201, firstCleaningTotalCents: 17000 }), booking({ id: 202, customerPhone: OTHER_PHONE })];
     const lookup = await h.repo.lookup(PHONE, EMAIL, FROM, TO);
     const reread = await h.repo.services(17, FROM, TO);
-    expect(reread).toEqual(lookup);
+    expect(lookup.client).toEqual({ id: 0, name: "Synthetic billing client", phone: PHONE, email: EMAIL });
+    expect(reread.client).toEqual({ id: 17, name: "Synthetic billing client", phone: PHONE, email: EMAIL });
+    expect(reread.services).toEqual(lookup.services);
     expect(lookup.services.map(s => [s.id, s.date, s.amountCents, s.eligible])).toEqual(kind === "job"
       ? [["job:101", DATE, 17000, true], ["job:102", DATE, 23000, true]]
       : [[`booking:201:first:${DATE}`, DATE, 17000, true], [`booking:202:first:${DATE}`, DATE, 23000, true]]);
@@ -268,10 +275,11 @@ describe("billing identity correction — real repository, offline filtering SQL
     const h = fixture();
     h.state.jobs = [job(), job({ id: 102, customerPhone: OTHER_PHONE }), job({ id: 103, customerEmail: "wrong@example.test" })];
     const result = await h.repo.lookup(phone, address, FROM, TO);
-    expect(result.client).toBeNull();
+    expect(result.client).toEqual({ id: 0, name: "Synthetic billing client", phone, email: address });
     expect(result.services.map(s => s.id)).toEqual(ids);
     expect(result.services.every(s => s.eligible)).toBe(true);
-    expect(h.trace[0].values).toEqual([phone]);
+    expect(h.trace[0].values).toEqual([FROM, TO, address, phone.slice(2), phone.slice(1)]);
+    expect(h.trace.some(t => t.sql.includes("customer_portal_accounts"))).toBe(false);
     expect(h.writes()).toEqual([]);
     expect(h.getConnection).not.toHaveBeenCalled();
   });

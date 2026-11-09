@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import { invoiceBalance, invoiceIssueSchema, invoiceMarkPaidSchema, selectedBalance, type InvoiceClient, type InvoiceService, type PayableInvoice } from "../../../shared/payableInvoice";
-import { PayableInvoiceService, type InvoiceRepository } from "../../../server/payableInvoiceService";
+import type Stripe from "stripe";
+import { invoiceBalance, invoiceCheckoutSchema, invoiceIssueSchema, invoiceLookupSchema, invoiceMarkPaidSchema, selectedBalance, type InvoiceAttempt, type InvoiceClient, type InvoiceService, type PayableInvoice } from "../../../shared/payableInvoice";
+import { INVOICE_PAYMENT_MARKER, PayableInvoiceService, type InvoiceIssueInput, type InvoiceMarkPaidInput, type InvoiceRepository } from "../../../server/payableInvoiceService";
 import { invoiceReviewHash } from "../../../server/payableInvoiceReview";
 
 // Small isolated hook harness: handlers and state transitions run without a browser,
@@ -68,8 +69,146 @@ const expectRowPrice = (index: number, amount: string, label: string | RegExp) =
   if (typeof label === "string") expect(actualLabel).toBe(label); else expect(actualLabel).toMatch(label);
 };
 
+// TEST ONLY: this adapter runs the actual schemas/service, never application storage,
+// portal auth, delivery, server startup, a provider SDK constructor, or network fetch.
+const matchedDay = "2026-11-09";
+const matchedClient: InvoiceClient = { id: 0, name: "Matched Booking Customer", phone: "+12025550109", email: "matched@example.test" };
+const matchedBooking = (overrides: Partial<InvoiceService> = {}): InvoiceService => ({ id: "job:901", occurrenceKey: "job:901", date: matchedDay, description: "Matched $5 booking", address: "Test address", amountCents: 500, paidCents: 0, paymentSource: null, status: "completed", eligible: true, reason: null, ...overrides });
+function matchedFlow(rows = [matchedBooking()], contacts: InvoiceClient = matchedClient) {
+  const state = { client: { ...contacts }, rows: rows.map(row => ({ ...row })), invoice: null as PayableInvoice | null, tokenHash: "", attempt: null as InvoiceAttempt | null, providerPaid: false, allocations: 0, manualEffects: 0 };
+  const snapshot = () => ({ client: { ...state.client }, services: state.rows.map(row => ({ ...row })) });
+  const repo: InvoiceRepository = {
+    lookup: vi.fn(async (_phone: string, _email: string, _from: string, _to: string) => snapshot()),
+    services: vi.fn(async (_id: number, _from: string, _to: string) => { throw new Error("Positive-ID portal path must not run for matched contacts"); }),
+    contactServices: vi.fn(async (phone: string, email: string, _from: string, _to: string) => {
+      const current = snapshot();
+      if ((phone && phone !== state.client.phone) || (email && email !== state.client.email)) current.client = { ...state.client, phone, email: email || null };
+      return current;
+    }),
+    issue: vi.fn(async (input: InvoiceIssueInput, client: InvoiceClient, services: InvoiceService[], tokenHash: string, _payloadHash: string): Promise<PayableInvoice> => {
+      state.tokenHash = tokenHash;
+      state.invoice = { id: 901, number: "TEST-MATCHED-901", clientId: client.id, clientName: client.name, from: input.from, to: input.to, dueDate: input.dueDate, currency: "usd", status: "open", receipts: [], activeAttemptId: null,
+        lines: services.map((row, index) => ({ id: index + 1, occurrenceKey: row.occurrenceKey, date: row.date, description: row.description, address: row.address, amountCents: row.amountCents, paidCents: row.paidCents || 0, manualPaidCents: row.paymentSource === "manual" ? row.paidCents || 0 : 0 })) };
+      return state.invoice;
+    }),
+    byToken: vi.fn(async hash => hash === state.tokenHash ? state.invoice : null),
+    reserve: vi.fn(async (invoiceId, requestId, lineIds): Promise<InvoiceAttempt> => {
+      if (state.attempt) return state.attempt;
+      state.attempt = { id: "attempt-matched-ui", invoiceId, requestId, lineIds: lineIds.slice(), amountCents: selectedBalance(state.invoice!, lineIds), currency: "usd", state: "pending", sessionId: null, sessionUrl: null, createdAt: Date.parse(`${matchedDay}T12:00:00Z`) };
+      state.invoice!.activeAttemptId = state.attempt.id; return state.attempt;
+    }),
+    attachSession: vi.fn(async (_id, sessionId, url) => { state.attempt!.sessionId = sessionId; state.attempt!.sessionUrl = url; state.attempt!.state = "session_open"; }),
+    attempt: vi.fn(async id => state.attempt?.id === id ? state.attempt : null),
+    settle: vi.fn(async (_id, sessionId, paymentId, amountCents) => {
+      if (state.attempt!.state === "paid" || state.invoice!.receipts.some(row => row.paymentId === paymentId)) return;
+      if (sessionId !== state.attempt!.sessionId || amountCents !== state.attempt!.amountCents) throw new Error("TEST ONLY invalid settlement");
+      state.attempt!.lineIds.forEach(id => { const line = state.invoice!.lines.find(row => row.id === id)!; line.paidCents = line.amountCents; });
+      state.invoice!.receipts.push({ paymentId, amountCents, paidAt: `${matchedDay}T12:00:00Z`, lineIds: state.attempt!.lineIds.slice() });
+      state.attempt!.state = "paid"; state.invoice!.activeAttemptId = null; state.invoice!.status = invoiceBalance(state.invoice!.lines) === 0 ? "paid" : "partially_paid"; state.allocations++;
+    }),
+    markAlreadyPaid: vi.fn(async (input: InvoiceMarkPaidInput, _agentId: number) => {
+      if (input.reviewHash !== invoiceReviewHash(state.client, state.rows, input.from, input.to)) throw new Error("Services changed. Pull bookings again.");
+      input.serviceIds.forEach(id => { const row = state.rows.find(row => row.id === id)!; row.paidCents = row.amountCents; row.paymentSource = "manual"; }); state.manualEffects++;
+    }),
+  };
+  const create = vi.fn(async (_params: Stripe.Checkout.SessionCreateParams, _options?: Stripe.RequestOptions) => ({ id: "cs_test_matched_ui", url: "https://checkout.stripe.com/c/pay/test_matched_ui" }));
+  const retrieve = vi.fn(async (_id: string): Promise<Stripe.Checkout.Session> => ({ id: "cs_test_matched_ui", object: "checkout.session", mode: "payment", livemode: false, payment_status: state.providerPaid ? "paid" : "unpaid", amount_total: state.attempt!.amountCents, currency: "usd", client_reference_id: "attempt-matched-ui", payment_intent: "pi_test_matched_ui", metadata: { leadflowInvoice: INVOICE_PAYMENT_MARKER, invoiceId: "901", invoiceAttemptId: "attempt-matched-ui" } } as unknown as Stripe.Checkout.Session));
+  const stripe = vi.fn(() => ({ checkout: { sessions: { create, retrieve } } } as unknown as Stripe));
+  const service = new PayableInvoiceService({ repo, stripe, assertCollectionReady: vi.fn(async () => {}), origin: "https://invoice.example.test", tokenSecret: "test-only-ui-matched-secret-not-a-real-key-2026", now: () => Date.parse(`${matchedDay}T12:00:00Z`) });
+  const install = () => fetchMock.mockImplementation(async (url: string, options: any = {}) => {
+    const payload = options.body ? JSON.parse(options.body) : undefined;
+    try {
+      if (url === "/api/payable-invoices/admin/status") return response({ paymentsReady: true });
+      if (url === "/api/payable-invoices/admin/lookup") { const input = invoiceLookupSchema.parse(payload); return response(await service.lookup(input.phone, input.email, input.from, input.to)); }
+      if (url === "/api/payable-invoices/admin/issue") return response(await service.issue(invoiceIssueSchema.parse(payload)));
+      if (url === "/api/payable-invoices/admin/mark-paid") return response(await service.markAlreadyPaid(invoiceMarkPaidSchema.parse(payload), 7));
+      const match = /^\/api\/payable-invoices\/([a-f0-9]{64})(\/checkout)?$/.exec(url);
+      if (match?.[2]) { const input = invoiceCheckoutSchema.parse(payload); return response(await service.checkout(match[1], input.requestId, input.lineIds)); }
+      if (match) return response({ invoice: await service.refresh(match[1]), paymentsReady: true });
+    } catch (error) { return response({ message: error instanceof Error ? error.message : "Isolated test request failed" }, false); }
+    throw new Error(`Unexpected test request: ${url}`);
+  });
+  const start = async (phone = contacts.phone, email = contacts.email || "") => {
+    install(); page = () => InvoiceCollectionPage({}); render(); await flush(); render();
+    change("Client phone", phone); change("Billing email", email); change("From service date", matchedDay); change("To service date", matchedDay);
+    await button("Pull bookings").props.onClick(); render();
+  };
+  return { state, repo, service, stripe, create, retrieve, start };
+}
+
 beforeEach(() => { hooks.slots = []; hooks.cursor = 0; hooks.effectCursor = 0; hooks.effects = []; hooks.cleanups = []; hooks.dependencies = []; fetchMock.mockReset(); vi.stubGlobal("fetch", fetchMock); vi.stubGlobal("window", { location: { pathname: "/invoice/pay/token", origin: "https://local.example.test", assign: vi.fn() } }); vi.stubGlobal("document", { querySelector: () => null, createElement: () => ({ remove: vi.fn() }), head: { appendChild: vi.fn() } }); vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn(async () => {}) } }); });
 afterEach(() => { hooks.cleanups.forEach(cleanup => cleanup()); vi.unstubAllGlobals(); });
+
+describe("matched booking UI through the real invoice service", () => {
+  it("creates the no-portal Nov 9 $5 invoice with only a due date, then checks out and confirms exactly 500 cents once", async () => {
+    const h = matchedFlow(); await h.start();
+    expect(text(tree)).toContain(matchedClient.name); expectRowPrice(0, "$5.00", "Unpaid"); expectSummary("$5.00", "$0.00", "$5.00", 1);
+    expect(selectedServiceInputs()).toHaveLength(0); expect(button("Create invoice page").props.disabled).toBe(true);
+    expect(text(tree)).not.toContain("I reviewed these service"); expect(checkbox("I confirm payment was already received").props.checked).toBe(false);
+    change("Payment due date", "2026-11-16"); expect(button("Create invoice page").props.disabled).toBe(false);
+    await button("Create invoice page").props.onClick(); render();
+    const input = invoiceIssueSchema.parse(lastPayload());
+    expect(input).toEqual({ requestId: expect.any(String), clientId: 0, phone: matchedClient.phone, email: matchedClient.email, from: matchedDay, to: matchedDay, dueDate: "2026-11-16", serviceIds: ["job:901"], reviewHash: invoiceReviewHash(matchedClient, [matchedBooking()], matchedDay, matchedDay), confirmedUnpaid: true });
+    expect(h.repo.contactServices).toHaveBeenCalledWith(input.phone, input.email, input.from, input.to); expect(h.repo.services).not.toHaveBeenCalled(); expect(h.repo.issue).toHaveBeenCalledTimes(1);
+    expect(h.repo.issue).toHaveBeenCalledWith(input, matchedClient, [matchedBooking()], expect.stringMatching(/^[a-f0-9]{64}$/), expect.stringMatching(/^[a-f0-9]{64}$/));
+    expect(text(tree)).toContain("Invoice page created"); expect(text(tree)).toContain("No email or SMS has been sent."); expect(button("Send invoice").props.disabled).toBe(true); expect(h.stripe).not.toHaveBeenCalled(); expect(h.state.allocations).toBe(0);
+    const publicUrl = find("a", "Open customer page").props.href; const token = publicUrl.split("/").pop()!;
+    expect(publicUrl).toBe(`https://invoice.example.test/invoice/${token}`); expect(token).toMatch(/^[a-f0-9]{64}$/); expect(await h.service.view(token)).toBe(h.state.invoice);
+    expectOnlyAdminCalls("status", "lookup", "issue");
+    resetHarness(); window.location.pathname = new URL(publicUrl).pathname; page = () => CustomerInvoicePage({}); render(); await flush(); render();
+    expect(text(tree)).toContain("Nov 9, 2026"); expect(button("Pay $5.00").props.disabled).toBe(false); expect(summary("Selected service dates")).toBe("Selected service dates1");
+    await button("Pay $5.00").props.onClick(); render();
+    const checkout = invoiceCheckoutSchema.parse(lastPayload()); expect(checkout).toEqual({ requestId: expect.any(String), lineIds: [1] });
+    expect(h.repo.reserve).toHaveBeenCalledWith(901, checkout.requestId, [1]); expect(h.create).toHaveBeenCalledTimes(1);
+    expect(h.create.mock.calls[0][0].line_items).toEqual([{ price_data: { currency: "usd", unit_amount: 500, product_data: { name: "Maids in Black invoice TEST-MATCHED-901", description: "1 selected service date" } }, quantity: 1 }]);
+    expect(h.create.mock.calls[0][1]).toEqual({ idempotencyKey: "leadflow:invoice:901:attempt:attempt-matched-ui" });
+    expect(window.location.assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/test_matched_ui"); expect(h.state.allocations).toBe(0);
+    h.state.providerPaid = true; await button("Check payment status").props.onClick(); render();
+    expect(h.retrieve).toHaveBeenCalledWith("cs_test_matched_ui"); expect(h.repo.settle).toHaveBeenCalledWith("attempt-matched-ui", "cs_test_matched_ui", "pi_test_matched_ui", 500);
+    const event = { id: "evt_test_matched_ui", object: "event", type: "checkout.session.completed", livemode: false, data: { object: { id: "cs_test_matched_ui", metadata: { leadflowInvoice: INVOICE_PAYMENT_MARKER }, payment_status: "unpaid", amount_total: 1 } } } as unknown as Stripe.Event;
+    await h.service.reconcile(event); await h.service.reconcile(event); await button("Check payment status").props.onClick(); render();
+    expect(h.state.allocations).toBe(1); expect(h.state.invoice!.receipts).toHaveLength(1); expect(h.state.invoice!.receipts[0]).toMatchObject({ paymentId: "pi_test_matched_ui", amountCents: 500, lineIds: [1] });
+    expect(h.state.invoice!.status).toBe("paid"); expect(invoiceBalance(h.state.invoice!.lines)).toBe(0); expect(text(tree)).toContain("No payment is due on this invoice."); expect(summary("Remaining invoice balance")).toBe("Remaining invoice balance$0.00"); expect(h.create).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(["/api/payable-invoices/admin/status", "/api/payable-invoices/admin/lookup", "/api/payable-invoices/admin/issue", `/api/payable-invoices/${token}`, `/api/payable-invoices/${token}/checkout`, `/api/payable-invoices/${token}`, `/api/payable-invoices/${token}`]);
+  });
+  it.each(["phone only", "email only"])("creates with %s and no portal, invoice selection or prior-payment confirmation", async mode => {
+    const client = { ...matchedClient, phone: mode === "email only" ? "" : matchedClient.phone, email: mode === "phone only" ? null : matchedClient.email };
+    const h = matchedFlow([matchedBooking()], client); await h.start(); change("Payment due date", "2026-11-16");
+    expect(button("Create invoice page").props.disabled).toBe(false); expect(selectedServiceInputs()).toHaveLength(0); await button("Create invoice page").props.onClick(); render();
+    const input = invoiceIssueSchema.parse(lastPayload()); expect(input).toMatchObject({ clientId: 0, phone: client.phone, email: client.email || "", serviceIds: ["job:901"], confirmedUnpaid: true });
+    expect(h.repo.contactServices).toHaveBeenCalledWith(client.phone, client.email || "", matchedDay, matchedDay); expect(h.repo.services).not.toHaveBeenCalled(); expect(h.state.invoice!.lines[0].amountCents).toBe(500); expect(h.stripe).not.toHaveBeenCalled(); expectOnlyAdminCalls("status", "lookup", "issue");
+  });
+  it("excludes manual-paid, provider-paid, zero-balance and ineligible matched rows from automatic issue IDs", async () => {
+    const rows = [matchedBooking(), matchedBooking({ id: "job:902", occurrenceKey: "job:902", amountCents: 700, paidCents: 700, paymentSource: "manual" }), matchedBooking({ id: "job:903", occurrenceKey: "job:903", amountCents: 800, paidCents: 800, paymentSource: "stripe" }), matchedBooking({ id: "job:904", occurrenceKey: "job:904", amountCents: 0 }), matchedBooking({ id: "job:905", occurrenceKey: "job:905", eligible: false, reason: "Needs review" })];
+    const h = matchedFlow(rows); await h.start(); expectSummary("$20.00", "$15.00", "$5.00", 1); expectRowPrice(1, "$7.00", "Paid"); expectRowPrice(2, "$8.00", "Paid");
+    for (let index = 1; index < rows.length; index++) expect(serviceInput(index).props.disabled).toBe(true);
+    change("Payment due date", "2026-11-16"); await button("Create invoice page").props.onClick(); render(); const input = invoiceIssueSchema.parse(lastPayload());
+    expect(input.serviceIds).toEqual(["job:901"]); expect(input.reviewHash).toBe(invoiceReviewHash(matchedClient, rows, matchedDay, matchedDay)); expect(input.reviewHash).not.toBe(invoiceReviewHash(matchedClient, [rows[0]], matchedDay, matchedDay));
+    expect(h.state.invoice!.lines.map(row => row.occurrenceKey)).toEqual(["job:901"]); expect(h.stripe).not.toHaveBeenCalled(); expectOnlyAdminCalls("status", "lookup", "issue");
+  });
+  it.each([["Client phone", "+12025550999"], ["Billing email", "changed@example.test"]])("invalidates matched loaded contact/review after %s changes", async (label, value) => {
+    const h = matchedFlow(); await h.start(); change("Payment due date", "2026-11-16"); expect(button("Create invoice page").props.disabled).toBe(false);
+    change(label, value); expect(button("Create invoice page").props.disabled).toBe(true); expect(text(tree)).toContain("No services loaded"); await button("Create invoice page").props.onClick();
+    expect(h.repo.issue).not.toHaveBeenCalled(); expectOnlyAdminCalls("status", "lookup");
+  });
+  it.each(["contact snapshot", "paid row"])("surfaces real server stale-hash rejection after the %s changes", async kind => {
+    const rows = [matchedBooking(), matchedBooking({ id: "job:902", occurrenceKey: "job:902", paidCents: 500, paymentSource: "manual" })]; const h = matchedFlow(rows); await h.start(); change("Payment due date", "2026-11-16");
+    if (kind === "contact snapshot") h.state.client.name = "Changed authoritative booking name"; else h.state.rows[1].description = "Changed paid booking";
+    await button("Create invoice page").props.onClick(); render(); expect(text(tree)).toContain("Service dates, amounts or paid status changed. Pull bookings again before creating the invoice.");
+    expect(text(tree)).not.toContain("Invoice page created"); expect(h.repo.issue).not.toHaveBeenCalled(); expect(h.stripe).not.toHaveBeenCalled(); expectOnlyAdminCalls("status", "lookup", "issue");
+  });
+  it("requires explicit prior-payment confirmation, refreshes the same matched contacts and records exactly one selected ID", async () => {
+    const rows = [matchedBooking(), matchedBooking({ id: "job:902", occurrenceKey: "job:902", amountCents: 600 })]; const h = matchedFlow(rows); await h.start(); toggleService(0);
+    expect(button("Mark selected").props.disabled).toBe(true); await button("Mark selected").props.onClick(); expectOnlyAdminCalls("status", "lookup"); expect(h.repo.markAlreadyPaid).not.toHaveBeenCalled();
+    confirm("I confirm payment was already received"); await button("Mark selected").props.onClick(); render(); const input = invoiceMarkPaidSchema.parse(lastPayload());
+    expect(input).toEqual({ requestId: expect.any(String), clientId: 0, phone: matchedClient.phone, email: matchedClient.email, from: matchedDay, to: matchedDay, serviceIds: ["job:901"], reviewHash: invoiceReviewHash(matchedClient, rows, matchedDay, matchedDay) });
+    expect(h.repo.markAlreadyPaid).toHaveBeenCalledWith(input, 7); expect(h.repo.contactServices).toHaveBeenCalledWith(matchedClient.phone, matchedClient.email, matchedDay, matchedDay); expect(h.repo.services).not.toHaveBeenCalled();
+    expect(input).not.toHaveProperty("confirmed"); expect(h.state.manualEffects).toBe(1); expectRowPrice(0, "$5.00", "Paid"); expectRowPrice(1, "$6.00", "Unpaid"); expectSummary("$11.00", "$5.00", "$6.00", 1);
+    expect(selectedServiceInputs()).toHaveLength(0); expect(checkbox("I confirm payment was already received").props.checked).toBe(false); expect(h.stripe).not.toHaveBeenCalled(); expect(h.repo.reserve).not.toHaveBeenCalled();
+    change("Payment due date", "2026-11-16"); expect(button("Create invoice page").props.disabled).toBe(false); await button("Create invoice page").props.onClick(); render(); const issued = invoiceIssueSchema.parse(lastPayload());
+    expect(issued.serviceIds).toEqual(["job:902"]); expect(issued.reviewHash).toBe(invoiceReviewHash(h.state.client, h.state.rows, matchedDay, matchedDay)); expect(issued.reviewHash).not.toBe(input.reviewHash); expect(h.state.invoice!.lines.map(row => [row.occurrenceKey, row.amountCents])).toEqual([["job:902", 600]]); expectOnlyAdminCalls("status", "lookup", "mark-paid", "issue");
+  });
+});
 
 describe("local invoice builder", () => {
   it("pulls and lists jobs with phone only, without requiring an email", async () => {

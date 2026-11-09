@@ -6,7 +6,8 @@ import { extractUSDigits, normalizePhone } from "./utils/phone";
 import { invoiceReviewHash } from "./payableInvoiceReview";
 import { invoiceOccurrence, observedCollectionReason, PRIOR_PAYMENT_REVIEW_REASON, validServiceStatus } from "./payableInvoiceCollectionPolicy";
 
-/** Existing accounts and stable owned visit IDs are the only source identities.
+/** Billing contact snapshots and stable owned visit IDs identify new invoices.
+ * Account zero is an invoice-owned snapshot, never a portal account identity.
  * Native first-date projections alias only when a single verified projection exists.
  * Invoice-line occurrence uniqueness is the durable new-invoice collection claim.
  * Native booking locks coordinate with collectors using the same booking lock/claim.
@@ -15,6 +16,7 @@ import { invoiceOccurrence, observedCollectionReason, PRIOR_PAYMENT_REVIEW_REASO
  */
 type SqlClient = Pool | PoolConnection;
 type Row = RowDataPacket & Record<string, unknown>;
+type ContactInput = { phone?: string; email?: string };
 const MAX_ROWS = 1000;
 const INVOICE_COLUMNS = "id, number, accountId, clientName, clientPhone, clientEmail, periodFrom, periodTo, dueDate, currency, status, activeAttemptId, requestId, payloadHash, reviewHash, tokenHash, tokenExpiresAt";
 const ATTEMPT_COLUMNS = "id, invoiceId, requestId, selectedLineIds, amountCents, currency, state, sessionId, sessionUrl, paymentId, createdAtMs, paidAtMs, refundedCents";
@@ -57,6 +59,16 @@ function clientFrom(row: Row): InvoiceClient {
   if (!phone || integer(row.id) <= 0) return fail("CLIENT_IDENTITY_MISMATCH", "Customer identity needs review.");
   return { id: integer(row.id), name: text(row.customerName), phone, email: normalizedEmail(row.customerEmail) || null };
 }
+function contactClient(phoneInput: string = "", emailInput: string = ""): InvoiceClient {
+  const phone = normalizePhone(phoneInput);
+  const email = normalizedEmail(emailInput);
+  if (phoneInput.length > 40 || emailInput.length > 320 || (phoneInput.trim() && !phone) || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) || (!phone && !email)) return fail("INVALID_CUSTOMER", "Enter a valid phone or email.", 400);
+  return { id: 0, name: (email || phone || "").slice(0, 255), phone: phone || "", email: email || null };
+}
+function snapshotClient(row: Row): InvoiceClient {
+  if (integer(row.accountId) > 0) return clientFrom({ ...row, id: row.accountId, customerName: row.clientName, customerPhone: row.clientPhone, customerEmail: row.clientEmail } as Row);
+  return { ...contactClient(text(row.clientPhone), text(row.clientEmail)), name: text(row.clientName) };
+}
 function attemptFrom(row: Row): InvoiceAttempt {
   if (!["pending", "session_open", "paid", "expired"].includes(text(row.state)) || row.currency !== "usd") return fail("CORRUPT_SNAPSHOT", "Payment storage needs review.");
   const amountCents = integer(row.amountCents);
@@ -76,20 +88,17 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
   }
 
   async lookup(phoneInput: string, emailInput: string, from: string, to: string) {
-    const phone = normalizePhone(phoneInput);
-    const email = normalizedEmail(emailInput);
-    if (!phone && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("INVALID_CUSTOMER", "Enter a phone or email.", 400);
-    const db = await this.pool();
-    // A portal account is optional for search. Never create one while listing.
-    const accounts = phone
-      ? await rows(db, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE customerPhone = ? LIMIT 2", [phone])
-      : await rows(db, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE LOWER(TRIM(customerEmail)) = ? LIMIT 2", [email]);
-    let client: InvoiceClient | null = null;
-    if (accounts.length === 1) {
-      const candidate = clientFrom(accounts[0]);
-      if ((!phone || candidate.phone === phone) && (!email || candidate.email === email)) client = candidate;
-    }
-    return { client, services: await this.readServices(db, { phone: phone || "", email: email || null }, from, to, false, true) };
+    return this.contactServices(phoneInput, emailInput, from, to);
+  }
+
+  async contactServices(phoneInput: string, emailInput: string, from: string, to: string): Promise<{ client: InvoiceClient; services: InvoiceService[] }> {
+    return this.readContactServices(await this.pool(), phoneInput, emailInput, from, to);
+  }
+
+  private async readContactServices(db: SqlClient, phoneInput: string, emailInput: string, from: string, to: string, current = false): Promise<{ client: InvoiceClient; services: InvoiceService[] }> {
+    const client = contactClient(phoneInput, emailInput);
+    const services = await this.readServices(db, client, from, to, current, true);
+    return { client, services };
   }
 
   async services(clientId: number, from: string, to: string) {
@@ -101,7 +110,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
     return { client, services: await this.readServices(db, client, from, to) };
   }
 
-  private async readServices(db: SqlClient, client: { phone: string; email: string | null; id?: number }, from: string, to: string, current = false, listing = false): Promise<InvoiceService[]> {
+  private async readServices(db: SqlClient, client: { phone: string; email: string | null; id?: number; name?: string }, from: string, to: string, current = false, listing = false): Promise<InvoiceService[]> {
     if (!invoicePeriodSchema.safeParse({ from, to }).success) return fail("INVALID_PERIOD", "Choose a valid service period.", 400);
     const local = extractUSDigits(client.phone);
     if (!local && !listing) return fail("CLIENT_IDENTITY_MISMATCH", "Customer phone needs review.");
@@ -110,7 +119,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
     // kinds use date indexes and the same rule; never silently truncate visits.
     const listingContact = (alias: string) => `(LOWER(TRIM(${alias}.customerEmail)) = NULLIF(?, '') OR REGEXP_REPLACE(${alias}.customerPhone, '[^0-9]', '') IN (NULLIF(?, ''), NULLIF(?, '')))`;
     const contactValues = [from, to, client.email || "", local || "", local ? `1${local}` : ""];
-    const loadJobs = () => rows(db, `SELECT j.id, j.bookingId, j.jobDate, j.customerPhone, j.customerEmail,
+    const loadJobs = () => rows(db, `SELECT j.id, j.bookingId, j.jobDate, j.customerPhone, j.customerEmail, j.customerName,
       j.serviceName, j.jobAddress, j.jobTotalCents, j.bookingStatus, j.missingFromLaunch27At,
       b.id AS nativeId, b.requestedLocalDate AS nativeDate, b.customerPhone AS nativePhone,
       b.customerEmail AS nativeEmail, b.status AS nativeStatus, b.firstCleaningTotalCents AS nativeAmount,
@@ -123,7 +132,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
         AND ${listing ? listingContact("j") : `(LOWER(TRIM(j.customerEmail)) = ? OR
           (COALESCE(TRIM(j.customerEmail), '') = '' AND REGEXP_REPLACE(j.customerPhone, '[^0-9]', '') IN (?, ?)))`}
       ORDER BY j.id LIMIT 1001${current ? " FOR UPDATE" : ""}`, contactValues);
-    const loadBookings = () => rows(db, `SELECT b.id, b.requestedLocalDate, b.customerPhone, b.customerEmail,
+    const loadBookings = () => rows(db, `SELECT b.id, b.requestedLocalDate, b.customerPhone, b.customerEmail, b.customerName,
       b.serviceName, b.address, b.firstCleaningTotalCents, b.status,
       (SELECT COUNT(*) FROM leadflow_jobs c WHERE c.jobDate = b.requestedLocalDate AND c.bookingId = b.id) AS firstProjectionCount,
       p.id AS firstProjectionId, p.jobTotalCents AS projectionAmount, p.customerPhone AS projectionPhone,
@@ -189,7 +198,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       const manual = await rows(db, `SELECT occurrenceKey, sourceServiceId, accountId, serviceDate, amountCents, requestId, payloadHash, reviewHash, recordedByAgentId, recordedAtMs FROM payable_invoice_manual_payments WHERE occurrenceKey = ?${current ? " FOR UPDATE" : ""}`, [service.occurrenceKey]);
       if (manual.length) {
         const mark = manual[0];
-        if (manual.length !== 1 || (client.id != null && integer(mark.accountId) !== client.id) || mark.sourceServiceId !== service.id || mark.serviceDate !== service.date || integer(mark.amountCents) !== service.amountCents) return fail("MANUAL_PAYMENT_CONFLICT", "A recorded manual payment no longer matches the service/account snapshot.");
+        if (manual.length !== 1 || (client.id != null && client.id > 0 && integer(mark.accountId) !== client.id) || mark.sourceServiceId !== service.id || mark.serviceDate !== service.date || integer(mark.amountCents) !== service.amountCents) return fail("MANUAL_PAYMENT_CONFLICT", "A recorded manual payment no longer matches the service/account snapshot.");
         service.paidCents = service.amountCents;
         service.paymentSource = "manual";
         if (service.eligible) service.reason = "Already paid — explicitly recorded by an agent before invoice creation.";
@@ -199,7 +208,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       const ownedLines = await rows(db, "SELECT l.sourceServiceId, l.serviceDate, l.amountCents, l.paidCents, l.manualPaidCents, i.accountId, i.status FROM payable_invoice_lines l INNER JOIN payable_invoices i ON i.id = l.invoiceId WHERE l.occurrenceKey = ?", [service.occurrenceKey]);
       if (ownedLines.length) {
         const line = ownedLines[0];
-        if (ownedLines.length !== 1 || (client.id != null && integer(line.accountId) !== client.id) || line.sourceServiceId !== service.id || line.serviceDate !== service.date || integer(line.amountCents) !== service.amountCents) return fail("INVALID_SNAPSHOT", "An existing invoice claim conflicts with this service/account.");
+        if (ownedLines.length !== 1 || (client.id != null && client.id > 0 && integer(line.accountId) !== client.id) || line.sourceServiceId !== service.id || line.serviceDate !== service.date || integer(line.amountCents) !== service.amountCents) return fail("INVALID_SNAPSHOT", "An existing invoice claim conflicts with this service/account.");
         const paid = integer(line.paidCents);
         if (paid > service.amountCents) return fail("CORRUPT_SNAPSHOT", "Existing invoice payment amounts need review.");
         if (paid > 0) { service.paidCents = paid; service.paymentSource = integer(line.manualPaidCents ?? 0) === paid ? "manual" : "stripe"; }
@@ -209,7 +218,16 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
         if (sourceEligible) service.reason = line.status === "payment_review" ? "An existing invoice payment adjustment needs review." : paid === service.amountCents ? "Already paid on the existing invoice." : "This service already belongs to an existing invoice.";
       }
     }
-    return result.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    result.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    if (listing && client.id === 0) {
+      for (const service of result) {
+        const source = invoiceOccurrence(service.occurrenceKey);
+        const row = source.kind === "booking" ? bookings.find(b => integer(b.id) === source.id) : jobs.find(j => integer(j.id) === source.id);
+        const name = text(row?.customerName).trim();
+        if (name) { client.name = name.slice(0, 255); break; }
+      }
+    }
+    return result;
   }
 
   private async nativeCollectionReason(db: SqlClient, bookingId: number, current = false): Promise<string | null> {
@@ -234,10 +252,16 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
     }
   }
 
-  private async verifyInvoiceCollection(tx: PoolConnection, invoice: PayableInvoice, selectedIds?: number[]): Promise<void> {
-    const accounts = await rows(tx, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1 FOR UPDATE", [invoice.clientId]);
-    if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", "The invoice customer account no longer exists.", 404);
-    const current = await this.readServices(tx, clientFrom(accounts[0]), invoice.from, invoice.to, true);
+  private async verifyInvoiceCollection(tx: PoolConnection, invoice: PayableInvoice, selectedIds?: number[], invoiceRow?: Row): Promise<void> {
+    let current: InvoiceService[];
+    if (invoice.clientId === 0) {
+      if (!invoiceRow || integer(invoiceRow.id) !== invoice.id || integer(invoiceRow.accountId) !== 0) return fail("INVALID_SNAPSHOT", "Invoice billing contacts need review.");
+      current = await this.readServices(tx, snapshotClient(invoiceRow), invoice.from, invoice.to, true, true);
+    } else {
+      const accounts = await rows(tx, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1 FOR UPDATE", [invoice.clientId]);
+      if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", "The invoice customer account no longer exists.", 404);
+      current = await this.readServices(tx, clientFrom(accounts[0]), invoice.from, invoice.to, true);
+    }
     const unpaid = invoice.lines.filter(line => line.paidCents < line.amountCents && (!selectedIds || selectedIds.includes(line.id)));
     await this.assertClaims(tx, invoice.lines, invoice.id);
     for (const line of unpaid) {
@@ -266,7 +290,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       const invoice = await this.invoiceView(tx, found[0]);
       if (invoice.clientId !== selected.clientId) return fail("INVALID_SNAPSHOT", "Invoice identity needs review.");
       if (invoice.status === "void" || invoice.status === "payment_review") return fail("PAYMENT_REVIEW_REQUIRED", "This invoice is not available for collection.");
-      await this.verifyInvoiceCollection(tx, invoice);
+      await this.verifyInvoiceCollection(tx, invoice, undefined, found[0]);
     });
   }
 
@@ -284,7 +308,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       const found = await rows(tx, `SELECT ${INVOICE_COLUMNS} FROM payable_invoices WHERE id = ? LIMIT 1 FOR UPDATE`, [id]);
       if (!found[0]) return fail("NOT_FOUND", "Invoice unavailable.", 404);
       const row = found[0];
-      const client = clientFrom({ ...row, id: row.accountId, customerName: row.clientName, customerPhone: row.clientPhone, customerEmail: row.clientEmail } as Row);
+      const client = snapshotClient(row);
       return { invoice: await this.invoiceView(tx, row), client, requestId: text(row.requestId) };
     });
   }
@@ -340,21 +364,32 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
     if (row.payloadHash !== payloadHash || row.tokenHash !== tokenHash) fail("IDEMPOTENCY_CONFLICT", "This request UUID was already used for a different invoice.");
   }
 
-  async replayIssue(input: InvoiceIssueInput, tokenHash: string): Promise<PayableInvoice | null> {
+  private async verifyIssueReplay(db: SqlClient, row: Row, input: InvoiceIssueInput & ContactInput, tokenHash: string): Promise<void> {
+    const lines = await rows(db, "SELECT sourceServiceId FROM payable_invoice_lines WHERE invoiceId = ? ORDER BY sourceServiceId FOR UPDATE", [integer(row.id)]);
+    let contactsMatch = true;
+    if (input.clientId === 0) {
+      const contact = contactClient(input.phone, input.email);
+      contactsMatch = text(row.clientPhone) === contact.phone && normalizedEmail(row.clientEmail) === (contact.email || "");
+    }
+    if (!contactsMatch || row.tokenHash !== tokenHash || integer(row.accountId) !== input.clientId || row.requestId !== input.requestId || row.periodFrom !== input.from || row.periodTo !== input.to || row.dueDate !== input.dueDate || row.reviewHash !== input.reviewHash || JSON.stringify(lines.map(line => text(line.sourceServiceId)).sort()) !== JSON.stringify(input.serviceIds.slice().sort())) return fail("IDEMPOTENCY_CONFLICT", "This issuance request was already saved with a different client, period or selection.");
+  }
+
+  async replayIssue(input: InvoiceIssueInput & ContactInput, tokenHash: string): Promise<PayableInvoice | null> {
     return this.transaction(async tx => {
       const found = await rows(tx, `SELECT ${INVOICE_COLUMNS} FROM payable_invoices WHERE requestId = ? LIMIT 1 FOR UPDATE`, [input.requestId]);
       if (!found[0]) return null;
       const row = found[0];
-      const lines = await rows(tx, "SELECT sourceServiceId FROM payable_invoice_lines WHERE invoiceId = ? ORDER BY sourceServiceId FOR UPDATE", [integer(row.id)]);
-      if (row.tokenHash !== tokenHash || integer(row.accountId) !== input.clientId || row.periodFrom !== input.from || row.periodTo !== input.to || row.dueDate !== input.dueDate || row.reviewHash !== input.reviewHash || JSON.stringify(lines.map(line => text(line.sourceServiceId)).sort()) !== JSON.stringify(input.serviceIds.slice().sort())) return fail("IDEMPOTENCY_CONFLICT", "This issuance request was already saved with a different client, period or selection.");
+      await this.verifyIssueReplay(tx, row, input, tokenHash);
       return this.invoiceView(tx, row);
     });
   }
 
-  async issue(input: InvoiceIssueInput, client: InvoiceClient, services: InvoiceService[], tokenHash: string, payloadHash: string): Promise<PayableInvoice> {
+  async issue(input: InvoiceIssueInput & ContactInput, client: InvoiceClient, services: InvoiceService[], tokenHash: string, payloadHash: string): Promise<PayableInvoice> {
     invoiceIssueSchema.parse(input);
-    if (client.id !== input.clientId || normalizePhone(client.phone) !== client.phone || !client.email || services.length !== input.serviceIds.length || new Set(input.serviceIds).size !== input.serviceIds.length || new Set(services.map(s => s.id)).size !== services.length || new Set(services.map(s => s.occurrenceKey)).size !== services.length || services.some(s => !s.eligible || !input.serviceIds.includes(s.id) || s.date < input.from || s.date > input.to)) return fail("INVALID_SNAPSHOT", "Selected service ownership and amounts need review.");
-    const expectedHash = createHash("sha256").update(JSON.stringify({ clientId: input.clientId, from: input.from, to: input.to, dueDate: input.dueDate, services: services.slice().sort((a, b) => a.id.localeCompare(b.id)).map(s => [s.occurrenceKey, s.date, s.amountCents, s.paidCents ?? 0]) })).digest("hex");
+    const contact = input.clientId === 0 ? contactClient(input.phone, input.email) : null;
+    const invalidIdentity = contact ? client.phone !== contact.phone || client.email !== contact.email : normalizePhone(client.phone) !== client.phone || !client.email;
+    if (client.id !== input.clientId || invalidIdentity || services.length !== input.serviceIds.length || new Set(input.serviceIds).size !== input.serviceIds.length || new Set(services.map(s => s.id)).size !== services.length || new Set(services.map(s => s.occurrenceKey)).size !== services.length || services.some(s => !s.eligible || !input.serviceIds.includes(s.id) || s.date < input.from || s.date > input.to)) return fail("INVALID_SNAPSHOT", "Selected service ownership and amounts need review.");
+    const expectedHash = createHash("sha256").update(JSON.stringify({ clientId: input.clientId, ...(input.clientId === 0 ? { billing: [client.phone, client.email, client.name] } : {}), from: input.from, to: input.to, dueDate: input.dueDate, services: services.slice().sort((a, b) => a.id.localeCompare(b.id)).map(s => [s.occurrenceKey, s.date, s.amountCents, s.paidCents ?? 0]) })).digest("hex");
     if (!/^[a-f0-9]{64}$/.test(tokenHash) || payloadHash !== expectedHash || safeSum(services.map(s => s.amountCents)) < 50) return fail("INVALID_SNAPSHOT", "Invoice snapshot is invalid.");
     try {
       return await this.transaction(async tx => {
@@ -365,13 +400,21 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
           const locked = await rows(tx, `SELECT ${INVOICE_COLUMNS} FROM payable_invoices WHERE id = ? LIMIT 1 FOR UPDATE`, [integer(existing[0].id)]);
           if (!locked[0]) return fail("CORRUPT_SNAPSHOT", "Stored invoice disappeared and needs review.");
           this.verifyReplay(locked[0], tokenHash, payloadHash);
+          if (input.clientId === 0) await this.verifyIssueReplay(tx, locked[0], input, tokenHash);
           return this.invoiceView(tx, locked[0]);
         }
-        const accounts = await rows(tx, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1 FOR UPDATE", [client.id]);
-        if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", "Customer account no longer exists.", 404);
-        const currentClient = clientFrom(accounts[0]);
-        if (currentClient.phone !== client.phone || currentClient.email !== client.email) return fail("CLIENT_IDENTITY_MISMATCH", "Customer identity changed after review.");
-        const currentServices = await this.readServices(tx, currentClient, input.from, input.to, true);
+        let currentClient: InvoiceClient, currentServices: InvoiceService[];
+        if (contact) {
+          const current = await this.readContactServices(tx, contact.phone, contact.email || "", input.from, input.to, true);
+          currentClient = current.client; currentServices = current.services;
+          if (currentClient.name !== client.name) return fail("REVIEW_CHANGED", "Billing name changed after review. Refresh before issuing.");
+        } else {
+          const accounts = await rows(tx, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1 FOR UPDATE", [client.id]);
+          if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", "Customer account no longer exists.", 404);
+          currentClient = clientFrom(accounts[0]);
+          if (currentClient.phone !== client.phone || currentClient.email !== client.email) return fail("CLIENT_IDENTITY_MISMATCH", "Customer identity changed after review.");
+          currentServices = await this.readServices(tx, currentClient, input.from, input.to, true);
+        }
         if (invoiceReviewHash(currentClient, currentServices, input.from, input.to) !== input.reviewHash) return fail("REVIEW_CHANGED", "Services changed since the explicit unpaid review. Refresh before issuing.");
         for (const selected of services) {
           const fresh = currentServices.find(s => s.id === selected.id);
@@ -384,7 +427,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
         const total = safeSum(services.map(s => s.amountCents));
         const initialStatus = paidTotal === total ? "paid" : paidTotal > 0 ? "partially_paid" : "open";
         const inserted = await change(tx, `INSERT INTO payable_invoices (number, accountId, clientName, clientPhone, clientEmail, periodFrom, periodTo, dueDate, currency, status, requestId, payloadHash, reviewHash, tokenHash, tokenExpiresAt, createdAtMs, paidAtMs)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'usd', ?, ?, ?, ?, ?, ?, ?, ?)`, [number, client.id, client.name, client.phone, client.email, input.from, input.to, input.dueDate, initialStatus, input.requestId, payloadHash, input.reviewHash, tokenHash, createdAt + 90 * 24 * 60 * 60 * 1000, createdAt, initialStatus === "paid" ? createdAt : null]);
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'usd', ?, ?, ?, ?, ?, ?, ?, ?)`, [number, client.id, client.name, client.phone, contact ? client.email || "" : client.email, input.from, input.to, input.dueDate, initialStatus, input.requestId, payloadHash, input.reviewHash, tokenHash, createdAt + 90 * 24 * 60 * 60 * 1000, createdAt, initialStatus === "paid" ? createdAt : null]);
         const invoiceId = integer(inserted.insertId);
         for (const service of services.slice().sort((a, b) => a.occurrenceKey.localeCompare(b.occurrenceKey))) {
           if (service.amountCents <= 0 || !/^(job:\d+|booking:\d+:first:\d{4}-\d{2}-\d{2})$/.test(service.occurrenceKey) || service.id.length > 100 || service.occurrenceKey.length > 100 || service.description.length > 500 || service.address.length > 500) return fail("INVALID_SNAPSHOT", "Service snapshot exceeds supported bounds.");
@@ -399,23 +442,31 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
         const existing = await rows(tx, `SELECT ${INVOICE_COLUMNS} FROM payable_invoices WHERE requestId = ? LIMIT 1 FOR UPDATE`, [input.requestId]);
         if (!existing[0]) return fail("SOURCE_ALREADY_INVOICED", "A selected visit already belongs to another invoice. Review instead of issuing twice.");
         this.verifyReplay(existing[0], tokenHash, payloadHash);
+        if (input.clientId === 0) await this.verifyIssueReplay(tx, existing[0], input, tokenHash);
         return this.invoiceView(tx, existing[0]);
       });
     }
   }
 
-  async markAlreadyPaid(input: { clientId: number; from: string; to: string; serviceIds: string[]; requestId: string; reviewHash: string }, agentId: number): Promise<void> {
+  async markAlreadyPaid(input: { clientId: number; phone?: string; email?: string; from: string; to: string; serviceIds: string[]; requestId: string; reviewHash: string }, agentId: number): Promise<void> {
     uuid(input.requestId);
-    if (!Number.isSafeInteger(agentId) || agentId <= 0 || !Number.isSafeInteger(input.clientId) || input.clientId <= 0 || !/^[a-f0-9]{64}$/.test(input.reviewHash) || !invoicePeriodSchema.safeParse(input).success || !input.serviceIds.length || input.serviceIds.length > MAX_ROWS || new Set(input.serviceIds).size !== input.serviceIds.length) return fail("INVALID_REQUEST", "Explicit current service review and agent identity are required.", 400);
+    if (!Number.isSafeInteger(agentId) || agentId <= 0 || !Number.isSafeInteger(input.clientId) || input.clientId < 0 || !/^[a-f0-9]{64}$/.test(input.reviewHash) || !invoicePeriodSchema.safeParse(input).success || !input.serviceIds.length || input.serviceIds.length > MAX_ROWS || new Set(input.serviceIds).size !== input.serviceIds.length) return fail("INVALID_REQUEST", "Explicit current service review and agent identity are required.", 400);
+    if (input.clientId === 0) contactClient(input.phone, input.email);
     return this.transaction(async tx => {
-      const accounts = await rows(tx, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1 FOR UPDATE", [input.clientId]);
-      if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", "Customer account not found.", 404);
-      const client = clientFrom(accounts[0]);
-      const current = await this.readServices(tx, client, input.from, input.to, true);
+      let client: InvoiceClient, current: InvoiceService[];
+      if (input.clientId === 0) {
+        const contact = await this.readContactServices(tx, input.phone || "", input.email || "", input.from, input.to, true);
+        client = contact.client; current = contact.services;
+      } else {
+        const accounts = await rows(tx, "SELECT id, customerName, customerPhone, customerEmail FROM customer_portal_accounts WHERE id = ? LIMIT 1 FOR UPDATE", [input.clientId]);
+        if (accounts.length !== 1) return fail("CLIENT_NOT_FOUND", "Customer account not found.", 404);
+        client = clientFrom(accounts[0]);
+        current = await this.readServices(tx, client, input.from, input.to, true);
+      }
       const selected = input.serviceIds.map(id => current.find(s => s.id === id));
       if (selected.some(s => !s || !s.eligible)) return fail("SERVICE_REVIEW_REQUIRED", "Only exact owned services without an existing collection may be marked already paid.");
       const services = selected as InvoiceService[];
-      const payloadHash = createHash("sha256").update(JSON.stringify({ clientId: input.clientId, from: input.from, to: input.to, reviewHash: input.reviewHash, services: services.slice().sort((a, b) => a.id.localeCompare(b.id)).map(s => [s.id, s.occurrenceKey, s.date, s.amountCents]) })).digest("hex");
+      const payloadHash = createHash("sha256").update(JSON.stringify({ clientId: input.clientId, ...(input.clientId === 0 ? { phone: client.phone, email: client.email } : {}), from: input.from, to: input.to, reviewHash: input.reviewHash, services: services.slice().sort((a, b) => a.id.localeCompare(b.id)).map(s => [s.id, s.occurrenceKey, s.date, s.amountCents]) })).digest("hex");
       const replay = await rows(tx, "SELECT occurrenceKey, payloadHash FROM payable_invoice_manual_payments WHERE requestId = ? ORDER BY occurrenceKey FOR UPDATE", [input.requestId]);
       if (replay.length) {
         const keys = services.map(s => s.occurrenceKey).sort();
@@ -461,7 +512,7 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       if (invoiceRows[0].activeAttemptId != null) return fail("CHECKOUT_IN_PROGRESS", "Another checkout is unresolved for this invoice. Review or resume it before starting another.");
       const invoice = await this.invoiceView(tx, invoiceRows[0]);
       const amount = selectedBalance(invoice, ids);
-      await this.verifyInvoiceCollection(tx, invoice, ids);
+      await this.verifyInvoiceCollection(tx, invoice, ids, invoiceRows[0]);
       // Selection represents complete unpaid lines, not arbitrary partial cents.
       if (ids.some(id => invoice.lines.find(line => line.id === id)!.paidCents !== 0)) return fail("PAYMENT_REVIEW_REQUIRED", "A partially allocated service needs review.");
       const id = randomUUID();
