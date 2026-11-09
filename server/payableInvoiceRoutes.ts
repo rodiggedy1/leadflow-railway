@@ -5,6 +5,7 @@ import { agents } from "../drizzle/schema";
 import { getDb, getPool } from "./db";
 import { getAgentFromRequest } from "./_core/agentAuth";
 import { ENV } from "./_core/env";
+import { getStripeClient } from "./stripeClient";
 import { invoiceCheckoutSchema, invoiceIssueSchema, invoiceLookupSchema, invoiceMarkPaidSchema, invoiceSendSchema, InvoiceError } from "../shared/payableInvoice";
 import { INVOICE_PAYMENT_MARKER, PayableInvoiceService } from "./payableInvoiceService";
 import { MysqlInvoiceRepository } from "./payableInvoiceRepository";
@@ -26,7 +27,7 @@ async function activeAdmin(req: Request): Promise<number | false> {
 }
 const stripeClient = () => {
   if (!ENV.stripeSecretKey) throw new InvoiceError("STRIPE_NOT_CONFIGURED", 503, "Secure payments are not configured.");
-  return new Stripe(ENV.stripeSecretKey, { apiVersion: "2026-05-27.dahlia" });
+  return getStripeClient();
 };
 const pool = async () => { await getDb(); const value = getPool(); if (!value) throw new InvoiceError("INVOICE_STORAGE_UNAVAILABLE", 503, "Invoice storage is unavailable."); return value; };
 let runtime: PayableInvoiceService | null = null;

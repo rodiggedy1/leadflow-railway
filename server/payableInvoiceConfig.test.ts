@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
@@ -40,6 +41,8 @@ const TEST_ONLY_TOKEN_SECRET = "test-only-dedicated-invoice-token-secret-2026";
 const TEST_ONLY_WEBHOOK_SECRET = "whsec_test_only_dedicated_invoice_fixture";
 const TEST_ONLY_LEGACY_JWT = "test-only-legacy-jwt-secret-not-for-invoices-2026";
 const TEST_ONLY_GLOBAL_WEBHOOK = "whsec_test_only_global_fixture_not_for_invoices";
+const DERIVED_TOKEN_SECRET = createHmac("sha256", TEST_ONLY_STRIPE_KEY)
+  .update("leadflow:invoice-token-key:v1").digest("hex");
 const REQUIRED_SETTINGS = [
   "STRIPE_SECRET_KEY",
   "INVOICE_TOKEN_SECRET",
@@ -68,6 +71,7 @@ function expectSafeDiagnostics(
 ) {
   expect(typeof config.message).toBe("string");
   const diagnostics = JSON.stringify({ message: config.message, missing: config.missing });
+  expect(diagnostics).not.toContain(DERIVED_TOKEN_SECRET);
   for (const name of [
     ...REQUIRED_SETTINGS,
     "JWT_SECRET",
@@ -79,7 +83,7 @@ function expectSafeDiagnostics(
 }
 
 describe("invoice configuration confirmed production regression", () => {
-  it("uses the canonical origin and fails closed for the confirmed stale-URL/short-JWT environment without changing it", () => {
+  it("uses the canonical origin and is ready for the confirmed stale-URL/short-JWT environment without new secrets or mutation", () => {
     const env: NodeJS.ProcessEnv = {
       NODE_ENV: "production",
       QUOTE_APP_URL: STALE_QUOTE_ORIGIN,
@@ -94,20 +98,19 @@ describe("invoice configuration confirmed production regression", () => {
     expect(invoiceRuntimeOrigin(env)).toBe(PRODUCTION_ORIGIN);
     const config = invoiceConfiguration(env);
     expect(config.origin).toBe(PRODUCTION_ORIGIN);
-    expect(config.paymentsReady).toBe(false);
+    expect(config.paymentsReady).toBe(true);
     expect(config.stripeSecretKey).toBe(TEST_ONLY_STRIPE_KEY);
-    expect(config.tokenSecret).toBe("");
+    expect(config.tokenSecret).toBe(DERIVED_TOKEN_SECRET);
+    expect(config.tokenSecret).toMatch(/^[a-f0-9]{64}$/);
     expect(config.webhookSecret).toBe("");
-    expect(missingSetting(config.missing, "INVOICE_TOKEN_SECRET")).toBe(true);
-    expect(missingSetting(config.missing, "INVOICE_STRIPE_WEBHOOK_SECRET")).toBe(true);
-    expect(missingSetting(config.missing, "STRIPE_SECRET_KEY")).toBe(false);
-    expect(config.message.trim().length).toBeGreaterThan(0);
+    expect(config.missing).toEqual([]);
+    expect(config.message).toBe("");
     expectSafeDiagnostics(config, env);
     expect(env).toEqual(before);
     expect(process.env).toEqual(ambientBefore);
   });
 
-  it("is ready only with the existing Stripe key and both new dedicated secrets", () => {
+  it("preserves existing dedicated secrets exactly when supplied with the Stripe key", () => {
     const env = readyEnv({
       JWT_SECRET: TEST_ONLY_LEGACY_JWT,
       STRIPE_WEBHOOK_SECRET: TEST_ONLY_GLOBAL_WEBHOOK,
@@ -138,16 +141,27 @@ describe("dedicated invoice payment settings", () => {
     };
     const config = invoiceConfiguration(env);
 
-    expect(config.paymentsReady).toBe(false);
-    expect(config.tokenSecret).toBe("");
+    expect(config.paymentsReady).toBe(true);
+    expect(config.tokenSecret).toBe(DERIVED_TOKEN_SECRET);
+    expect(config.tokenSecret).not.toBe(TEST_ONLY_LEGACY_JWT);
     expect(config.webhookSecret).toBe("");
-    expect(missingSetting(config.missing, "INVOICE_TOKEN_SECRET")).toBe(true);
-    expect(missingSetting(config.missing, "INVOICE_STRIPE_WEBHOOK_SECRET")).toBe(true);
+    expect(config.missing).toEqual([]);
     expectSafeDiagnostics(config, env);
   });
 
-  it.each([undefined, "", "test-only-short-token", "t".repeat(31)])(
-    "rejects an absent, empty or too-short dedicated token secret: %j",
+  it.each([undefined, ""])("derives a deterministic server-only key for absent or empty token secret: %j", tokenSecret => {
+    const env = readyEnv({ INVOICE_TOKEN_SECRET: tokenSecret, JWT_SECRET: TEST_ONLY_LEGACY_JWT });
+    const config = invoiceConfiguration(env);
+    expect(config.paymentsReady).toBe(true);
+    expect(config.tokenSecret).toBe(DERIVED_TOKEN_SECRET);
+    expect(invoiceConfiguration(env).tokenSecret).toBe(config.tokenSecret);
+    expect(invoiceConfiguration({ ...env, STRIPE_SECRET_KEY: `${TEST_ONLY_STRIPE_KEY}_other` }).tokenSecret)
+      .not.toBe(config.tokenSecret);
+    expectSafeDiagnostics(config, env);
+  });
+
+  it.each(["test-only-short-token", "t".repeat(31)])(
+    "rejects a provided too-short dedicated token secret without replacing it: %j",
     tokenSecret => {
       const env = readyEnv({
         INVOICE_TOKEN_SECRET: tokenSecret,
@@ -156,6 +170,7 @@ describe("dedicated invoice payment settings", () => {
       const config = invoiceConfiguration(env);
       expect(config.paymentsReady).toBe(false);
       expect(missingSetting(config.missing, "INVOICE_TOKEN_SECRET")).toBe(true);
+      expect(config.tokenSecret).toBe(tokenSecret);
       expect(config.tokenSecret).not.toBe(TEST_ONLY_LEGACY_JWT);
       expectSafeDiagnostics(config, env);
     },
@@ -169,14 +184,14 @@ describe("dedicated invoice payment settings", () => {
     expect(config.missing).toEqual([]);
   });
 
-  it.each([undefined, ""])("requires the dedicated webhook secret: %j", webhookSecret => {
+  it.each([undefined, ""])("does not require the optional signed-webhook secret for checkout: %j", webhookSecret => {
     const env = readyEnv({
       INVOICE_STRIPE_WEBHOOK_SECRET: webhookSecret,
       STRIPE_WEBHOOK_SECRET: TEST_ONLY_GLOBAL_WEBHOOK,
     });
     const config = invoiceConfiguration(env);
-    expect(config.paymentsReady).toBe(false);
-    expect(missingSetting(config.missing, "INVOICE_STRIPE_WEBHOOK_SECRET")).toBe(true);
+    expect(config.paymentsReady).toBe(true);
+    expect(config.missing).toEqual([]);
     expect(config.webhookSecret).toBe("");
     expectSafeDiagnostics(config, env);
   });
@@ -187,8 +202,15 @@ describe("dedicated invoice payment settings", () => {
     expect(missingSetting(config.missing, "STRIPE_SECRET_KEY")).toBe(true);
   });
 
-  it.each([0, 1, 2, 3, 4, 5, 6])(
-    "keeps every incomplete combination unready, even with legacy credentials (mask %i)",
+  it("leaves the derived key empty without Stripe and never substitutes JWT", () => {
+    const config = invoiceConfiguration({ JWT_SECRET: TEST_ONLY_LEGACY_JWT });
+    expect(config.tokenSecret).toBe("");
+    expect(config.paymentsReady).toBe(false);
+    expect(missingSetting(config.missing, "STRIPE_SECRET_KEY")).toBe(true);
+  });
+
+  it.each([0, 1, 2, 3, 4, 5, 6, 7])(
+    "is ready iff Stripe exists with a valid supplied or derived key, regardless of webhook (mask %i)",
     mask => {
       const env: NodeJS.ProcessEnv = {
         JWT_SECRET: TEST_ONLY_LEGACY_JWT,
@@ -201,11 +223,15 @@ describe("dedicated invoice payment settings", () => {
       const before = { ...env };
       Object.freeze(env);
       const config = invoiceConfiguration(env);
-      expect(config.paymentsReady).toBe(false);
-      REQUIRED_SETTINGS.forEach((name, index) => {
-        expect(missingSetting(config.missing, name)).toBe(!(mask & (1 << index)));
-      });
-      expect(config.message.trim().length).toBeGreaterThan(0);
+      const hasStripe = Boolean(mask & 1);
+      const hasDedicatedToken = Boolean(mask & 2);
+      expect(config.paymentsReady).toBe(hasStripe);
+      expect(missingSetting(config.missing, "STRIPE_SECRET_KEY")).toBe(!hasStripe);
+      expect(missingSetting(config.missing, "INVOICE_TOKEN_SECRET")).toBe(!hasStripe && !hasDedicatedToken);
+      expect(missingSetting(config.missing, "INVOICE_STRIPE_WEBHOOK_SECRET")).toBe(false);
+      expect(config.tokenSecret).toBe(hasDedicatedToken ? TEST_ONLY_TOKEN_SECRET : hasStripe ? DERIVED_TOKEN_SECRET : "");
+      expect(config.webhookSecret).toBe(mask & 4 ? TEST_ONLY_WEBHOOK_SECRET : "");
+      expect(Boolean(config.message.trim().length)).toBe(!hasStripe);
       expectSafeDiagnostics(config, env);
       expect(env).toEqual(before);
     },

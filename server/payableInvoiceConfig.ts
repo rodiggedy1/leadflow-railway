@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { InvoiceError } from "../shared/payableInvoice";
 
 export const INVOICE_PRODUCTION_ORIGIN = "https://quote.maidinblack.com";
@@ -14,13 +15,18 @@ export function invoiceRuntimeOrigin(env: NodeJS.ProcessEnv = process.env): stri
 
 /** Values stay server-side; routes expose only readiness and safe setting names. */
 export function invoiceConfiguration(env: NodeJS.ProcessEnv = process.env) {
-  const tokenSecret = env.INVOICE_TOKEN_SECRET ?? "";
   const webhookSecret = env.INVOICE_STRIPE_WEBHOOK_SECRET ?? "";
   const stripeSecretKey = env.STRIPE_SECRET_KEY ?? "";
+  // Reuse the configured payment credential through an invoice-only derivation.
+  // An existing dedicated key remains authoritative so its links do not change.
+  const tokenSecret = env.INVOICE_TOKEN_SECRET || (stripeSecretKey
+    ? createHmac("sha256", stripeSecretKey).update("leadflow:invoice-token-key:v1").digest("hex")
+    : "");
   const missing: string[] = [];
   if (!stripeSecretKey) missing.push("STRIPE_SECRET_KEY");
   if (tokenSecret.length < 32) missing.push("INVOICE_TOKEN_SECRET");
-  if (!webhookSecret) missing.push("INVOICE_STRIPE_WEBHOOK_SECRET");
+  // Checkout is confirmed through the existing Stripe API refresh/resume path.
+  // Webhook handling still requires its own verified signature when configured.
   return {
     origin: invoiceRuntimeOrigin(env), tokenSecret, webhookSecret, stripeSecretKey,
     paymentsReady: missing.length === 0,

@@ -95,9 +95,9 @@ export function InvoiceCollectionPage({ review = false, onPreview }: { review?: 
       const data: LookupResult = review ? { client, reviewHash: "sample-review-only", services: services.map(row => currentlyUnpaid.some(selectedRow => selectedRow.id === row.id) ? { ...row, paidCents: row.amountCents, paymentSource: "manual", status: "Paid — recorded by staff" } : row) } : await request<LookupResult>("/admin/mark-paid", "POST", { requestId: markKey.current, clientId: client.id, from, to, serviceIds: currentlyUnpaid.map(row => row.id), reviewHash }, abort.signal);
       if (!current(abort)) return;
       setClient(data.client); setServices(data.services); setReviewHash(data.reviewHash);
-      setSelected(ids => ids.filter(id => data.services.some(row => row.id === id && row.eligible)));
+      setSelected(data.services.filter(row => row.eligible).map(row => row.id));
       setPaidConfirmed(false); setConfirmed(false); issueKey.current = crypto.randomUUID(); markKey.current = crypto.randomUUID();
-      setNotice(review ? "Sample prior payment recorded in this review only. No request was made." : "Prior payment recorded. No charge was made. Select all eligible services to include every date, then create the invoice page.");
+      setNotice(review ? "Sample prior payment recorded in this review only. No request was made." : "Prior payment recorded. No charge was made. All eligible service dates are now included; the summary shows the unpaid remainder. Review the dates before creating the invoice page.");
     } catch (value) { if (current(abort)) setError(value instanceof Error ? value.message : "Prior payment could not be recorded."); }
     finally { if (current(abort)) { setBusy(false); setAction(""); } }
   };

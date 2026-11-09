@@ -66,6 +66,8 @@ const TOKEN_SECRET = "test-only-dedicated-invoice-signing-secret-2026";
 const WEBHOOK_SECRET = "whsec_test_only_dedicated_invoice_2026";
 const GLOBAL_WEBHOOK_SECRET = "whsec_test_only_old_global_not_for_invoices";
 const SHORT_JWT = "short-test-only-jwt";
+const DERIVED_SECRET = createHmac("sha256", STRIPE_KEY)
+  .update("leadflow:invoice-token-key:v1").digest("hex");
 const TOKEN = "a".repeat(64);
 const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
 const NOW = Date.parse("2026-11-08T12:00:00Z");
@@ -114,12 +116,12 @@ function readyEnvironment() {
 }
 function safeResponse(body: unknown) {
   const text = JSON.stringify(body);
-  for (const value of [STRIPE_KEY, TOKEN_SECRET, WEBHOOK_SECRET, GLOBAL_WEBHOOK_SECRET, SHORT_JWT, STALE_ORIGIN]) {
+  for (const value of [STRIPE_KEY, TOKEN_SECRET, DERIVED_SECRET, WEBHOOK_SECRET, GLOBAL_WEBHOOK_SECRET, SHORT_JWT, STALE_ORIGIN]) {
     expect(text).not.toContain(value);
   }
   expect(text).not.toMatch(/private storage|private processor|exampleclient@example\.test/);
 }
-function fixture(isAdmin = true) {
+function fixture(isAdmin = true, directTokenSecret?: string) {
   const rows: InvoiceService[] = [{
     id: "leadflow_jobs:101", occurrenceKey: "leadflow_jobs:101:2026-11-02",
     date: "2026-11-02", description: "Example service", address: "Example street",
@@ -176,13 +178,13 @@ function fixture(isAdmin = true) {
   }) as unknown as Stripe);
   const config = invoiceConfiguration();
   const service = new PayableInvoiceService({
-    repo, stripe, origin: config.origin, tokenSecret: config.tokenSecret,
+    repo, stripe, origin: config.origin, tokenSecret: directTokenSecret ?? config.tokenSecret,
     assertCollectionReady: repo.assertCollectionReady, now: () => NOW,
   });
   const admin = vi.fn(async () => isAdmin ? 19 : false);
   const app = express();
   // Intentionally no origin, readiness, or webhook-secret override: production
-  // defaults must use only the dedicated invoice configuration in process.env.
+  // defaults must use the existing Stripe credential and optional invoice settings.
   registerPayableInvoiceRoutes(app, { service, admin, stripe });
   const issue: InvoiceIssueInput = {
     requestId: REQUEST_ID, clientId: CLIENT.id, from: LOOKUP.from, to: LOOKUP.to,
@@ -268,24 +270,22 @@ describe("confirmed production invoice configuration flow", () => {
     noPaymentEffects(f);
   });
 
-  it("reports missing dedicated setting names, not their values or legacy credentials", async () => {
+  it("reports ready without either optional dedicated secret and exposes no server key or legacy credentials", async () => {
     vi.stubEnv("STRIPE_WEBHOOK_SECRET", GLOBAL_WEBHOOK_SECRET);
     const f = fixture();
     const response = await request(f.app).get(`${INVOICE_API}/admin/status`).expect(200);
-    expect(response.body.paymentsReady).toBe(false);
-    expect(response.body.message).toContain("INVOICE_TOKEN_SECRET");
-    expect(response.body.message).toContain("INVOICE_STRIPE_WEBHOOK_SECRET");
-    expect(response.body.message).toMatch(/booking lookup remains available/i);
-    expect(response.body.message).not.toContain("STRIPE_SECRET_KEY");
-    expect(response.body.message).not.toMatch(/\bJWT_SECRET\b|\bSTRIPE_WEBHOOK_SECRET\b/);
+    expect(response.body).toEqual({ paymentsReady: true, message: "" });
     safeResponse(response.body);
     noPaymentEffects(f);
   });
 
-  it.each(["both", "token", "webhook", "short-token"])("blocks direct issue/checkout/resume POSTs with %s configuration missing", async missing => {
+  it.each(["stripe", "stripe-and-dedicated-secrets", "short-token"])("blocks direct issue/checkout/resume POSTs with %s configuration invalid", async missing => {
     readyEnvironment();
-    if (missing === "both" || missing === "token") vi.stubEnv("INVOICE_TOKEN_SECRET", undefined);
-    if (missing === "both" || missing === "webhook") vi.stubEnv("INVOICE_STRIPE_WEBHOOK_SECRET", undefined);
+    if (missing.startsWith("stripe")) vi.stubEnv("STRIPE_SECRET_KEY", undefined);
+    if (missing === "stripe-and-dedicated-secrets") {
+      vi.stubEnv("INVOICE_TOKEN_SECRET", undefined);
+      vi.stubEnv("INVOICE_STRIPE_WEBHOOK_SECRET", undefined);
+    }
     if (missing === "short-token") vi.stubEnv("INVOICE_TOKEN_SECRET", "short-test-only-token");
     const f = fixture();
     const issueSpy = vi.spyOn(f.service, "issue");
@@ -320,7 +320,8 @@ describe("confirmed production invoice configuration flow", () => {
     expect(f.repo.reserve).not.toHaveBeenCalled();
   });
 
-  it("keeps existing capability view available with missing signing secret and no admin login", async () => {
+  it("keeps existing capability view available with missing Stripe key and no admin login", async () => {
+    vi.stubEnv("STRIPE_SECRET_KEY", undefined);
     const f = fixture(false);
     await expect(f.service.view(TOKEN)).resolves.toBe(f.invoice);
     const response = await request(f.app).get(`${INVOICE_API}/${TOKEN}`).expect(200);
@@ -380,6 +381,105 @@ describe("confirmed production invoice configuration flow", () => {
     expect(f.repo.settle).not.toHaveBeenCalled();
   });
 
+  it("issues without either dedicated secret, charges only 40000 remaining cents, and settles once through trusted refresh", async () => {
+    const f = fixture();
+    f.rows.splice(0, f.rows.length, ...[188000, 17000, 23000].map((amountCents, index) => ({
+      id: `leadflow_jobs:${101 + index}`, occurrenceKey: `leadflow_jobs:${101 + index}:2026-11-0${2 + index}`,
+      date: `2026-11-0${2 + index}`, description: "Example service", address: "Example street",
+      amountCents, paidCents: index === 0 ? amountCents : 0,
+      status: "completed", eligible: true, reason: null,
+    })));
+    f.invoice.lines = f.rows.map((row, index) => ({ ...row, id: index + 1, paidCents: row.paidCents! }));
+    f.invoice.status = "partially_paid";
+    f.issue.serviceIds = f.rows.map(row => row.id);
+    f.issue.reviewHash = invoiceReviewHash(CLIENT, f.rows, LOOKUP.from, LOOKUP.to);
+    f.attempt.lineIds = [2, 3];
+    f.attempt.amountCents = 40000;
+    f.session.amount_total = 40000;
+    f.session.payment_status = "unpaid";
+    f.session.status = "open";
+    f.repo.attachSession.mockImplementation(async (_id, sessionId, url) => {
+      f.invoice.activeAttemptId = f.attempt.id;
+      f.attempt.sessionId = sessionId;
+      f.attempt.sessionUrl = url;
+      f.attempt.state = "session_open";
+    });
+    f.repo.settle.mockImplementation(async () => {
+      for (const line of f.invoice.lines) if (f.attempt.lineIds.includes(line.id)) line.paidCents = line.amountCents;
+      f.invoice.receipts.push({ paymentId: "pi_test_invoice_configuration", amountCents: 40000,
+        paidAt: "2026-11-08T12:00:00Z", lineIds: [2, 3] });
+      f.invoice.activeAttemptId = null;
+      f.invoice.status = "paid";
+      f.attempt.state = "paid";
+    });
+    expect(process.env.INVOICE_TOKEN_SECRET).toBeUndefined();
+    expect(process.env.INVOICE_STRIPE_WEBHOOK_SECRET).toBeUndefined();
+    expect(process.env.JWT_SECRET).toBe(SHORT_JWT);
+    const issued = await request(f.app).post(`${INVOICE_API}/admin/issue`)
+      .set("Origin", ORIGIN).send(f.issue).expect(200);
+    const token = createHmac("sha256", DERIVED_SECRET).update(`invoice:${CLIENT.id}:${REQUEST_ID}`).digest("hex");
+    expect(issued.body.url).toBe(`${ORIGIN}/invoice/${token}`);
+    expect(f.repo.issue.mock.calls[0][3]).toBe(invoiceTokenHash(token));
+    expect(token).not.toBe(createHmac("sha256", SHORT_JWT).update(`invoice:${CLIENT.id}:${REQUEST_ID}`).digest("hex"));
+    const checkout = await request(f.app).post(`${INVOICE_API}/${token}/checkout`)
+      .set("Origin", ORIGIN).send({ requestId: REQUEST_ID, lineIds: [2, 3] }).expect(200);
+    expect(checkout.body.url).toBe(f.session.url);
+    safeResponse(checkout.body);
+    expectCalledOnceWith(f.repo.reserve, f.invoice.id, REQUEST_ID, [2, 3]);
+    expect(f.create.mock.calls[0][0]).toMatchObject({
+      mode: "payment", client_reference_id: f.attempt.id,
+      line_items: [{ price_data: { currency: "usd", unit_amount: 40000 }, quantity: 1 }],
+      metadata: { leadflowInvoice: INVOICE_PAYMENT_MARKER, invoiceId: "42", invoiceAttemptId: f.attempt.id },
+      success_url: `${ORIGIN}/invoice/${token}?returned=1`, cancel_url: `${ORIGIN}/invoice/${token}`,
+    });
+    expect(f.create.mock.calls[0][1]).toEqual({ idempotencyKey: `leadflow:invoice:42:attempt:${f.attempt.id}` });
+    expect(f.repo.settle).not.toHaveBeenCalled();
+    f.session.payment_status = "paid";
+    f.session.status = "complete";
+    const refreshed = await request(f.app).get(`${INVOICE_API}/${token}`).expect(200);
+    expectCalledOnceWith(f.retrieve, f.session.id);
+    expectCalledOnceWith(f.repo.settle, f.attempt.id, f.session.id, "pi_test_invoice_configuration", 40000);
+    expect(refreshed.body).toMatchObject({ paymentsReady: true, invoice: { status: "paid", activeAttemptId: null } });
+    expect(refreshed.body.invoice.lines.map((line: { paidCents: number }) => line.paidCents)).toEqual([188000, 17000, 23000]);
+    const again = await request(f.app).get(`${INVOICE_API}/${token}`).expect(200);
+    expect(again.body.invoice.receipts).toHaveLength(1);
+    expect(f.retrieve).toHaveBeenCalledOnce();
+    expect(f.repo.settle).toHaveBeenCalledOnce();
+    expect(f.create).toHaveBeenCalledOnce();
+  });
+
+  it.each(["invoice", "attempt", "amount", "currency", "reference", "session"])("keeps trusted refresh %s identity guard without optional secrets", async kind => {
+    const f = fixture();
+    f.invoice.activeAttemptId = f.attempt.id;
+    f.attempt.sessionId = f.session.id;
+    if (kind === "invoice") f.session.metadata!.invoiceId = "99";
+    if (kind === "attempt") f.session.metadata!.invoiceAttemptId = "other-attempt";
+    if (kind === "amount") f.session.amount_total = 10001;
+    if (kind === "currency") f.session.currency = "eur";
+    if (kind === "reference") f.session.payment_intent = null;
+    if (kind === "session") f.session.id = "cs_test_other";
+    const response = await request(f.app).get(`${INVOICE_API}/${TOKEN}`).expect(409);
+    expect(response.body.error).toBe("PAYMENT_IDENTITY_MISMATCH");
+    safeResponse(response.body);
+    expect(f.retrieve).toHaveBeenCalledOnce();
+    expect(f.repo.settle).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+  });
+
+  it("retains the refund/payment-review checkout guard without optional secrets", async () => {
+    const f = fixture();
+    f.invoice.status = "payment_review";
+    f.invoice.receipts = [{ paymentId: "pi_test_refunded", amountCents: 10000,
+      refundedCents: 5000, paidAt: "2026-11-08T12:00:00Z", lineIds: [1] }];
+    const response = await request(f.app).post(`${INVOICE_API}/${TOKEN}/checkout`)
+      .set("Origin", ORIGIN).send({ requestId: REQUEST_ID, lineIds: [1] }).expect(409);
+    expect(response.body.error).toBe("PAYMENT_REVIEW_REQUIRED");
+    safeResponse(response.body);
+    expect(f.repo.reserve).not.toHaveBeenCalled();
+    expect(f.stripe).not.toHaveBeenCalled();
+    expect(f.repo.settle).not.toHaveBeenCalled();
+  });
+
   it("safely reports a throwing fake processor instead of attempting the real provider", async () => {
     readyEnvironment();
     const f = fixture();
@@ -396,7 +496,7 @@ describe("confirmed production invoice configuration flow", () => {
 describe("real service defers dedicated signing validation until link issuance", () => {
   it.each([undefined, "", "short-test-only-token", "t".repeat(31)])("constructs and looks up with invalid signing key %j, but issue fails typed before storage", async secret => {
     vi.stubEnv("INVOICE_TOKEN_SECRET", secret);
-    const f = fixture();
+    const f = fixture(true, secret ?? "");
     expect(f.service).toBeInstanceOf(PayableInvoiceService);
     await expect(f.service.lookup(LOOKUP.phone, LOOKUP.email, LOOKUP.from, LOOKUP.to))
       .resolves.toMatchObject({ client: CLIENT, reviewHash: f.issue.reviewHash });
@@ -411,7 +511,7 @@ describe("real service defers dedicated signing validation until link issuance",
   });
 
   it("rejects admin link regeneration with a typed signing error, without mutation or providers", async () => {
-    const f = fixture();
+    const f = fixture(true, "");
     await expect(f.service.adminInvoice(f.invoice.id)).rejects.toBeInstanceOf(InvoiceError);
     await expect(f.service.adminInvoice(f.invoice.id)).rejects.toMatchObject({
       code: "INVOICE_SIGNING_NOT_CONFIGURED", status: 503,

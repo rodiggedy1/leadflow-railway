@@ -1,37 +1,29 @@
-# Invoice-only configuration correction
+# Invoice payments using the existing Stripe integration
 
-The invoice code no longer reads `QUOTE_APP_URL` for its Production origin, uses `JWT_SECRET` for invoice links, or uses `STRIPE_WEBHOOK_SECRET` for its dedicated webhook. Those existing settings and all login and older payment handlers remain unchanged.
+Invoice card payments reuse `getStripeClient()` and the same server-only `STRIPE_SECRET_KEY` used by existing booking payment flows. No additional payment credential, new Stripe destination, table migration, or login-secret change is required for invoice creation and card checkout.
 
-Production invoice requests and return links use `https://quote.maidinblack.com`. Preview uses its configured `RAILWAY_PUBLIC_DOMAIN` when `PREVIEW_MODE=true`. An absent Preview domain retains the canonical Production fallback; do not use that fallback to test customer payments from an unrelated Preview domain.
+## Private invoice links
 
-## Required payment settings
+If a dedicated `INVOICE_TOKEN_SECRET` is already configured, it remains authoritative and must be at least 32 characters. When absent or empty, a server-only invoice-specific HMAC key is derived from the existing Stripe API secret using the fixed context `leadflow:invoice-token-key:v1`. That derived key creates the existing opaque invoice links; neither it nor the Stripe credential is returned to the browser or logged. The legacy JWT is never used.
 
-Keep the existing `STRIPE_SECRET_KEY` for the intended Stripe account and mode. Add two **invoice-only** Railway service variables:
+The Stripe API secret must remain stable for reconstructing previously issued links when using the derived key. Rotating it changes subsequently reconstructed links; previously distributed tokens are still checked against their stored hashes. Do not add or change a dedicated override casually: that also changes reconstructed links. The existing explicit dedicated-key behavior is unchanged.
 
-- `INVOICE_TOKEN_SECRET`: a cryptographically random private key, at least 32 characters. A suitable value is 32 random bytes encoded as 64 hexadecimal characters. Keep it stable across releases; changing it changes the links reconstructed for already issued invoices. Do not reuse or change the login secret.
-- `INVOICE_STRIPE_WEBHOOK_SECRET`: the endpoint-specific Stripe signing secret for the invoice webhook below. It is not the Stripe API key, the older webhook's secret, or a local CLI forwarding secret. Stripe assigns distinct signing secrets by endpoint and by test/live mode.[1]
+Production uses `https://quote.maidinblack.com`, not the old global quote-site URL. Explicit Preview mode uses its configured Railway domain. No environment variable is changed by this correction.
 
-A private key can be generated in the user's own Console with `node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))'`. Copy it privately into Railway Variables; do not paste it into task chat, commit it, place it in client-side variables, or include it in a URL. This document does not generate or set a real key.
+## Amount and confirmed payment
 
-## Dedicated Stripe endpoint
+The admin records prior payments against the selected dates. After a confirmed save, all eligible dates in the returned billing period are selected so the summary shows gross service value, already-paid value, and the unpaid remainder. Staff can still explicitly narrow the selection before issuing the invoice. Paid dates remain visible and cannot be charged again through the invoice checkout.
 
-In the same Stripe account and mode used by the existing API key, add a new **Account / snapshot-event** webhook destination. Leave existing destinations and their subscriptions unchanged.[2]
+The customer chooses unpaid service dates or selects all and pays their server-calculated outstanding balance in the existing Stripe-hosted card Checkout. Creating or sending an invoice does not charge a card. This feature does not initiate off-session saved-card charges or automatically send email/SMS.
 
-The destination URL is `https://quote.maidinblack.com/api/payable-invoices/stripe-webhook`. The inspected route verifies the raw request body using Stripe's `Stripe-Signature` header. It does not accept a query secret and rejects query parameters; **do not append a cron secret**. Use the endpoint's signing secret as `INVOICE_STRIPE_WEBHOOK_SECRET` in Railway. No live destination has been created as part of this local correction.
+Payment is confirmed through the existing authenticated server-to-Stripe Checkout retrieval in invoice refresh/resume. Invoice, attempt, provider session, payment mode, amount, currency, marker, reference, and payment ID must match before durable allocation. The browser's return URL and claimed success are not payment evidence. Failed provider retrieval does not mark an invoice paid. Allocation remains transactionally idempotent.
 
-Subscribe to the events supported by the existing invoice service: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `payment_intent.succeeded`, and `charge.refunded`. Use the same compatible snapshot API version as the existing SDK, `2026-05-27.dahlia`, where the account permits selecting it. Do not select connected-account events for this implementation.
+## Optional signed webhook
 
-The dedicated route rejects unsigned, tampered or incorrectly signed payloads. Verified unrelated events are ignored. Invoice events still require the existing invoice marker and provider-confirmed session, amount, currency, invoice/attempt identity, payment reference and mode before durable settlement. A failed settlement is not acknowledged as success.
+The existing invoice webhook remains optional for checkout readiness. If `INVOICE_STRIPE_WEBHOOK_SECRET` is configured, the raw-body route still verifies Stripe's signature before accepting an event. Missing secrets, unsigned/tampered bodies, wrong secrets, and unrelated identity do not bypass verification. No new webhook is provisioned by this correction, and older Stripe handlers are unchanged.
 
-## Readiness and release boundaries
+Without webhook delivery, LeadFlow confirms payment when the invoice is reopened or the customer uses Check payment status/Resume. A customer who pays but never returns can leave the local payment status pending until that explicit check occurs. There is no new polling or background synchronizer. Automatic refund notification also requires a configured signed webhook; Stripe-side refunds without delivered events require staff review rather than assuming the local ledger has updated.
 
-Client lookup and explicitly initiated prior-payment recording no longer require invoice signing or Stripe webhook configuration. Creating a payable invoice and creating or resuming customer checkout require all three payment settings server-side; an API caller cannot bypass this by ignoring the button state. Admin readiness names missing settings without returning their values. Merely having settings present does not prove a live key, webhook delivery or account identity is correct.
+## Validation and release
 
-The code patch can be released only after separate deployment approval. Actual Railway variables and the Stripe destination also require their authorized setup; exporting variables in an interactive Console does not configure the already running server. No configuration changes, provider calls, database queries, invoices or charges are performed by this document.
-
-The observed domain/signing failures prevented the reported lookup from reaching its normal data path. Correcting those gates does not prove the supplied client exists or that July 22–November 7 services and unpaid amounts are available. The existing exact identity and service-payment checks remain in place and return a review error rather than fabricating bookings or balances.
-
-## References
-
-[1]: https://docs.stripe.com/webhooks "Stripe raw-body signature verification and endpoint signing secrets"
-[2]: https://docs.stripe.com/development/dashboard/webhooks "Stripe adding a separate Account webhook endpoint"
+All validation uses synthetic clients, mock storage/payment processors, and network-isolated tests. This document does not create an invoice, payment, email, webhook, schema, or configuration value. Local checks do not prove the running deployment or a real transaction; Production release requires separate approval.
