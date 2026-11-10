@@ -14,24 +14,30 @@ describe("native booking drawer commercial edits", () => {
       router.indexOf("updateDetails: bookingsAgentProcedure"),
       router.indexOf("cancel: bookingsAgentProcedure")
     );
+    const implementation = router.slice(
+      router.indexOf("const updateCanonicalBookingDetailsInputSchema"),
+      router.indexOf("export const bookingsRouter")
+    ) + updateBlock;
+    expect(updateBlock).toContain("updateCanonicalBookingDetails(tx, input)");
 
     for (const marker of [
       "updateDetails: bookingsAgentProcedure",
       "PUBLIC_BOOKING_PRICED_EXTRAS",
       "firstCleaningTotalCents: z",
       "companyNotes: z.string().trim().max(4_000).nullable()",
-      "requestedLocalDate: z",
+      "requestedLocalDate: bookingRescheduleDateSchema",
+      "requestedLocalTime: bookingRescheduleTimeSchema",
       "recurrence: z.enum(NATIVE_BOOKING_RECURRENCES)",
       "nativeBookingFutureVisitTotalCents",
       "requestedStartAt",
     ])
-      expect(updateBlock).toContain(marker);
-    expect(updateBlock).toContain("bookingSeries");
+      expect(implementation).toContain(marker);
+    expect(implementation).toContain("bookingSeries");
     expect(updateBlock).toContain("publishNativeBookingRefresh()");
-    expect(updateBlock).not.toContain("bookingPaymentProfiles");
-    expect(updateBlock).not.toContain('paymentStatus === "authorized"');
-    expect(updateBlock).not.toContain('paymentStatus === "captured"');
-    expect(updateBlock).not.toContain(prohibitedLegacySymbol);
+    expect(implementation).not.toContain("bookingPaymentProfiles");
+    expect(implementation).not.toContain('paymentStatus === "authorized"');
+    expect(implementation).not.toContain('paymentStatus === "captured"');
+    expect(implementation).not.toContain(prohibitedLegacySymbol);
   });
 
   it("retains the first-visit only rule in the working CRM drawer", () => {

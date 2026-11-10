@@ -30,6 +30,15 @@ import {
 } from "../shared/booking";
 import { BOOKING_TIME_ZONE } from "../shared/easternTime";
 import {
+  bookingRescheduleDateSchema,
+  bookingRescheduleTimeSchema,
+  bookingRescheduleModeSchema,
+  isRecurringBookingFrequency,
+  bookingDateShiftDays,
+  shiftBookingDate,
+} from "../shared/bookingReschedule";
+import { rescheduleOperationalBooking } from "./bookingRescheduleService";
+import {
   NativeBookingIdempotencyConflictError,
   NativeBookingInputError,
   buildPreparedCanonicalBooking,
@@ -352,6 +361,301 @@ function mapAdminBooking(
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+
+const updateCanonicalBookingDetailsInputSchema = z
+  .object({
+    bookingId: z.number().int().positive(),
+    extras: z
+      .array(
+        z.object({
+          id: z.string().trim().min(1).max(80),
+          quantity: z.number().int().min(1).max(50),
+        }),
+      )
+      .max(50)
+      .optional(),
+    firstCleaningTotalCents: z.number().int().min(0).max(10_000_000).optional(),
+    companyNotes: z.string().trim().max(4_000).nullable().optional(),
+    requestedLocalDate: bookingRescheduleDateSchema.optional(),
+    requestedLocalTime: bookingRescheduleTimeSchema.optional(),
+    rescheduleMode: bookingRescheduleModeSchema.optional(),
+    recurrence: z.enum(NATIVE_BOOKING_RECURRENCES).optional(),
+  })
+  .refine(
+    (value) =>
+      value.extras !== undefined ||
+      value.firstCleaningTotalCents !== undefined ||
+      value.companyNotes !== undefined ||
+      value.requestedLocalDate !== undefined ||
+      value.requestedLocalTime !== undefined ||
+      value.recurrence !== undefined,
+    "Choose booking details to update.",
+  );
+
+type CanonicalBookingDetailsInput = z.infer<
+  typeof updateCanonicalBookingDetailsInputSchema
+>;
+type BookingTransaction = Parameters<
+  Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]
+>[0];
+
+/** Staff routers only: caller retains authorization and owns the transaction. */
+export async function updateCanonicalBookingDetails(
+  tx: BookingTransaction,
+  input: CanonicalBookingDetailsInput,
+) {
+  const rows = await tx
+    .select()
+    .from(bookings)
+    .where(eq(bookings.id, input.bookingId))
+    .limit(1)
+    .for("update");
+  const booking = rows[0];
+  if (!booking)
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Booking not found.",
+    });
+
+  const existingExtrasById = new Map(
+    booking.extras.map((extra) => [extra.id, extra]),
+  );
+  const seenExtras = new Set<string>();
+  const extras = (
+    input.extras ??
+    booking.extras.map((extra) => ({
+      id: extra.id,
+      quantity: extra.quantity,
+    }))
+  )
+    .map((selection) => {
+      if (seenExtras.has(selection.id))
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Each extra can only be selected once.",
+        });
+      seenExtras.add(selection.id);
+      const catalogExtra = PUBLIC_BOOKING_PRICED_EXTRAS[selection.id];
+      const existingExtra = existingExtrasById.get(selection.id);
+      if (!catalogExtra && !existingExtra)
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Unsupported booking extra.",
+        });
+      const unitPriceCents = catalogExtra
+        ? catalogExtra.unitPrice * 100
+        : existingExtra!.unitPriceCents;
+      return {
+        id: selection.id,
+        label: catalogExtra?.label ?? existingExtra!.label,
+        quantity: selection.quantity,
+        unitPriceCents,
+        totalCents: unitPriceCents * selection.quantity,
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+
+  const firstCleaningTotalCents =
+    input.firstCleaningTotalCents ?? booking.firstCleaningTotalCents;
+  const companyNotes =
+    input.companyNotes === undefined
+      ? booking.companyNotes
+      : input.companyNotes?.trim() || null;
+  const requestedLocalDate =
+    input.requestedLocalDate ?? booking.requestedLocalDate;
+  const requestedLocalTime =
+    input.requestedLocalTime ?? booking.requestedLocalTime;
+  const scheduleChanged =
+    requestedLocalDate !== booking.requestedLocalDate ||
+    requestedLocalTime !== booking.requestedLocalTime;
+  const recurrence =
+    input.recurrence ??
+    (booking.recurrence as (typeof NATIVE_BOOKING_RECURRENCES)[number]);
+  const futureVisitTotalCents = scheduleChanged && recurrence === booking.recurrence
+    ? booking.futureVisitTotalCents
+    : nativeBookingFutureVisitTotalCents(booking, recurrence);
+  const hasCommercialChanges = firstCleaningTotalCents !== booking.firstCleaningTotalCents ||
+    companyNotes !== booking.companyNotes || recurrence !== booking.recurrence ||
+    extras.length !== booking.extras.length || extras.some(extra => {
+      const existing = existingExtrasById.get(extra.id);
+      return !existing || existing.quantity !== extra.quantity;
+    });
+  let selectedJobId: number | null = null;
+  let commercialFutureJobIds: number[] = [];
+  if (
+    scheduleChanged &&
+    (isRecurringBookingFrequency(booking.recurrence) ||
+      isRecurringBookingFrequency(recurrence)) &&
+    input.rescheduleMode === undefined
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Choose whether to reschedule this visit or this and subsequent visits.",
+    });
+  }
+  const rescheduleMode = input.rescheduleMode ?? "visit";
+  let requestedStartAt = booking.requestedStartAt;
+  if (scheduleChanged) {
+    try {
+      requestedStartAt = businessLocalDateTimeToUtcMs(
+        requestedLocalDate,
+        requestedLocalTime,
+        booking.requestedTimeZone,
+      );
+    } catch (error) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          error instanceof Error ? error.message : "Invalid booking schedule.",
+      });
+    }
+    const originalOperationalRows = hasCommercialChanges ? await tx
+      .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
+      .from(leadflowJobs).where(eq(leadflowJobs.bookingId, booking.id)) : [];
+    commercialFutureJobIds = originalOperationalRows
+      .filter(row => row.jobDate > booking.requestedLocalDate).map(row => row.id);
+    // Exact old occurrence selection, collision preflight and recurrence
+    // continuation belong to the shared operational service, in this transaction.
+    const rescheduled = await rescheduleOperationalBooking(tx, {
+      bookingId: booking.id,
+      previousLocalDate: booking.requestedLocalDate,
+      previousLocalTime: booking.requestedLocalTime,
+      requestedLocalDate,
+      requestedLocalTime,
+      requestedTimeZone: booking.requestedTimeZone,
+      mode: rescheduleMode,
+      allowMissingOperationalJob: true,
+    });
+    selectedJobId = rescheduled.selectedJobId;
+    if (hasCommercialChanges && rescheduled.continuationCreated) {
+      const originalIds = new Set(originalOperationalRows.map(row => row.id));
+      const afterRows = await tx.select({ id: leadflowJobs.id })
+        .from(leadflowJobs).where(eq(leadflowJobs.bookingId, booking.id));
+      commercialFutureJobIds.push(...afterRows.filter(row => !originalIds.has(row.id)).map(row => row.id));
+    }
+  }
+  const now = new Date();
+
+  await tx
+    .update(bookings)
+    .set({
+      extras,
+      firstCleaningTotalCents,
+      companyNotes,
+      requestedLocalDate,
+      requestedLocalTime,
+      requestedStartAt,
+      recurrence,
+      recurringIntentStatus:
+        recurrence === "one-time" ? null : "intent_pending",
+      futureVisitTotalCents,
+      updatedAt: now,
+    })
+    .where(eq(bookings.id, booking.id));
+
+  const [activeAssignment] = await tx
+    .select({
+      teamId: bookingAssignments.teamId,
+      teamName: bookingAssignments.teamName,
+    })
+    .from(bookingAssignments)
+    .where(
+      and(
+        eq(bookingAssignments.bookingId, booking.id),
+        eq(bookingAssignments.status, "assigned"),
+      ),
+    )
+    .orderBy(desc(bookingAssignments.assignedAt), desc(bookingAssignments.id))
+    .limit(1);
+
+  const [series] = await tx
+    .select()
+    .from(bookingSeries)
+    .where(eq(bookingSeries.bookingId, booking.id))
+    .limit(1)
+    .for("update");
+  if (recurrence !== "one-time" && futureVisitTotalCents !== null) {
+    const seriesValues = {
+      status: "intent_pending",
+      frequency: recurrence,
+      anchorLocalDate:
+        scheduleChanged && rescheduleMode === "subsequent"
+          ? shiftBookingDate(
+              series?.anchorLocalDate ?? booking.requestedLocalDate,
+              bookingDateShiftDays(
+                booking.requestedLocalDate,
+                requestedLocalDate,
+              ),
+            )
+          : (series?.anchorLocalDate ?? booking.requestedLocalDate),
+      anchorLocalTime:
+        scheduleChanged && rescheduleMode === "subsequent"
+          ? requestedLocalTime
+          : (series?.anchorLocalTime ?? booking.requestedLocalTime),
+      timeZone: booking.requestedTimeZone,
+      firstCleaningTotalCents,
+      futureVisitTotalCents,
+      updatedAt: now,
+    };
+    if (series)
+      await tx
+        .update(bookingSeries)
+        .set(seriesValues)
+        .where(eq(bookingSeries.id, series.id));
+    else
+      await tx.insert(bookingSeries).values({
+        bookingId: booking.id,
+        ...seriesValues,
+        createdAt: now,
+      });
+  } else if (series) {
+    await tx
+      .update(bookingSeries)
+      .set({ status: "cancelled", updatedAt: now })
+      .where(eq(bookingSeries.id, series.id));
+  }
+
+  const nextBooking = {
+    ...booking,
+    extras,
+    firstCleaningTotalCents,
+    companyNotes,
+    requestedLocalDate,
+    requestedLocalTime,
+    requestedStartAt,
+    recurrence,
+    futureVisitTotalCents,
+  };
+  // A schedule-only save must not project its temporary visit date/frequency
+  // back into the future cadence. Combined saves project commercial fields only.
+  if (!scheduleChanged || hasCommercialChanges)
+    await syncNativeBookingOperationalProjection(
+      tx,
+      nextBooking,
+      activeAssignment &&
+        activeAssignment.teamId !== null &&
+        activeAssignment.teamName !== null
+        ? {
+            teamId: activeAssignment.teamId,
+            teamName: activeAssignment.teamName,
+          }
+        : null,
+      scheduleChanged ? { commercialOnly: true, selectedJobId, futureJobIds: commercialFutureJobIds } : undefined,
+    );
+
+  return {
+    bookingId: booking.id,
+    extras,
+    firstCleaningTotalCents,
+    futureVisitTotalCents,
+    companyNotes,
+    requestedLocalDate,
+    requestedLocalTime,
+    recurrence,
   };
 }
 
@@ -765,42 +1069,7 @@ export const bookingsRouter = router({
     }),
 
   updateDetails: bookingsAgentProcedure
-    .input(
-      z
-        .object({
-          bookingId: z.number().int().positive(),
-          extras: z
-            .array(
-              z.object({
-                id: z.string().trim().min(1).max(80),
-                quantity: z.number().int().min(1).max(50),
-              })
-            )
-            .max(50)
-            .optional(),
-          firstCleaningTotalCents: z
-            .number()
-            .int()
-            .min(0)
-            .max(10_000_000)
-            .optional(),
-          companyNotes: z.string().trim().max(4_000).nullable().optional(),
-          requestedLocalDate: z
-            .string()
-            .regex(/^\d{4}-\d{2}-\d{2}$/)
-            .optional(),
-          recurrence: z.enum(NATIVE_BOOKING_RECURRENCES).optional(),
-        })
-        .refine(
-          value =>
-            value.extras !== undefined ||
-            value.firstCleaningTotalCents !== undefined ||
-            value.companyNotes !== undefined ||
-            value.requestedLocalDate !== undefined ||
-            value.recurrence !== undefined,
-          "Choose booking details to update."
-        )
-    )
+    .input(updateCanonicalBookingDetailsInputSchema)
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db)
@@ -808,180 +1077,7 @@ export const bookingsRouter = router({
           code: "INTERNAL_SERVER_ERROR",
           message: "Booking service unavailable.",
         });
-      const updatedBooking = await db.transaction(async tx => {
-        const rows = await tx
-          .select()
-          .from(bookings)
-          .where(eq(bookings.id, input.bookingId))
-          .limit(1);
-        const booking = rows[0];
-        if (!booking)
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Booking not found.",
-          });
-
-        const existingExtrasById = new Map(
-          booking.extras.map(extra => [extra.id, extra])
-        );
-        const seenExtras = new Set<string>();
-        const extras = (
-          input.extras ??
-          booking.extras.map(extra => ({
-            id: extra.id,
-            quantity: extra.quantity,
-          }))
-        )
-          .map(selection => {
-            if (seenExtras.has(selection.id))
-              throw new TRPCError({
-                code: "BAD_REQUEST",
-                message: "Each extra can only be selected once.",
-              });
-            seenExtras.add(selection.id);
-            const catalogExtra = PUBLIC_BOOKING_PRICED_EXTRAS[selection.id];
-            const existingExtra = existingExtrasById.get(selection.id);
-            if (!catalogExtra && !existingExtra)
-              throw new TRPCError({
-                code: "BAD_REQUEST",
-                message: "Unsupported booking extra.",
-              });
-            const unitPriceCents = catalogExtra
-              ? catalogExtra.unitPrice * 100
-              : existingExtra!.unitPriceCents;
-            return {
-              id: selection.id,
-              label: catalogExtra?.label ?? existingExtra!.label,
-              quantity: selection.quantity,
-              unitPriceCents,
-              totalCents: unitPriceCents * selection.quantity,
-            };
-          })
-          .sort((left, right) => left.id.localeCompare(right.id));
-
-        const firstCleaningTotalCents =
-          input.firstCleaningTotalCents ?? booking.firstCleaningTotalCents;
-        const companyNotes =
-          input.companyNotes === undefined
-            ? booking.companyNotes
-            : input.companyNotes?.trim() || null;
-        const requestedLocalDate =
-          input.requestedLocalDate ?? booking.requestedLocalDate;
-        const recurrence =
-          input.recurrence ??
-          (booking.recurrence as (typeof NATIVE_BOOKING_RECURRENCES)[number]);
-        const futureVisitTotalCents = nativeBookingFutureVisitTotalCents(
-          booking,
-          recurrence
-        );
-        const requestedStartAt = businessLocalDateTimeToUtcMs(
-          requestedLocalDate,
-          booking.requestedLocalTime,
-          booking.requestedTimeZone
-        );
-        const now = new Date();
-
-        await tx
-          .update(bookings)
-          .set({
-            extras,
-            firstCleaningTotalCents,
-            companyNotes,
-            requestedLocalDate,
-            requestedStartAt,
-            recurrence,
-            recurringIntentStatus:
-              recurrence === "one-time" ? null : "intent_pending",
-            futureVisitTotalCents,
-            updatedAt: now,
-          })
-          .where(eq(bookings.id, booking.id));
-
-        const [activeAssignment] = await tx
-          .select({
-            teamId: bookingAssignments.teamId,
-            teamName: bookingAssignments.teamName,
-          })
-          .from(bookingAssignments)
-          .where(
-            and(
-              eq(bookingAssignments.bookingId, booking.id),
-              eq(bookingAssignments.status, "assigned")
-            )
-          )
-          .orderBy(
-            desc(bookingAssignments.assignedAt),
-            desc(bookingAssignments.id)
-          )
-          .limit(1);
-
-        const [series] = await tx
-          .select()
-          .from(bookingSeries)
-          .where(eq(bookingSeries.bookingId, booking.id))
-          .limit(1);
-        if (recurrence !== "one-time" && futureVisitTotalCents !== null) {
-          const seriesValues = {
-            status: "intent_pending",
-            frequency: recurrence,
-            anchorLocalDate: requestedLocalDate,
-            anchorLocalTime: booking.requestedLocalTime,
-            timeZone: booking.requestedTimeZone,
-            firstCleaningTotalCents,
-            futureVisitTotalCents,
-            updatedAt: now,
-          };
-          if (series)
-            await tx
-              .update(bookingSeries)
-              .set(seriesValues)
-              .where(eq(bookingSeries.id, series.id));
-          else
-            await tx.insert(bookingSeries).values({
-              bookingId: booking.id,
-              ...seriesValues,
-              createdAt: now,
-            });
-        } else if (series) {
-          await tx
-            .update(bookingSeries)
-            .set({ status: "cancelled", updatedAt: now })
-            .where(eq(bookingSeries.id, series.id));
-        }
-
-        const nextBooking = {
-          ...booking,
-          extras,
-          firstCleaningTotalCents,
-          companyNotes,
-          requestedLocalDate,
-          requestedStartAt,
-          recurrence,
-          futureVisitTotalCents,
-        };
-        await syncNativeBookingOperationalProjection(
-          tx,
-          nextBooking,
-          activeAssignment &&
-            activeAssignment.teamId !== null &&
-            activeAssignment.teamName !== null
-            ? {
-                teamId: activeAssignment.teamId,
-                teamName: activeAssignment.teamName,
-              }
-            : null
-        );
-
-        return {
-          bookingId: booking.id,
-          extras,
-          firstCleaningTotalCents,
-          futureVisitTotalCents,
-          companyNotes,
-          requestedLocalDate,
-          recurrence,
-        };
-      });
+      const updatedBooking = await db.transaction(tx => updateCanonicalBookingDetails(tx, input));
       publishNativeBookingRefresh();
       return updatedBooking;
     }),
@@ -1031,18 +1127,23 @@ export const bookingsRouter = router({
   updateStaffRequestSchedule: bookingsAgentProcedure
     .input(z.object({
       id: z.number().int().positive(),
-      requestedLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      requestedLocalTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      requestedLocalDate: bookingRescheduleDateSchema,
+      requestedLocalTime: bookingRescheduleTimeSchema,
+      rescheduleMode: bookingRescheduleModeSchema.optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      // Service requests have no canonical booking/series link. Never infer one
+      // from customer identity or manufacture subsequent operational visits.
       const result = await db.update(customerPortalServiceRequests).set({
         requestedLocalDate: input.requestedLocalDate,
         requestedLocalTime: input.requestedLocalTime,
         updatedAt: new Date(),
       }).where(eq(customerPortalServiceRequests.id, input.id));
-      if (Number((result as { affectedRows?: number }).affectedRows ?? 0) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Service request not found." });
+      const affected = Number((result as { affectedRows?: number }).affectedRows ??
+        (result as unknown as Array<{ affectedRows?: number }>)[0]?.affectedRows ?? 0);
+      if (affected !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Service request not found." });
       broadcastOpsUpdate("booking_funnel_update");
       return { id: input.id, requestedLocalDate: input.requestedLocalDate, requestedLocalTime: input.requestedLocalTime };
     }),

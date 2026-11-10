@@ -1,4 +1,5 @@
-import { and, eq, gt } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import {
   bookings,
   leadflowJobs,
@@ -88,12 +89,43 @@ export async function syncNativeBookingOperationalProjection(
   tx: TransactionClient,
   booking: BookingRow,
   assignment: OperationalAssignment | null,
+  options?: { commercialOnly: boolean; selectedJobId: number | null; futureJobIds: number[] },
 ): Promise<void> {
   const now = new Date();
   const currentRows = await tx
     .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
     .from(leadflowJobs)
     .where(eq(leadflowJobs.bookingId, booking.id));
+
+  const matchingRows = currentRows.filter((row) => row.jobDate === booking.requestedLocalDate);
+  if (matchingRows.length > 1 || (matchingRows.length === 0 && currentRows.length > 0)) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "The canonical booking visit cannot be selected safely for operational projection.",
+    });
+  }
+  const current = matchingRows[0];
+
+  if (options?.commercialOnly) {
+    if ((current?.id ?? null) !== options.selectedJobId) {
+      throw new TRPCError({ code: "CONFLICT", message: "The rescheduled operational visit changed before commercial projection." });
+    }
+    // Operational rescheduling already selected/moved the old occurrence.
+    // Future IDs retain the original boundary even when this visit crosses them.
+    if (current) await tx.update(leadflowJobs).set({
+      extras: nativeBookingExtras(booking),
+      customerNotes: nativeBookingCustomerNotes(booking),
+      jobTotalCents: booking.firstCleaningTotalCents,
+      updatedAt: now,
+    }).where(eq(leadflowJobs.id, current.id));
+    if (options.futureJobIds.length) await tx.update(leadflowJobs).set({
+      extras: nativeBookingExtras(booking),
+      customerNotes: nativeBookingCustomerNotes(booking),
+      jobTotalCents: booking.futureVisitTotalCents ?? booking.firstCleaningTotalCents,
+      updatedAt: now,
+    }).where(and(eq(leadflowJobs.bookingId, booking.id), inArray(leadflowJobs.id, options.futureJobIds)));
+    return;
+  }
 
   if (!assignment) {
     await tx
@@ -126,7 +158,6 @@ export async function syncNativeBookingOperationalProjection(
     hasStripeCard: nativeBookingHasCard(booking.paymentStatus),
   };
 
-  const current = currentRows.find((row) => row.jobDate === booking.requestedLocalDate) ?? currentRows[0];
   if (current) {
     await tx
       .update(leadflowJobs)

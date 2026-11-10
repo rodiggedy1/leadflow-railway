@@ -11,6 +11,7 @@ describe("isolated LeadFlow jobs contract", () => {
     const schema = read("drizzle/schema.ts");
     const service = read("server/leadflowJobsService.ts");
     const router = read("server/leadflowJobsRouter.ts");
+    const reschedule = read("server/bookingRescheduleService.ts");
     expect(schema).toContain('mysqlTable("leadflow_jobs"');
     expect(schema).toContain('uniqueIndex("uq_leadflow_jobs_launch27_booking")');
     expect(service).toContain('getCompletedBookingsForDate(date, { includeAll: true })');
@@ -25,7 +26,9 @@ describe("isolated LeadFlow jobs contract", () => {
     expect(router).not.toContain(prohibitedLegacySymbol);
     expect(service).toContain("async function mergeRecurringPlaceholderIntoImportedJob");
     expect(service).toContain("await tx.delete(leadflowJobs).where(eq(leadflowJobs.id, placeholderId));");
-    expect(router).toContain("A matching LeadFlow job already exists on that date.");
+    expect(router).toContain("rescheduleOperationalBooking(tx");
+    expect(reschedule).toContain("A matching LeadFlow job already exists on a requested date. No visits were changed.");
+    expect(reschedule).not.toContain(prohibitedLegacySymbol);
     expect(router).toContain("importStatus");
     expect(router).toContain("syncDate");
     expect(router).toContain("cancel:");

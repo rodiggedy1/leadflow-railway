@@ -36,12 +36,17 @@ describe("native booking operational-job parity", () => {
       bookingRouter.indexOf("updateDetails: bookingsAgentProcedure"),
       bookingRouter.indexOf("cancel: bookingsAgentProcedure")
     );
-    expect(commercialUpdate).toContain("syncNativeBookingOperationalProjection");
+    const commercialHelper = bookingRouter.slice(
+      bookingRouter.indexOf("export async function updateCanonicalBookingDetails"),
+      bookingRouter.indexOf("export const bookingsRouter")
+    );
+    expect(commercialUpdate).toContain("updateCanonicalBookingDetails(tx, input)");
+    expect(commercialHelper).toContain("syncNativeBookingOperationalProjection");
     expect(lifecycleService).toContain("jobTotalCents: booking.firstCleaningTotalCents");
     expect(lifecycleService).toContain("jobDate: booking.requestedLocalDate");
     expect(lifecycleService).toContain("serviceDateTime: nativeBookingServiceDateTime(booking)");
     expect(lifecycleService).toContain("frequency: nativeBookingFrequency(booking.recurrence)");
-    expect(commercialUpdate).toContain("futureVisitTotalCents");
+    expect(commercialHelper).toContain("futureVisitTotalCents");
     const cancellation = bookingRouter.slice(
       bookingRouter.indexOf("cancel: bookingsAgentProcedure")
     );

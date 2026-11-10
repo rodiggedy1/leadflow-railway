@@ -4,12 +4,14 @@ import { z } from "zod";
 import { activityLog, bookingAssignments, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPortalJobSignoffs, cleanerProfiles, conversationSessions, jobGeoCache, leadflowBookingMessages, leadflowJobPayrollAdjustments, leadflowJobs, schedulingTeams } from "../drizzle/schema";
 import { agentPageProcedure, agentProcedure, bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
-import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, isSameLeadflowJobIdentity, LEADFLOW_JOB_ORIGIN_LAUNCH27, moveServiceDateTimeToBusinessDate, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
+import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, LEADFLOW_JOB_ORIGIN_LAUNCH27, refreshImportedLaunch27JobDetails } from "./leadflowJobsService";
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { leadflowCallMatrixRouter } from "./leadflowCallMatrixRouter";
 import { sendSms } from "./openphone";
 import { calculateEffectivePayroll } from "./payrollCalculator";
 import { summarizeDashboardServices, summarizeDashboardSources } from "./dashboardAnalyticsPresentation";
+import { bookingRescheduleDateSchema, bookingRescheduleModeSchema, bookingRescheduleTimeSchema } from "../shared/bookingReschedule";
+import { operationalBookingLocalTime, rescheduleOperationalBooking } from "./bookingRescheduleService";
 
 const listInput = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -18,9 +20,11 @@ const listInput = z.object({
 
 const updateInput = z.object({
   jobId: z.number().int().positive(),
-  jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  jobDate: bookingRescheduleDateSchema.optional(),
+  jobTime: bookingRescheduleTimeSchema.optional(),
+  rescheduleMode: bookingRescheduleModeSchema.optional(),
   frequency: z.enum(["One time", "Weekly", "Bi-weekly", "Tri-weekly", "Monthly"]).optional(),
-}).refine((value) => value.jobDate !== undefined || value.frequency !== undefined, "Choose a date or frequency to update.");
+}).refine((value) => value.jobDate !== undefined || value.jobTime !== undefined || value.frequency !== undefined, "Choose a date, time, or frequency to update.");
 const bookingPhotoReferenceInput = z.object({
   bookingKey: z.string().regex(/^(leadflow|booking|funnel|portal):\d+$/, "Invalid booking reference."),
 });
@@ -1260,21 +1264,26 @@ export const leadflowJobsRouter = router({
   update: bookingsAgentProcedure.input(updateInput).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new Error("DB unavailable");
-    const existing = await db.select().from(leadflowJobs).where(eq(leadflowJobs.id, input.jobId)).limit(1);
-    const job = existing[0];
-    if (!job) throw new Error("LeadFlow job not found.");
-    const jobDate = input.jobDate ?? job.jobDate;
-    if (input.jobDate && jobDate !== job.jobDate) {
-      const jobsOnTargetDate = await db.select().from(leadflowJobs).where(eq(leadflowJobs.jobDate, jobDate));
-      if (jobsOnTargetDate.some((candidate) => candidate.id !== job.id && isSameLeadflowJobIdentity(job, candidate))) {
-        throw new Error("A matching LeadFlow job already exists on that date.");
+    const result = await db.transaction(async (tx) => {
+      const existing = await tx.select().from(leadflowJobs).where(eq(leadflowJobs.id, input.jobId)).limit(1).for("update");
+      const job = existing[0];
+      if (!job) throw new Error("LeadFlow job not found.");
+      const jobDate = input.jobDate ?? job.jobDate;
+      const oldTime = operationalBookingLocalTime(job.serviceDateTime);
+      const jobTime = input.jobTime ?? oldTime;
+      const scheduleChanged = jobDate !== job.jobDate || (input.jobTime !== undefined && input.jobTime !== oldTime);
+      if (scheduleChanged) {
+        if (!jobTime) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a booking time before rescheduling this visit." });
+        await rescheduleOperationalBooking(tx, {
+          jobId: job.id, previousLocalDate: job.jobDate,
+          requestedLocalDate: jobDate, requestedLocalTime: jobTime,
+          mode: input.rescheduleMode,
+        });
       }
-    }
-    await db.update(leadflowJobs).set({
-      ...(input.jobDate ? { jobDate, serviceDateTime: moveServiceDateTimeToBusinessDate(job.serviceDateTime, jobDate) } : {}),
-      ...(input.frequency ? { frequency: input.frequency } : {}),
-    }).where(eq(leadflowJobs.id, job.id));
+      if (input.frequency) await tx.update(leadflowJobs).set({ frequency: input.frequency }).where(eq(leadflowJobs.id, job.id));
+      return { id: job.id, jobDate, jobTime, frequency: input.frequency ?? job.frequency };
+    });
     broadcastCleanerPortalJobsChanged();
-    return { id: job.id, jobDate, frequency: input.frequency ?? job.frequency };
+    return result;
   }),
 });
