@@ -389,6 +389,36 @@ async function mergeRecurringPlaceholderIntoImportedJob(
   return "merged";
 }
 
+/** The worker's existing continuation mapping, shared with explicit visit-only rescheduling. */
+export function buildRecurringLeadflowJobValues(job: LeadflowJob, nextDate: string, recurringJobTotalCents: number) {
+  return {
+    origin: LEADFLOW_JOB_ORIGIN_RECURRENCE,
+    launch27BookingId: null,
+    bookingSeriesId: null,
+    bookingId: job.bookingId,
+    jobDate: nextDate,
+    serviceDateTime: moveServiceDateTimeToBusinessDate(job.serviceDateTime, nextDate),
+    customerName: job.customerName,
+    customerPhone: job.customerPhone,
+    customerEmail: job.customerEmail,
+    jobAddress: job.jobAddress,
+    serviceName: job.serviceName,
+    bedrooms: job.bedrooms,
+    bathrooms: job.bathrooms,
+    extras: job.extras,
+    frequency: job.frequency,
+    bookingStatus: "assigned",
+    teamName: job.teamName,
+    teamId: job.teamId,
+    customerNotes: job.customerNotes,
+    staffNotes: job.staffNotes,
+    jobTotalCents: recurringJobTotalCents,
+    hasStripeCard: job.hasStripeCard,
+    paymentBrand: job.paymentBrand,
+    paymentLast4: job.paymentLast4,
+  };
+}
+
 export async function runEndOfDayLeadflowJobRecurrence(now = new Date()): Promise<{ checked: number; created: number; skipped: number; errors: number }> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -423,32 +453,7 @@ export async function runEndOfDayLeadflowJobRecurrence(now = new Date()): Promis
         ? []
         : await db.select({ futureVisitTotalCents: bookings.futureVisitTotalCents }).from(bookings).where(eq(bookings.id, job.bookingId)).limit(1);
       const recurringJobTotalCents = nativeBookingRows[0]?.futureVisitTotalCents ?? job.jobTotalCents;
-      await db.insert(leadflowJobs).values({
-        origin: LEADFLOW_JOB_ORIGIN_RECURRENCE,
-        launch27BookingId: null,
-        bookingSeriesId: null,
-        bookingId: job.bookingId,
-        jobDate: nextDate,
-        serviceDateTime: moveServiceDateTimeToBusinessDate(job.serviceDateTime, nextDate),
-        customerName: job.customerName,
-        customerPhone: job.customerPhone,
-        customerEmail: job.customerEmail,
-        jobAddress: job.jobAddress,
-        serviceName: job.serviceName,
-        bedrooms: job.bedrooms,
-        bathrooms: job.bathrooms,
-        extras: job.extras,
-        frequency: job.frequency,
-        bookingStatus: "assigned",
-        teamName: job.teamName,
-        teamId: job.teamId,
-        customerNotes: job.customerNotes,
-        staffNotes: job.staffNotes,
-        jobTotalCents: recurringJobTotalCents,
-        hasStripeCard: job.hasStripeCard,
-        paymentBrand: job.paymentBrand,
-        paymentLast4: job.paymentLast4,
-      });
+      await db.insert(leadflowJobs).values(buildRecurringLeadflowJobValues(job, nextDate, recurringJobTotalCents));
       created++;
     } catch (error) {
       errors++;

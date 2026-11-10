@@ -20,11 +20,14 @@ import { ENV } from "./_core/env";
 import { invokeLLM } from "./_core/llm";
 import { getDb } from "./db";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { retrieveKnowledge } from "./madisonKnowledgeRetrieval";
 import { sendCustomerPortalLeadCreatedCommandChatCard, sendWidgetLeadCreatedNotifications } from "./bookingLeadCreatedNotifications";
 import { getCustomerPortalSessionFromRequest } from "./_core/customerPortalAuth";
 import { buildPreparedCanonicalBooking } from "./bookingsService";
 import { persistCanonicalBooking } from "./canonicalBookingPersistence";
+import { updateCanonicalBookingDetails } from "./bookingsRouter";
+import { bookingRescheduleDateSchema, bookingRescheduleTimeSchema, bookingRescheduleModeSchema, isRecurringBookingFrequency } from "../shared/bookingReschedule";
 import { normalizePhone } from "./utils/phone";
 import { createPublicBookingPriceSnapshot, isPublicBookingPriceSnapshot, PUBLIC_BOOKING_PRICING_VERSION } from "../shared/publicBookingPricing";
 import {
@@ -525,20 +528,41 @@ export const bookingFunnelRouter = router({
   updateSchedule: bookingsAgentProcedure
     .input(z.object({
       id: z.number().int().positive(),
-      requestedLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      requestedLocalTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      requestedLocalDate: bookingRescheduleDateSchema,
+      requestedLocalTime: bookingRescheduleTimeSchema,
+      rescheduleMode: bookingRescheduleModeSchema.optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
-      const result = await db.update(bookingFunnelRecords).set({
-        requestedLocalDate: input.requestedLocalDate,
-        requestedLocalTime: input.requestedLocalTime,
-        updatedAt: new Date(),
-      }).where(eq(bookingFunnelRecords.id, input.id));
-      if (affectedRows(result) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Booking lead not found." });
+      const savedSchedule = await db.transaction(async tx => {
+        const [funnel] = await tx.select().from(bookingFunnelRecords)
+          .where(eq(bookingFunnelRecords.id, input.id)).limit(1).for("update");
+        if (!funnel) throw new TRPCError({ code: "NOT_FOUND", message: "Booking lead not found." });
+        const changed = funnel.requestedLocalDate !== input.requestedLocalDate ||
+          funnel.requestedLocalTime !== input.requestedLocalTime;
+        if (!funnel.bookingId && changed && isRecurringBookingFrequency(funnel.recurrence) && input.rescheduleMode === undefined) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Choose whether to reschedule this visit or this and subsequent visits." });
+        }
+        // Only a verified stored bookingId delegates; pending funnel records
+        // have no established future visits and must never match by phone.
+        const saved = funnel.bookingId ? await updateCanonicalBookingDetails(tx, {
+          bookingId: funnel.bookingId,
+          requestedLocalDate: input.requestedLocalDate,
+          requestedLocalTime: input.requestedLocalTime,
+          rescheduleMode: input.rescheduleMode,
+        }) : input;
+        await tx.update(bookingFunnelRecords).set({
+          requestedLocalDate: saved.requestedLocalDate,
+          requestedLocalTime: saved.requestedLocalTime,
+          updatedAt: new Date(),
+        }).where(eq(bookingFunnelRecords.id, input.id));
+        return { id: input.id, requestedLocalDate: saved.requestedLocalDate, requestedLocalTime: saved.requestedLocalTime, linkedBooking: Boolean(funnel.bookingId) };
+      });
+      const { linkedBooking, ...schedule } = savedSchedule;
       broadcastOpsUpdate("booking_funnel_update");
-      return { id: input.id, requestedLocalDate: input.requestedLocalDate, requestedLocalTime: input.requestedLocalTime };
+      if (linkedBooking) broadcastCleanerPortalJobsChanged();
+      return schedule;
     }),
   cancel: bookingsAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))

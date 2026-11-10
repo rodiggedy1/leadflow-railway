@@ -1362,26 +1362,9 @@ function BookingDetailDrawer({ model }: { model: any }) {
                       !model.rescheduleTime ||
                       (model.rescheduleDate === active.requestedLocalDate &&
                         model.rescheduleTime === active.requestedLocalTime) ||
-                      (active.source === "leadflow"
-                        ? model.updateLeadflowJob.isPending
-                        : active.source === "funnel"
-                          ? model.updateFunnelSchedule.isPending
-                          : active.source === "portal"
-                            ? model.updatePortalSchedule.isPending
-                            : model.updateBookingDetails.isPending)
+                      model.scheduleSavePending
                     }
-                    onClick={() =>
-                      active.source === "leadflow"
-                        ? model.updateLeadflowJob.mutate(
-                            { jobId: active.id, jobDate: model.rescheduleDate, jobTime: model.rescheduleTime },
-                            { onSuccess: model.refreshBookingAndFunnelQueries }
-                          )
-                        : active.source === "funnel"
-                          ? model.updateFunnelRecordSchedule({ requestedLocalDate: model.rescheduleDate, requestedLocalTime: model.rescheduleTime })
-                          : active.source === "portal"
-                            ? model.updatePortalRecordSchedule({ requestedLocalDate: model.rescheduleDate, requestedLocalTime: model.rescheduleTime })
-                            : model.updateActiveBookingSchedule({ requestedLocalDate: model.rescheduleDate, requestedLocalTime: model.rescheduleTime })
-                    }
+                    onClick={model.updateActiveRecordSchedule}
                   >
                     {active.source === "leadflow"
                       ? model.updateLeadflowJob.isPending
@@ -1405,7 +1388,9 @@ function BookingDetailDrawer({ model }: { model: any }) {
               className="bcr-save-changes"
               disabled={
                 !activeCommercialDraft.isSaveable ||
-                model.updateBookingDetails.isPending
+                model.scheduleSavePending ||
+                !model.rescheduleDate ||
+                !model.rescheduleTime
               }
               onClick={() =>
                 model.updateActiveBookingDetails({

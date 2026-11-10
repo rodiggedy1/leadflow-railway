@@ -1,5 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
+import { BookingRescheduleChoice } from "@/components/BookingRescheduleChoice";
+import { bookingRescheduleDateSchema, bookingRescheduleTimeSchema, isRecurringBookingFrequency, type BookingRescheduleMode } from "@shared/bookingReschedule";
 import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { InternalBooking } from "@/pages/InternalBooking";
@@ -571,6 +573,14 @@ export default function NativeBookingsWorkspace({
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
+  const [pendingReschedule, setPendingReschedule] = useState<{
+    key: string;
+    previousDate: string | null;
+    previousTime: string | null;
+    date: string;
+    time: string;
+    submit: (mode: BookingRescheduleMode) => void;
+  } | null>(null);
   const [photoLightbox, setPhotoLightbox] = useState<{
     label: "Before" | "After";
     photos: StaffJobPhoto[];
@@ -1115,72 +1125,115 @@ export default function NativeBookingsWorkspace({
       }
     );
   };
+  const scheduleSavePending = updateLeadflowJob.isPending || updateBookingDetails.isPending || updateFunnelSchedule.isPending || updatePortalSchedule.isPending;
+  useEffect(() => {
+    setPendingReschedule(null);
+  }, [active?.key, active?.requestedLocalDate, active?.requestedLocalTime]);
+  const requestScheduleSave = (
+    requestedLocalDate: string,
+    requestedLocalTime: string,
+    submit: (mode: BookingRescheduleMode) => void,
+  ) => {
+    if (!active || scheduleSavePending || pendingReschedule) return;
+    if (!bookingRescheduleDateSchema.safeParse(requestedLocalDate).success || !bookingRescheduleTimeSchema.safeParse(requestedLocalTime).success) {
+      setImportSummary("Choose a valid booking date and time before saving.");
+      return;
+    }
+    const changed = requestedLocalDate !== active.requestedLocalDate || requestedLocalTime !== active.requestedLocalTime;
+    if (changed && isRecurringBookingFrequency(active.recurrence)) {
+      setPendingReschedule({ key: active.key, previousDate: active.requestedLocalDate, previousTime: active.requestedLocalTime, date: requestedLocalDate, time: requestedLocalTime, submit });
+      return;
+    }
+    submit("visit");
+  };
+  const confirmScheduleSave = (mode: BookingRescheduleMode) => {
+    if (!pendingReschedule || scheduleSavePending) return;
+    if (active?.key !== pendingReschedule.key || active.requestedLocalDate !== pendingReschedule.previousDate || active.requestedLocalTime !== pendingReschedule.previousTime) {
+      setPendingReschedule(null);
+      setImportSummary("This booking changed. Review its current schedule before saving.");
+      return;
+    }
+    setPendingReschedule(null);
+    pendingReschedule.submit(mode);
+  };
+  const scheduleSaved = (name: string, targetDate: string, targetTime: string) => {
+    setImportSummary(`${name}'s schedule was saved: ${targetDate} at ${targetTime}.`);
+    setDate(targetDate);
+    refreshBookingAndFunnelQueries();
+  };
   const updateActiveBookingDetails = (input: {
     extras: Array<{ id: string; quantity: number }>;
     firstCleaningTotalCents: number;
     companyNotes: string | null;
   }) => {
-    if (
-      !active ||
-      active.source !== "booking" ||
-      updateBookingDetails.isPending
-    )
-      return;
-    updateBookingDetails.mutate(
-      { bookingId: active.id, ...input },
+    if (!active || active.source !== "booking" || scheduleSavePending || pendingReschedule) return;
+    const booking = active;
+    const changed = rescheduleDate !== booking.requestedLocalDate || rescheduleTime !== booking.requestedLocalTime;
+    const submit = (rescheduleMode?: BookingRescheduleMode) => updateBookingDetails.mutate(
+      { bookingId: booking.id, ...input, ...(changed ? { requestedLocalDate: rescheduleDate, requestedLocalTime: rescheduleTime, rescheduleMode } : {}) },
       {
         onSuccess: () => {
-          setImportSummary(
-            `${active.customerName}'s price, extras, and notes were saved.`
-          );
-          refreshBookingAndFunnelQueries();
+          if (changed) scheduleSaved(booking.customerName, rescheduleDate, rescheduleTime);
+          else { setImportSummary(`${booking.customerName}'s price, extras, and notes were saved.`); refreshBookingAndFunnelQueries(); }
         },
-        onError: error =>
-          setImportSummary(
-            `Booking updates could not be saved: ${error.message}`
-          ),
-      }
+        onError: error => setImportSummary(`Booking updates could not be saved: ${error.message}`),
+      },
     );
+    if (changed) requestScheduleSave(rescheduleDate, rescheduleTime, submit);
+    else submit();
   };
   const updateActiveBookingSchedule = (input: {
     requestedLocalDate?: string;
     requestedLocalTime?: string;
     recurrence?: "one-time" | "weekly" | "biweekly" | "monthly";
   }) => {
-    if (
-      !active ||
-      active.source !== "booking" ||
-      updateBookingDetails.isPending
-    )
-      return;
-    updateBookingDetails.mutate(
-      { bookingId: active.id, ...input },
+    if (!active || active.source !== "booking" || scheduleSavePending || pendingReschedule) return;
+    const booking = active;
+    const targetDate = input.requestedLocalDate ?? booking.requestedLocalDate;
+    const targetTime = input.requestedLocalTime ?? booking.requestedLocalTime;
+    const changed = targetDate !== booking.requestedLocalDate || targetTime !== booking.requestedLocalTime;
+    const submit = (rescheduleMode?: BookingRescheduleMode) => updateBookingDetails.mutate(
+      { bookingId: booking.id, ...input, ...(changed ? { rescheduleMode } : {}) },
       {
         onSuccess: () => {
-          setImportSummary(`${active.customerName}'s schedule was saved.`);
-          refreshBookingAndFunnelQueries();
+          if (changed && targetDate && targetTime) scheduleSaved(booking.customerName, targetDate, targetTime);
+          else { setImportSummary(`${booking.customerName}'s schedule was saved.`); refreshBookingAndFunnelQueries(); }
         },
-        onError: error =>
-          setImportSummary(
-            `Booking schedule could not be saved: ${error.message}`
-          ),
-      }
+        onError: error => setImportSummary(`Booking schedule could not be saved: ${error.message}`),
+      },
     );
+    if (changed) requestScheduleSave(targetDate ?? "", targetTime ?? "", submit);
+    else submit();
   };
   const updateFunnelRecordSchedule = (input: { requestedLocalDate: string; requestedLocalTime: string }) => {
-    if (!active || active.source !== "funnel" || updateFunnelSchedule.isPending) return;
-    updateFunnelSchedule.mutate({ id: active.id, ...input }, {
-      onSuccess: () => { setImportSummary(`${active.customerName}'s schedule was saved.`); refreshBookingAndFunnelQueries(); },
-      onError: error => setImportSummary(`Booking lead schedule could not be saved: ${error.message}`),
-    });
+    if (!active || active.source !== "funnel" || scheduleSavePending || pendingReschedule) return;
+    const record = active;
+    requestScheduleSave(input.requestedLocalDate, input.requestedLocalTime, rescheduleMode => updateFunnelSchedule.mutate(
+      { id: record.id, ...input, rescheduleMode },
+      { onSuccess: () => scheduleSaved(record.customerName, input.requestedLocalDate, input.requestedLocalTime), onError: error => setImportSummary(`Booking lead schedule could not be saved: ${error.message}`) },
+    ));
   };
   const updatePortalRecordSchedule = (input: { requestedLocalDate: string; requestedLocalTime: string }) => {
-    if (!active || active.source !== "portal" || updatePortalSchedule.isPending) return;
-    updatePortalSchedule.mutate({ id: active.id, ...input }, {
-      onSuccess: () => { setImportSummary(`${active.customerName}'s schedule was saved.`); refreshBookingAndFunnelQueries(); },
-      onError: error => setImportSummary(`Service request schedule could not be saved: ${error.message}`),
-    });
+    if (!active || active.source !== "portal" || scheduleSavePending || pendingReschedule) return;
+    const record = active;
+    requestScheduleSave(input.requestedLocalDate, input.requestedLocalTime, rescheduleMode => updatePortalSchedule.mutate(
+      { id: record.id, ...input, rescheduleMode },
+      { onSuccess: () => scheduleSaved(record.customerName, input.requestedLocalDate, input.requestedLocalTime), onError: error => setImportSummary(`Service request schedule could not be saved: ${error.message}`) },
+    ));
   };
+  const updateActiveRecordSchedule = () => {
+    if (!active || scheduleSavePending || pendingReschedule) return;
+    const input = { requestedLocalDate: rescheduleDate, requestedLocalTime: rescheduleTime };
+    if (active.source === "booking") return updateActiveBookingSchedule(input);
+    if (active.source === "funnel") return updateFunnelRecordSchedule(input);
+    if (active.source === "portal") return updatePortalRecordSchedule(input);
+    const record = active;
+    requestScheduleSave(rescheduleDate, rescheduleTime, rescheduleMode => updateLeadflowJob.mutate(
+      { jobId: record.id, jobDate: rescheduleDate, jobTime: rescheduleTime, rescheduleMode },
+      { onSuccess: () => scheduleSaved(record.customerName, rescheduleDate, rescheduleTime), onError: error => setImportSummary(`Booking schedule could not be saved: ${error.message}`) },
+    ));
+  };
+  const rescheduleChoice = <BookingRescheduleChoice open={pendingReschedule !== null} date={pendingReschedule?.date ?? ""} time={pendingReschedule?.time ?? ""} pending={scheduleSavePending} onCancel={() => setPendingReschedule(null)} onChoose={confirmScheduleSave} />;
   const cancelActiveRecord = () => {
     if (!active || cancellationPending) return;
     const onSuccess = () => {
@@ -1241,6 +1294,7 @@ export default function NativeBookingsWorkspace({
           refreshLeadflowJobDetails,
           rescheduleDate,
           rescheduleTime,
+          scheduleSavePending,
           revenueCents,
           rows,
           setActiveKey,
@@ -1265,16 +1319,19 @@ export default function NativeBookingsWorkspace({
           updatePortalRecordSchedule,
           updateActiveBookingDetails,
           updateActiveBookingSchedule,
+          updateActiveRecordSchedule,
           updateBookingDetails,
           view,
           query,
           copyCustomerMagicLink,
         })}
+        {rescheduleChoice}
       </>
     );
 
   return (
     <main className={`bookings-ops-shell ${active ? "has-detail" : ""}`}>
+      {rescheduleChoice}
       {active && (
         <BookingSignoffReview
           bookingKey={activePhotoBookingKey}
@@ -1973,15 +2030,11 @@ export default function NativeBookingsWorkspace({
                       type="button"
                       disabled={
                         !rescheduleDate ||
+                        !rescheduleTime ||
                         rescheduleDate === active.requestedLocalDate ||
-                        updateLeadflowJob.isPending
+                        scheduleSavePending
                       }
-                      onClick={() =>
-                        updateLeadflowJob.mutate(
-                          { jobId: active.id, jobDate: rescheduleDate },
-                          { onSuccess: refreshBookingAndFunnelQueries }
-                        )
-                      }
+                      onClick={updateActiveRecordSchedule}
                     >
                       Save date
                     </button>

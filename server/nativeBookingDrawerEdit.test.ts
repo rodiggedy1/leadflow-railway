@@ -14,25 +14,30 @@ describe("native booking drawer commercial edits", () => {
       router.indexOf("updateDetails: bookingsAgentProcedure"),
       router.indexOf("cancel: bookingsAgentProcedure")
     );
+    const implementation = router.slice(
+      router.indexOf("const updateCanonicalBookingDetailsInputSchema"),
+      router.indexOf("export const bookingsRouter")
+    ) + updateBlock;
+    expect(updateBlock).toContain("updateCanonicalBookingDetails(tx, input)");
 
     for (const marker of [
       "updateDetails: bookingsAgentProcedure",
       "PUBLIC_BOOKING_PRICED_EXTRAS",
       "firstCleaningTotalCents: z",
       "companyNotes: z.string().trim().max(4_000).nullable()",
-      "requestedLocalDate: z",
-      "requestedLocalTime: z",
+      "requestedLocalDate: bookingRescheduleDateSchema",
+      "requestedLocalTime: bookingRescheduleTimeSchema",
       "recurrence: z.enum(NATIVE_BOOKING_RECURRENCES)",
       "nativeBookingFutureVisitTotalCents",
       "requestedStartAt",
     ])
-      expect(updateBlock).toContain(marker);
-    expect(updateBlock).toContain("bookingSeries");
+      expect(implementation).toContain(marker);
+    expect(implementation).toContain("bookingSeries");
     expect(updateBlock).toContain("publishNativeBookingRefresh()");
-    expect(updateBlock).not.toContain("bookingPaymentProfiles");
-    expect(updateBlock).not.toContain('paymentStatus === "authorized"');
-    expect(updateBlock).not.toContain('paymentStatus === "captured"');
-    expect(updateBlock).not.toContain(prohibitedLegacySymbol);
+    expect(implementation).not.toContain("bookingPaymentProfiles");
+    expect(implementation).not.toContain('paymentStatus === "authorized"');
+    expect(implementation).not.toContain('paymentStatus === "captured"');
+    expect(implementation).not.toContain(prohibitedLegacySymbol);
   });
 
   it("retains the first-visit only rule in the working CRM drawer", () => {
@@ -55,9 +60,10 @@ describe("native booking drawer commercial edits", () => {
       "displayedExtras",
       "Save booking updates",
       'type="time"',
-      "jobTime: model.rescheduleTime",
+      "model.updateActiveRecordSchedule",
     ])
       expect(page).toContain(marker);
+    expect(workspace).toContain("jobTime: rescheduleTime");
     expect(page).not.toMatch(
       /active\.source === "booking"\s*&&\s*active\.firstCleaningTotalCents\s*!==\s*null\s*&&\s*<NativeBookingCommercialEditor/
     );
@@ -85,10 +91,13 @@ describe("native booking drawer commercial edits", () => {
 
   it("supports time edits for imported LeadFlow bookings through the owned job path", () => {
     const router = read("server/leadflowJobsRouter.ts");
-    expect(router).toContain("jobTime: z.string().regex");
-    expect(router).toContain("businessLocalDateTimeToUtcMs");
-    expect(router).toContain("input.jobDate || input.jobTime");
+    const service = read("server/bookingRescheduleService.ts");
+    expect(router).toContain("jobTime: bookingRescheduleTimeSchema.optional()");
+    expect(router).toContain("rescheduleOperationalBooking(tx");
+    expect(router).toContain("requestedLocalTime: jobTime");
+    expect(service).toContain("businessLocalDateTimeToUtcMs(date, time, timeZone)");
     expect(router).not.toContain(prohibitedLegacySymbol);
+    expect(service).not.toContain(prohibitedLegacySymbol);
   });
 
   it("uses an additive company-notes migration for the native booking table", () => {
