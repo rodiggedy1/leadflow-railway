@@ -17,6 +17,7 @@ import { bootstrapVapiAssistant } from "../vapiService";
 import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
 import { registerWebsiteHeroLeadRoute } from "../websiteHeroLeadRoute";
+import { registerBookingDomainRedirect } from "../bookingDomainRedirect";
 import { registerStripeWebhookRoute } from "../stripeWebhookRoute";
 import { registerSseTestRoutes } from "../sseTest";
 import { registerOpsStreamRoute } from "../opsStream";
@@ -993,6 +994,9 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  // Booking domain redirects — first, so they run before CORS, webhooks and the SPA fallback.
+  // Exact "/" and "/book" GET/HEAD only; every other path falls straight through.
+  registerBookingDomainRedirect(app);
   registerWebsiteHeroLeadRoute(app);
   // CORS — must be before all other middleware so preflight OPTIONS requests are handled
   app.use(corsMiddleware);
