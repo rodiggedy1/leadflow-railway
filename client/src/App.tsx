@@ -217,11 +217,18 @@ function PublicBookingRoute() {
   return <div className="public-booking-cohesion approved-book-surface"><PublicBookingHeader /><Book /></div>;
 }
 
+// book.maidsinblack.com serves the booking form at its root; every other host keeps Home at "/".
+const BOOKING_HOSTNAME = "book.maidsinblack.com";
+
+function RootRoute() {
+  return window.location.hostname === BOOKING_HOSTNAME ? <PublicBookingRoute /> : <Home />;
+}
+
 function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        <Route path={"/"} component={Home} />
+        <Route path={"/"} component={RootRoute} />
         <Route path={"/book"} component={PublicBookingRoute} />
         <Route path={"/book/widget"} component={BookWidget} />
         <Route path={"/book-now"} component={BookNow} />

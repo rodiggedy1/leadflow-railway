@@ -23,6 +23,13 @@ type PreparedCashAppPayment = Reservation & {
 
 type ExitDestination = "card" | "apple_pay" | "google_pay" | null;
 
+// Return to the page the booking form is on: "/" at the root of book.maidsinblack.com,
+// "/book" everywhere else (old domain, /book/:token links). Both render Book, which reads cashapp_return.
+function cashAppReturnUrl(returnToken: string): string {
+  const atBookingRoot = window.location.hostname === "book.maidsinblack.com" && window.location.pathname === "/";
+  return `${window.location.origin}${atBookingRoot ? "/" : "/book"}?cashapp_return=${encodeURIComponent(returnToken)}`;
+}
+
 type Props = {
   active: boolean;
   totalCents: number;
@@ -186,7 +193,7 @@ export function BookingCashAppCheckout({
         }
         const result = await stripe.confirmCashappPayment(payment.clientSecret, {
           payment_method: {},
-          return_url: `${window.location.origin}/book?cashapp_return=${encodeURIComponent(payment.returnToken)}`,
+          return_url: cashAppReturnUrl(payment.returnToken),
         });
         if (result.error) throw new Error(result.error.message);
         if (result.paymentIntent?.status === "succeeded") {
