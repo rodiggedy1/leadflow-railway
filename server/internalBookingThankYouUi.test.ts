@@ -92,19 +92,20 @@ describe("internal staff thank-you source boundary", () => {
 });
 
 describe("staff handoff UI interactions (mocked transport only)", () => {
-  it("mounts only the saved overview query; selection does not create, send, charge or copy", async () => {
+  it("mounts only the saved overview query; explicit selection generates once but never sends or copies", async () => {
     const f = fixture();
     expect(f.queryHook).toHaveBeenCalledWith({ bookingId: 91 }, { enabled: true, refetchInterval: false, refetchOnWindowFocus: false });
     expect(f.text()).toContain("Saved Customer"); expect(f.text()).toContain("BK-91"); expect(f.text()).toContain("$345.67"); expect(f.text()).toContain("unpaid");
     expect(f.text()).toContain("Save a card through Apple Pay"); expect(f.text()).toContain("Save a card only. No charge");
+    expect(f.create).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); expect(f.clipboard).not.toHaveBeenCalled(); expect(f.uuid).not.toHaveBeenCalled();
     await f.click("Send link: Apple Pay");
     expect(f.text()).toContain("Saved booking amount (no charge)");
     expect(f.text()).not.toContain("Immediate first-cleaning payment");
-    expect(f.create).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); expect(f.clipboard).not.toHaveBeenCalled(); expect(f.uuid).not.toHaveBeenCalled();
-    expect(f.button("Confirm Send")).toBeUndefined();
+    expect(f.create).toHaveBeenCalledTimes(1); expect(f.uuid).toHaveBeenCalledTimes(1); expect(f.send).not.toHaveBeenCalled(); expect(f.clipboard).not.toHaveBeenCalled();
+    expect(f.button("Confirm Send")).toBeDefined(); expect(f.button("Create link for review")).toBeUndefined(); expect(f.button("Retry link creation")).toBeUndefined();
   });
   it.each(["Apple Pay", "Cash App", "Card on file"])("reviews the saved recipient, returned URL and message before Confirm Send for %s", async label => {
-    const f = fixture(); await f.click(`Send link: ${label}`); await f.click("Create link for review");
+    const f = fixture(); await f.click(`Send link: ${label}`);
     expect(f.create).toHaveBeenCalledWith({ bookingId: 91, method: label === "Apple Pay" ? "apple_pay" : label === "Cash App" ? "cashapp" : "card", requestId: "d432d702-5ff4-4f0a-97ab-a9602716ef28", expectedAmountCents: 34567, confirmed: true });
     expect(f.send).not.toHaveBeenCalled(); expect(f.text()).toContain("+12025550142"); expect(f.byLabel("Review link").props.value).toBe(link().url);
     expect(f.byLabel("Review message").props.value).toBe(link().message);
@@ -114,37 +115,100 @@ describe("staff handoff UI interactions (mocked transport only)", () => {
   });
   it("retains the UUID across an unchanged creation failure retry and hides raw API errors", async () => {
     const f = fixture(); f.create.mockRejectedValueOnce(new Error('[{"secret":"raw error"}]'));
-    await f.click("Send link: Cash App"); await f.click("Create link for review");
+    await f.click("Send link: Cash App");
     expect(f.text()).toContain("Link creation was not confirmed"); expect(f.text()).not.toContain("secret");
-    await f.click("Create link for review"); expect(f.uuid).toHaveBeenCalledTimes(1);
+    await f.click("Retry link creation"); expect(f.uuid).toHaveBeenCalledTimes(1);
     expect(f.create.mock.calls[0][0]).toEqual(f.create.mock.calls[1][0]); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("shows generation status and disables selection, refresh, cancellation and confirmation while pending", async () => {
+    const f = fixture(); let finish!: (value: any) => void;
+    f.create.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const capturedOtherSelection = f.byLabel("Copy link: Cash App").props.onClick;
+    await f.click("Send link: Apple Pay");
+    expect(f.text()).toContain("Generating a secure payment link");
+    expect(f.nodes().find(node => node.props.role === "status")?.props.children).toContain("Generating");
+    for (const label of ["Send link: Apple Pay", "Send link: Cash App", "Copy link: Card on file"]) expect(f.byLabel(label).props.disabled).toBeTruthy();
+    expect(f.button("Refresh saved summary").props.disabled).toBeTruthy(); expect(f.button("Cancel review").props.disabled).toBeTruthy();
+    expect(f.button("Retry link creation")).toBeUndefined(); expect(f.button("Confirm Send")).toBeUndefined();
+    capturedOtherSelection(); expect(f.create).toHaveBeenCalledTimes(1);
+    finish(link()); await f.tick(); f.render();
+    expect(f.button("Confirm Send").props.disabled).toBeFalsy(); expect(f.send).not.toHaveBeenCalled(); expect(f.clipboard).not.toHaveBeenCalled();
+  });
+  it("requires failure-only explicit retry after copy/send reselection and deduplicates retry clicks with the same UUID", async () => {
+    const f = fixture(); f.create.mockRejectedValueOnce(new Error("private provider detail"));
+    await f.click("Copy link: Card on file");
+    expect(f.button("Confirm Send")).toBeUndefined(); expect(f.clipboard).not.toHaveBeenCalled();
+    const originalRetry = f.button("Retry link creation").props.onClick;
+    await f.click("Cancel review"); await f.click("Send link: Card on file");
+    expect(f.create).toHaveBeenCalledTimes(1); expect(f.button("Retry link creation")).toBeDefined();
+    await f.click("Cancel review"); await f.click("Copy link: Card on file"); expect(f.create).toHaveBeenCalledTimes(1);
+    let finish!: (value: any) => void; f.create.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const retry = f.button("Retry link creation").props.onClick; retry(); retry();
+    expect(f.create).toHaveBeenCalledTimes(2); expect(f.create.mock.calls[1][0]).toEqual(f.create.mock.calls[0][0]); expect(f.uuid).toHaveBeenCalledTimes(1);
+    finish(link("card")); await f.tick(); f.render();
+    originalRetry(); await f.tick(); f.render(); expect(f.create).toHaveBeenCalledTimes(2);
+    await f.click("Copy link"); expect(f.clipboard).toHaveBeenCalledWith(link().url); expect(f.send).not.toHaveBeenCalled();
+    f.switchBooking(92); originalRetry(); await f.tick(); f.render(); expect(f.create).toHaveBeenCalledTimes(2);
+  });
+  it("reuses a ready attempt and edited message across cancel, refresh and copy/send selection without another API call", async () => {
+    const f = fixture(); await f.click("Send link: Apple Pay");
+    const edited = `Saved review: ${link().url}`;
+    f.byLabel("Review message").props.onChange({ currentTarget: { value: edited } }); f.render();
+    await f.click("Cancel review"); await f.click("Copy link: Apple Pay");
+    expect(f.byLabel("Review message").props.value).toBe(edited); expect(f.button("Confirm Send")).toBeUndefined();
+    await f.click("Copy link"); await f.click("Refresh saved summary"); await f.click("Send link: Apple Pay");
+    expect(f.create).toHaveBeenCalledTimes(1); expect(f.uuid).toHaveBeenCalledTimes(1); expect(f.query.refetch).toHaveBeenCalledTimes(1);
+    await f.click("Confirm Send"); expect(f.send).toHaveBeenCalledWith(expect.objectContaining({ message: edited, token: "saved-token" }));
+    await f.click("Cancel review"); await f.click("Send link: Apple Pay");
+    expect(f.button("Send accepted · delivery unconfirmed").props.disabled).toBeTruthy(); expect(f.create).toHaveBeenCalledTimes(1); expect(f.send).toHaveBeenCalledTimes(1);
+  });
+  it("reviews the server-returned saved recipient rather than replacing it with the summary recipient", async () => {
+    const f = fixture(); f.create.mockResolvedValueOnce({ ...link(), customerName: "Returned Saved Customer", customerPhone: "+12025550199" });
+    await f.click("Send link: Apple Pay");
+    expect(f.text()).toContain("Returned Saved Customer"); expect(f.text()).toContain("+12025550199");
+    expect(f.create).toHaveBeenCalledWith(expect.objectContaining({ expectedAmountCents: 34567 })); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("shows the known server duplicate-SMS warning on failure, but not arbitrary returned credentials", async () => {
+    const f = fixture();
+    const warning = "SMS acceptance could not be confirmed. Check the customer-service inbox before manually retrying: another send may produce a duplicate SMS, not a second payment.";
+    expect(read("server/internalBookingHandoffRouter.ts")).toContain(warning);
+    f.send.mockResolvedValueOnce({ success: false, submitted: false, message: warning } as any);
+    await f.click("Send link: Apple Pay"); await f.click("Confirm Send");
+    expect(f.text()).toContain(warning); expect(f.text()).not.toContain("Message submitted");
+    f.send.mockResolvedValueOnce({ success: false, submitted: false, message: "API credential sk_live_private" } as any);
+    await f.click("Confirm Send"); expect(f.text()).toContain("Send was not confirmed"); expect(f.text()).not.toContain("sk_live_private");
+    expect(f.send.mock.calls[1][0]).toEqual(f.send.mock.calls[0][0]); expect(f.create).toHaveBeenCalledTimes(1);
   });
   it("keeps the token and exact message on unconfirmed send retries; never claims delivered", async () => {
     const f = fixture(); f.send.mockRejectedValueOnce(new Error("provider secret")).mockResolvedValueOnce({ success: false, submitted: false });
-    await f.click("Send link: Apple Pay"); await f.click("Create link for review"); await f.click("Confirm Send");
+    await f.click("Send link: Apple Pay"); await f.click("Confirm Send");
     expect(f.text()).toContain("Delivery status is unknown"); expect(f.text()).not.toContain("provider secret");
     await f.click("Confirm Send"); expect(f.send.mock.calls[0][0]).toEqual(f.send.mock.calls[1][0]);
     expect(f.text()).toContain("Send was not confirmed"); expect(f.text()).not.toContain("Message submitted"); expect(f.create).toHaveBeenCalledTimes(1);
     f.send.mockResolvedValueOnce({ success: true, submitted: false }); await f.click("Confirm Send"); expect(f.text()).toContain("Send was not confirmed");
   });
   it("allows explicit message review/edit but blocks a message without the reviewed URL", async () => {
-    const f = fixture(); await f.click("Send link: Apple Pay"); await f.click("Create link for review");
+    const f = fixture(); await f.click("Send link: Apple Pay");
     f.byLabel("Review message").props.onChange({ currentTarget: { value: "No URL" } }); f.render(); expect(f.button("Confirm Send").props.disabled).toBeTruthy();
     const edited = `Hello saved customer: ${link().url}`;
     f.byLabel("Review message").props.onChange({ currentTarget: { value: edited } }); f.render(); await f.click("Confirm Send");
     expect(f.send).toHaveBeenCalledWith(expect.objectContaining({ message: edited, token: "saved-token" }));
   });
-  it("creates a copy-only link only after review; clipboard failure is visible and never sends", async () => {
+  it("generates a copy-only link on selection; manual clipboard failure is visible and never sends", async () => {
     const f = fixture(); f.clipboard.mockRejectedValueOnce(new Error("denied"));
-    await f.click("Copy link: Card on file"); expect(f.create).not.toHaveBeenCalled(); await f.click("Create link for review");
+    await f.click("Copy link: Card on file"); expect(f.create).toHaveBeenCalledTimes(1); expect(f.clipboard).not.toHaveBeenCalled();
     expect(f.button("Confirm Send")).toBeUndefined(); await f.click("Copy link"); expect(f.text()).toContain("Could not copy the link");
     await f.click("Copy link"); expect(f.text()).toContain("Link copied. No message was sent."); expect(f.send).not.toHaveBeenCalled(); expect(f.create).toHaveBeenCalledTimes(1);
   });
   it.each([
     { bookingId: 92 }, { method: "cashapp" }, { amountCents: 1 }, { url: "javascript:alert(1)" }, { token: "" }, { expiresAt: "2020-01-01" },
   ])("rejects unverifiable created output: %j", async change => {
-    const f = fixture(); f.create.mockResolvedValueOnce({ ...link(), ...change }); await f.click("Send link: Apple Pay"); await f.click("Create link for review");
+    const f = fixture(); f.create.mockResolvedValueOnce({ ...link(), ...change }); await f.click("Send link: Apple Pay");
     expect(f.text()).toContain("returned link could not be verified"); expect(f.button("Confirm Send")).toBeUndefined(); expect(f.send).not.toHaveBeenCalled(); expect(f.clipboard).not.toHaveBeenCalled();
+    await f.click("Cancel review"); await f.click("Copy link: Apple Pay");
+    expect(f.create).toHaveBeenCalledTimes(1); expect(f.button("Retry link creation")).toBeDefined(); expect(f.byLabel("Review link")).toBeUndefined();
+    await f.click("Retry link creation"); expect(f.create.mock.calls[1][0]).toEqual(f.create.mock.calls[0][0]); expect(f.uuid).toHaveBeenCalledTimes(1);
+    expect(f.byLabel("Review link").props.value).toBe(link().url); expect(f.send).not.toHaveBeenCalled(); expect(f.clipboard).not.toHaveBeenCalled();
   });
   it("disables actions without an actual native ID, on query error, and on cross-booking overview", () => {
     const missing = fixture(undefined); expect(missing.queryHook).toHaveBeenCalledWith({ bookingId: 0 }, expect.objectContaining({ enabled: false })); expect(missing.byLabel("Send link: Apple Pay").props.disabled).toBeTruthy();
@@ -152,49 +216,54 @@ describe("staff handoff UI interactions (mocked transport only)", () => {
     f.query.isError = true; f.query.error = new Error("raw query secret"); f.render(); expect(f.text()).not.toContain("raw query secret"); expect(f.text()).toContain("actions are disabled");
   });
   it("blocks missing recipients and changed saved amounts without creating a replacement automatically", async () => {
-    const f = fixture(); f.create.mockResolvedValueOnce({ ...link(), customerPhone: null } as any); await f.click("Send link: Apple Pay"); await f.click("Create link for review");
+    const f = fixture(); f.create.mockResolvedValueOnce({ ...link(), customerPhone: null } as any); await f.click("Send link: Apple Pay");
     expect(f.button("Confirm Send").props.disabled).toBeTruthy(); expect(f.text()).toContain("No saved phone recipient");
     f.query.data!.firstCleaningTotalCents = 99999; f.render(); expect(f.text()).toContain("no longer matches"); expect(f.button("Confirm Send")).toBeUndefined(); expect(f.create).toHaveBeenCalledTimes(1);
+    await f.click("Cancel review"); await f.click("Copy link: Apple Pay");
+    expect(f.byLabel("Review link")).toBeUndefined(); expect(f.nodes().filter(node => node.type === "button" && node.props.children?.[1] === "Copy link" && !node.props["aria-label"])).toHaveLength(0);
+    expect(f.button("Retry link creation")).toBeUndefined(); expect(f.create).toHaveBeenCalledTimes(1);
   });
   it("ignores a late create result after switching native bookings", async () => {
     const f = fixture(); let finish!: (value: any) => void; f.create.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    await f.click("Send link: Apple Pay"); await f.click("Create link for review"); f.switchBooking(92); finish(link()); await f.tick(); f.render();
+    await f.click("Send link: Apple Pay"); f.switchBooking(92); finish(link()); await f.tick(); f.render();
     expect(f.text()).toContain("BK-92"); expect(f.byLabel("Review link")).toBeUndefined(); expect(f.send).not.toHaveBeenCalled();
   });
   it("ignores late send acceptance after switching bookings and does not refresh the new booking", async () => {
     const f = fixture(); let finish!: (value: any) => void; f.send.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    await f.click("Send link: Apple Pay"); await f.click("Create link for review"); await f.click("Confirm Send"); f.switchBooking(92); finish({ success: true, submitted: true }); await f.tick(); f.render();
+    await f.click("Send link: Apple Pay"); await f.click("Confirm Send"); f.switchBooking(92); finish({ success: true, submitted: true }); await f.tick(); f.render();
     expect(f.text()).not.toContain("Message submitted"); expect(f.query.refetch).not.toHaveBeenCalled();
   });
   it("rechecks expiry at click time even before another render", async () => {
-    const f = fixture(); await f.click("Send link: Apple Pay"); await f.click("Create link for review");
+    const f = fixture(); await f.click("Send link: Apple Pay");
     const sendClick = f.button("Confirm Send").props.onClick;
     const copyClick = f.button("Copy link").props.onClick;
     const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 7200000);
     try {
       await sendClick(); await copyClick(); await f.tick(); f.render();
       expect(f.send).not.toHaveBeenCalled(); expect(f.clipboard).not.toHaveBeenCalled(); expect(f.text()).toContain("no longer valid");
+      await f.click("Cancel review"); await f.click("Send link: Apple Pay");
+      expect(f.create).toHaveBeenCalledTimes(1); expect(f.button("Confirm Send")).toBeUndefined(); expect(f.button("Retry link creation")).toBeUndefined();
+      expect(f.text()).toContain("expired or no longer matches");
     } finally { clock.mockRestore(); }
   });
   it("deduplicates rapid explicit create and send clicks", async () => {
     const f = fixture(); let finishCreate!: (value: any) => void;
     f.create.mockImplementationOnce(() => new Promise(resolve => { finishCreate = resolve; }));
-    await f.click("Send link: Apple Pay"); const createClick = f.button("Create link for review").props.onClick;
+    const createClick = f.byLabel("Send link: Apple Pay").props.onClick;
     createClick(); createClick(); expect(f.create).toHaveBeenCalledTimes(1); finishCreate(link()); await f.tick(); f.render();
     let finishSend!: (value: any) => void; f.send.mockImplementationOnce(() => new Promise(resolve => { finishSend = resolve; }));
     const sendClick = f.button("Confirm Send").props.onClick; sendClick(); sendClick(); expect(f.send).toHaveBeenCalledTimes(1);
     finishSend({ success: true, submitted: true }); await f.tick(); f.render(); expect(f.text()).toContain("Delivery is not confirmed");
   });
   it("rejects captured mutation and clipboard handlers from an unmounted booking", async () => {
-    const f = fixture(); await f.click("Send link: Apple Pay");
-    const createClick = f.button("Create link for review").props.onClick; await f.click("Create link for review");
+    const f = fixture(); const createClick = f.byLabel("Send link: Apple Pay").props.onClick; await f.click("Send link: Apple Pay");
     const sendClick = f.button("Confirm Send").props.onClick, copyClick = f.button("Copy link").props.onClick;
     f.switchBooking(92); createClick(); sendClick(); copyClick(); await f.tick(); f.render();
     expect(f.create).toHaveBeenCalledTimes(1); expect(f.send).not.toHaveBeenCalled(); expect(f.clipboard).not.toHaveBeenCalled();
   });
   it("requires an explicit true success flag and does not invent provider delivery", async () => {
     const f = fixture(); f.send.mockResolvedValueOnce({} as any).mockResolvedValueOnce({ success: true } as any);
-    await f.click("Send link: Apple Pay"); await f.click("Create link for review"); await f.click("Confirm Send");
+    await f.click("Send link: Apple Pay"); await f.click("Confirm Send");
     expect(f.text()).toContain("Send was not confirmed"); await f.click("Confirm Send"); expect(f.text()).toContain("Send request accepted. Delivery is not confirmed.");
   });
   it("preserves the existing explicit navigation callbacks", async () => {

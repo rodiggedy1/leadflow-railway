@@ -109,7 +109,7 @@ export async function assertUnclaimedHandoffVisit(tx: HandoffTx, target: Handoff
 }
 
 /** Cash never infers a reusable card from captured. Only card proof changes jobs. */
-export async function updateHandoffPaymentOnly(tx: HandoffTx, target: HandoffTarget, paymentStatus: string, card?: { brand: string; last4: string }) {
-  await tx.update(bookings).set({ paymentStatus, updatedAt: new Date() }).where(eq(bookings.id, target.booking.id));
+export async function updateHandoffPaymentOnly(tx: HandoffTx, target: HandoffTarget, paymentStatus: string, card?: { brand: string; last4: string; paymentMethod?: "card" | "apple_pay" | "google_pay" }) {
+  await tx.update(bookings).set({ paymentStatus, ...(card?.paymentMethod ? { paymentMethod: card.paymentMethod } : {}), updatedAt: new Date() }).where(eq(bookings.id, target.booking.id));
   if (card) await tx.update(leadflowJobs).set({ hasStripeCard: 1, paymentBrand: card.brand, paymentLast4: card.last4, updatedAt: new Date() }).where(eq(leadflowJobs.bookingId, target.booking.id));
 }

@@ -15,6 +15,19 @@ const methodSchema = z.enum(["apple_pay", "cashapp", "card"]);
 export const handoffCreateInput = bookingInput.extend({ method: methodSchema, requestId: z.string().uuid(), expectedAmountCents: z.number().int().min(0).max(10_000_000), confirmed: z.literal(true) }).strict();
 export const handoffSendInput = bookingInput.extend({ method: methodSchema, token: z.string().min(1).max(256), message: z.string().trim().min(1).max(1600), confirmed: z.literal(true) }).strict();
 const TTL = 7 * 24 * 60 * 60 * 1000;
+// Verbatim existing concierge/Command Chat card-link text; no AI generation or
+// legacy customer lookup. The parity test keeps this literal in sync with it.
+const PAYMENT_LINK_SMS_TEMPLATE = `Hi {first_name}! 👋
+Everything's all set for your service, we just need a card on file before the day of service via our secure Stripe link (Keeps things super simple and it's so our crew doesn't have to travel around the DC area with loads of cash): {link}
+
+🔒 100% secure – no one on our team sees your card info
+✅ Pre-auth only – you're NOT charged until after service.
+💳 Your card is not saved on our servers and is processed by Stripe.
+
+Reply if you have any questions! Look forward to seeing you soon and it has been lovely chatting with you.  🧹✨`;
+export function buildExistingCardLinkSms(firstName: string, linkUrl: string) {
+  return PAYMENT_LINK_SMS_TEMPLATE.replace("{first_name}", firstName).replace("{link}", linkUrl);
+}
 function handoffOrigin() {
   // The native /pay route belongs to this app, not ENV.quoteAppUrl.
   const domain = ENV.isPreviewMode ? process.env.RAILWAY_PUBLIC_DOMAIN : undefined;
@@ -69,7 +82,10 @@ export async function createInternalHandoffLink(db: HandoffDb, input: z.infer<ty
   const current = await getHandoffTarget(db, input.bookingId);
   if (current.booking.customerPhone !== initial.booking.customerPhone || current.booking.customerName !== initial.booking.customerName || current.booking.firstCleaningTotalCents !== link.amountCents) handoffConflict();
   const purpose = input.method === "card" ? "save a card securely (no charge through this link)" : input.method === "cashapp" ? "pay for your first cleaning with Cash App" : "save a card securely with Apple Pay (no charge through this link; requires a compatible device)";
-  return { bookingId: input.bookingId, method: input.method, ...link, customerName: current.booking.customerName, customerPhone: current.booking.customerPhone, message: `Hi ${current.booking.customerName}, Maids in Black booking ${current.booking.publicBookingNumber}: please ${purpose}: ${link.url}` };
+  const message = input.method === "cashapp"
+    ? `Hi ${current.booking.customerName}, Maids in Black booking ${current.booking.publicBookingNumber}: please ${purpose}: ${link.url}`
+    : buildExistingCardLinkSms(current.booking.customerName.split(" ")[0], link.url);
+  return { bookingId: input.bookingId, method: input.method, ...link, customerName: current.booking.customerName, customerPhone: current.booking.customerPhone, message };
 }
 export function assertReviewedHandoffMessage(message: string, knownUrl: string) {
   if (!message.trim() || message.length > 1600 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(message)) handoffConflict("Review a message of 1–1600 characters.");
@@ -79,7 +95,6 @@ export function assertReviewedHandoffMessage(message: string, knownUrl: string) 
   if (!urls.length || urls.some(value => value !== knownUrl)) handoffConflict("The reviewed message must include only the exact generated payment URL, with no other links.");
 }
 export async function submitReviewedHandoffSms(to: string, content: string, send: (input: SendSmsParams) => Promise<SendSmsResult>, fromNumberId = ENV.openPhoneCsNumberId) {
-  if (!fromNumberId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "The customer-service SMS line is not configured." });
   const digits = to.replace(/[^\d]/g, "");
   const recipient = /^\+[1-9]\d{7,14}$/.test(to) ? to : digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith("1") ? `+${digits}` : null;
   if (!recipient) handoffConflict("The saved booking recipient phone needs review.");

@@ -5,6 +5,7 @@ import { bookingPaymentMetadata } from "./bookingPaymentService";
 import { verifyCanonicalCardSetup } from "./bookingPaymentVerification";
 import { assertHandoffCapability, getHandoffTarget, lookupHandoffToken, updateHandoffPaymentOnly, validateHandoffToken, type HandoffDb } from "./internalBookingHandoffContext";
 import { handoffConflict } from "./internalBookingHandoffToken";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 
 export async function getInternalHandoffCard(db: HandoffDb, token: string) {
   const { target } = await validateHandoffToken(db, "card", token);
@@ -54,14 +55,22 @@ export async function confirmInternalHandoffCard(db: HandoffDb, token: string, p
   // This unchanged primitive proves succeeded SI, exact returned PM, customer and
   // canonical booking/profile metadata. No attach shortcut or raw card inputs.
   const pm = await verifyCanonicalCardSetup(stripe, { setupIntentId: before.profile.stripeSetupIntentId, paymentMethodId, bookingId: before.booking.id, bookingPaymentProfileId: before.profile.id, stripeCustomerId: before.profile.stripeCustomerId });
-  await db.transaction(async tx => {
+  const wallet = pm.card.wallet?.type;
+  const paymentMethod = wallet === "apple_pay" || wallet === "google_pay" ? wallet : "card";
+  const changed = await db.transaction(async tx => {
     const target = await getHandoffTarget(tx, before.booking.id, true);
     const cap = await lookupHandoffToken(tx, "card", token, true);
     assertHandoffCapability(cap, target, { allowUsed: true, allowUsedPreviousVersion: true });
     if (cap.kind !== "card" || target.profile.stripeSetupIntentId !== before.profile.stripeSetupIntentId || target.profile.stripeCustomerId !== before.profile.stripeCustomerId) handoffConflict();
     if (cap.row.used) {
       if (target.profile.stripePaymentMethodId !== paymentMethodId) handoffConflict();
-      return;
+      // A verified replay can repair the old non-card discriminator only.
+      // Paid/held records and already-correct completions remain write-free.
+      if (target.profile.paymentStatus === "card_on_file" && target.booking.paymentStatus === "card_on_file" && ["invoice", "cashapp"].includes(target.booking.paymentMethod)) {
+        await updateHandoffPaymentOnly(tx, target, "card_on_file", { brand: pm.card.brand, last4: pm.card.last4, paymentMethod });
+        return true;
+      }
+      return false;
     }
     if (target.profile.stripePaymentMethodId && target.profile.stripePaymentMethodId !== paymentMethodId) handoffConflict();
     if ([target.profile.paymentStatus, target.booking.paymentStatus].some(value => ["charge_pending", "authorization_pending", "capture_pending", "action_required"].includes(value))) handoffConflict();
@@ -73,10 +82,12 @@ export async function confirmInternalHandoffCard(db: HandoffDb, token: string, p
     // The existing CardAuth page does not display canonical booking consent.
     // Deliberately leave all canonical consent fields unchanged.
     await tx.update(bookingFunnelRecords).set({ stripeCustomerId: target.profile.stripeCustomerId, stripePaymentMethodId: pm.id, paymentBrand: pm.card.brand, paymentLast4: pm.card.last4, updatedAt: new Date() }).where(eq(bookingFunnelRecords.id, target.funnel.id));
-    await updateHandoffPaymentOnly(tx, target, paymentStatus, { brand: pm.card.brand, last4: pm.card.last4 });
+    await updateHandoffPaymentOnly(tx, target, paymentStatus, { brand: pm.card.brand, last4: pm.card.last4, ...(paymentStatus === "card_on_file" ? { paymentMethod } : {}) });
     const customer = { phone: target.booking.customerPhone, name: target.booking.customerName, stripeCustomerId, ...details, cardSavedAt: now };
     await tx.insert(stripeCustomers).values(customer).onDuplicateKeyUpdate({ set: customer });
     await tx.update(cardAuthTokens).set({ used: 1, completedAt: now }).where(eq(cardAuthTokens.id, cap.row.id));
+    return true;
   });
+  if (changed) broadcastOpsUpdate("booking_funnel_update");
   return { success: true, cardBrand: pm.card.brand, cardLast4: pm.card.last4, cardExpMonth: pm.card.exp_month, cardExpYear: pm.card.exp_year };
 }

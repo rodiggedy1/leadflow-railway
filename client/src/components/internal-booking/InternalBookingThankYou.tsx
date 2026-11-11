@@ -32,7 +32,9 @@ type CreatedLink = {
 };
 type CreateInput = { bookingId: number; method: Method; requestId: string; expectedAmountCents: number; confirmed: true };
 type SendInput = { bookingId: number; method: Method; token: string; message: string; confirmed: true };
-type Attempt = { input: CreateInput; link?: CreatedLink; message?: string; sendInput?: SendInput; accepted?: boolean };
+type Attempt = { input: CreateInput; link?: CreatedLink; creationFailed?: boolean; message?: string; sendInput?: SendInput; accepted?: boolean };
+// Only this known server-contract failure is displayable; never show raw provider/API errors.
+const sendFailureWarning = "SMS acceptance could not be confirmed. Check the customer-service inbox before manually retrying: another send may produce a duplicate SMS, not a second payment.";
 const actions: ReadonlyArray<{ method: Method; title: string; label: string; detail: string }> = [
   { method: "apple_pay", title: "Send Apple Pay card-on-file link", label: "Apple Pay", detail: "Save a card through Apple Pay on a compatible device. No charge is made through this link." },
   { method: "cashapp", title: "Send Cash App payment link", label: "Cash App", detail: "Immediate payment for the first cleaning only." },
@@ -112,23 +114,26 @@ function BookingHandoff({ bookingId, onStartAnotherBooking, onOpenBookings }: {
     if (!current() || lock.current || !canReview) return;
     setNotice(null);
     setSelection({ method, mode });
+    // Opening a handoff generates once; failed attempts need an explicit retry.
+    if (!attempts.current[method]) void createForReview(method);
   };
-  const createForReview = async () => {
-    if (!current() || lock.current || !selection || !summary || !canReview) return;
+  const createForReview = async (method: Method) => {
+    if (!current() || lock.current || !summary || !canReview || attempts.current[method]?.link) return;
     lock.current = true;
     setBusy("create");
     setNotice(null);
-    const method = selection.method;
     let request = attempts.current[method];
     try {
       if (!request || request.input.expectedAmountCents !== summary.firstCleaningTotalCents) {
         request = { input: { bookingId: bookingId!, method, requestId: crypto.randomUUID(), expectedAmountCents: summary.firstCleaningTotalCents, confirmed: true } };
         attempts.current[method] = request;
       }
+      request.creationFailed = false;
       // An unchanged retry reuses the same UUID; an already-created link is never recreated automatically.
       const result: CreatedLink = await create.mutateAsync(request.input);
       if (!current() || attempts.current[method] !== request) return;
       if (!usableLink(result, bookingId!, method, request.input.expectedAmountCents)) {
+        request.creationFailed = true;
         setNotice({ error: true, text: "The returned link could not be verified for this booking, amount, or expiry. Nothing was sent or copied." });
         return;
       }
@@ -136,7 +141,10 @@ function BookingHandoff({ bookingId, onStartAnotherBooking, onOpenBookings }: {
       request.message = result.message;
       setRevision(value => value + 1);
     } catch (error) {
-      if (current()) setNotice({ error: true, text: safeError(error, "Link creation was not confirmed. Nothing was sent or copied. Retry keeps the same request reference.") });
+      if (current()) {
+        if (request) request.creationFailed = true;
+        setNotice({ error: true, text: safeError(error, "Link creation was not confirmed. Nothing was sent or copied. Retry keeps the same request reference.") });
+      }
     } finally {
       if (current()) { lock.current = false; setBusy(null); }
     }
@@ -164,7 +172,7 @@ function BookingHandoff({ bookingId, onStartAnotherBooking, onOpenBookings }: {
       const result = await send.mutateAsync(request.sendInput);
       if (!current() || attempts.current[selection.method] !== request) return;
       if (result.success !== true || result.submitted === false) {
-        setNotice({ error: true, text: "Send was not confirmed. Delivery status is unknown. Retry uses the same link and unchanged message; do not assume the customer received it." });
+        setNotice({ error: true, text: result.message === sendFailureWarning ? result.message : "Send was not confirmed. Delivery status is unknown. Retry uses the same link and unchanged message; do not assume the customer received it." });
         return;
       }
       request.accepted = true;
@@ -222,7 +230,7 @@ function BookingHandoff({ bookingId, onStartAnotherBooking, onOpenBookings }: {
         </section>}
       {targetValid && <button className="ibty-text-button" type="button" disabled={!!busy || overviewQuery.isFetching} onClick={refresh}>{overviewQuery.isFetching ? "Refreshing saved summary…" : "Refresh saved summary"}</button>}
       <section aria-labelledby="ibty-actions-title" className="ibty-actions">
-        <div className="ibty-section-heading"><h2 id="ibty-actions-title">Customer payment handoff</h2><p>No link is created or sent until you review and confirm. Creating or copying a link does not charge the customer.</p></div>
+        <div className="ibty-section-heading"><h2 id="ibty-actions-title">Customer payment handoff</h2><p>Choose Send link or Copy link to generate a secure link for review. No SMS is sent until Confirm Send. Creating or copying a link does not charge the customer.</p></div>
         <div className="ibty-action-grid">{actions.map(item => (
           <article className="ibty-action" key={item.method}>
             <span className="ibty-action-icon" aria-hidden="true">{item.method === "card" ? <CreditCard /> : <Smartphone />}</span>
@@ -238,7 +246,7 @@ function BookingHandoff({ bookingId, onStartAnotherBooking, onOpenBookings }: {
         <div className="ibty-review-top"><h2 id="ibty-review-title">Review {action.label} link</h2><button type="button" disabled={!!busy} onClick={() => { setSelection(null); setNotice(null); }}>Cancel review</button></div>
         <p>{action.detail}</p>
         <dl className="ibty-review-facts"><div><dt>Customer</dt><dd>{savedText(linkReady ? link?.customerName : summary?.customerName)}</dd></div><div><dt>Recipient · SMS</dt><dd>{savedText(linkReady ? link?.customerPhone : summary?.customerPhone)}</dd></div><div><dt>{selection.method === "cashapp" ? "Immediate first-cleaning payment" : "Saved booking amount (no charge)"}</dt><dd>{summary && amountValid ? money(summary.firstCleaningTotalCents) : "Amount unavailable"}</dd></div></dl>
-        {!link ? <><p>A link and message have not been created. Confirm creation, then review the returned URL and message before sending.</p><button type="button" className="ibty-primary" disabled={!canReview || !!busy} onClick={() => void createForReview()}>{busy === "create" ? "Creating link…" : "Create link for review"}</button></>
+        {!link ? busy === "create" ? <p role="status">Generating a secure payment link…</p> : attempt?.creationFailed ? <><p>Link creation was not confirmed. Retry creation, then review the returned URL and message before sending.</p><button type="button" className="ibty-primary" disabled={!canReview || !!busy} onClick={() => void createForReview(selection.method)}>Retry link creation</button></> : null
           : !linkReady ? <p role="alert" className="ibty-error">This link has expired or no longer matches the saved booking amount. Do not send it. Refresh the summary and review this booking in the CRM.</p>
           : <>
             <label className="ibty-field">Review link<input readOnly value={link.url} aria-label="Review link" onFocus={event => event.currentTarget.select()} /></label>
