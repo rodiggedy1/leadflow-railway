@@ -1,0 +1,84 @@
+.internal-booking-thank-you {
+  --ibty-gold: #bd984b;
+  --ibty-ink: #242826;
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 28px 24px 36px;
+  color: var(--ibty-ink);
+  font-family: Inter, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.internal-booking-thank-you * { box-sizing: border-box; }
+.internal-booking-thank-you h1,
+.internal-booking-thank-you h2,
+.internal-booking-thank-you h3,
+.internal-booking-thank-you p { margin: 0; }
+.internal-booking-thank-you h1 { font-size: 29px; line-height: 1.2; font-weight: 650; }
+.internal-booking-thank-you h2 { font-size: 19px; font-weight: 650; }
+.internal-booking-thank-you h3 { font-size: 17px; line-height: 1.35; font-weight: 650; }
+.internal-booking-thank-you p { color: #606860; }
+.internal-booking-thank-you .ibty-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+.internal-booking-thank-you .ibty-heading h1 { margin: 4px 0 7px; }
+.internal-booking-thank-you .ibty-eyebrow { color: #74602f; font-size: 10px; font-weight: 750; letter-spacing: .14em; }
+.internal-booking-thank-you .ibty-check { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border-radius: 50%; background: #edf2e9; color: #47613e; }
+.internal-booking-thank-you svg { width: 17px; height: 17px; flex-shrink: 0; }
+.internal-booking-thank-you .ibty-check svg { width: 25px; height: 25px; }
+.internal-booking-thank-you .ibty-summary,
+.internal-booking-thank-you .ibty-review { border: 1px solid #e1e3da; border-radius: 13px; background: #fff; padding: 20px; }
+.internal-booking-thank-you .ibty-summary-top { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #eceee7; padding-bottom: 12px; }
+.internal-booking-thank-you .ibty-summary-top strong { font-size: 20px; }
+.internal-booking-thank-you .ibty-summary-top span { font-size: 12px; color: #606860; }
+.internal-booking-thank-you dl { margin: 14px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 24px; }
+.internal-booking-thank-you dt { color: #606860; font-size: 11px; margin-bottom: 4px; }
+.internal-booking-thank-you dd { margin: 0; font-weight: 550; overflow-wrap: anywhere; }
+.internal-booking-thank-you dd small { display: block; font-size: 12px; font-weight: 400; color: #606860; margin-top: 3px; }
+.internal-booking-thank-you button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 40px; border: 1px solid #d7dbd0; background: #fff; color: var(--ibty-ink); border-radius: 7px; padding: 9px 12px; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.internal-booking-thank-you button:hover:not(:disabled) { border-color: #a4823b; background: #faf8f2; }
+.internal-booking-thank-you button:disabled { opacity: .5; cursor: not-allowed; }
+.internal-booking-thank-you button:focus-visible,
+.internal-booking-thank-you input:focus-visible,
+.internal-booking-thank-you textarea:focus-visible,
+.internal-booking-thank-you .ibty-review:focus-visible { outline: 3px solid #bd984b; outline-offset: 3px; }
+.internal-booking-thank-you button.ibty-primary { border-color: var(--ibty-gold); background: var(--ibty-gold); color: #171d16; }
+.internal-booking-thank-you button.ibty-primary:hover:not(:disabled) { background: #ad8739; }
+.internal-booking-thank-you button.ibty-text-button { border: 0; background: none; padding: 6px 0; min-height: 34px; color: #74602f; }
+.internal-booking-thank-you .ibty-actions { margin-top: 20px; }
+.internal-booking-thank-you .ibty-section-heading { margin-bottom: 14px; }
+.internal-booking-thank-you .ibty-section-heading p { margin-top: 4px; font-size: 12px; }
+.internal-booking-thank-you .ibty-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.internal-booking-thank-you .ibty-action { display: flex; flex-direction: column; align-items: flex-start; border: 1px solid #e1e3da; border-radius: 12px; padding: 18px; background: #fff; }
+.internal-booking-thank-you .ibty-action-icon { display: grid; place-items: center; background: #f5f2e9; color: #74602f; width: 36px; height: 36px; border-radius: 9px; margin-bottom: 12px; }
+.internal-booking-thank-you .ibty-action p { font-size: 12px; margin: 8px 0 18px; }
+.internal-booking-thank-you .ibty-card-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.internal-booking-thank-you .ibty-review { margin-top: 20px; border-color: var(--ibty-gold); }
+.internal-booking-thank-you .ibty-review-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.internal-booking-thank-you .ibty-review-facts { margin-bottom: 16px; }
+.internal-booking-thank-you .ibty-review > p { margin: 10px 0; }
+.internal-booking-thank-you .ibty-field { display: block; font-size: 12px; font-weight: 650; margin-top: 14px; }
+.internal-booking-thank-you input,
+.internal-booking-thank-you textarea { display: block; width: 100%; border: 1px solid #d7dbd0; border-radius: 7px; padding: 10px 12px; margin-top: 6px; color: var(--ibty-ink); background: #fafbf8; font: inherit; font-weight: 400; }
+.internal-booking-thank-you textarea { resize: vertical; min-height: 105px; }
+.internal-booking-thank-you .ibty-expiry { font-size: 11px; }
+.internal-booking-thank-you .ibty-review-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.internal-booking-thank-you .ibty-error,
+.internal-booking-thank-you .ibty-notice { margin: 16px 0; border-radius: 8px; padding: 12px 14px; overflow-wrap: anywhere; }
+.internal-booking-thank-you .ibty-error { background: #fff3ee; border: 1px solid #eed8ce; color: #863f2b; }
+.internal-booking-thank-you .ibty-notice { background: #edf4e9; border: 1px solid #d6e3d0; color: #405a36; }
+.internal-booking-thank-you .ibty-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #e1e3da; }
+@media (max-width: 760px) {
+  .internal-booking-thank-you { padding: 20px 16px 28px; }
+  .internal-booking-thank-you .ibty-action-grid { grid-template-columns: 1fr; }
+  .internal-booking-thank-you dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .internal-booking-thank-you .ibty-card-buttons { width: 100%; }
+  .internal-booking-thank-you .ibty-card-buttons button { flex: 1; }
+}
+@media (max-width: 420px) {
+  .internal-booking-thank-you h1 { font-size: 25px; }
+  .internal-booking-thank-you .ibty-heading { gap: 10px; align-items: flex-start; }
+  .internal-booking-thank-you .ibty-check { flex-basis: 38px; height: 38px; }
+  .internal-booking-thank-you dl { grid-template-columns: 1fr; gap: 12px; }
+  .internal-booking-thank-you .ibty-summary,
+  .internal-booking-thank-you .ibty-review { padding: 16px; }
+  .internal-booking-thank-you .ibty-footer button { width: 100%; }
+}

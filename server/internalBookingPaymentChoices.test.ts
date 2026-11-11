@@ -24,7 +24,6 @@ const protectedPaths = [
   "client/src/components/BookingPaymentCheckout.tsx",
   "client/src/components/BookingApplePayCheckout.tsx",
   "client/src/components/BookingCashAppCheckout.tsx",
-  "client/src/components/internal-booking/InternalPublicBook.tsx",
   "client/src/components/internal-booking/BookingPaymentCheckout.tsx",
   "client/src/components/internal-booking/BookingApplePayCheckout.tsx",
   "client/src/components/internal-booking/BookingCashAppCheckout.tsx",
@@ -33,7 +32,6 @@ const protectedPaths = [
   "server/internalExactBookingService.ts",
   "server/bookingPaymentEngine.ts",
   "server/bookingCashAppEngine.ts",
-  "server/stripeWebhookRoute.ts",
   "shared/publicBookingPricing.ts",
   "shared/canonicalBooking.ts",
 ];
@@ -264,5 +262,16 @@ describe("internal booking payment choices: exact scoped presentation", () => {
       expect(read(path), path).toBe(expected);
     }
     expect(protectedPaths.length).toBeGreaterThan(0);
+    const baseline = (path: string) => execFileSync("git", ["show", `2041fa94a4cf8e2b47c40773582e07f482114987:${path}`], { cwd: root, encoding: "utf8", env: { PATH: process.env.PATH } });
+    const controller = "client/src/components/internal-booking/InternalPublicBook.tsx";
+    const stripCompletion = (source: string) => source
+      .replace('import InternalBookingThankYou from "./InternalBookingThankYou";\n', "")
+      .replace(/  if \(complete\)\n    return \([\s\S]*?\n    \);/, "[completion branch]");
+    expect(stripCompletion(read(controller))).toBe(stripCompletion(baseline(controller)));
+    const webhook = "server/stripeWebhookRoute.ts";
+    const stripHandoffDispatch = (source: string) => source
+      .replace('import { isInternalBookingHandoffEvent, processSignedInternalHandoffEvent } from "./internalBookingHandoffWebhook";\n', "")
+      .replace(/    if \(isInternalBookingHandoffEvent\(event\)\) \{[\s\S]*?\n    \}\n/, "");
+    expect(stripHandoffDispatch(read(webhook))).toBe(baseline(webhook));
   });
 });

@@ -27,6 +27,7 @@ import { broadcastOpsUpdate } from "./sseBroadcast";
 import { finalizeCanonicalBooking, finalizeCanonicalCardOnFile, startCanonicalCardSetup } from "./bookingPaymentEngine";
 import { verifyCanonicalCardSetup } from "./bookingPaymentVerification";
 import { authorizeCanonicalBookingHold, captureCanonicalPaymentIntent, cancelCanonicalPaymentIntent, chargeCanonicalSavedCard } from "./bookingPaymentActionsEngine";
+import { internalBookingHandoffRouter } from "./internalBookingHandoffRouter";
 
 const confirmedBookingInput = z.object({
   bookingId: z.number().int().positive(),
@@ -150,6 +151,7 @@ async function activePortalRequestHold(
 }
 
 export const bookingPaymentAdminRouter = router({
+  handoff: internalBookingHandoffRouter,
   startInternalCardSetup: agentProcedure
     .input(z.object({ bookingId: z.number().int().positive() }))
     .mutation(async ({ input }) => {
