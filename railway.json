@@ -9,5 +9,12 @@
     "healthcheckPath": "/api/health",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
+  },
+  "environments": {
+    "preview": {
+      "deploy": {
+        "healthcheckPath": "/api/trpc/system.health?input=%7B%22json%22%3A%7B%22timestamp%22%3A0%7D%7D"
+      }
+    }
   }
 }
