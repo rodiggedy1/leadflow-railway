@@ -1,11 +1,12 @@
 import type Stripe from "stripe";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { bookingCashAppPayments, bookingPaymentProfiles, cashAppPaymentTokens } from "../drizzle/schema";
+import { bookingCashAppPayments, bookingPaymentProfiles, bookings, cashAppPaymentTokens } from "../drizzle/schema";
 import { getStripeClient } from "./stripeClient";
 import { bookingPaymentMetadata } from "./bookingPaymentService";
 import { assertHandoffCapability, assertUnclaimedHandoffVisit, getHandoffTarget, lookupHandoffToken, updateHandoffPaymentOnly, validateHandoffToken, type HandoffDb, type HandoffTarget, type HandoffCapability, type HandoffTx } from "./internalBookingHandoffContext";
 import { handoffConflict } from "./internalBookingHandoffToken";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 
 export const CASH_HANDOFF_PURPOSE = "cash_v1";
 const cashKey = (token: string) => `leadflow:internal-handoff:cash:${token}`;
@@ -87,7 +88,18 @@ export async function createInternalHandoffCashIntent(db: HandoffDb, token: stri
   return { clientSecret: intent.client_secret };
 }
 
-/** Called only after the raw signed webhook and its durable event registration.
+export async function confirmInternalHandoffCash(db: HandoffDb, token: string) {
+  const { cap, target } = await validateHandoffToken(db, "cashapp", token, { allowExpired: true, allowUsed: true, allowUsedPreviousVersion: true });
+  if (cap.kind !== "cashapp" || !cap.row.stripePaymentIntentId) handoffConflict("No durable Cash App payment was found. Review the existing attempt; do not create another charge.");
+  const intent = await getStripeClient().paymentIntents.retrieve(cap.row.stripePaymentIntentId);
+  if (intent.id !== cap.row.stripePaymentIntentId) handoffConflict();
+  assertInternalHandoffCashIntent(intent, target, cap);
+  await reconcileInternalHandoffCash(db, intent);
+  return getInternalHandoffCash(db, token, true);
+}
+
+/** Called after the raw signed webhook and its durable event registration,
+ * or a server-verified return using only the exact persisted handoff token/PI.
  * Provider refresh makes late failure/pending events unable to undo success. */
 export async function reconcileInternalHandoffCash(db: HandoffDb, object: Stripe.PaymentIntent) {
   const token = object.metadata?.cashAppPaymentToken;
@@ -103,7 +115,7 @@ export async function reconcileInternalHandoffCash(db: HandoffDb, object: Stripe
     const pm = await getStripeClient().paymentMethods.retrieve(pmId);
     if (pm.id !== pmId || pm.type !== "cashapp") handoffConflict("The confirmed payment was not Cash App.");
   }
-  await db.transaction(async tx => {
+  const changed = await db.transaction(async tx => {
     const target = await getHandoffTarget(tx, initial.target.booking.id, true);
     const cap = await lookupHandoffToken(tx, "cashapp", token, true);
     assertHandoffCapability(cap, target, { allowExpired: true, allowUsed: true, allowUsedPreviousVersion: true });
@@ -111,7 +123,11 @@ export async function reconcileInternalHandoffCash(db: HandoffDb, object: Stripe
     assertInternalHandoffCashIntent(intent, target, cap);
     if (cap.row.status === "paid") {
       if (cap.row.stripePaymentIntentId !== intent.id || target.profile.stripePaymentIntentId !== intent.id || target.profile.paymentStatus !== "captured") handoffConflict();
-      return;
+      if (intent.status === "succeeded" && target.booking.paymentStatus === "captured" && target.booking.paymentMethod !== "cashapp") {
+        await tx.update(bookings).set({ paymentMethod: "cashapp" }).where(eq(bookings.id, target.booking.id));
+        return true;
+      }
+      return false;
     }
     if (cap.row.status === "cancelled") { if (intent.status !== "canceled" || cap.row.stripePaymentIntentId !== intent.id) handoffConflict(); return; }
     await assertUnclaimedHandoffVisit(tx, target, token);
@@ -125,6 +141,8 @@ export async function reconcileInternalHandoffCash(db: HandoffDb, object: Stripe
       await tx.update(cashAppPaymentTokens).set({ status: "paid", paidAt: now }).where(eq(cashAppPaymentTokens.id, cap.row.id));
       await tx.update(bookingPaymentProfiles).set({ paymentStatus: "captured", capturedAt: now, failureCode: null, failureMessage: null, updatedAt: new Date() }).where(eq(bookingPaymentProfiles.id, target.profile.id));
       await updateHandoffPaymentOnly(tx, target, "captured");
+      await tx.update(bookings).set({ paymentMethod: "cashapp" }).where(eq(bookings.id, target.booking.id));
+      return true;
     } else if (intent.status === "canceled") {
       // Only verified definitive cancellation releases first-service ownership.
       await tx.update(bookingCashAppPayments).set({ status: "cancelled", failureCode: "payment_cancelled", updatedAt: new Date() }).where(eq(bookingCashAppPayments.id, payment.id));
@@ -138,4 +156,5 @@ export async function reconcileInternalHandoffCash(db: HandoffDb, object: Stripe
       await tx.update(bookingPaymentProfiles).set(failure).where(eq(bookingPaymentProfiles.id, target.profile.id));
     }
   });
+  if (changed) broadcastOpsUpdate("booking_funnel_update");
 }

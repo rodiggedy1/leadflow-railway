@@ -11,6 +11,7 @@ import { getStripeClient } from "./stripeClient";
 import { bookingCashAppRouter } from "./bookingCashAppRouter";
 import { isInternalHandoffToken } from "./internalBookingHandoffToken";
 import { getInternalHandoffCash, createInternalHandoffCashIntent } from "./internalBookingHandoffCash";
+import { confirmInternalHandoffCash } from "./internalBookingHandoffCash";
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -93,6 +94,14 @@ export const cashAppRouter = router({
       const [row] = await db.select({ status: cashAppPaymentTokens.status, amountCents: cashAppPaymentTokens.amountCents, description: cashAppPaymentTokens.description }).from(cashAppPaymentTokens).where(eq(cashAppPaymentTokens.token, input.token)).limit(1);
       if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Invalid payment link" });
       return row;
+    }),
+
+  confirmPayment: publicProcedure
+    .input(z.object({ token: z.string().regex(/^hp1_[A-Za-z0-9_-]{43}$/) }).strict())
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      return confirmInternalHandoffCash(db, input.token);
     }),
 
   createPaymentIntent: publicProcedure
