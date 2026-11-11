@@ -45,6 +45,7 @@ export function InternalBookingAmountControl({
 
   return (
     <div className="internal-booking-amount-control">
+      <h2 className="internal-booking-amount-heading">Edit booking price</h2>
       <label className="br3-field" htmlFor={id}>
         <span>Final booking amount ($)</span>
         <input
@@ -52,6 +53,7 @@ export function InternalBookingAmountControl({
           type="text"
           inputMode="decimal"
           value={value}
+          placeholder={(calculatedTotalCents / 100).toFixed(2)}
           onChange={event => onChange(event.target.value)}
           disabled={disabled}
           aria-invalid={Boolean(error)}
@@ -91,18 +93,22 @@ export function InternalBookWithoutPaymentControl({
   disabled,
 }: InternalBookWithoutPaymentControlProps) {
   return (
-    <div className="internal-booking-no-payment-control">
+    <section className="internal-booking-no-payment-control br3-method">
       <button
         type="button"
-        className="br3-secure-button"
+        className="br3-method-head"
+        aria-label="Book without payment"
         onClick={onClick}
         disabled={disabled}
       >
-        Book without payment
+        <span className="br3-radio" aria-hidden="true" />
+        <span className="br3-method-copy">
+          <strong>Book without payment</strong>
+          <small>
+            No payment will be collected. The booking remains unpaid.
+          </small>
+        </span>
       </button>
-      <p className="internal-booking-control-note">
-        No payment will be collected. The booking remains unpaid.
-      </p>
-    </div>
+    </section>
   );
 }

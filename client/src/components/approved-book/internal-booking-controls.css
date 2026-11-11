@@ -1,22 +1,42 @@
 /* Internal-only additions; no selector targets the existing public checkout. */
 .approved-book-surface .br-third-page .internal-booking-amount-control {
   min-width: 0;
-  margin-top: 18px;
+  margin: 0 0 20px;
+  padding: 24px;
+  border: 2px solid #9a5d4d;
+  border-radius: 8px;
+  background: #fcf6f2;
+}
+
+.approved-book-surface .br-third-page .internal-booking-amount-heading {
+  margin: 0 0 18px;
+  color: #273e30;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.approved-book-surface .br-third-page .internal-booking-amount-control .br3-field > span {
+  color: #273e30;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .approved-book-surface .br-third-page .internal-booking-amount-control input {
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: 60px;
   margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #dbe2dc;
+  padding: 12px 16px;
+  border: 2px solid #9a5d4d;
   border-radius: 5px;
   background: #fff;
   color: #273e30;
-  font-size: 13px;
+  font-size: 24px;
+  font-weight: 600;
   line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 .approved-book-surface
@@ -35,7 +55,7 @@
   border: 0;
   background: transparent;
   color: #9a5d4d;
-  font-size: 10px;
+  font-size: 13px;
   text-decoration: underline;
 }
 
@@ -51,6 +71,14 @@
   color: #74807b;
   font-size: 11px;
   line-height: 1.7;
+}
+
+.approved-book-surface
+  .br-third-page
+  .internal-booking-amount-control
+  .internal-booking-control-note {
+  color: #59675e;
+  font-size: 13px;
 }
 
 .approved-book-surface
@@ -87,7 +115,7 @@
 }
 
 @media (max-width: 760px) {
-  .approved-book-surface .br-third-page .internal-booking-amount-control input {
-    font-size: 16px;
+  .approved-book-surface .br-third-page .internal-booking-amount-control {
+    padding: 18px;
   }
 }
