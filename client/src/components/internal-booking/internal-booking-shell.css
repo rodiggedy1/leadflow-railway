@@ -1,4 +1,4 @@
-/* Modal positioning only; the three booking screens use unchanged public styles. */
+/* Internal modal containment and staff-only presentation; shared public source is unchanged. */
 .internal-exact-booking-shell.is-modal {
   position: fixed;
   inset: 0;
@@ -51,3 +51,39 @@
 .internal-exact-booking-shell .booking-close-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
 .internal-exact-booking-shell .booking-close-confirm-actions .btn { border: 1px solid #383a34; background: #242620; color: #d9d8cc; padding: 8px 11px; border-radius: 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
 .internal-exact-booking-shell .booking-close-confirm-actions .btn.gold { background: #dbc99a; color: #181912; border-color: #dbc99a; }
+
+/* Staff booking keeps the same shared form and handlers without sales content. */
+.internal-exact-booking-shell.approved-book-surface .br-first-page .br-editorial,
+.internal-exact-booking-shell.approved-book-surface .br-first-page .br-trust,
+.internal-exact-booking-shell.approved-book-surface .br-first-page .br-card-heading p,
+.internal-exact-booking-shell.approved-book-surface .br-second-page .br2-hero h1,
+.internal-exact-booking-shell.approved-book-surface .br-second-page .br2-hero-subtitle,
+.internal-exact-booking-shell.approved-book-surface .br-second-page .br2-hero-proof,
+.internal-exact-booking-shell.approved-book-surface .br-second-page .br2-benefit-card,
+.internal-exact-booking-shell.approved-book-surface .br-second-page .br2-review-quote,
+.internal-exact-booking-shell.approved-book-surface .br-second-page .br2-extra > img,
+.internal-exact-booking-shell.approved-book-surface .br-second-page .br2-extra > .br2-extra-icon,
+.internal-exact-booking-shell.approved-book-surface .br-third-page .br2-hero h1,
+.internal-exact-booking-shell.approved-book-surface .br-third-page .br2-hero-subtitle,
+.internal-exact-booking-shell.approved-book-surface .br-third-page .br2-hero-proof,
+.internal-exact-booking-shell.approved-book-surface .br-third-page .br3-testimonial,
+.internal-exact-booking-shell.approved-book-surface .br-third-page .br3-guarantee {
+  display: none;
+}
+
+.internal-exact-booking-shell.approved-book-surface .br-first-page .br-hero {
+  padding: 28px 18px 32px;
+}
+
+.internal-exact-booking-shell.approved-book-surface .br-first-page .br-hero-inner {
+  grid-template-columns: minmax(0, 435px);
+  justify-content: center;
+  gap: 0;
+}
+
+/* Customer-operated wallets remain implemented, but are not staff booking choices. */
+.internal-exact-booking-shell.approved-book-surface .br-third-page [data-internal-payment-method="apple_pay"],
+.internal-exact-booking-shell.approved-book-surface .br-third-page [data-internal-payment-method="cashapp"],
+.internal-exact-booking-shell.approved-book-surface .br-third-page [data-internal-payment-method="google_pay"] {
+  display: none;
+}

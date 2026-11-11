@@ -193,6 +193,9 @@ function elements(tree: any): any[] {
   if (!React.isValidElement(tree)) return [];
   return [tree, ...elements((tree.props as any).children)];
 }
+function withoutInternalVisibilityMarkers(html: string) {
+  return html.replace(/ data-internal-payment-method="[^"]+"/g, "");
+}
 function amountProps(overrides: Record<string, unknown> = {}) {
   return {
     value: "300.00",
@@ -215,14 +218,15 @@ function renderControl(Component: any, props: any) {
 }
 
 describe("internal booking controls: public preservation and optional slots", () => {
-  it("leaves public payment source untouched; the internal copy adds only two optional slots and relative import resolution", () => {
+  it("leaves public source untouched; internal adds only optional slots and visibility markers", () => {
     expect(readFileSync(resolve(root, publicPaymentPath), "utf8")).toBe(baselineSource);
     const withoutAdditions = paymentSource
       .split("\n")
       .filter(
         line =>
           !line.includes("internalAmountControl") &&
-          !line.includes("internalNoPaymentControl")
+          !line.includes("internalNoPaymentControl") &&
+          !line.includes("data-internal-payment-method")
       )
       .join("\n")
       .replace('from "../approved-book/ApprovedBookContext"', 'from "./ApprovedBookContext"')
@@ -254,7 +258,7 @@ describe("internal booking controls: public preservation and optional slots", ()
             { selectedPaymentMethod, ...slots },
             value
           );
-          expect(current.html).toBe(baseline.html);
+          expect(withoutInternalVisibilityMarkers(current.html)).toBe(baseline.html);
           expect(current.seen).toEqual(methods);
           expect(current.html).not.toContain("internal-booking-");
         }
@@ -269,7 +273,7 @@ describe("internal booking controls: public preservation and optional slots", ()
       cardOnFile: true,
       formError: "Local retry notice",
     };
-    expect(renderPayment(paymentSource, overrides).html).toBe(
+    expect(withoutInternalVisibilityMarkers(renderPayment(paymentSource, overrides).html)).toBe(
       renderPayment(baselineSource, overrides).html
     );
   });
@@ -308,29 +312,29 @@ describe("internal booking controls: public preservation and optional slots", ()
       const summaryChildren = React.Children.toArray(
         summary.props.children
       ) as any[];
-      const amountIndex = summaryChildren.findIndex(
+      expect(summaryChildren.some(
         node => node.type === controls.InternalBookingAmountControl
+      )).toBe(false);
+      const main = elements(result.tree).find(
+        node => node.props.className === "br3-main"
       );
-      expect(summaryChildren[amountIndex - 1].props.className).toBe(
-        "br2-price-lines"
-      );
-      expect(summaryChildren[amountIndex + 1].props.className).toBe(
-        "br2-total"
-      );
+      const mainChildren = React.Children.toArray(main.props.children) as any[];
+      expect(mainChildren[0].type).toBe(controls.InternalBookingAmountControl);
+      expect(mainChildren[1].props.className).toBe("br3-payment-card");
       const paymentCard = elements(result.tree).find(
         node => node.props.className === "br3-payment-card"
       );
       const paymentChildren = React.Children.toArray(
         paymentCard.props.children
       ) as any[];
+      const methodGroup = paymentChildren.find(node => node.props.className === "br3-methods");
+      const methodChildren = React.Children.toArray(methodGroup.props.children) as any[];
       // React.Children assigns keys, so locate optional nodes by component type.
-      const noPaymentIndex = paymentChildren.findIndex(
+      const noPaymentIndex = methodChildren.findIndex(
         node => node.type === controls.InternalBookWithoutPaymentControl
       );
-      expect(paymentChildren[noPaymentIndex - 1].props.className).toBe(
-        "br3-methods"
-      );
-      expect(paymentChildren[noPaymentIndex + 1].props.className).toBe(
+      expect(noPaymentIndex).toBe(methods.length);
+      expect(paymentChildren[paymentChildren.indexOf(methodGroup) + 1].props.className).toBe(
         "br3-booking-error"
       );
       expect(
@@ -352,7 +356,9 @@ describe("internal booking controls: thin controlled presentation", () => {
     expect(input.props.type).toBe("text");
     expect(input.props.inputMode).toBe("decimal");
     expect(input.props.value).toBe(props.value);
+    expect(input.props.placeholder).toBe("333.00");
     expect(label.props.htmlFor).toBe(input.props.id);
+    expect(result.html).toContain("Edit booking price</h2>");
     expect(result.html).toContain("Final booking amount ($)");
     expect(result.html).toContain("Calculated price: $333.00");
     expect(result.html).toContain("First cleaning only.");

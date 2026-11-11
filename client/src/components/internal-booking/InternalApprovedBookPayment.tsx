@@ -233,6 +233,7 @@ export default function ApprovedBookPayment({
       </section>
       <div className="br3-layout br2-container">
         <div className="br3-main">
+          {internalAmountControl}
           <section
             className="br3-payment-card"
             aria-label="Choose your payment method"
@@ -255,6 +256,7 @@ export default function ApprovedBookPayment({
                   <section
                     key={option.id}
                     className={`br3-method${active ? " is-selected" : ""}`}
+                    data-internal-payment-method={option.id}
                   >
                     <button
                       type="button"
@@ -301,8 +303,8 @@ export default function ApprovedBookPayment({
                   </section>
                 );
               })}
+              {internalNoPaymentControl}
             </div>
-            {internalNoPaymentControl}
             {formError && (
               <div className="br3-booking-error" role="alert">
                 {formError}
@@ -438,7 +440,6 @@ export default function ApprovedBookPayment({
                 </div>
               )}
             </div>
-            {internalAmountControl}
             <div className="br2-total">
               <span>First cleaning</span>
               <strong aria-live="polite">
