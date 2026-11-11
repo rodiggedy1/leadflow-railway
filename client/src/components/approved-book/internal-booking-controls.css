@@ -1,0 +1,93 @@
+/* Internal-only additions; no selector targets the existing public checkout. */
+.approved-book-surface .br-third-page .internal-booking-amount-control {
+  min-width: 0;
+  margin-top: 18px;
+}
+
+.approved-book-surface .br-third-page .internal-booking-amount-control input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #dbe2dc;
+  border-radius: 5px;
+  background: #fff;
+  color: #273e30;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.approved-book-surface
+  .br-third-page
+  .internal-booking-amount-control
+  input[aria-invalid="true"] {
+  border-color: #b42318;
+}
+
+.approved-book-surface
+  .br-third-page
+  .internal-booking-amount-control
+  .internal-booking-amount-reset {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #9a5d4d;
+  font-size: 10px;
+  text-decoration: underline;
+}
+
+.approved-book-surface
+  .br-third-page
+  .internal-booking-amount-control
+  .internal-booking-control-note,
+.approved-book-surface
+  .br-third-page
+  .internal-booking-no-payment-control
+  .internal-booking-control-note {
+  margin: 8px 0 0;
+  color: #74807b;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.approved-book-surface
+  .br-third-page
+  .internal-booking-amount-control
+  .internal-booking-control-error {
+  margin: 8px 0 0;
+  color: #b42318;
+  font-size: 12px;
+}
+
+.approved-book-surface
+  .br-third-page
+  .internal-booking-amount-control
+  .internal-booking-price-adjustment {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 5px 0;
+  color: #7a8772;
+  font-size: 12px;
+}
+
+.approved-book-surface
+  .br-third-page
+  .internal-booking-price-adjustment
+  strong {
+  flex-shrink: 0;
+  color: #3b5332;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .approved-book-surface .br-third-page .internal-booking-amount-control input {
+    font-size: 16px;
+  }
+}

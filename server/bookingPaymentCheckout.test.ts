@@ -32,13 +32,17 @@ describe("shared booking Stripe checkout", () => {
   it("retains the existing Internal Booking Stripe setup component", () => {
     const checkout = read("client/src/components/BookingPaymentCheckout.tsx");
     const internalBooking = read("client/src/pages/InternalBookingReview.tsx");
+    const internalCheckout = read("client/src/components/internal-booking/BookingPaymentCheckout.tsx");
+    const internalForm = read("client/src/components/internal-booking/InternalPublicBook.tsx");
     expect(checkout).toContain("export function InternalCardSetupForm");
     expect(checkout).toContain("const stripe = useStripe()");
     expect(checkout).toContain("const elements = useElements()");
-    expect(internalBooking).toContain(
-      'import { InternalCardSetupForm } from "@/components/BookingPaymentCheckout"'
-    );
-    expect(internalBooking).toContain("<InternalCardSetupForm");
+    expect(internalBooking).toContain('import { InternalBooking } from "./InternalBooking"');
+    expect(internalCheckout).toContain("export function InternalCardSetupForm");
+    expect(internalCheckout).toContain("const stripe = useStripe()");
+    expect(internalCheckout).toContain("const elements = useElements()");
+    expect(internalCheckout).toContain("<InternalCardSetupForm");
+    expect(internalForm).toContain("<PublicBookingCardSetupBeforeReservation");
   });
 
   it("mounts the established card form before the public booking funnel is reserved", () => {

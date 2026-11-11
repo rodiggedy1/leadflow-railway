@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
+import { internalExactBookingRouter } from "./internalExactBookingRouter";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import {
@@ -660,6 +661,7 @@ export async function updateCanonicalBookingDetails(
 }
 
 export const bookingsRouter = router({
+  internalExact: internalExactBookingRouter,
   todayStats: bookingsAgentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return { bookedCount: 0, bookedRevenue: 0, bookingDetails: [] };

@@ -7,6 +7,7 @@ import { getStripeClient } from "./stripeClient";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import { TRPCError } from "@trpc/server";
+import { exactConflict, lockInternalExactBooking } from "./internalExactBookingMarker";
 
 type Db = NonNullable<Awaited<ReturnType<typeof import("./db").getDb>>>;
 type Profile = typeof bookingPaymentProfiles.$inferSelect;
@@ -19,10 +20,17 @@ function affectedRows(result: unknown): number {
   return Number(direct?.affectedRows ?? nested?.affectedRows ?? 0);
 }
 
-export async function startCanonicalCardSetup(db: Db, input: { bookingId: number; customerName: string; profile: Profile }) {
+export async function startCanonicalCardSetup(db: Db, input: { bookingId: number; customerName: string; profile: Profile; internalExact?: true }) {
   const { bookingId, customerName, profile } = input;
+  if (input.internalExact) await db.transaction(async tx => {
+    const exact = await lockInternalExactBooking(tx, bookingId, "start", { required: true, profileId: profile.id, profileVersion: profile.version });
+    if (exact && (exact.booking.customerName !== customerName || exact.profile.stripeSetupIntentId !== profile.stripeSetupIntentId || exact.profile.stripeCustomerId !== profile.stripeCustomerId)) exactConflict();
+  });
   if (profile.paymentStatus === "card_on_file") {
-    if (profile.cardBrand && profile.cardLast4) await db.transaction(tx => syncNativeBookingPaymentState(tx, { bookingId, paymentStatus: "card_on_file", paymentBrand: profile.cardBrand, paymentLast4: profile.cardLast4 }));
+    if (profile.cardBrand && profile.cardLast4) await db.transaction(async tx => {
+      if (input.internalExact) await lockInternalExactBooking(tx, bookingId, "start", { required: true, profileId: profile.id, profileVersion: profile.version });
+      await syncNativeBookingPaymentState(tx, { bookingId, paymentStatus: "card_on_file", paymentBrand: profile.cardBrand, paymentLast4: profile.cardLast4 });
+    });
     return { alreadyComplete: true as const, clientSecret: null, setupIntentId: null };
   }
   const stripe = getStripeClient();
@@ -33,7 +41,11 @@ export async function startCanonicalCardSetup(db: Db, input: { bookingId: number
   if (profile.stripeSetupIntentId) {
     const existing = await stripe.setupIntents.retrieve(profile.stripeSetupIntentId);
     if (existing.client_secret && existing.status !== "succeeded" && existing.status !== "canceled") {
-      await db.transaction(tx => syncNativeBookingPaymentState(tx, { bookingId, paymentStatus: "pending" }));
+      await db.transaction(async tx => {
+        const exact = input.internalExact ? await lockInternalExactBooking(tx, bookingId, "start", { required: true, profileId: profile.id, profileVersion: profile.version }) : null;
+        if (exact && exact.profile.stripeSetupIntentId !== existing.id) exactConflict();
+        await syncNativeBookingPaymentState(tx, { bookingId, paymentStatus: "pending" });
+      });
       broadcastOpsUpdate("booking_funnel_update");
       return { alreadyComplete: false as const, clientSecret: existing.client_secret, setupIntentId: existing.id };
     }
@@ -41,6 +53,8 @@ export async function startCanonicalCardSetup(db: Db, input: { bookingId: number
   const setupIntent = await stripe.setupIntents.create({ customer: customer.id, usage: "off_session", payment_method_types: ["card"], metadata: bookingPaymentMetadata(bookingId, profile.id) }, { idempotencyKey: bookingPaymentIdempotencyKey(bookingId, "setup", profile.version) });
   if (!setupIntent.client_secret) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe could not prepare secure card entry." });
   await db.transaction(async tx => {
+    const exact = input.internalExact ? await lockInternalExactBooking(tx, bookingId, "start", { required: true, profileId: profile.id, profileVersion: profile.version }) : null;
+    if (exact && (exact.profile.stripeSetupIntentId !== profile.stripeSetupIntentId || exact.profile.stripeCustomerId !== profile.stripeCustomerId || exact.profile.paymentStatus === "card_on_file")) exactConflict();
     const result = await tx.update(bookingPaymentProfiles).set({ paymentStatus: "setup_pending", stripeCustomerId: customer.id, stripeSetupIntentId: setupIntent.id, updatedAt: new Date() }).where(and(eq(bookingPaymentProfiles.id, profile.id), eq(bookingPaymentProfiles.version, profile.version)));
     if (affectedRows(result) !== 1) throw new TRPCError({ code: "CONFLICT", message: "The payment method changed. Please try again." });
     await tx.update(bookings).set({ paymentStatus: "pending", updatedAt: new Date() }).where(eq(bookings.id, bookingId));
@@ -50,9 +64,11 @@ export async function startCanonicalCardSetup(db: Db, input: { bookingId: number
   return { alreadyComplete: false as const, clientSecret: setupIntent.client_secret, setupIntentId: setupIntent.id };
 }
 
-export async function finalizeCanonicalCardOnFile(db: Db, input: { bookingId: number; profileId: number; profileVersion: number; funnelId: number; stripeCustomerId: string; customerName: string; customerPhone: string; paymentMethod: CardDetails; wallet?: Wallet; deferConfirmation?: boolean }) {
+export async function finalizeCanonicalCardOnFile(db: Db, input: { bookingId: number; profileId: number; profileVersion: number; funnelId: number; stripeCustomerId: string; customerName: string; customerPhone: string; paymentMethod: CardDetails; wallet?: Wallet; deferConfirmation?: boolean; internalExactSetupIntentId?: string }) {
   const now = new Date();
   await db.transaction(async tx => {
+    const exact = input.internalExactSetupIntentId ? await lockInternalExactBooking(tx, input.bookingId, "confirm", { required: true, profileId: input.profileId, profileVersion: input.profileVersion, funnelId: input.funnelId }) : null;
+    if (exact && (input.deferConfirmation !== true || exact.profile.paymentStatus !== "setup_pending" || !input.internalExactSetupIntentId || exact.profile.stripeSetupIntentId !== input.internalExactSetupIntentId || exact.profile.stripeCustomerId !== input.stripeCustomerId || exact.booking.customerName !== input.customerName || exact.booking.customerPhone !== input.customerPhone)) exactConflict();
     const profileUpdate = await tx.update(bookingPaymentProfiles).set({ paymentStatus: "card_on_file", stripeCustomerId: input.stripeCustomerId, stripePaymentMethodId: input.paymentMethod.id, cardBrand: input.paymentMethod.brand, cardLast4: input.paymentMethod.last4, cardExpMonth: input.paymentMethod.exp_month, cardExpYear: input.paymentMethod.exp_year, consentVersion: BOOKING_PAYMENT_CONSENT_VERSION, consentText: BOOKING_PAYMENT_CONSENT_TEXT, consentAcceptedAt: Date.now(), version: sql`${bookingPaymentProfiles.version} + 1`, updatedAt: now }).where(and(eq(bookingPaymentProfiles.id, input.profileId), eq(bookingPaymentProfiles.version, input.profileVersion)));
     if (affectedRows(profileUpdate) !== 1) throw new TRPCError({ code: "CONFLICT", message: "The payment method changed. Please try again." });
     await tx.update(bookings).set({ status: input.deferConfirmation ? "pending_payment" : "needs_attention", paymentStatus: "card_on_file", paymentMethod: input.wallet ?? "card", updatedAt: now }).where(eq(bookings.id, input.bookingId));
@@ -69,12 +85,16 @@ export async function reuseCanonicalSavedCard(db: Db, input: { bookingId: number
   return { bookingId: input.bookingId, paymentStatus: "card_on_file" as const, cardBrand: input.savedCard.brand ?? "Card", cardLast4: input.savedCard.last4 ?? "saved", finalizationRequired: input.deferConfirmation === true };
 }
 
-export async function finalizeCanonicalBooking(db: Db, input: { bookingId: number; funnelId: number }) {
+export async function finalizeCanonicalBooking(db: Db, input: { bookingId: number; funnelId: number; internalExact?: true }) {
+  let exactReplay = false;
   await db.transaction(async tx => {
+    const exact = input.internalExact ? await lockInternalExactBooking(tx, input.bookingId, "finalize", { required: true, funnelId: input.funnelId }) : null;
+    if (exact?.alreadyComplete) { exactReplay = true; return; }
     await tx.update(bookings).set({ status: "needs_attention", paymentStatus: "card_on_file", updatedAt: new Date() }).where(eq(bookings.id, input.bookingId));
     await tx.update(bookingFunnelRecords).set({ stage: "booked", updatedAt: new Date() }).where(eq(bookingFunnelRecords.id, input.funnelId));
     await syncNativeBookingPaymentState(tx, { bookingId: input.bookingId, paymentStatus: "card_on_file" });
   });
+  if (exactReplay) return;
   broadcastOpsUpdate("booking_funnel_update");
   void sendBookingCompletionNotifications(input.bookingId).catch(error => console.error("[BookingPaymentEngine] Booking completion notifications failed:", error));
 }

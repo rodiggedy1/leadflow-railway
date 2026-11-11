@@ -9,6 +9,7 @@ import { getStripeClient } from "./stripeClient";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
 import { markApplePayPaymentUnavailable, settleSucceededApplePayPayment } from "./bookingApplePayEngine";
 import { markCashAppPaymentUnavailable, settleSucceededCashAppPayment } from "./bookingCashAppEngine";
+import { hasInternalExactMarker, lockInternalExactBooking } from "./internalExactBookingMarker";
 
 function isDuplicateEntry(error: unknown): boolean {
   const candidate = error as { code?: string; errno?: number; message?: string };
@@ -173,6 +174,15 @@ async function reconcileEvent(event: Stripe.Event, eventRecordId: number) {
   const bound = await findBoundProfile(object);
   if (!bound) return { status: "ignored" as const };
   const now = new Date();
+  if (object.object === "setup_intent" && hasInternalExactMarker(bound.booking.priceSnapshot)) {
+    await bound.db.transaction(async tx => {
+      await lockInternalExactBooking(tx, bound.booking.id, "webhook", { required: true, profileId: bound.profile.id });
+      // Staff must explicitly verify the wallet/card and consent, then finalize.
+      // Provider delivery (including late failures) never rewinds native state.
+      await tx.update(stripeWebhookEvents).set({ status: "processed", processedAt: now }).where(eq(stripeWebhookEvents.id, eventRecordId));
+    });
+    return { status: "processed" as const };
+  }
   if (object.object === "setup_intent" && event.type === "setup_intent.succeeded") {
     const paymentMethodId = typeof object.payment_method === "string" ? object.payment_method : object.payment_method?.id;
     if (!paymentMethodId) throw new Error("Stripe SetupIntent succeeded without a payment method.");
