@@ -10,19 +10,18 @@ const legacySymbols = new RegExp(
 );
 
 describe("internal booking additional services", () => {
-  it("uses the approved nine-step catalog and submits explicit quantities", () => {
+  it("uses the requested exact public three-screen form and submits canonical extra quantities without a separate add-on catalog", () => {
     const page = read("client/src/pages/InternalBooking.tsx");
-    expect(page).toContain('"Additional services"');
-    expect(page).toContain("ADDITIONAL_SERVICES");
-    expect(page).toContain(
-      "additionalServices: Object.entries(additionalServices)"
-    );
-    expect(page).toContain(
-      "pricing.firstCleaningTotalCents + additionalServicesTotalCents"
-    );
-    expect(page).toContain('"carpet-cleaning"');
-    expect(page).toContain('"exterior-window-cleaning"');
-    expect(page).toContain('"pet-area-cleaning"');
+    const form = read("client/src/components/internal-booking/InternalPublicBook.tsx");
+    const api = read("client/src/components/internal-booking/InternalExactBookingApi.ts");
+    expect(page).toContain("InternalBookingWrapper");
+    expect(form).toContain("ApprovedBookFirstPage");
+    expect(form).toContain("ApprovedBookSecondPage");
+    expect(form).toContain("ApprovedBookPayment");
+    expect(form).not.toContain("ADDITIONAL_SERVICES");
+    expect(api).toContain("createCanonicalPricingInput");
+    expect(api).toContain("createCanonicalBookingInput");
+    expect(api).not.toContain("additionalServices");
   });
 
   it("validates and persists add-ons on LeadFlow-owned booking and job rows", () => {
@@ -83,11 +82,12 @@ describe("internal booking additional services", () => {
     );
     expect(paymentAdminRouter).not.toMatch(legacySymbols);
   });
-  it("defers card-booking add-ons until the canonical card completion step", () => {
-    const page = read("client/src/pages/InternalBooking.tsx");
-    expect(page).toContain('paymentMethod === "card"');
-    expect(page).toContain('additionalServices: paymentMethod === "card"');
-    expect(page).toContain("updateAdditionalServices.mutate");
+  it("does not run additional-service mutations from the exact-public internal form", () => {
+    const form = read("client/src/components/internal-booking/InternalPublicBook.tsx");
+    const native = read("server/internalExactBookingService.ts");
+    expect(form).not.toContain("updateAdditionalServices.mutate");
+    expect(native).not.toContain("applyInternalAdditionalServices");
+    expect(form).toContain("internalBooking.finalizeCard()");
   });
 
   it("propagates recurring add-ons, assignments, one-time cancellation, and notes", () => {
@@ -114,10 +114,13 @@ describe("internal booking additional services", () => {
     expect(jobs).toContain("leadflowJobId");
     expect(jobs).not.toMatch(legacySymbols);
   });
-  it("does not allow Step 7 to continue before the card is saved", () => {
-    const page = read("client/src/pages/InternalBooking.tsx");
-    expect(page).toContain("const [cardSaved, setCardSaved] = useState(false)");
-    expect(page).toContain("!cardSaved");
-    expect(page).toContain("Save the card before continuing.");
+  it("retains verified card completion/retry and a distinct explicitly unpaid action on the copied payment screen", () => {
+    const form = read("client/src/components/internal-booking/InternalPublicBook.tsx");
+    expect(form).toContain("const [cardOnFile, setCardOnFile] = useState(false)");
+    expect(form).toContain("await internalBooking.finalizeCard()");
+    expect(form).toContain("setCardOnFile(true)");
+    expect(form).toContain("onRetryFinalization={() => void finalizeConfirmedCard()}");
+    expect(form).toContain("await prepareLockedBooking(true)");
+    expect(form).toContain('setCardLabel("No payment collected · booking remains unpaid")');
   });
 });

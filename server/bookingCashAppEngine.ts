@@ -13,6 +13,7 @@ import { bookingPaymentIdempotencyKey, bookingPaymentMetadata } from "./bookingP
 import { getStripeClient } from "./stripeClient";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { sendBookingCompletionNotifications } from "./bookingCompletionNotifications";
+import { exactConflict, hasInternalExactMarker, lockInternalExactBooking } from "./internalExactBookingMarker";
 
 type Db = NonNullable<Awaited<ReturnType<typeof import("./db").getDb>>>;
 type Profile = typeof bookingPaymentProfiles.$inferSelect;
@@ -68,6 +69,7 @@ export async function createOrReuseCashAppPaymentIntent(
     profile: Profile;
     amountCents: number;
     publicBookingNumber: string;
+    internalExact?: true;
   }
 ) {
   assertCashAppTarget(input.profile);
@@ -82,6 +84,10 @@ export async function createOrReuseCashAppPaymentIntent(
     )
     .limit(1);
   if (existing[0]) {
+    if (input.internalExact) await db.transaction(async tx => {
+      const exact = await lockInternalExactBooking(tx, input.bookingId, "cash_prepare", { required: true, profileId: input.profile.id, profileVersion: input.profile.version, funnelId: input.funnelId, paymentIntentId: existing[0].stripePaymentIntentId });
+      if (exact && exact.booking.firstCleaningTotalCents !== input.amountCents) exactConflict();
+    });
     const intent = await getStripeClient().paymentIntents.retrieve(
       existing[0].stripePaymentIntentId
     );
@@ -114,7 +120,7 @@ export async function createOrReuseCashAppPaymentIntent(
         currency: "usd",
         payment_method_types: ["cashapp"],
         description: `Maids in Black first cleaning ${input.publicBookingNumber}`,
-        metadata: paymentIntentMetadata(input.bookingId, input.profile.id),
+        metadata: input.internalExact ? { ...paymentIntentMetadata(input.bookingId, input.profile.id), internalExactForm: "1" } : paymentIntentMetadata(input.bookingId, input.profile.id),
       },
       {
         idempotencyKey: bookingPaymentIdempotencyKey(
@@ -143,6 +149,8 @@ export async function createOrReuseCashAppPaymentIntent(
   try {
     await db.transaction(async tx => {
       const now = new Date();
+      const exact = input.internalExact ? await lockInternalExactBooking(tx, input.bookingId, "cash_prepare", { required: true, profileId: input.profile.id, profileVersion: input.profile.version, funnelId: input.funnelId }) : null;
+      if (exact && (exact.booking.firstCleaningTotalCents !== input.amountCents || exact.booking.publicBookingNumber !== input.publicBookingNumber || (exact.profile.stripePaymentIntentId && exact.profile.stripePaymentIntentId !== intent.id))) exactConflict();
       const result = await tx
         .update(bookingPaymentProfiles)
         .set({
@@ -207,6 +215,10 @@ export async function createOrReuseCashAppPaymentIntent(
       .where(eq(bookingCashAppPayments.stripePaymentIntentId, intent.id))
       .limit(1);
     if (existingAfterRace[0]) {
+      if (input.internalExact) await db.transaction(async tx => {
+        const exact = await lockInternalExactBooking(tx, input.bookingId, "cash_prepare", { required: true, profileId: input.profile.id, profileVersion: input.profile.version, funnelId: input.funnelId, paymentIntentId: intent.id });
+        if (exact && exact.booking.firstCleaningTotalCents !== input.amountCents) exactConflict();
+      });
       return {
         bookingId: input.bookingId,
         paymentIntentId: intent.id,
@@ -285,7 +297,7 @@ export async function settleSucceededCashAppPayment(
   const paymentMethod = await assertSucceededCashAppIntent(intent, payment);
   let completedNow = false;
   await db.transaction(async tx => {
-    const [profile] = await tx
+    let [profile] = await tx
       .select()
       .from(bookingPaymentProfiles)
       .where(
@@ -295,12 +307,15 @@ export async function settleSucceededCashAppPayment(
         )
       )
       .limit(1);
-    const [booking] = await tx
+    let [booking] = await tx
       .select()
       .from(bookings)
       .where(eq(bookings.id, payment.bookingId))
       .limit(1);
-    const [funnel] = await tx
+    const exact = hasInternalExactMarker(booking?.priceSnapshot) ? await lockInternalExactBooking(tx, payment.bookingId, "cash_settle", { required: true, profileId: payment.bookingPaymentProfileId, paymentIntentId: intent.id }) : null;
+    if (exact?.alreadyComplete) return;
+    if (exact) { profile = exact.profile; booking = exact.booking; }
+    const [funnel] = exact ? [exact.funnel] : await tx
       .select()
       .from(bookingFunnelRecords)
       .where(eq(bookingFunnelRecords.bookingId, payment.bookingId))
@@ -399,7 +414,19 @@ export async function markCashAppPaymentUnavailable(
     .limit(1);
   if (!payment || payment.status !== "pending") return null;
   const now = new Date();
+  let exactSkipped = false;
   await db.transaction(async tx => {
+    const exact = intent.metadata.internalExactForm === "1" ? await lockInternalExactBooking(tx, payment.bookingId, "cash_unavailable", { required: true, profileId: payment.bookingPaymentProfileId, paymentIntentId: intent.id }) : null;
+    if (exact?.skip) { exactSkipped = true; return; }
+    if (exact && (intent.metadata.bookingId !== String(exact.booking.id) || intent.metadata.bookingPaymentProfileId !== String(exact.profile.id) || intent.metadata.operation !== CASH_APP_OPERATION || intent.metadata.paymentMethod !== "cashapp" || intent.amount !== exact.booking.firstCleaningTotalCents || intent.currency !== "usd" || intent.status === "succeeded")) exactConflict();
+    if (exact && status === "failed") {
+      // A failed PaymentIntent may still be confirmed. Keep its live binding;
+      // only explicit provider cancellation permits a different payment method.
+      const failure = { failureCode: intent.last_payment_error?.code ?? "payment_failed", failureMessage: intent.last_payment_error?.message ?? null, updatedAt: now };
+      await tx.update(bookingCashAppPayments).set(failure).where(and(eq(bookingCashAppPayments.id, payment.id), eq(bookingCashAppPayments.status, "pending")));
+      await tx.update(bookingPaymentProfiles).set(failure).where(eq(bookingPaymentProfiles.id, exact.profile.id));
+      return;
+    }
     await tx
       .update(bookingCashAppPayments)
       .set({
@@ -455,13 +482,14 @@ export async function markCashAppPaymentUnavailable(
       paymentStatus: "not_started",
     });
   });
+  if (exactSkipped) return null;
   broadcastOpsUpdate("booking_funnel_update");
   return { bookingId: payment.bookingId, status };
 }
 
 export async function abandonCashAppPayment(
   db: Db,
-  input: { bookingId: number; paymentIntentId: string }
+  input: { bookingId: number; paymentIntentId: string; internalExact?: true }
 ) {
   const [payment] = await db
     .select()
@@ -474,10 +502,17 @@ export async function abandonCashAppPayment(
     )
     .limit(1);
   if (!payment) return { abandoned: false as const };
+  const exact = input.internalExact ? await db.transaction(tx => lockInternalExactBooking(tx, input.bookingId, "cash_unavailable", { required: true, profileId: payment.bookingPaymentProfileId, paymentIntentId: input.paymentIntentId })) : null;
+  if (exact?.skip) return { abandoned: exact.payment?.status === "failed" || exact.payment?.status === "cancelled", alreadySucceeded: exact.profile.paymentStatus === "captured" };
   const stripe = getStripeClient();
   const intent = await stripe.paymentIntents.retrieve(input.paymentIntentId);
   if (intent.status === "succeeded") {
     return { abandoned: false as const, alreadySucceeded: true as const };
+  }
+  if (exact && !exact.skip && intent.status === "requires_payment_method") {
+    const cancelled = await stripe.paymentIntents.cancel(input.paymentIntentId);
+    await markCashAppPaymentUnavailable(db, cancelled, "cancelled");
+    return { abandoned: true as const, alreadySucceeded: false as const };
   }
   if (payment.status !== "pending") {
     return { abandoned: true as const, alreadySucceeded: false as const };

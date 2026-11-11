@@ -1,0 +1,765 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  Elements,
+  CardElement,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
+import { CreditCard, LockKeyhole, ShieldCheck } from "lucide-react";
+import { BOOKING_PAYMENT_CONSENT_TEXT } from "@shared/bookingPayment";
+import { trpc } from "@/lib/trpc";
+import { CARD_ELEMENT_OPTIONS, useStripeCardSetup } from "../useStripeCardSetup";
+import { useInternalBookingCheckoutTransport, publicCheckoutReservation, internalCheckoutReservation, type BookingCheckoutReservation } from "./BookingCheckoutTransport";
+
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripePublishableKey
+  ? loadStripe(stripePublishableKey)
+  : null;
+
+type BookingPaymentCheckoutProps = {
+  publicFunnelNumber: string;
+  mutationToken: string;
+  customerName: string;
+  amountCents: number;
+  savedCard?: { brand: string | null; last4: string } | null;
+  footerReservesSavedCard?: boolean;
+  selectedPaymentChoice?: "saved" | "new";
+  onPaymentChoiceChange?: (choice: "saved" | "new") => void;
+  externalSavedCardError?: string;
+  /** Shows the Stripe fields immediately; other legacy surfaces retain their existing consent interstitial. */
+  directCardEntry?: boolean;
+  deferConfirmation?: boolean;
+  /** Allows the card UI to render before the pending booking is created. */
+  setupReady?: boolean;
+  submitLabel?: string;
+  onComplete: (result: {
+    bookingId: number;
+    cardBrand: string;
+    cardLast4: string;
+    portalAccessCode?: string | null;
+    directPortalSessionReady?: boolean;
+    finalizationRequired?: boolean;
+  }) => void;
+};
+
+type SetupFormProps = {
+  clientSecret: string;
+  customerName: string;
+  authorizationCopy?: string;
+  dark?: boolean;
+  submitLabel?: string;
+  onConfirm: (paymentMethodId: string) => Promise<void>;
+};
+
+type InternalCardSetupFormProps = {
+  clientSecret: string | null;
+  customerName: string;
+  onCreateBooking?: () => void | Promise<void>;
+  creatingBooking?: boolean;
+  awaitingSetup?: boolean;
+  onConfirm: (paymentMethodId: string) => Promise<void>;
+};
+
+type PublicBookingCardSetupBeforeReservationProps = {
+  customerName: string;
+  creatingBooking?: boolean;
+  onPrepareReservation: () => Promise<BookingCheckoutReservation | null>;
+  onComplete: (result: {
+    bookingId: number;
+    cardBrand: string;
+    cardLast4: string;
+    portalAccessCode?: string | null;
+    directPortalSessionReady?: boolean;
+    finalizationRequired?: boolean;
+  }) => void;
+};
+
+const DARK_CARD_ELEMENT_OPTIONS = {
+  ...CARD_ELEMENT_OPTIONS,
+  style: {
+    ...CARD_ELEMENT_OPTIONS.style,
+    base: {
+      ...CARD_ELEMENT_OPTIONS.style.base,
+      color: "#f5f3ef",
+      "::placeholder": { color: "#8e897f" },
+      iconColor: "#e8bb85",
+    },
+  },
+} as const;
+
+function ExistingCardSetupForm({
+  clientSecret,
+  customerName,
+  onConfirm,
+}: SetupFormProps) {
+  const { stripeReady, name, setName, cardError, loading, handleSubmit } =
+    useStripeCardSetup({
+      clientSecret,
+      prefillName: customerName,
+      onSetupSucceeded: async paymentMethodId => onConfirm(paymentMethodId),
+    });
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <label className="grid gap-1.5 text-[11px] font-bold text-[#3a3c41]">
+        Name on card
+        <input
+          required
+          value={name}
+          onChange={event => setName(event.target.value)}
+          autoComplete="cc-name"
+          className="h-11 rounded-xl border border-[#d7d8dc] bg-white px-3 text-[13px] text-[#3a3c41] outline-none focus:border-[#ff684c] focus:ring-2 focus:ring-[#ff684c]/20"
+        />
+      </label>
+      <label className="grid gap-1.5 text-[11px] font-bold text-[#3a3c41]">
+        Card details
+        <span className="flex h-11 items-center rounded-xl border border-[#d7d8dc] bg-white px-3">
+          <CardElement options={CARD_ELEMENT_OPTIONS} className="w-full" />
+        </span>
+      </label>
+      {cardError && (
+        <p
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-700"
+        >
+          {cardError}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={loading || !stripeReady}
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-extrabold text-white transition hover:bg-[#e9573e] disabled:cursor-wait disabled:opacity-60"
+      >
+        <LockKeyhole className="h-4 w-4" />
+        {loading ? "Saving secure card…" : "Save card to reserve →"}
+      </button>
+    </form>
+  );
+}
+
+export function PremiumCardSetupForm({
+  clientSecret,
+  customerName,
+  authorizationCopy,
+  dark = false,
+  submitLabel,
+  onConfirm,
+}: SetupFormProps) {
+  const { stripeReady, name, setName, cardError, loading, handleSubmit } =
+    useStripeCardSetup({
+      clientSecret,
+      prefillName: customerName,
+      onSetupSucceeded: async paymentMethodId => onConfirm(paymentMethodId),
+    });
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className={`booking-card-acceptance${dark ? " booking-card-acceptance-dark" : ""}`}
+    >
+      <header className="booking-card-acceptance-head">
+        <span className="booking-card-acceptance-mark">
+          <LockKeyhole />
+        </span>
+        <span>
+          <small>SECURE CARD DETAILS</small>
+          <strong>Add your card</strong>
+          <em>Your card is stored securely and charged only after service.</em>
+        </span>
+      </header>
+      <div className="booking-card-acceptance-fields">
+        <label>
+          <span>Name on card</span>
+          <input
+            required
+            value={name}
+            onChange={event => setName(event.target.value)}
+            autoComplete="cc-name"
+            placeholder="Name as it appears on your card"
+          />
+        </label>
+        <label>
+          <span>Card details</span>
+          <span className="booking-card-element-shell">
+            <CardElement
+              options={dark ? DARK_CARD_ELEMENT_OPTIONS : CARD_ELEMENT_OPTIONS}
+              className="w-full"
+            />
+          </span>
+        </label>
+      </div>
+      {cardError && (
+        <p role="alert" className="booking-card-acceptance-error">
+          {cardError}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={loading || !stripeReady}
+        className="booking-card-acceptance-submit"
+      >
+        <LockKeyhole className="h-4 w-4" />
+        {loading
+          ? "Saving secure card…"
+          : `${submitLabel ?? "Save card to reserve"} →`}
+      </button>
+      {authorizationCopy && (
+        <p className="booking-card-acceptance-terms">{authorizationCopy}</p>
+      )}
+    </form>
+  );
+}
+
+/** The Internal Booking card fields stay mounted before booking creation. */
+export function InternalCardSetupForm({
+  clientSecret,
+  customerName,
+  onCreateBooking,
+  creatingBooking = false,
+  awaitingSetup = false,
+  onConfirm,
+}: InternalCardSetupFormProps) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [name, setName] = useState(customerName);
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const autoConfirmKey = useRef<string | null>(null);
+
+  async function confirmCard() {
+    if (!clientSecret) {
+      setCardError(null);
+      setLoading(true);
+      try {
+        await onCreateBooking?.();
+      } catch (error: unknown) {
+        setCardError(
+          error instanceof Error
+            ? error.message
+            : "We couldn't start secure card entry. Please try again."
+        );
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+    if (!stripe || !elements) {
+      setCardError("Secure card entry is still loading. Please try again.");
+      return;
+    }
+    setLoading(true);
+    setCardError(null);
+    try {
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) throw new Error("Card element not found");
+      const { setupIntent, error } = await stripe.confirmCardSetup(
+        clientSecret,
+        {
+          payment_method: { card: cardElement, billing_details: { name } },
+        }
+      );
+      if (error) {
+        setCardError(
+          error.message ?? "Card declined. Please try a different card."
+        );
+        return;
+      }
+      if (!setupIntent?.payment_method) {
+        setCardError("Something went wrong. Please try again.");
+        return;
+      }
+      await onConfirm(setupIntent.payment_method as string);
+    } catch (error: unknown) {
+      setCardError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (
+      !clientSecret ||
+      !awaitingSetup ||
+      !stripe ||
+      !elements ||
+      autoConfirmKey.current === clientSecret
+    )
+      return;
+    autoConfirmKey.current = clientSecret;
+    void confirmCard();
+  }, [awaitingSetup, clientSecret, elements, stripe]);
+
+  return (
+    <form
+      onSubmit={event => {
+        event.preventDefault();
+        void confirmCard();
+      }}
+      className="booking-card-acceptance"
+    >
+      <header className="booking-card-acceptance-head">
+        <span className="booking-card-acceptance-mark">
+          <LockKeyhole />
+        </span>
+        <span>
+          <small>SECURE CARD DETAILS</small>
+          <strong>Add your card</strong>
+          <em>Your card is stored securely and charged only after service.</em>
+        </span>
+      </header>
+      <div className="booking-card-acceptance-fields">
+        <label>
+          <span>Name on card</span>
+          <input
+            required
+            value={name}
+            onChange={event => setName(event.target.value)}
+            autoComplete="cc-name"
+            placeholder="Name as it appears on your card"
+          />
+        </label>
+        <label>
+          <span>Card details</span>
+          <span className="booking-card-element-shell">
+            <CardElement options={CARD_ELEMENT_OPTIONS} className="w-full" />
+          </span>
+        </label>
+      </div>
+      {cardError && (
+        <p role="alert" className="booking-card-acceptance-error">
+          {cardError}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={
+          loading ||
+          creatingBooking ||
+          Boolean(clientSecret && (!stripe || !elements))
+        }
+        className="booking-card-acceptance-submit"
+      >
+        <LockKeyhole className="h-4 w-4" />
+        {loading
+          ? "Saving secure card…"
+          : clientSecret
+            ? "Save card to reserve →"
+            : awaitingSetup
+              ? "Preparing secure card…"
+              : "Create booking & save card →"}
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Public /book adapter. It mirrors the working Internal Booking form: the
+ * CardElement mounts before reservation, and the submitted card is confirmed
+ * once the existing public funnel returns its SetupIntent client secret.
+ */
+export function PublicBookingCardSetupBeforeReservation({
+  customerName,
+  creatingBooking = false,
+  onPrepareReservation,
+  onComplete,
+}: PublicBookingCardSetupBeforeReservationProps) {
+  const checkoutTransport = useInternalBookingCheckoutTransport();
+  const startSetup = trpc.bookingPayments.startSetup.useMutation();
+  const confirmSetup = trpc.bookingPayments.confirmSetup.useMutation();
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState("");
+  const reservationRef = useRef<BookingCheckoutReservation | null>(null);
+
+  const prepareCardSetup = async () => {
+    setCheckoutError("");
+    const reservation =
+      reservationRef.current ?? (await onPrepareReservation());
+    if (!reservation) return;
+    reservationRef.current = reservation;
+    try {
+      const result = checkoutTransport
+        ? await checkoutTransport.startSetup(internalCheckoutReservation(reservation))
+        : await startSetup.mutateAsync(publicCheckoutReservation(reservation));
+      if (result.alreadyComplete) {
+        onComplete({
+          bookingId: result.bookingId,
+          cardBrand: "Card",
+          cardLast4: "saved",
+          portalAccessCode: result.portalAccessCode,
+          directPortalSessionReady: result.directPortalSessionReady,
+          finalizationRequired: true,
+        });
+        return;
+      }
+      if (!result.clientSecret) {
+        throw new Error(
+          "We could not prepare secure card entry. Please try again."
+        );
+      }
+      setClientSecret(result.clientSecret);
+    } catch (error: unknown) {
+      setCheckoutError(
+        error instanceof Error
+          ? error.message
+          : "We could not prepare secure card entry. Please try again."
+      );
+    }
+  };
+
+  const confirmCardSetup = async (paymentMethodId: string) => {
+    const reservation = reservationRef.current;
+    if (!reservation) {
+      throw new Error("Start secure card entry before confirming it.");
+    }
+    const result = checkoutTransport
+      ? await checkoutTransport.confirmSetup({ ...internalCheckoutReservation(reservation), paymentMethodId, consentAccepted: true, deferConfirmation: true })
+      : await confirmSetup.mutateAsync({
+          ...publicCheckoutReservation(reservation),
+          paymentMethodId,
+          consentAccepted: true,
+          deferConfirmation: true,
+        });
+    onComplete(result);
+  };
+
+  if (!stripePromise) {
+    return (
+      <p role="alert" className="booking-card-acceptance-error">
+        Secure card entry is temporarily unavailable. Please refresh and try
+        again.
+      </p>
+    );
+  }
+
+  return (
+    <Elements stripe={stripePromise}>
+      <InternalCardSetupForm
+        clientSecret={clientSecret}
+        customerName={customerName}
+        onCreateBooking={prepareCardSetup}
+        creatingBooking={
+          creatingBooking || startSetup.isPending || confirmSetup.isPending
+        }
+        awaitingSetup={Boolean(clientSecret)}
+        onConfirm={confirmCardSetup}
+      />
+      {checkoutError && (
+        <p role="alert" className="booking-card-acceptance-error">
+          {checkoutError}
+        </p>
+      )}
+      <p className="booking-card-acceptance-terms">
+        {`By selecting “Create booking & save card,” ${BOOKING_PAYMENT_CONSENT_TEXT.replace("I authorize", "you authorize").replace("My card", "your card").replace("I may", "you may")}`}
+      </p>
+    </Elements>
+  );
+}
+
+/** Booking adapter around the established Stripe Elements + confirmCardSetup collection path. */
+export function BookingPaymentCheckout({
+  publicFunnelNumber,
+  mutationToken,
+  customerName,
+  amountCents,
+  savedCard,
+  footerReservesSavedCard = false,
+  selectedPaymentChoice,
+  onPaymentChoiceChange,
+  externalSavedCardError = "",
+  directCardEntry = false,
+  deferConfirmation = false,
+  setupReady = true,
+  submitLabel,
+  onComplete,
+}: BookingPaymentCheckoutProps) {
+  const startSetup = trpc.bookingPayments.startSetup.useMutation();
+  const confirmSetup = trpc.bookingPayments.confirmSetup.useMutation();
+  const reuseSavedCard = trpc.bookingPayments.reuseSavedCard.useMutation();
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [internalPaymentChoice, setInternalPaymentChoice] = useState<
+    "saved" | "new"
+  >(savedCard ? "saved" : "new");
+  const requestedCardEntry = useRef<string | null>(null);
+  const paymentChoice = selectedPaymentChoice ?? internalPaymentChoice;
+  const authorizationCopy = `By selecting “Save card to reserve,” ${BOOKING_PAYMENT_CONSENT_TEXT.replace("I authorize", "you authorize").replace("My card", "Your card").replace("I may", "You may")}`;
+
+  const selectPaymentChoice = (choice: "saved" | "new") => {
+    setCheckoutError("");
+    setInternalPaymentChoice(choice);
+    onPaymentChoiceChange?.(choice);
+  };
+
+  const beginCardCollection = async () => {
+    if (!directCardEntry && !consentAccepted) return;
+    setCheckoutError("");
+    try {
+      const result = await startSetup.mutateAsync({
+        publicFunnelNumber,
+        mutationToken,
+      });
+      if (result.alreadyComplete) {
+        onComplete({
+          bookingId: result.bookingId,
+          cardBrand: "Card",
+          cardLast4: "saved",
+          portalAccessCode: result.portalAccessCode,
+          directPortalSessionReady: result.directPortalSessionReady,
+          finalizationRequired: deferConfirmation,
+        });
+        return;
+      }
+      if (!result.clientSecret) {
+        throw new Error(
+          "We could not prepare secure card entry. Please try again."
+        );
+      }
+      setClientSecret(result.clientSecret);
+    } catch (error: unknown) {
+      setCheckoutError(
+        error instanceof Error
+          ? error.message
+          : "We could not prepare secure card entry. Please try again."
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (
+      !directCardEntry ||
+      !setupReady ||
+      !stripePromise ||
+      (paymentChoice === "saved" && savedCard) ||
+      clientSecret
+    )
+      return;
+    const requestKey = `${publicFunnelNumber}:${mutationToken}:${paymentChoice}`;
+    if (requestedCardEntry.current === requestKey) return;
+    requestedCardEntry.current = requestKey;
+    void beginCardCollection();
+  }, [
+    clientSecret,
+    directCardEntry,
+    mutationToken,
+    paymentChoice,
+    publicFunnelNumber,
+    setupReady,
+    savedCard,
+  ]);
+
+  const completeCardCollection = async (paymentMethodId: string) => {
+    const result = await confirmSetup.mutateAsync({
+      publicFunnelNumber,
+      mutationToken,
+      paymentMethodId,
+      consentAccepted: true,
+      ...(deferConfirmation ? { deferConfirmation: true } : {}),
+    });
+    onComplete(result);
+  };
+
+  const reserveWithSavedCard = async () => {
+    setCheckoutError("");
+    try {
+      const result = await reuseSavedCard.mutateAsync({
+        publicFunnelNumber,
+        mutationToken,
+        ...(deferConfirmation ? { deferConfirmation: true } : {}),
+      });
+      onComplete(result);
+    } catch (error: unknown) {
+      setCheckoutError(
+        error instanceof Error
+          ? error.message
+          : "We could not use your saved card. Please add a new card."
+      );
+    }
+  };
+
+  if (directCardEntry) {
+    if (clientSecret && stripePromise) {
+      return (
+        <Elements
+          stripe={stripePromise}
+          options={{ clientSecret, appearance: { theme: "stripe" } }}
+        >
+          <PremiumCardSetupForm
+            clientSecret={clientSecret}
+            customerName={customerName}
+            authorizationCopy={authorizationCopy}
+            submitLabel={submitLabel}
+            onConfirm={completeCardCollection}
+          />
+        </Elements>
+      );
+    }
+
+    if (!stripePromise) {
+      return (
+        <p role="alert" className="booking-card-acceptance-error">
+          Secure card entry is temporarily unavailable. Please refresh and try
+          again.
+        </p>
+      );
+    }
+
+    if (checkoutError) {
+      return (
+        <p role="alert" className="booking-card-acceptance-error">
+          {checkoutError}
+        </p>
+      );
+    }
+
+    return (
+      <section
+        className="booking-card-acceptance booking-card-acceptance-loading"
+        aria-label="Preparing card acceptance form"
+      >
+        <span />
+        <span />
+        <span />
+      </section>
+    );
+  }
+
+  return (
+    <div className="rounded-[20px] border border-[#e4e5e7] bg-white p-4 shadow-[0_14px_36px_rgba(22,20,33,0.08)] sm:p-5">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#fff1ed] text-[#e9573e]">
+          <CreditCard className="h-4.5 w-4.5" />
+        </span>
+        <div>
+          <h3 className="text-[15px] font-extrabold text-[#3a3c41]">
+            Secure card on file
+          </h3>
+          <p className="mt-0.5 text-[10px] text-[#6f7279]">
+            ${(amountCents / 100).toFixed(0)} after service · Stripe secure
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 flex gap-3 rounded-xl border border-[#cfe9df] bg-[#f3fbf7] p-3 text-[10px] leading-5 text-[#41695a]">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#168d61]" />
+        <p>
+          {savedCard
+            ? "Choose the saved card below or add a new card. You won’t be charged until after service."
+            : "Add a card to reserve your cleaning. You won’t be charged until after service. Your payment information is securely handled by Stripe and is never stored on our servers."}
+        </p>
+      </div>
+      {savedCard && !clientSecret && (
+        <div
+          className="mt-4 grid gap-2"
+          role="radiogroup"
+          aria-label="Payment method"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={paymentChoice === "saved"}
+            onClick={() => selectPaymentChoice("saved")}
+            className={`rounded-xl border p-3 text-left ${paymentChoice === "saved" ? "border-[#ff684c] bg-[#fff7f4] ring-2 ring-[#ff684c]/10" : "border-[#e4e5e7] bg-white"}`}
+          >
+            <strong className="block text-[12px] text-[#3a3c41]">
+              Use {savedCard.brand ? `${savedCard.brand} ` : "card "}ending in{" "}
+              {savedCard.last4}
+            </strong>
+            <span className="mt-1 block text-[10px] text-[#6f7279]">
+              Selected by default · no charge today
+            </span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={paymentChoice === "new"}
+            onClick={() => selectPaymentChoice("new")}
+            className={`rounded-xl border p-3 text-left ${paymentChoice === "new" ? "border-[#ff684c] bg-[#fff7f4] ring-2 ring-[#ff684c]/10" : "border-[#e4e5e7] bg-white"}`}
+          >
+            <strong className="block text-[12px] text-[#3a3c41]">
+              Add a new card
+            </strong>
+            <span className="mt-1 block text-[10px] text-[#6f7279]">
+              Use a different payment method for this rebook
+            </span>
+          </button>
+        </div>
+      )}
+      {!clientSecret ? (
+        <div className="mt-4 space-y-3">
+          {paymentChoice === "saved" && savedCard ? (
+            footerReservesSavedCard ? (
+              <div
+                className="flex items-center gap-2 rounded-xl border border-[#cfe9df] bg-[#f3fbf7] px-3 py-3 text-[11px] font-semibold text-[#41695a]"
+                role="status"
+              >
+                <ShieldCheck className="h-4 w-4 shrink-0 text-[#168d61]" />
+                Your saved card is selected. Complete your reservation below.
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void reserveWithSavedCard()}
+                disabled={reuseSavedCard.isPending}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-extrabold text-white transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <LockKeyhole className="h-4 w-4" />
+                {reuseSavedCard.isPending
+                  ? "Reserving with saved card…"
+                  : `Reserve with card ending in ${savedCard.last4} →`}
+              </button>
+            )
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-[#f8f7f5] p-3 text-[10px] leading-5 text-[#5f6168]">
+                <input
+                  type="checkbox"
+                  checked={consentAccepted}
+                  onChange={event => setConsentAccepted(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#ff684c]"
+                />
+                <span>{BOOKING_PAYMENT_CONSENT_TEXT}</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => void beginCardCollection()}
+                disabled={!consentAccepted || startSetup.isPending}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ff684c] px-4 py-3 text-[12px] font-extrabold text-white transition hover:bg-[#e9573e] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <LockKeyhole className="h-4 w-4" />
+                {startSetup.isPending
+                  ? "Preparing secure card entry…"
+                  : "Continue to secure card entry →"}
+              </button>
+            </>
+          )}
+        </div>
+      ) : (
+        <Elements
+          stripe={stripePromise}
+          options={{ clientSecret, appearance: { theme: "stripe" } }}
+        >
+          <div className="mt-4">
+            <ExistingCardSetupForm
+              clientSecret={clientSecret}
+              customerName={customerName}
+              onConfirm={completeCardCollection}
+            />
+          </div>
+        </Elements>
+      )}
+      {(checkoutError || externalSavedCardError) && (
+        <p
+          role="alert"
+          className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-700"
+        >
+          {checkoutError || externalSavedCardError}
+        </p>
+      )}
+    </div>
+  );
+}
