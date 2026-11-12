@@ -13,6 +13,7 @@ import { generatePayableInvoicePdf, sendPayableInvoiceEmail } from "./payableInv
 import { InvoiceMailOutbox } from "./payableInvoiceMailOutbox";
 import { invoiceConfiguration, invoiceRuntimeOrigin } from "./payableInvoiceConfig";
 export { invoiceRuntimeOrigin } from "./payableInvoiceConfig";
+import { invoiceExistingSearchSchema, invoiceExistingMarkPaidSchema } from "../shared/payableInvoice";
 
 export const INVOICE_API = "/api/payable-invoices";
 type Options = { service?: PayableInvoiceService; admin?: (req: Request) => Promise<boolean | number>; origin?: string; stripe?: () => Stripe; webhookSecret?: string; paymentsReady?: boolean; outbox?: InvoiceMailOutbox; send?: typeof sendPayableInvoiceEmail };
@@ -88,6 +89,22 @@ export function registerPayableInvoiceRoutes(app: Express, options: Options = {}
     res.status(403).json({ success: false, error: "ORIGIN_REQUIRED", message: "This invoice action must be submitted from its configured LeadFlow domain." }); return false;
   };
   router.get("/admin/status", (_req, res) => { res.json({ paymentsReady: ready(), message: paymentMessage() }); });
+  router.post("/admin/existing/search", async (req, res) => {
+    if (!requireOrigin(req, res)) return;
+    const parsed = invoiceExistingSearchSchema.safeParse(req.body);
+    if (!parsed.success) return void res.status(400).json({ success: false, error: "INVALID_INPUT", message: "Enter a valid invoice search." });
+    try { res.json(await service().searchExisting(parsed.data)); } catch (error) { fail(res, error); }
+  });
+  router.get("/admin/existing/:id", async (req, res) => {
+    if (!/^[1-9]\d*$/.test(req.params.id) || !Number.isSafeInteger(Number(req.params.id))) return void res.status(400).json({ success: false, error: "INVALID_INPUT", message: "Choose a saved invoice." });
+    try { res.json(await service().existingInvoice(Number(req.params.id))); } catch (error) { fail(res, error); }
+  });
+  router.post("/admin/existing/:id/mark-paid", async (req, res) => {
+    if (!requireOrigin(req, res)) return;
+    const parsed = invoiceExistingMarkPaidSchema.safeParse(req.body);
+    if (!/^[1-9]\d*$/.test(req.params.id) || !Number.isSafeInteger(Number(req.params.id)) || !parsed.success) return void res.status(400).json({ success: false, error: "INVALID_INPUT", message: "Select saved invoice lines and confirm payment was already received." });
+    try { res.json(await service().markExistingInvoicePaid(Number(req.params.id), parsed.data, res.locals.invoiceAgentId)); } catch (error) { fail(res, error); }
+  });
   router.post("/admin/lookup", async (req, res) => {
     if (!requireOrigin(req, res)) return;
     const parsed = invoiceLookupSchema.safeParse(req.body);

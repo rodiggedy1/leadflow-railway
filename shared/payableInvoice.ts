@@ -41,3 +41,30 @@ export function selectedBalance(invoice: PayableInvoice, ids: number[]): number 
   if (total < 50) throw new InvoiceError("INVALID_AMOUNT", 409, "The selected amount is below the supported card payment minimum.");
   return total;
 }
+
+export const invoiceExistingSearchSchema = z.object({
+  search: z.string().trim().max(320).default(""),
+  beforeId: z.number().int().positive().optional(),
+}).strict();
+export const invoiceExistingMarkPaidSchema = z.object({
+  requestId: z.string().uuid(),
+  lineIds: z.array(z.number().int().positive()).min(1).max(1000).refine(ids => new Set(ids).size === ids.length, "Select each service only once"),
+  reviewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  confirmed: z.literal(true),
+}).strict();
+export type InvoiceExistingSearchInput = z.infer<typeof invoiceExistingSearchSchema>;
+export type InvoiceExistingMarkPaidInput = z.infer<typeof invoiceExistingMarkPaidSchema>;
+export type InvoiceExistingSummary = {
+  id: number;
+  number: string;
+  clientName: string;
+  from: string;
+  to: string;
+  dueDate: string;
+  status: PayableInvoice["status"];
+  amountCents: number;
+  paidCents: number;
+  balanceCents: number;
+};
+export type InvoiceExistingSearchResult = { invoices: InvoiceExistingSummary[]; nextBeforeId: number | null };
+export type InvoiceExistingView = { invoice: PayableInvoice; client: InvoiceClient; url: string; reviewHash: string };

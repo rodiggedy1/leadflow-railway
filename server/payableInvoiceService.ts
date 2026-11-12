@@ -3,6 +3,8 @@ import type Stripe from "stripe";
 import { InvoiceError, selectedBalance, safeSum, type InvoiceAttempt, type InvoiceClient, type InvoiceService, type PayableInvoice, type invoiceIssueSchema, type invoiceMarkPaidSchema } from "../shared/payableInvoice";
 import { invoiceReviewHash } from "./payableInvoiceReview";
 import type { z } from "zod";
+import { invoiceExistingSearchSchema, invoiceExistingMarkPaidSchema, type InvoiceExistingSearchInput, type InvoiceExistingSearchResult, type InvoiceExistingMarkPaidInput, type InvoiceExistingView } from "../shared/payableInvoice";
+import { invoiceExistingReviewHash } from "./payableInvoiceExistingReview";
 
 export const INVOICE_PAYMENT_MARKER = "leadflow_invoice_v1";
 export type InvoiceIssueInput = z.infer<typeof invoiceIssueSchema>;
@@ -23,6 +25,8 @@ export type InvoiceRepository = {
   adminInvoice?: (invoiceId: number) => Promise<{ invoice: PayableInvoice; client: InvoiceClient; requestId: string }>;
   replayIssue?: (input: InvoiceIssueInput, tokenHash: string) => Promise<PayableInvoice | null>;
   recordAdjustment?: (paymentId: string, refundedCents: number) => Promise<void>;
+  listExisting?: (input: InvoiceExistingSearchInput) => Promise<InvoiceExistingSearchResult>;
+  markInvoicePaid?: (invoiceId: number, input: InvoiceExistingMarkPaidInput, agentId: number) => Promise<void | PayableInvoice>;
 };
 export type InvoiceDependencies = {
   repo: InvoiceRepository;
@@ -79,6 +83,25 @@ export class PayableInvoiceService {
     if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0 || !this.deps.repo.adminInvoice) throw new InvoiceError("NOT_FOUND", 404, "Invoice unavailable.");
     const result = await this.deps.repo.adminInvoice(invoiceId);
     return { ...result, url: `${this.deps.origin}/invoice/${this.token(result.client.id, result.requestId)}` };
+  }
+  async searchExisting(input: InvoiceExistingSearchInput): Promise<InvoiceExistingSearchResult> {
+    if (!invoiceExistingSearchSchema.safeParse(input).success) throw new InvoiceError("INVALID_INPUT", 400, "Enter a valid invoice search.");
+    if (!this.deps.repo.listExisting) throw new InvoiceError("INVOICE_STORAGE_UNAVAILABLE", 503, "Saved invoice records are unavailable.");
+    return this.deps.repo.listExisting(input);
+  }
+  async existingInvoice(invoiceId: number): Promise<InvoiceExistingView> {
+    const { invoice, client, url } = await this.adminInvoice(invoiceId);
+    return { invoice, client, url, reviewHash: invoiceExistingReviewHash(invoice, client) };
+  }
+  async markExistingInvoicePaid(invoiceId: number, input: InvoiceExistingMarkPaidInput, agentId: number): Promise<InvoiceExistingView> {
+    if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0 || !invoiceExistingMarkPaidSchema.safeParse(input).success) throw new InvoiceError("INVALID_INPUT", 400, "Select saved invoice lines and confirm payment was already received.");
+    if (!Number.isSafeInteger(agentId) || agentId <= 0) throw new InvoiceError("ADMIN_REQUIRED", 403, "An active staff administrator is required.");
+    if (!this.deps.repo.markInvoicePaid) throw new InvoiceError("INVOICE_STORAGE_UNAVAILABLE", 503, "Saved invoice payment records are unavailable.");
+    // Verify retrieval and signing before committing a manual record. This does
+    // not refresh Stripe, issue a replacement invoice, or send the existing link.
+    await this.existingInvoice(invoiceId);
+    await this.deps.repo.markInvoicePaid(invoiceId, input, agentId);
+    return this.existingInvoice(invoiceId);
   }
   async view(token: string): Promise<PayableInvoice> {
     if (!/^[a-f0-9]{64}$/.test(token)) throw new InvoiceError("NOT_FOUND", 404, "Invoice link unavailable or expired.");

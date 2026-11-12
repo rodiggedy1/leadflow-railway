@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { InvoiceError, invoiceDate, invoiceBalance, invoiceIssueSchema, invoicePeriodSchema, safeSum, selectedBalance, type InvoiceAttempt, type InvoiceClient, type InvoiceService, type PayableInvoice } from "../shared/payableInvoice";
+import { invoiceExistingMarkPaidSchema, invoiceExistingSearchSchema, type InvoiceExistingMarkPaidInput, type InvoiceExistingSearchInput, type InvoiceExistingSearchResult } from "../shared/payableInvoice";
+import { invoiceExistingReviewHash } from "./payableInvoiceExistingReview";
 import type { InvoiceIssueInput, InvoiceRepository } from "./payableInvoiceService";
 import { extractUSDigits, normalizePhone } from "./utils/phone";
 import { invoiceReviewHash } from "./payableInvoiceReview";
@@ -592,6 +594,95 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       const review = invoice.status === "payment_review";
       const updated = await change(tx, "UPDATE payable_invoices SET activeAttemptId = NULL, status = ?, paidAtMs = ? WHERE id = ? AND activeAttemptId = ?", [review ? "payment_review" : paid ? "paid" : "partially_paid", !review && paid ? paidAt : null, invoice.id, attemptId]);
       if (updated.affectedRows !== 1) return fail("PAYMENT_IDENTITY_MISMATCH", "Invoice payment ownership changed.");
+    });
+  }
+
+  async listExisting(input: InvoiceExistingSearchInput): Promise<InvoiceExistingSearchResult> {
+    const parsed = invoiceExistingSearchSchema.safeParse(input);
+    if (!parsed.success) return fail("INVALID_REQUEST", "Enter a valid invoice search and cursor.", 400);
+    const { search, beforeId } = parsed.data;
+    const conditions: string[] = [], values: (string | number | null)[] = [];
+    if (beforeId != null) { conditions.push("i.id < ?"); values.push(beforeId); }
+    if (search) {
+      // A dedicated LIKE escape character also makes literal backslashes safe.
+      const literal = `%${search.replace(/[!%_]/g, character => `!${character}`)}%`;
+      const phone = extractUSDigits(search);
+      conditions.push("(LOWER(i.clientName) LIKE LOWER(?) ESCAPE '!' OR LOWER(i.number) LIKE LOWER(?) ESCAPE '!' OR LOWER(TRIM(i.clientEmail)) = NULLIF(?, '') OR REGEXP_REPLACE(i.clientPhone, '[^0-9]', '') IN (NULLIF(?, ''), NULLIF(?, '')))");
+      values.push(literal, literal, normalizedEmail(search), phone || "", phone ? `1${phone}` : "");
+    }
+    // Page headers BEFORE joining lines: one aggregate query, not 51 detail reads.
+    // No issuance secrets, contacts, provider URLs or legacy invoices are returned.
+    const found = await rows(await this.pool(), `SELECT h.id, h.number, h.clientName, h.periodFrom, h.periodTo, h.dueDate, h.currency, h.status,
+      COUNT(l.id) AS lineCount, COALESCE(SUM(l.amountCents), 0) AS amountCents, COALESCE(SUM(l.paidCents), 0) AS paidCents,
+      COALESCE(SUM(CASE WHEN l.amountCents <= 0 OR l.amountCents > 99999999 OR l.paidCents > l.amountCents OR l.manualPaidCents > l.paidCents OR (l.manualPaidCents <> 0 AND l.manualPaidCents <> l.amountCents) THEN 1 ELSE 0 END), 0) AS invalidLines
+      FROM (SELECT i.id, i.number, i.clientName, i.periodFrom, i.periodTo, i.dueDate, i.currency, i.status FROM payable_invoices i
+        ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY i.id DESC LIMIT 51) h
+      LEFT JOIN payable_invoice_lines l ON l.invoiceId = h.id
+      GROUP BY h.id, h.number, h.clientName, h.periodFrom, h.periodTo, h.dueDate, h.currency, h.status ORDER BY h.id DESC`, values);
+    if (found.length > 51) return fail("CORRUPT_SNAPSHOT", "Invoice search bounds need review.");
+    const summaries = found.map(row => {
+      const count = integer(row.lineCount), amountCents = safeSum([integer(row.amountCents)]), paidCents = safeSum([integer(row.paidCents)]);
+      if (integer(row.id) <= 0 || count === 0 || count > MAX_ROWS || integer(row.invalidLines) !== 0 || amountCents === 0 || paidCents > amountCents || row.currency !== "usd" || !["open", "partially_paid", "paid", "void", "payment_review"].includes(text(row.status)) || (row.status === "open" && paidCents !== 0) || (row.status === "paid" && paidCents !== amountCents) || (row.status === "partially_paid" && (paidCents === 0 || paidCents === amountCents))) return fail("CORRUPT_SNAPSHOT", "Saved invoice amounts or status need review.");
+      return { id: integer(row.id), number: text(row.number), clientName: text(row.clientName), from: text(row.periodFrom), to: text(row.periodTo), dueDate: text(row.dueDate), status: row.status as PayableInvoice["status"], amountCents, paidCents, balanceCents: amountCents - paidCents };
+    });
+    const invoices = summaries.slice(0, 50);
+    return { invoices, nextBeforeId: summaries.length === 51 ? invoices[49].id : null };
+  }
+
+  async markInvoicePaid(invoiceId: number, input: InvoiceExistingMarkPaidInput, agentId: number): Promise<void> {
+    const parsed = invoiceExistingMarkPaidSchema.safeParse(input);
+    if (!parsed.success || !Number.isSafeInteger(invoiceId) || invoiceId <= 0 || !Number.isSafeInteger(agentId) || agentId <= 0) return fail("INVALID_REQUEST", "Explicit saved-invoice review and agent identity are required.", 400);
+    const request = parsed.data, ids = canonicalIds(request.lineIds);
+    return this.transaction(async tx => {
+      // Match checkout: invoice header first, then current line/allocation reads.
+      const found = await rows(tx, `SELECT ${INVOICE_COLUMNS} FROM payable_invoices WHERE id = ? LIMIT 1 FOR UPDATE`, [invoiceId]);
+      if (!found[0]) return fail("NOT_FOUND", "Invoice unavailable.", 404);
+      const row = found[0], invoice = await this.invoiceView(tx, row), client = snapshotClient(row);
+      // Request history precedes status/review guards: exact replay remains valid
+      // after this mark or a later unrelated card payment changes the invoice.
+      const replay = bounded(await rows(tx, "SELECT occurrenceKey, sourceServiceId, accountId, serviceDate, amountCents, requestId, payloadHash, reviewHash, recordedByAgentId, recordedAtMs FROM payable_invoice_manual_payments WHERE requestId = ? ORDER BY occurrenceKey LIMIT 1001 FOR UPDATE", [request.requestId]));
+      const selected = ids.map(id => invoice.lines.find(line => line.id === id));
+      if (selected.some(line => !line)) return fail(replay.length ? "IDEMPOTENCY_CONFLICT" : "INVALID_SELECTION", "Selected services do not belong to this saved invoice.", replay.length ? 409 : 400);
+      const lines = selected as PayableInvoice["lines"];
+      const bindings = await rows(tx, `SELECT id, invoiceId, sourceServiceId, occurrenceKey, serviceDate, amountCents FROM payable_invoice_lines WHERE invoiceId = ? AND id IN (${ids.map(() => "?").join(",")}) ORDER BY id FOR UPDATE`, [invoiceId, ...ids]);
+      if (bindings.length !== ids.length || new Set(lines.map(line => line.occurrenceKey)).size !== lines.length) return fail("INVALID_SNAPSHOT", "Selected invoice ownership needs review.");
+      for (const line of lines) {
+        invoiceOccurrence(line.occurrenceKey);
+        const binding = bindings.find(candidate => integer(candidate.id) === line.id);
+        if (!binding || integer(binding.invoiceId) !== invoiceId || binding.occurrenceKey !== line.occurrenceKey || binding.serviceDate !== line.date || integer(binding.amountCents) !== line.amountCents || !text(binding.sourceServiceId)) return fail("INVALID_SNAPSHOT", "Selected source snapshot changed.");
+      }
+      const payloadHash = createHash("sha256").update(JSON.stringify({ namespace: "existing-invoice-manual-v1", invoiceId, lineIds: ids, reviewHash: request.reviewHash,
+        identity: [invoice.number, invoice.clientId, invoice.clientName, client.phone, client.email, invoice.from, invoice.to, invoice.dueDate, invoice.currency, row.requestId, row.payloadHash, row.reviewHash],
+        lines: bindings.map(binding => [integer(binding.id), binding.sourceServiceId, binding.occurrenceKey, binding.serviceDate, integer(binding.amountCents)]),
+      })).digest("hex");
+      if (replay.length) {
+        if (replay.length !== lines.length || replay.some(mark => {
+          const line = lines.find(line => line.occurrenceKey === mark.occurrenceKey), binding = bindings.find(binding => binding.occurrenceKey === mark.occurrenceKey);
+          return !line || !binding || mark.requestId !== request.requestId || mark.payloadHash !== payloadHash || mark.reviewHash !== request.reviewHash || integer(mark.accountId) !== invoice.clientId || mark.sourceServiceId !== binding.sourceServiceId || mark.serviceDate !== line.date || integer(mark.amountCents) !== line.amountCents || line.paidCents !== line.amountCents || (line.manualPaidCents ?? 0) !== line.amountCents;
+        })) return fail("IDEMPOTENCY_CONFLICT", "This manual-payment UUID was already used with a different saved invoice or selection.");
+        await this.assertClaims(tx, lines, invoiceId);
+        return;
+      }
+      if (invoice.status === "void") return fail("INVOICE_VOID", "This invoice is no longer payable.");
+      if (invoice.status === "payment_review") return fail("PAYMENT_REVIEW_REQUIRED", "This invoice payment adjustment needs review.");
+      if (invoice.status === "paid" || lines.some(line => line.paidCents !== 0 || (line.manualPaidCents ?? 0) !== 0)) return fail("BALANCE_CHANGED", "A selected service is already paid or partially allocated. Refresh the invoice.");
+      if (invoice.activeAttemptId != null) return fail("CHECKOUT_IN_PROGRESS", "An unresolved checkout owns this invoice. No manual payment was recorded.");
+      const unresolved = await rows(tx, "SELECT id FROM payable_invoice_attempts WHERE invoiceId = ? AND state IN ('pending', 'session_open') ORDER BY id LIMIT 1 FOR UPDATE", [invoiceId]);
+      if (unresolved.length) return fail("CHECKOUT_IN_PROGRESS", "An unresolved invoice payment needs review.");
+      if (invoiceExistingReviewHash(invoice, client) !== request.reviewHash) return fail("REVIEW_CHANGED", "The saved invoice changed since review. Refresh before marking paid.");
+      await this.verifyInvoiceCollection(tx, invoice, ids, row);
+      const recordedAt = Date.now();
+      for (const line of lines.slice().sort((a, b) => a.occurrenceKey.localeCompare(b.occurrenceKey))) {
+        const binding = bindings.find(binding => integer(binding.id) === line.id)!;
+        const inserted = await change(tx, "INSERT INTO payable_invoice_manual_payments (occurrenceKey, sourceServiceId, accountId, serviceDate, amountCents, requestId, payloadHash, reviewHash, recordedByAgentId, recordedAtMs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [line.occurrenceKey, text(binding.sourceServiceId), invoice.clientId, line.date, line.amountCents, request.requestId, payloadHash, request.reviewHash, agentId, recordedAt]);
+        if (inserted.affectedRows !== 1) return fail("MANUAL_PAYMENT_CONFLICT", "The manual-payment audit record was not saved.");
+        const updated = await change(tx, "UPDATE payable_invoice_lines SET paidCents = paidCents + ?, manualPaidCents = manualPaidCents + ? WHERE invoiceId = ? AND id = ? AND paidCents = 0 AND manualPaidCents = 0 AND amountCents = ? AND sourceServiceId = ? AND occurrenceKey = ? AND serviceDate = ?", [line.amountCents, line.amountCents, invoiceId, line.id, line.amountCents, text(binding.sourceServiceId), line.occurrenceKey, line.date]);
+        if (updated.affectedRows !== 1) return fail("BALANCE_CHANGED", "A selected service allocation changed. No manual payment was committed.");
+        line.paidCents = line.amountCents; line.manualPaidCents = line.amountCents;
+      }
+      const paid = invoiceBalance(invoice.lines) === 0;
+      const updated = await change(tx, "UPDATE payable_invoices SET status = ?, paidAtMs = ? WHERE id = ? AND activeAttemptId IS NULL AND status IN ('open', 'partially_paid')", [paid ? "paid" : "partially_paid", paid ? recordedAt : null, invoiceId]);
+      if (updated.affectedRows !== 1) return fail("BALANCE_CHANGED", "Invoice payment ownership changed. No manual payment was committed.");
     });
   }
 }
