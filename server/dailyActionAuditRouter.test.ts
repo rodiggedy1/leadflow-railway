@@ -7,6 +7,9 @@ vi.mock("./dailyActionAuditEvidence", async original => ({ ...(await original() 
 vi.mock("./dailyActionAuditInterpret", async original => ({ ...(await original() as any), interpretAuditThreads: mocks.interpret }));
 import { dailyActionAuditRouter, dailyAuditInputSchema, runDailyActionAudit, type DailyAuditDependencies } from "./dailyActionAuditRouter";
 import { verifyAuditCandidates } from "./dailyActionAuditEngine";
+import { AuditSnapshotError } from "./dailyActionAuditSnapshot";
+import { auditFailureMessage, safeAuditFailureMessage } from "../shared/dailyActionAudit";
+import { TRPCError } from "@trpc/server";
 
 const now = new Date("2026-11-12T16:00:00.000Z");
 const input = { auditDate: "2026-11-11", timeZone: "America/New_York" as const };
@@ -129,6 +132,38 @@ describe("Daily Action Audit read-only orchestration", () => {
     await expect(runDailyActionAudit(input, d)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
     try { await runDailyActionAudit(input, d); } catch (error) { expect(String(error)).not.toMatch(/customer text|301555|SQL/); }
     expect(d.interpret).not.toHaveBeenCalled();
+  });
+  it.each(["DB_UNAVAILABLE", "DB_UNSUPPORTED", "DB_SCHEMA", "DB_TIMEOUT", "DB_READ_FAILED"] as const)("reports a fixed %s reason at the message-read stage without a raw cause", async reason => {
+    const d = deps(); d.messages = vi.fn(async () => { throw new AuditSnapshotError(reason); });
+    let thrown: any;
+    try { await runDailyActionAudit(input, d); } catch (error) { thrown = error; }
+    expect(thrown).toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: auditFailureMessage("MESSAGE_READ", reason) });
+    expect(thrown.cause).toBeUndefined();
+    expect(safeAuditFailureMessage(thrown.message)).toBe(thrown.message);
+    expect(d.records).not.toHaveBeenCalled(); expect(d.interpret).not.toHaveBeenCalled();
+  });
+  it("distinguishes current-record read failures from stored-message reads", async () => {
+    const d = deps(); d.records = vi.fn(async () => { throw new AuditSnapshotError("DB_SCHEMA"); });
+    await expect(runDailyActionAudit(input, d)).rejects.toMatchObject({ message: auditFailureMessage("RECORD_READ", "DB_SCHEMA") });
+    expect(d.messages).toHaveBeenCalledTimes(1); expect(d.interpret).not.toHaveBeenCalled();
+  });
+  it("reports processing failures without mislabeling them as a database read", async () => {
+    const d = deps(); d.verify = vi.fn(() => { throw new Error("SECRET CUSTOMER +13015550123 SQL"); });
+    await expect(runDailyActionAudit(input, d)).rejects.toMatchObject({ message: auditFailureMessage("PROCESSING", "FAILED") });
+  });
+  it("sanitizes dependency-thrown tRPC exceptions rather than attaching their raw payload", async () => {
+    const d = deps(); d.records = vi.fn(async () => { throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "SQL SECRET +13015550123", cause: new Error("raw query parameters") }); });
+    let thrown: any;
+    try { await runDailyActionAudit(input, d); } catch (error) { thrown = error; }
+    expect(thrown.message).toBe(auditFailureMessage("RECORD_READ", "FAILED"));
+    expect(thrown.cause).toBeUndefined();
+  });
+  it("allows only complete fixed failure messages, never secret text appended to a code", () => {
+    const known = auditFailureMessage("MESSAGE_READ", "DB_SCHEMA");
+    expect(safeAuditFailureMessage(known)).toBe(known);
+    for (const unsafe of [known + " secret phone", "[DAA:MESSAGE_READ:DB_SCHEMA] SQL customer data", "UNKNOWN", null, { message: known }]) {
+      expect(safeAuditFailureMessage(unsafe)).toBeNull();
+    }
   });
   it.each(["2026-11-12", "2026-11-13"])("rejects today/future %s before reading evidence", async auditDate => {
     const d = deps(); await expect(runDailyActionAudit({ ...input, auditDate }, d)).rejects.toMatchObject({ code: "BAD_REQUEST" });

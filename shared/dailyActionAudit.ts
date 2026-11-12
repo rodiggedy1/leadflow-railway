@@ -114,3 +114,36 @@ export type DailyActionAuditResult = {
   totals: Record<AuditStatus, number>;
   nextCursor: AuditCursor | null;
 };
+
+export const AUDIT_FAILURE_STAGES = {
+  MESSAGE_READ: "reading stored message evidence",
+  RECORD_READ: "reading current booking and job records",
+  PROCESSING: "processing audit evidence",
+} as const;
+export const AUDIT_FAILURE_REASONS = {
+  DB_UNAVAILABLE: "The audit database connection is unavailable.",
+  DB_UNSUPPORTED: "The database rejected an unsupported operation.",
+  DB_SCHEMA: "A required audit table or field is unavailable.",
+  DB_TIMEOUT: "The database read timed out or its connection was interrupted.",
+  DB_READ_FAILED: "The required database snapshot could not be read.",
+  FAILED: "The required evidence could not be processed.",
+} as const;
+export type AuditFailureStage = keyof typeof AUDIT_FAILURE_STAGES;
+export type AuditFailureReason = keyof typeof AUDIT_FAILURE_REASONS;
+
+/** Only fixed codes/text cross the transport; never SQL, parameters or source errors. */
+export function auditFailureMessage(stage: AuditFailureStage, reason: AuditFailureReason): string {
+  return `[DAA:${stage}:${reason}] Audit failed while ${AUDIT_FAILURE_STAGES[stage]}. ${AUDIT_FAILURE_REASONS[reason]} No changes were made.`;
+}
+
+/** Exact allowlist matching, not extraction or rendering of arbitrary error text. */
+export function safeAuditFailureMessage(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  for (const stage of Object.keys(AUDIT_FAILURE_STAGES) as AuditFailureStage[]) {
+    for (const reason of Object.keys(AUDIT_FAILURE_REASONS) as AuditFailureReason[]) {
+      const safe = auditFailureMessage(stage, reason);
+      if (value === safe) return safe;
+    }
+  }
+  return null;
+}

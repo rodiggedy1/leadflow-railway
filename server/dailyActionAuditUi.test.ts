@@ -6,6 +6,7 @@ import { runInNewContext } from "node:vm";
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import type { AuditItem, AuditMessage, DailyActionAuditResult } from "../shared/dailyActionAudit";
+import * as auditFailures from "../shared/dailyActionAudit";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "../shared/bookingWidgetConfig";
 
 // LOCAL ONLY: compile the actual UI source with explicit dependency mocks.
@@ -30,6 +31,7 @@ function compile(source: string, react: any = React, trpc: any = {}, extra: Reco
       if (id === "react") return react;
       if (id === "lucide-react") return icons;
       if (id === "@/lib/trpc") return { trpc };
+      if (id === "@shared/dailyActionAudit") return auditFailures;
       if (id === "@shared/bookingWidgetConfig") return { BOOKING_WIDGET_PRICED_EXTRAS };
       if (id === "@/components/daily-action-audit/AuditCalendar") return { __esModule: true, default: CalendarStub };
       if (id.endsWith(".css")) return {};
@@ -324,6 +326,130 @@ describe("Daily Action Audit actual read-only UI", () => {
     work.harness.dispose();
   });
 
+  it("renders exact safe message-read setup and record-field failures without blaming browser access or connection", async () => {
+    for (const [stage, reason, detail] of [
+      ["MESSAGE_READ", "DB_UNAVAILABLE", "The audit database connection is unavailable."],
+      ["MESSAGE_READ", "DB_UNSUPPORTED", "The database rejected an unsupported operation."],
+      ["RECORD_READ", "DB_SCHEMA", "A required audit table or field is unavailable."],
+      ["RECORD_READ", "DB_TIMEOUT", "The database read timed out or its connection was interrupted."],
+    ] as const) {
+      const safeMessage = auditFailures.auditFailureMessage(stage, reason);
+      const work = workspace(async () => { throw { message: safeMessage, data: { code: "INTERNAL_SERVER_ERROR" } }; });
+      work.change("2026-11-11"); await work.submit();
+      const tree = work.render();
+      const error = find(tree, node => node.type === work.harness.loaded.AuditRunError);
+      expect(error.props.safeMessage).toBe(safeMessage);
+      const html = renderToStaticMarkup(error);
+      expect(html).toContain(`[DAA:${stage}:${reason}]`);
+      expect(html).toContain(stage === "MESSAGE_READ" ? "reading stored message evidence" : "reading current booking and job records");
+      expect(html).toContain(detail);
+      expect(html).toContain("No changes were made.");
+      expect(html).toContain("No results are being shown.");
+      expect(html).not.toContain("Check your access and connection");
+      expect(find(tree, node => node.type === work.harness.loaded.AuditResults)).toBeUndefined();
+      expect(text(tree)).not.toContain("Review next batch");
+      work.harness.dispose();
+    }
+  });
+
+  it("renders only the exact shared failure allowlist, retaining every stage/reason code", () => {
+    for (const stage of Object.keys(auditFailures.AUDIT_FAILURE_STAGES) as auditFailures.AuditFailureStage[]) {
+      for (const reason of Object.keys(auditFailures.AUDIT_FAILURE_REASONS) as auditFailures.AuditFailureReason[]) {
+        const safeMessage = auditFailures.auditFailureMessage(stage, reason);
+        const html = renderToStaticMarkup(React.createElement(ui.AuditRunError, { safeMessage }));
+        expect(html).toContain(safeMessage);
+        expect(html).toContain(`[DAA:${stage}:${reason}]`);
+        expect(html).not.toContain("Check your access and connection");
+      }
+    }
+  });
+
+  it("never reflects unknown, prefixed, appended, altered-code, or non-string transport errors", async () => {
+    const safeMessage = auditFailures.auditFailureMessage("MESSAGE_READ", "DB_SCHEMA");
+    const unsafeMessages = [
+      "SECRET SQL customer phone +15550101234",
+      `${safeMessage} SECRET SQL customer phone +15550101234`,
+      `SECRET ${safeMessage}`,
+      "[DAA:MESSAGE_READ:DB_SCHEMA] SECRET SQL",
+      safeMessage.replace("MESSAGE_READ", "message_read"),
+      safeMessage.replace("DB_SCHEMA", "DB_UNKNOWN"),
+      `${safeMessage}\n`,
+    ];
+    for (const failure of [
+      ...unsafeMessages.map(message => ({ message })),
+      { message: "SECRET", data: { code: "UNAUTHORIZED" } },
+      { message: "SECRET", data: { code: "FORBIDDEN" } },
+      { message: { secret: "SECRET" } }, null, undefined, 123, safeMessage,
+    ]) {
+      const work = workspace(async () => { throw failure; });
+      work.change("2026-11-11"); await work.submit();
+      const error = find(work.render(), node => node.type === work.harness.loaded.AuditRunError);
+      expect(error.props.safeMessage).toBeUndefined();
+      const html = renderToStaticMarkup(error);
+      expect(html).toContain("No results are being shown. Check your access and connection");
+      expect(html).not.toContain("SECRET");
+      expect(html).not.toContain("+15550101234");
+      expect(html).not.toContain("[DAA:");
+      work.harness.dispose();
+    }
+    for (const safeMessage of unsafeMessages) {
+      const html = renderToStaticMarkup(React.createElement(ui.AuditRunError, { safeMessage }));
+      expect(html).toContain("Check your access and connection");
+      expect(html).not.toContain("SECRET");
+      expect(html).not.toContain("[DAA:");
+    }
+  });
+
+  it("clears stored safe failures on rerun, date changes, and discarded stale failures", async () => {
+    const responses = Array.from({ length: 5 }, () => deferred<DailyActionAuditResult>());
+    let calls = 0;
+    const work = workspace(() => responses[calls++].promise);
+    const safeMessage = auditFailures.auditFailureMessage("RECORD_READ", "DB_SCHEMA");
+    const error = () => find(work.render(), node => node.type === work.harness.loaded.AuditRunError);
+    work.change("2026-11-11");
+    let promise = work.submit();
+    responses[0].reject(new Error(safeMessage)); await promise;
+    expect(error().props.safeMessage).toBe(safeMessage);
+
+    promise = work.submit();
+    expect(error()).toBeUndefined();
+    expect(text(work.render())).toContain("Running audit");
+    responses[1].reject(new Error("SECRET")); await promise;
+    expect(error().props.safeMessage).toBeUndefined();
+    expect(renderToStaticMarkup(error())).not.toContain("[DAA:");
+
+    promise = work.submit();
+    responses[2].reject(new Error(safeMessage)); await promise;
+    expect(error().props.safeMessage).toBe(safeMessage);
+    work.change("2026-11-10");
+    expect(error()).toBeUndefined();
+    expect(text(work.render())).toContain("Ready when you are");
+    promise = work.submit();
+    work.change("2026-11-09");
+    responses[3].reject(new Error(safeMessage)); await promise;
+    expect(error()).toBeUndefined();
+    expect(text(work.render())).toContain("Ready when you are");
+    expect(find(work.render(), node => node.type === work.harness.loaded.AuditResults)).toBeUndefined();
+    expect(text(work.render())).not.toContain("Review next batch");
+
+    promise = work.submit();
+    responses[4].resolve(result()); await promise;
+    expect(error().props.safeMessage).toBeUndefined();
+    expect(renderToStaticMarkup(error())).not.toContain("[DAA:");
+    expect(work.reset).toHaveBeenCalled();
+    work.harness.dispose();
+  });
+
+  it("does not write safe failures after unmount", async () => {
+    const response = deferred<DailyActionAuditResult>();
+    const work = workspace(() => response.promise);
+    work.change("2026-11-11");
+    const promise = work.submit();
+    work.harness.dispose();
+    response.reject(new Error(auditFailures.auditFailureMessage("MESSAGE_READ", "DB_TIMEOUT"))); await promise;
+    expect(work.harness.lateWrites).toBe(0);
+  });
+
   it("reviews the next batch only on click with cursor, then merges and stops without looping", async () => {
     let calls = 0;
     const cursor = { sessionAfterId: 20, inboundAfterId: 100, asOf: "2026-11-12T15:00:00Z" };
@@ -343,17 +469,24 @@ describe("Daily Action Audit actual read-only UI", () => {
   });
 
   it("clears matches and shows a next-batch failure on continuation errors or stale cutoffs", async () => {
-    for (const mode of ["error", "stale"]) {
+    const safeMessage = auditFailures.auditFailureMessage("RECORD_READ", "DB_READ_FAILED");
+    for (const mode of ["error", "safe-error", "stale"]) {
       let calls = 0;
       const work = workspace(async () => {
         if (++calls === 1) return result([item("old-match", "matches")], { nextCursor: { sessionAfterId: 20, inboundAfterId: 100, asOf: "2026-11-12T15:00:00Z" } });
         if (mode === "error") throw new Error("SECRET");
+        if (mode === "safe-error") throw new Error(safeMessage);
         return result([item("stale", "matches")], { asOf: "2026-11-12T16:00:00Z" });
       });
       work.change("2026-11-11"); await work.submit(); await work.nextBatch();
       const tree = work.render();
       expect(find(tree, node => node.type === work.harness.loaded.AuditResults)).toBeUndefined();
-      expect(renderToStaticMarkup(find(tree, node => node.type === work.harness.loaded.AuditRunError))).toContain("Next evidence batch could not be completed");
+      const error = find(tree, node => node.type === work.harness.loaded.AuditRunError);
+      const html = renderToStaticMarkup(error);
+      expect(html).toContain("Next evidence batch could not be completed");
+      expect(error.props.safeMessage).toBe(mode === "safe-error" ? safeMessage : undefined);
+      expect(html).not.toContain("SECRET");
+      expect(text(tree)).not.toContain("Review next batch");
       work.harness.dispose();
     }
   });

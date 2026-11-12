@@ -3,7 +3,9 @@ import { TRPCError } from "@trpc/server";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { isValidBookingRescheduleDate } from "../shared/bookingReschedule";
 import type { AuditCoverage, AuditCursor, AuditStatus, DailyActionAuditResult } from "../shared/dailyActionAudit";
+import { auditFailureMessage, type AuditFailureStage } from "../shared/dailyActionAudit";
 import { auditDayWindow, readAuditMessages, readAuditRecords } from "./dailyActionAuditData";
+import { AuditSnapshotError } from "./dailyActionAuditSnapshot";
 import { interpretAuditThreads } from "./dailyActionAuditInterpret";
 import { verifyAuditCandidates } from "./dailyActionAuditEngine";
 import { hydrateAuditEvidence, mergeAuditEvidence, readAuditProviderPage } from "./dailyActionAuditEvidence";
@@ -43,20 +45,25 @@ export async function runDailyActionAudit(input: z.infer<typeof dailyAuditInputS
   if (!Number.isFinite(Date.parse(asOf)) || Date.parse(asOf) > now.getTime() || Date.parse(asOf) < Date.parse(`${input.auditDate}T00:00:00.000Z`)) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "The audit continuation is invalid. Start this day again." });
   }
+  let failureStage: AuditFailureStage = "PROCESSING";
   try {
     const window = auditDayWindow(input.auditDate, input.timeZone);
     const provider = await deps.provider({ ...window, cursor: input.cursor });
     const cursor: AuditCursor | undefined = input.cursor?.localComplete ? { ...input.cursor, sessionAfterId: 2_147_483_647, inboundAfterId: 2_147_483_647 } : input.cursor;
+    failureStage = "MESSAGE_READ";
     const messages = input.cursor?.localComplete && !provider.messages.length
       ? { threads: [], coverage: emptyCoverage(), nextCursor: null }
       : await deps.messages({ auditDate: input.auditDate, timeZone: input.timeZone, asOf, cursor, extraPhones: provider.messages.map(message => message.customerPhone) });
+    failureStage = "PROCESSING";
     const merged = mergeAuditEvidence(messages.threads, provider.messages);
     const evidence = !provider.available && provider.warnings.length
       ? { threads: merged, warnings: [] }
       : await deps.hydrate(merged, input.auditDate, input.timeZone);
     // One current-state snapshot is read/released before model computation.
     // No DB transaction is held open while waiting for the model or provider.
+    failureStage = "RECORD_READ";
     const records = evidence.threads.length ? await deps.records({ threads: evidence.threads, candidates: [] }) : { records: [], truncated: false, warnings: [] };
+    failureStage = "PROCESSING";
     const checkedAt = deps.now().toISOString();
     // Display names are never matching inputs. Only exact-phone records provide them.
     const threads = evidence.threads.map(thread => {
@@ -90,8 +97,9 @@ export async function runDailyActionAudit(input: z.infer<typeof dailyAuditInputS
       },
     };
   } catch (error) {
-    if (error instanceof TRPCError) throw error;
-    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The audit could not read its required evidence. No changes were made. Try again or review the conversations manually." });
+    // Do not attach the source exception: it can contain SQL, parameters or SMS.
+    const reason = error instanceof AuditSnapshotError ? error.reason : "FAILED";
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: auditFailureMessage(failureStage, reason) });
   }
 }
 export const dailyActionAuditRouter = router({

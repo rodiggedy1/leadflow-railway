@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, ClipboardCheck, Clock3, FileSearch, LockKeyhole, MessageSquareText, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { safeAuditFailureMessage } from "@shared/dailyActionAudit";
 import type { AuditAgreement, AuditItem, AuditMessage, AuditRecord, AuditStatus, DailyActionAuditResult } from "@shared/dailyActionAudit";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import AuditCalendar from "@/components/daily-action-audit/AuditCalendar";
@@ -190,9 +191,10 @@ export function AuditResults({ result, filter = "all" }: { result: DailyActionAu
   </section>;
 }
 
-export function AuditRunError({ continuation = false }: { continuation?: boolean }) {
-  // Transport errors can contain source text. Do not echo their raw messages.
-  return <div className="daa-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><div><strong>{continuation ? "Next evidence batch could not be completed" : "Audit could not be completed"}</strong><p>No results are being shown. Check your access and connection, then run the audit again manually.</p></div></div>;
+export function AuditRunError({ continuation = false, safeMessage }: { continuation?: boolean; safeMessage?: string }) {
+  // Transport errors can contain source text. Render only an exact allowlist match.
+  const message = safeAuditFailureMessage(safeMessage);
+  return <div className="daa-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><div><strong>{continuation ? "Next evidence batch could not be completed" : "Audit could not be completed"}</strong><p>{message ? `${message} No results are being shown. Run the audit again manually.` : "No results are being shown. Check your access and connection, then run the audit again manually."}</p></div></div>;
 }
 
 function AuditWorkspace() {
@@ -202,6 +204,7 @@ function AuditWorkspace() {
   const [filter, setFilter] = useState<AuditFilter>("all");
   const [failed, setFailed] = useState(false);
   const [batchFailed, setBatchFailed] = useState(false);
+  const [safeMessage, setSafeMessage] = useState<string | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const requestVersion = useRef(0);
@@ -221,6 +224,7 @@ function AuditWorkspace() {
     setResult(null);
     setFailed(false);
     setBatchFailed(false);
+    setSafeMessage(null);
     setFilter("all");
     setValidation(auditDateError(value));
     run.reset();
@@ -237,6 +241,7 @@ function AuditWorkspace() {
     setResult(null);
     setFailed(false);
     setBatchFailed(false);
+    setSafeMessage(null);
     if (error) return;
     const version = ++requestVersion.current;
     const requestedDate = auditDate;
@@ -252,11 +257,12 @@ function AuditWorkspace() {
         return;
       }
       setResult(mergeAuditBatches(previous, next));
-    } catch {
+    } catch (error) {
       if (mounted.current && version === requestVersion.current && selectedDate.current === requestedDate) {
         setResult(null);
         setFailed(true);
         setBatchFailed(continuation);
+        setSafeMessage(safeAuditFailureMessage(typeof error === "object" && error !== null && "message" in error ? error.message : null));
       }
     } finally {
       inFlight.current = false;
@@ -273,7 +279,7 @@ function AuditWorkspace() {
     <form className="daa-run-panel" onSubmit={runAudit} aria-label="Run daily action audit"><div className="daa-date-field"><AuditCalendar value={isValidAuditDate(auditDate) ? auditDate : ""} min={MIN_DATE} onChange={changeDate} /><p>Previous days only · America/New_York</p></div><div className="daa-run-copy"><strong>Choose a message day, then run once.</strong><p>The scan compares SMS expectations with records as they exist now. It does not send messages, fix records, or run automatically.</p></div><button className="daa-run-button" type="submit" disabled={pending || run.isPending || Boolean(dateProblem)}><FileSearch size={17} aria-hidden="true" />{pending || run.isPending ? "Running audit…" : "Run audit"}</button></form>
     {(validation || dateProblem) && <p className="daa-date-error" role="alert">{validation || dateProblem}</p>}
     <aside className="daa-limit-note"><AlertCircle size={16} aria-hidden="true" /><p><strong>Every scan has partial coverage.</strong> Review warnings and source SMS before drawing conclusions. A current-state match does not prove that an action happened on the selected message day.</p></aside>
-    {failed && <AuditRunError continuation={batchFailed} />}
+    {failed && <AuditRunError continuation={batchFailed} safeMessage={safeMessage ?? undefined} />}
     {(pending || run.isPending) && <div className="daa-empty daa-pending" role="status"><FileSearch size={28} aria-hidden="true" /><h2>Reading evidence and checking current records…</h2><p>No changes are made. Changing the message date discards this scan’s response.</p></div>}
     {result && !pending && !run.isPending && <><div className="daa-filter-bar" aria-label="Audit result filters"><span>Show</span><button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All actions</button><button type="button" aria-pressed={filter === "affectsTomorrow"} onClick={() => setFilter("affectsTomorrow")}>Affects tomorrow <span>ET</span></button></div><AuditResults result={result} filter={filter} />{result.nextCursor && <div className="daa-continuation"><p>Scan another bounded batch only when you choose. Coverage stays partial.</p><button type="button" className="daa-run-button" disabled={pending || run.isPending} onClick={event => void runAudit(event, true)}><FileSearch size={16} aria-hidden="true" /> Review next batch</button></div>}</>}
     {!result && !failed && !pending && !run.isPending && <div className="daa-empty daa-initial"><span className="daa-empty-icon"><ClipboardCheck size={29} aria-hidden="true" /></span><h2>Ready when you are</h2><p>Select a previous message day to review future service dates, unresolved actions, and their source SMS. Nothing runs until you click Run audit.</p><span className="daa-empty-footnote"><LockKeyhole size={13} aria-hidden="true" /> No automatic scans · no record changes</span></div>}

@@ -9,6 +9,7 @@ import type {
   AuditCandidate, AuditCoverage, AuditCursor, AuditMessage, AuditRecord, AuditThread,
 } from "../shared/dailyActionAudit";
 import { getDb } from "./db";
+import { AuditSnapshotError, readAuditSnapshot } from "./dailyActionAuditSnapshot";
 import { normalizePhone } from "./utils/phone";
 
 const EASTERN = "America/New_York";
@@ -20,8 +21,7 @@ const THREAD_TEXT = 8_000;
 const TOTAL_TEXT = 16_000;
 const RECORD_CAP = 1_000;
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
-type Reader = Pick<Database, "select">;
-type ReaderDatabase = Pick<Database, "select" | "transaction">;
+type ReaderDatabase = Pick<Database, "$client">;
 
 // Offset-less strings, seconds-vs-milliseconds guesses, and rolled calendar dates
 // must not silently become source evidence. Stored numeric history ts uses Unix ms.
@@ -86,23 +86,8 @@ function messageKey(customerPhone: string, direction: AuditMessage["direction"],
 }
 async function database(db?: ReaderDatabase): Promise<ReaderDatabase> {
   const result = db ?? await getDb();
-  if (!result) throw new Error("Audit database is unavailable; no verification was performed.");
-  if (typeof result.transaction !== "function") throw new Error("Audit database cannot provide a read-only snapshot.");
+  if (!result) throw new AuditSnapshotError("DB_UNAVAILABLE");
   return result;
-}
-async function snapshot<T>(db: ReaderDatabase, read: (reader: Reader) => Promise<T>): Promise<T> {
-  // Drizzle mysql2 acquires one connection and releases it before resolution.
-  // REPEATABLE READ establishes the consistent snapshot at the first SELECT.
-  // Do not combine withConsistentSnapshot/accessMode: this installed Drizzle
-  // version omits their required SQL comma. READ ONLY itself emits valid SQL.
-  try {
-    return await db.transaction(tx => read(tx), {
-      isolationLevel: "repeatable read", accessMode: "read only",
-    });
-  } catch {
-    // Provider/SQL errors can contain SQL parameters (including customer phones).
-    throw new Error("Audit snapshot read failed; no verification was performed.");
-  }
 }
 class Warnings {
   counts = new Map<string, number>();
@@ -127,7 +112,7 @@ export async function readAuditMessages(input: ReadAuditMessagesInput, db?: Read
   if (cursor && (instant(cursor.asOf) !== cutoff || !Number.isSafeInteger(cursor.sessionAfterId) || cursor.sessionAfterId < 0 || !Number.isSafeInteger(cursor.inboundAfterId) || cursor.inboundAfterId < 0)) {
     throw new Error("Invalid audit continuation cursor or changed asOf.");
   }
-  const source = await snapshot(await database(db), async reader => {
+  const source = await readAuditSnapshot(await database(db), async reader => {
     const sessions = await reader.select({
       id: conversationSessions.id, leadPhone: conversationSessions.leadPhone, leadName: conversationSessions.leadName,
       // Cap bytes in SQL, not just after transferring a potentially huge history.
@@ -329,7 +314,7 @@ export async function readAuditRecords(input: ReadAuditRecordsInput, db?: Reader
     warnings.add("Candidate thread is missing; no inferred customer lookup"); truncated = true;
   }
   if (!phones.length) return { records: [], truncated, warnings: warnings.list() };
-  const data = await snapshot(connection, async reader => {
+  const data = await readAuditSnapshot(connection, async reader => {
     const canonicalFields = {
       id: bookings.id, publicBookingNumber: bookings.publicBookingNumber, customerPhone: bookings.customerPhone,
       customerName: bookings.customerName, date: bookings.requestedLocalDate, time: bookings.requestedLocalTime,
