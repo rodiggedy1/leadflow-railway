@@ -2,6 +2,7 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { dailyActionAuditRouter } from "./dailyActionAuditRouter";
 
 const policyMode = z.enum(["approval_required", "suggest_only", "automatic"]);
 const merchantId = "default";
@@ -28,6 +29,7 @@ async function ensureDefaults(db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 }
 
 export const aiActionsRouter = router({
+  dailyAudit: dailyActionAuditRouter,
   listPolicies: adminAgentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];

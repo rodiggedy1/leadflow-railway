@@ -1,0 +1,183 @@
+.daily-action-audit-page {
+  min-height: 100%;
+  min-width: 0;
+  padding: 28px 30px 48px;
+  background: #f8f7f2;
+  color: #273e30;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.daily-action-audit-page * { box-sizing: border-box; }
+.daily-action-audit-page button { font: inherit; cursor: pointer; }
+.daily-action-audit-page button:disabled { cursor: not-allowed; }
+.daily-action-audit-page button:focus-visible,
+.daily-action-audit-page a:focus-visible,
+.daily-action-audit-page summary:focus-visible { outline: 2px solid #314f38; outline-offset: 3px; }
+.daily-action-audit-page h1,
+.daily-action-audit-page h2,
+.daily-action-audit-page h3,
+.daily-action-audit-page h4,
+.daily-action-audit-page p { margin: 0; }
+.daily-action-audit-page svg { flex-shrink: 0; }
+.daily-action-audit-page .daa-content { max-width: 1180px; min-width: 0; margin: 0 auto; }
+.daily-action-audit-page .daa-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 22px; margin-bottom: 23px; }
+.daily-action-audit-page .daa-eyebrow { display: flex; align-items: center; gap: 7px; color: #718274; font-size: 10px; font-weight: 700; letter-spacing: .13em; }
+.daily-action-audit-page .daa-hero h1 { margin: 8px 0 7px; font-size: clamp(26px, 3vw, 33px); line-height: 1.16; letter-spacing: -.045em; font-weight: 650; }
+.daily-action-audit-page .daa-intro { max-width: 620px; color: #738073; font-size: 13px; }
+.daily-action-audit-page .daa-readonly { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; margin-top: 3px; padding: 8px 11px; border: 1px solid #d9e3d6; border-radius: 8px; background: #eef3e9; color: #536e55; font-size: 10px; font-weight: 600; }
+.daily-action-audit-page .daa-run-panel { display: grid; grid-template-columns: minmax(245px, 350px) minmax(0, 1fr) auto; align-items: center; gap: 23px; padding: 20px; border: 1px solid #dde4d8; border-radius: 14px; background: #f0f3ea; }
+.daily-action-audit-page .daa-date-field { min-width: 0; }
+.daily-action-audit-page .daa-date-field > p { margin-top: -13px; color: #798776; font-size: 10px; }
+.daily-action-audit-page .daa-run-copy strong { display: block; color: #3c5541; font-size: 13px; font-weight: 600; }
+.daily-action-audit-page .daa-run-copy p { max-width: 365px; margin-top: 5px; color: #788574; font-size: 11px; line-height: 1.65; }
+.daily-action-audit-page .daa-run-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 43px; padding: 11px 18px; border: 1px solid #ed795d; border-radius: 9px; background: #f48c70; color: #293e30; font-size: 12px; font-weight: 650; box-shadow: 0 3px 8px #ed795d19; white-space: nowrap; }
+.daily-action-audit-page .daa-run-button:hover:not(:disabled) { background: #f17e61; }
+.daily-action-audit-page .daa-run-button:disabled { background: #f2d5c8; border-color: #e3c9bc; color: #8c796f; box-shadow: none; }
+.daily-action-audit-page .daa-date-error { margin-top: 9px; padding: 9px 12px; border: 1px solid #e4c1af; border-radius: 8px; background: #fff0e7; color: #88563f; font-size: 12px; }
+.daily-action-audit-page .daa-limit-note { display: flex; align-items: flex-start; gap: 9px; margin: 13px 0 20px; color: #7e8474; font-size: 11px; }
+.daily-action-audit-page .daa-limit-note svg { margin-top: 2px; color: #9e977b; }
+.daily-action-audit-page .daa-limit-note strong { font-weight: 600; color: #726f58; }
+.daily-action-audit-page .daa-error { display: flex; align-items: flex-start; gap: 10px; padding: 15px; margin: 15px 0; border: 1px solid #e9c3b5; border-radius: 10px; background: #fff0e9; color: #805445; }
+.daily-action-audit-page .daa-error p { margin-top: 4px; font-size: 12px; }
+.daily-action-audit-page .daa-filter-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: 20px 0 13px; }
+.daily-action-audit-page .daa-filter-bar > span { margin-right: 4px; color: #768571; font-size: 11px; }
+.daily-action-audit-page .daa-filter-bar button { min-height: 34px; padding: 6px 12px; border: 1px solid #dee4d8; border-radius: 7px; background: #fff; color: #748270; font-size: 11px; }
+.daily-action-audit-page .daa-filter-bar button[aria-pressed="true"] { border-color: #a3b499; background: #eaf0e3; color: #3e5c41; font-weight: 600; }
+.daily-action-audit-page .daa-filter-bar button span { margin-left: 4px; font-size: 9px; opacity: .8; }
+.daily-action-audit-page .daa-results { min-width: 0; }
+.daily-action-audit-page .daa-coverage { display: flex; align-items: flex-start; gap: 11px; padding: 15px 17px; border: 1px solid #e4d7b9; border-radius: 11px; background: #faf3e4; color: #806c43; }
+.daily-action-audit-page .daa-coverage > svg { margin-top: 1px; color: #a0834c; }
+.daily-action-audit-page .daa-coverage > div { min-width: 0; }
+.daily-action-audit-page .daa-coverage h2 { font-size: 12px; font-weight: 650; }
+.daily-action-audit-page .daa-coverage p { margin-top: 4px; font-size: 11px; }
+.daily-action-audit-page .daa-coverage-counts { color: #8c7956; }
+.daily-action-audit-page .daa-coverage ul { margin: 8px 0 0; padding-left: 17px; font-size: 11px; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-warning { padding-top: 3px; }
+.daily-action-audit-page .daa-result-meta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 7px 20px; margin: 14px 0; color: #7b8975; font-size: 10px; }
+.daily-action-audit-page .daa-result-meta p { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.daily-action-audit-page .daa-result-meta strong { color: #556c51; font-weight: 600; }
+.daily-action-audit-page .daa-status-counts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.daily-action-audit-page .daa-count { padding: 12px 15px; border: 1px solid #e1e5db; border-radius: 10px; background: #fff; }
+.daily-action-audit-page .daa-count strong { display: block; font-size: 25px; line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+.daily-action-audit-page .daa-count span { display: block; margin-top: 5px; color: #7c8776; font-size: 10px; }
+.daily-action-audit-page .daa-count-needs_action strong { color: #bb7356; }
+.daily-action-audit-page .daa-count-conflict strong { color: #b16962; }
+.daily-action-audit-page .daa-count-cannot_verify strong { color: #a28a54; }
+.daily-action-audit-page .daa-count-matches strong { color: #647f56; }
+.daily-action-audit-page .daa-count-superseded strong { color: #8e9484; }
+.daily-action-audit-page .daa-results-heading { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin: 23px 0 16px; }
+.daily-action-audit-page .daa-results-heading h2 { font-size: 18px; font-weight: 600; letter-spacing: -.025em; }
+.daily-action-audit-page .daa-results-heading p { margin-top: 4px; color: #818c7b; font-size: 11px; }
+.daily-action-audit-page .daa-results-heading > span { flex-shrink: 0; color: #7d8b73; font-size: 10px; }
+.daily-action-audit-page .daa-filter-note { margin: -5px 0 18px; padding: 10px 12px; border: 1px solid #dce3d5; border-radius: 8px; background: #eff3e9; color: #72816a; font-size: 11px; }
+.daily-action-audit-page .daa-priority-section + .daa-priority-section { margin-top: 28px; }
+.daily-action-audit-page .daa-section-label { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; color: #75866c; font-size: 11px; font-weight: 600; }
+.daily-action-audit-page .daa-section-label span { display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 5px; background: #e8edde; font-size: 10px; }
+.daily-action-audit-page .daa-date-group + .daa-date-group { margin-top: 20px; }
+.daily-action-audit-page .daa-group-header { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 9px; color: #7b8e73; }
+.daily-action-audit-page .daa-group-header h3 { font-size: 12px; color: #5e7557; font-weight: 600; }
+.daily-action-audit-page .daa-group-header > span { margin-left: auto; color: #8b957f; font-size: 10px; }
+.daily-action-audit-page .daa-cards { display: grid; gap: 11px; }
+.daily-action-audit-page .daa-audit-card { min-width: 0; padding: 16px 18px 0; border: 1px solid #dde4d6; border-left: 3px solid #adc09e; border-radius: 11px; background: #fff; box-shadow: 0 3px 12px #34452c04; }
+.daily-action-audit-page .daa-status-needs_action { border-left-color: #eaa083; }
+.daily-action-audit-page .daa-status-conflict { border-left-color: #d9998c; }
+.daily-action-audit-page .daa-status-cannot_verify { border-left-color: #d6bc7c; }
+.daily-action-audit-page .daa-status-superseded { border-left-color: #c6cbbd; }
+.daily-action-audit-page .daa-item-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.daily-action-audit-page .daa-item-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.daily-action-audit-page .daa-item-identity > div { min-width: 0; }
+.daily-action-audit-page .daa-customer-icon { display: grid; place-items: center; flex-shrink: 0; width: 35px; height: 35px; border: 1px solid #e2e9db; border-radius: 9px; background: #f0f4eb; color: #7f9472; }
+.daily-action-audit-page .daa-item-header h3 { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-item-header p { color: #85907b; font-size: 10px; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-status-pill { padding: 4px 8px; border-radius: 5px; background: #ecf2e6; color: #6d855b; font-size: 10px; font-weight: 600; }
+.daily-action-audit-page .daa-pill-needs_action { background: #fff0e6; color: #b27653; }
+.daily-action-audit-page .daa-pill-conflict { background: #fcebe6; color: #ad7267; }
+.daily-action-audit-page .daa-pill-cannot_verify { background: #f9f2df; color: #9c8955; }
+.daily-action-audit-page .daa-pill-superseded { background: #f0f1eb; color: #8b917e; }
+.daily-action-audit-page .daa-item-context { margin: 12px 0; }
+.daily-action-audit-page .daa-agreement { display: inline-block; color: #8c8467; font-size: 10px; font-weight: 600; }
+.daily-action-audit-page .daa-agreement-confirmed { color: #6e855e; }
+.daily-action-audit-page .daa-agreement-declined { color: #9b7364; }
+.daily-action-audit-page .daa-item-context > p { margin-top: 4px; color: #77846d; font-size: 11px; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.daily-action-audit-page .daa-comparison-panel { min-width: 0; padding: 12px 13px; border: 1px solid #e6e7dc; border-radius: 8px; background: #fafaf5; }
+.daily-action-audit-page .daa-expected { background: #fbf7ef; border-color: #ece5d9; }
+.daily-action-audit-page .daa-comparison-panel h4 { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; color: #7c7b61; font-size: 10px; font-weight: 650; }
+.daily-action-audit-page .daa-actual h4 { color: #778b69; }
+.daily-action-audit-page dl { display: grid; gap: 4px; margin: 0; }
+.daily-action-audit-page .daa-detail-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 9px; font-size: 10px; }
+.daily-action-audit-page .daa-detail-row dt { color: #939480; }
+.daily-action-audit-page .daa-detail-row dd { margin: 0; color: #66765b; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-record-source { margin-bottom: 7px; color: #7f9273; font-size: 9px; font-weight: 600; }
+.daily-action-audit-page .daa-record + .daa-record { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e9df; }
+.daily-action-audit-page .daa-missing { margin: 10px 0; color: #948668; font-size: 11px; }
+.daily-action-audit-page .daa-verification { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; color: #7d8e71; }
+.daily-action-audit-page .daa-verification svg { margin-top: 2px; }
+.daily-action-audit-page .daa-verification p { font-size: 11px; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-verification small { display: block; margin-top: 3px; color: #959c88; font-size: 9px; }
+.daily-action-audit-page .daa-evidence { border-top: 1px solid #ebeee4; }
+.daily-action-audit-page .daa-evidence summary { display: flex; align-items: center; gap: 7px; min-height: 40px; padding: 9px 0; cursor: pointer; color: #7c9170; font-size: 11px; list-style: none; }
+.daily-action-audit-page .daa-evidence summary::-webkit-details-marker { display: none; }
+.daily-action-audit-page .daa-evidence summary::after { content: "+"; margin-left: 4px; font-size: 14px; }
+.daily-action-audit-page .daa-evidence[open] summary::after { content: "−"; }
+.daily-action-audit-page .daa-evidence small { color: #98a08d; font-size: 10px; }
+.daily-action-audit-page .daa-evidence-hint { margin-left: auto; color: #9aa28e; font-size: 9px; }
+.daily-action-audit-page .daa-message-list { display: grid; gap: 8px; list-style: none; margin: 0 0 14px; padding: 0; }
+.daily-action-audit-page .daa-message { min-width: 0; padding: 11px 12px; border: 1px solid #e1e7db; border-radius: 8px; background: #f7f9f2; }
+.daily-action-audit-page .daa-message-outbound { background: #faf6ef; border-color: #ede3d6; }
+.daily-action-audit-page .daa-message header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px; font-size: 10px; color: #799066; }
+.daily-action-audit-page .daa-message header strong { font-weight: 600; }
+.daily-action-audit-page .daa-message header span { color: #919b83; }
+.daily-action-audit-page .daa-message-time { margin-top: 2px; color: #959b87; font-size: 9px; }
+.daily-action-audit-page .daa-message-text { margin-top: 7px; color: #61765a; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-message footer { margin-top: 7px; color: #9aa18c; font-size: 9px; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-record-links { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 0 0 12px; }
+.daily-action-audit-page .daa-record-links a { display: inline-flex; align-items: center; gap: 5px; color: #7e906a; font-size: 10px; text-decoration: underline; text-underline-offset: 3px; }
+.daily-action-audit-page .daa-record-links a:hover { color: #3e5c41; }
+.daily-action-audit-page .daa-empty { display: grid; justify-items: center; gap: 10px; padding: 46px 20px; border: 1px dashed #dce3d1; border-radius: 13px; background: #fafbf6; color: #7f9271; text-align: center; }
+.daily-action-audit-page .daa-empty h2,
+.daily-action-audit-page .daa-empty h3 { color: #5c7652; font-size: 17px; font-weight: 600; letter-spacing: -.015em; }
+.daily-action-audit-page .daa-empty > p { max-width: 440px; color: #8b9780; font-size: 12px; }
+.daily-action-audit-page .daa-empty-icon { display: grid; place-items: center; width: 57px; height: 57px; margin-bottom: 3px; border: 1px solid #dfe8d5; border-radius: 15px; background: #eef3e7; color: #8ca37b; }
+.daily-action-audit-page .daa-empty-footnote { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: #9aa58d; font-size: 10px; }
+.daily-action-audit-page .daa-access { display: grid; justify-items: center; gap: 12px; max-width: 550px; margin: 65px auto; padding: 36px 22px; border: 1px solid #dfe5d5; border-radius: 13px; background: #fff; color: #79906b; text-align: center; }
+.daily-action-audit-page .daa-access h1 { color: #526c48; font-size: 22px; line-height: 1.3; }
+.daily-action-audit-page .daa-access p { color: #86947b; font-size: 12px; }
+@media (max-width: 1050px) {
+  .daily-action-audit-page .daa-run-panel { grid-template-columns: minmax(230px, 350px) minmax(0, 1fr); gap: 15px 20px; }
+  .daily-action-audit-page .daa-run-button { grid-column: 2; justify-self: start; }
+  .daily-action-audit-page .daa-run-copy { grid-column: 2; grid-row: 1; }
+  .daily-action-audit-page .daa-date-field { grid-row: 1 / 3; }
+}
+@media (max-width: 760px) {
+  .daily-action-audit-page { padding: 20px 16px 35px; }
+  .daily-action-audit-page .daa-hero { flex-direction: column; gap: 12px; }
+  .daily-action-audit-page .daa-status-counts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .daily-action-audit-page .daa-comparison { grid-template-columns: minmax(0, 1fr); }
+  .daily-action-audit-page .daa-run-panel { grid-template-columns: minmax(0, 1fr); padding: 15px; gap: 13px; }
+  .daily-action-audit-page .daa-run-panel > * { grid-column: 1; grid-row: auto; }
+  .daily-action-audit-page .daa-run-button { justify-self: stretch; }
+  .daily-action-audit-page .daa-run-copy p { max-width: none; }
+  .daily-action-audit-page .daa-date-field > p { margin-top: -12px; }
+  .daily-action-audit-page .daa-group-header > span { flex-basis: 100%; margin-left: 22px; }
+}
+@media (max-width: 440px) {
+  .daily-action-audit-page { padding: 18px 12px 30px; }
+  .daily-action-audit-page .daa-hero h1 { font-size: 27px; }
+  .daily-action-audit-page .daa-status-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .daily-action-audit-page .daa-count { padding: 11px 12px; }
+  .daily-action-audit-page .daa-count:last-child { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+  .daily-action-audit-page .daa-count:last-child span { margin: 0; }
+  .daily-action-audit-page .daa-audit-card { padding: 13px 12px 0; }
+  .daily-action-audit-page .daa-results-heading { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .daily-action-audit-page .daa-coverage { padding: 12px; gap: 8px; }
+  .daily-action-audit-page .daa-detail-row { grid-template-columns: 94px minmax(0, 1fr); gap: 7px; }
+  .daily-action-audit-page .daa-empty { padding: 35px 16px; }
+}
+.daily-action-audit-page .daa-batch-note { margin-top: 20px; color: #8c987f; font-size: 10px; }
+.daily-action-audit-page .daa-continuation { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 16px; padding: 14px 16px; border: 1px solid #dde5d4; border-radius: 10px; background: #f0f4ea; }
+.daily-action-audit-page .daa-continuation p { color: #7b8c70; font-size: 11px; }
+@media (max-width: 440px) {
+  .daily-action-audit-page .daa-continuation .daa-run-button { width: 100%; }
+}
