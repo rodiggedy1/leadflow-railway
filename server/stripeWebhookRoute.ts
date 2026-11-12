@@ -10,6 +10,7 @@ import { sendBookingCompletionNotifications } from "./bookingCompletionNotificat
 import { markCashAppPaymentUnavailable, settleSucceededCashAppPayment } from "./bookingCashAppEngine";
 import { isPayableInvoiceEvent, reconcilePayableInvoiceEvent, registerPayableInvoiceRoutes } from "./payableInvoiceRoutes";
 import { hasInternalExactMarker, lockInternalExactBooking } from "./internalExactBookingMarker";
+import { isInternalBookingHandoffEvent, processSignedInternalHandoffEvent } from "./internalBookingHandoffWebhook";
 
 function isDuplicateEntry(error: unknown): boolean {
   const candidate = error as { code?: string; errno?: number; message?: string };
@@ -242,6 +243,12 @@ export function registerStripeWebhookRoute(app: Express) {
     if (isPayableInvoiceEvent(event)) {
       try { await reconcilePayableInvoiceEvent(event); return res.status(200).json({ received: true, status: "processed" }); }
       catch { return res.status(500).json({ error: "Invoice payment reconciliation failed; retry the signed event" }); }
+    }
+    if (isInternalBookingHandoffEvent(event)) {
+      const db = await getDb();
+      if (!db) return res.status(503).json({ error: "Database unavailable" });
+      try { return res.status(200).json({ received: true, ...await processSignedInternalHandoffEvent(db, event) }); }
+      catch { return res.status(500).json({ error: "Internal handoff reconciliation failed; retry the signed event" }); }
     }
     const db = await getDb();
     if (!db) return res.status(503).json({ error: "Database unavailable" });

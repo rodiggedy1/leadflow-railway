@@ -35,6 +35,7 @@ export function useInternalExactBooking() {
   const adapter = useMemo<InternalBookingAdapter>(() => ({
     isSaving,
     get hasPrepared() { return session.prepared !== null; },
+    get bookingId() { return session.prepared?.bookingId; },
     prepare: submission => session.prepare(api, submission, false),
     bookWithoutPayment: submission => session.prepare(api, submission, true),
     finalizeCard: async () => {

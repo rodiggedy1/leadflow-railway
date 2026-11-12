@@ -9,6 +9,9 @@ import { cashAppPaymentTokens } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { getStripeClient } from "./stripeClient";
 import { bookingCashAppRouter } from "./bookingCashAppRouter";
+import { isInternalHandoffToken } from "./internalBookingHandoffToken";
+import { getInternalHandoffCash, createInternalHandoffCashIntent } from "./internalBookingHandoffCash";
+import { confirmInternalHandoffCash } from "./internalBookingHandoffCash";
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -64,6 +67,11 @@ export const cashAppRouter = router({
   getLink: publicProcedure
     .input(z.object({ token: z.string().min(1).max(64) }))
     .query(async ({ input }) => {
+      if (isInternalHandoffToken(input.token)) {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        return getInternalHandoffCash(db, input.token);
+      }
       const { row } = await getOpenToken(input.token);
       return {
         customerName: row.customerName ?? "",
@@ -76,6 +84,11 @@ export const cashAppRouter = router({
   getStatus: publicProcedure
     .input(z.object({ token: z.string().min(1).max(64) }))
     .query(async ({ input }) => {
+      if (isInternalHandoffToken(input.token)) {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        return getInternalHandoffCash(db, input.token, true);
+      }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       const [row] = await db.select({ status: cashAppPaymentTokens.status, amountCents: cashAppPaymentTokens.amountCents, description: cashAppPaymentTokens.description }).from(cashAppPaymentTokens).where(eq(cashAppPaymentTokens.token, input.token)).limit(1);
@@ -83,9 +96,22 @@ export const cashAppRouter = router({
       return row;
     }),
 
+  confirmPayment: publicProcedure
+    .input(z.object({ token: z.string().regex(/^hp1_[A-Za-z0-9_-]{43}$/) }).strict())
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      return confirmInternalHandoffCash(db, input.token);
+    }),
+
   createPaymentIntent: publicProcedure
     .input(z.object({ token: z.string().min(1).max(64) }))
     .mutation(async ({ input }) => {
+      if (isInternalHandoffToken(input.token)) {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        return createInternalHandoffCashIntent(db, input.token);
+      }
       const { db, row } = await getOpenToken(input.token);
       const stripe = requireStripe();
       if (row.stripePaymentIntentId) {

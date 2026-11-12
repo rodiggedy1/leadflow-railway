@@ -16,6 +16,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement } from "@stripe/react-stripe-js";
 import { trpc } from "@/lib/trpc";
 import { CARD_ELEMENT_OPTIONS, useStripeCardSetup } from "@/components/useStripeCardSetup";
+import ApplePayCardAuth from "@/components/internal-booking/ApplePayCardAuth";
 
 const STRIPE_PK = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string;
 
@@ -849,6 +850,7 @@ function CardAuthInner({
   prefillAddress,
   clientSecret,
   publishableKey,
+  walletContent,
 }: {
   token: string;
   prefillName: string;
@@ -856,6 +858,7 @@ function CardAuthInner({
   prefillAddress: string;
   clientSecret: string;
   publishableKey: string;
+  walletContent?: React.ReactNode;
 }) {
   const [stripePromise] = useState(() => loadStripe(publishableKey));
   const [submitted, setSubmitted] = useState(false);
@@ -866,7 +869,7 @@ function CardAuthInner({
     setSubmitted(true);
   }
 
-  const formContent = submitted ? (
+  const formContent = walletContent ?? (submitted ? (
     <SuccessScreen name={submittedName} />
   ) : (
     <Elements stripe={stripePromise} options={{ clientSecret }}>
@@ -879,7 +882,7 @@ function CardAuthInner({
         onSuccess={handleSuccess}
       />
     </Elements>
-  );
+  ));
 
   const faqItems = [
     { q: "Will my card be charged before the cleaning?", a: "No. We preauthorize before service, but your card is charged only after the cleaning is completed." },
@@ -1279,11 +1282,17 @@ export default function CardAuth() {
     { enabled: !!token, retry: false }
   );
 
+  const walletBooking = tokenQuery.data && "bookingId" in tokenQuery.data ? tokenQuery.data : null;
+  const applePay = urlParams.get("wallet") === "apple_pay" && walletBooking !== null
+    && Number.isSafeInteger(walletBooking.bookingId) && walletBooking.bookingId > 0
+    && Number.isSafeInteger(walletBooking.firstCleaningTotalCents) && walletBooking.firstCleaningTotalCents >= 0
+    && Number.isFinite(walletBooking.requestedStartAt);
   const setupIntentMutation = trpc.stripe.createSetupIntent.useMutation();
   const [setupData, setSetupData] = useState<{ clientSecret: string } | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (applePay) return; // Existing wallet flow prepares setup only after the customer's wallet action.
     if (tokenQuery.data && !setupData && !setupError) {
       setupIntentMutation.mutate(
         { token },
@@ -1294,11 +1303,11 @@ export default function CardAuth() {
       );
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokenQuery.data]);
+  }, [tokenQuery.data, applePay]);
 
   if (!token) return <TokenError message="No authorization token found in this link." />;
 
-  if (tokenQuery.isLoading || (!setupData && !setupError && !tokenQuery.error)) {
+  if (tokenQuery.isLoading || (!applePay && !setupData && !setupError && !tokenQuery.error)) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
@@ -1330,6 +1339,14 @@ export default function CardAuth() {
     );
   }
 
+  if (applePay && walletBooking) return (
+    <CardAuthInner token={token} prefillName={walletBooking.customerName} prefillDate={walletBooking.jobDate} prefillAddress={walletBooking.jobAddress} clientSecret="" publishableKey={STRIPE_PK}
+      walletContent={<div className="rounded-[32px] p-6 stripe-card" style={{ background: "rgba(255,255,255,0.92)", border: "1px solid rgba(255,255,255,0.62)", boxShadow: T.shadow }}>
+        <BoardingPass name={walletBooking.customerName} date={walletBooking.jobDate} address={walletBooking.jobAddress} />
+        <ApplePayCardAuth token={token} bookingId={walletBooking.bookingId} publicBookingNumber={walletBooking.publicBookingNumber} customerName={walletBooking.customerName} amountCents={walletBooking.firstCleaningTotalCents} requestedStartAt={walletBooking.requestedStartAt} />
+      </div>}
+    />
+  );
   if (setupError) return <TokenError message={`Unable to load secure form: ${setupError}`} />;
   if (!setupData) return null;
 

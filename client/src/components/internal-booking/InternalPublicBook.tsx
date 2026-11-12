@@ -13,6 +13,7 @@ import ApprovedBookPayment from "./InternalApprovedBookPayment";
 import { InternalBookingAmountControl, InternalBookWithoutPaymentControl } from "@/components/approved-book/InternalBookingControls";
 import type { InternalBookingAdapter } from "./InternalBookingAdapter";
 import type { InternalCheckoutReservation } from "./BookingCheckoutTransport";
+import InternalBookingThankYou from "./InternalBookingThankYou";
 import { parseInternalBookingAmount } from "@shared/internalBookingAmount";
 import { createBookingArrivalPreference, formatBookingArrivalPreference, type BookingArrivalMode, type BookingArrivalPeriod } from "@shared/bookingArrival";
 import brandLogo from "@/assets/book-cohesion/maids-in-black-logo.svg";
@@ -633,18 +634,8 @@ export default function InternalPublicBook({ internalBooking, onStartAnotherBook
 
   if (complete)
     return (
-      <BookingSuccess
-        name={firstName}
-        service={selectedService.title}
-        bedrooms={bedrooms}
-        bathrooms={bathrooms}
-        dateLabel={dateLabel}
-        time={formatBookingArrivalPreference(arrivalPreference)}
-        total={priceBreakdown.firstCleaningTotalCents}
-        futureTotal={priceBreakdown.futureVisitTotalCents}
-        frequencyLabel={selectedFrequency.label}
-        cardLabel={cardLabel}
-        unpaid={withoutPaymentCompleted}
+      <InternalBookingThankYou
+        bookingId={internalBooking.bookingId}
         onStartAnotherBooking={onStartAnotherBooking}
         onOpenBookings={onOpenBookings}
       />

@@ -9,6 +9,7 @@ export type InternalBookingSubmission = {
 export interface InternalBookingAdapter {
   isSaving: boolean;
   readonly hasPrepared?: boolean;
+  readonly bookingId?: number;
   prepare: (input: InternalBookingSubmission) => Promise<InternalCheckoutReservation>;
   bookWithoutPayment: (input: InternalBookingSubmission) => Promise<InternalCheckoutReservation>;
   finalizeCard: () => Promise<void>;

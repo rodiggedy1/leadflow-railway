@@ -28,6 +28,7 @@ import { finalizeCanonicalBooking, finalizeCanonicalCardOnFile, startCanonicalCa
 import { verifyCanonicalCardSetup } from "./bookingPaymentVerification";
 import { authorizeCanonicalBookingHold, captureCanonicalPaymentIntent, cancelCanonicalPaymentIntent, chargeCanonicalSavedCard } from "./bookingPaymentActionsEngine";
 import { withUnclaimedNativeFirstVisit } from "./payableInvoiceBookingGuard";
+import { internalBookingHandoffRouter } from "./internalBookingHandoffRouter";
 
 const confirmedBookingInput = z.object({
   bookingId: z.number().int().positive(),
@@ -151,6 +152,7 @@ async function activePortalRequestHold(
 }
 
 export const bookingPaymentAdminRouter = router({
+  handoff: internalBookingHandoffRouter,
   startInternalCardSetup: agentProcedure
     .input(z.object({ bookingId: z.number().int().positive() }))
     .mutation(async ({ input }) => {

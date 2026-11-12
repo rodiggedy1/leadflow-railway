@@ -25,6 +25,8 @@ import { cardAuthTokens, stripeCustomers, paymentAuthorizations } from "../drizz
 import { eq, desc, and } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { reconcileMissingStripeCustomerCards } from "./stripeCardListReconciliation";
+import { isInternalHandoffToken } from "./internalBookingHandoffToken";
+import { getInternalHandoffCard, createInternalHandoffSetup, confirmInternalHandoffCard } from "./internalBookingHandoffCard";
 
 // ── Stripe client (lazy-initialised so missing key throws at call time, not import) ──
 function getStripe(): Stripe {
@@ -93,6 +95,11 @@ export const stripeRouter = router({
   getCardAuthToken: publicProcedure
     .input(z.object({ token: z.string().min(1).max(64) }))
     .query(async ({ input }) => {
+      if (isInternalHandoffToken(input.token)) {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        return getInternalHandoffCard(db, input.token);
+      }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
@@ -123,6 +130,11 @@ export const stripeRouter = router({
   createSetupIntent: publicProcedure
     .input(z.object({ token: z.string().min(1).max(64) }))
     .mutation(async ({ input }) => {
+      if (isInternalHandoffToken(input.token)) {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        return createInternalHandoffSetup(db, input.token);
+      }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
@@ -203,6 +215,11 @@ export const stripeRouter = router({
       })
     )
     .mutation(async ({ input }) => {
+      if (isInternalHandoffToken(input.token)) {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        return confirmInternalHandoffCard(db, input.token, input.paymentMethodId);
+      }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
