@@ -87,6 +87,8 @@ export type AuditItem = {
   records: AuditRecord[];
   recordLinks: Array<{ label: string; href: string }>;
   verifiedAt: string;
+  evidenceBasis?: "captured" | "provider";
+  evidenceWarnings?: string[];
 };
 export type AuditCoverage = {
   status: "partial";
@@ -151,6 +153,15 @@ export type AuditCursor = {
   providerComplete?: boolean;
   localComplete?: boolean;
 };
+/** Local capture is useful evidence, not proof of organization-wide SMS completeness. */
+export type AuditLocalSource = {
+  status: "captured" | "partial";
+  sessionsRead: number;
+  inboundRead: number;
+  messagesRead: number;
+  threadsRead: number;
+  providerRequests: 0;
+};
 export type DailyActionAuditResult = {
   auditDate: string;
   timeZone: string;
@@ -161,6 +172,7 @@ export type DailyActionAuditResult = {
   nextCursor: AuditCursor | null;
   collection?: AuditDayCollection;
   analysis?: AuditAnalysis;
+  localSource?: AuditLocalSource;
 };
 
 export const AUDIT_FAILURE_STAGES = {

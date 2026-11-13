@@ -6,7 +6,7 @@ import {
 } from "../drizzle/schema";
 import { isValidBookingRescheduleDate, shiftBookingDate } from "../shared/bookingReschedule";
 import type {
-  AuditCandidate, AuditCoverage, AuditCursor, AuditMessage, AuditRecord, AuditThread,
+  AuditCandidate, AuditCoverage, AuditCursor, AuditLocalSource, AuditMessage, AuditRecord, AuditThread,
 } from "../shared/dailyActionAudit";
 import { getDb } from "./db";
 import { AuditSnapshotError, readAuditSnapshot } from "./dailyActionAuditSnapshot";
@@ -96,6 +96,45 @@ class Warnings {
 }
 type Entry = { message: AuditMessage; at: number; anchor: boolean; providerId: string | null };
 type CollectedThread = { thread: AuditThread; entries: Entry[]; anchored: boolean };
+type HistoryRow = { id: number; messageHistory: unknown };
+/** The stored-envelope rules are shared with the legacy reader; no provider lookup or time upgrade. */
+function readHistoryEntries(session: HistoryRow, customerPhone: string, start: number, end: number, cutoff: number,
+  gap: (reason: string) => void, warn: (reason: string) => void, add: (entry: Entry) => void) {
+  let history: unknown;
+  try {
+    if (session.messageHistory === null || session.messageHistory === undefined) throw new Error();
+    const raw = typeof session.messageHistory === "string" ? session.messageHistory : JSON.stringify(session.messageHistory);
+    if (Buffer.byteLength(raw, "utf8") > HISTORY_BYTES) {
+      gap("Oversized conversation history skipped at the 100k-byte cap; no repair"); return;
+    }
+    history = JSON.parse(raw);
+    if (!Array.isArray(history)) throw new Error();
+  } catch { gap("Missing, malformed, or SQL-size-capped conversation history skipped; no repair"); return; }
+  (history as unknown[]).forEach((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) { gap("Malformed history envelope skipped"); return; }
+    const item = raw as Record<string, unknown>;
+    if (!["user", "customer", "assistant"].includes(String(item.role))) return;
+    const direction = item.role === "assistant" ? "outbound" as const : "inbound" as const;
+    const text = string(item.content) ?? string(item.text) ?? string(item.body);
+    if (!text) { gap("Missing message text skipped; media-only content is not audited"); return; }
+    const providerId = string(item.opMsgId) ?? string(item.openPhoneId);
+    const at = instant(item.ts) ?? instant(item.timestamp) ?? (item.source === "openphone_reconcile" ? instant(item.createdAt) : null);
+    if (at === null) { gap("Unknown or invalid history timestamp skipped; no date fabricated"); return; }
+    if (at < start - 86_400_000 || at > cutoff) return;
+    const delivery: AuditMessage["delivery"] = direction === "inbound" ? "received" : "unknown";
+    warn("Generic history timestamps are processing/history time, not verified provider occurrence time");
+    if (delivery === "unknown") warn("Outbound assistant text has no actual sent evidence; it is not confirmation proof");
+    add({
+      at, anchor: at >= start && at < end, providerId,
+      message: {
+        key: messageKey(customerPhone, direction, providerId, `history:${session.id}:${index}`),
+        sessionId: session.id, customerPhone, businessPhone: null, direction, text, providerMessageId: providerId,
+        occurredAt: new Date(at).toISOString(), observedAt: new Date(at).toISOString(),
+        timeBasis: "history", delivery, source: "conversation_history",
+      },
+    });
+  });
+}
 export type ReadAuditMessagesInput = {
   auditDate: string; timeZone?: string; asOf: string; cursor?: AuditCursor | null;
   extraPhones?: string[];
@@ -177,44 +216,8 @@ export async function readAuditMessages(input: ReadAuditMessagesInput, db?: Read
     const customerPhone = phone(session.leadPhone);
     if (!customerPhone) { damaged = true; warnings.add("Invalid/non-US session customer phones skipped; no identity guess"); continue; }
     const thread = getThread(customerPhone, string(session.leadName));
-    let history: unknown;
-    try {
-      if (session.messageHistory === null || session.messageHistory === undefined) throw new Error();
-      const raw = typeof session.messageHistory === "string" ? session.messageHistory : JSON.stringify(session.messageHistory);
-      if (Buffer.byteLength(raw, "utf8") > HISTORY_BYTES) {
-        gap(thread, "Oversized conversation history skipped at the 100k-byte cap; no repair"); continue;
-      }
-      history = JSON.parse(raw);
-      if (!Array.isArray(history)) throw new Error();
-    } catch { gap(thread, "Missing, malformed, or SQL-size-capped conversation history skipped; no repair"); continue; }
-    (history as unknown[]).forEach((raw, index) => {
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) { gap(thread, "Malformed history envelope skipped"); return; }
-      const item = raw as Record<string, unknown>;
-      if (!["user", "customer", "assistant"].includes(String(item.role))) return;
-      const direction = item.role === "assistant" ? "outbound" as const : "inbound" as const;
-      const text = string(item.content) ?? string(item.text) ?? string(item.body);
-      if (!text) { gap(thread, "Missing message text skipped; media-only content is not audited"); return; }
-      const providerId = string(item.opMsgId) ?? string(item.openPhoneId);
-      // Stored source labels/IDs cannot bind session identity, business line or
-      // delivery. Even reconciled histories stay unverified until the provider
-      // page/GET proves the exact customer, text, line, ID and occurrence time.
-      const at = instant(item.ts) ?? instant(item.timestamp) ?? (item.source === "openphone_reconcile" ? instant(item.createdAt) : null);
-      if (at === null) { gap(thread, "Unknown or invalid history timestamp skipped; no date fabricated"); return; }
-      if (at < start.getTime() - 86_400_000 || at > cutoff) return;
-      const delivery: AuditMessage["delivery"] = direction === "inbound" ? "received" : "unknown";
-      warnings.add("Generic history timestamps are processing/history time, not verified provider occurrence time");
-      if (delivery === "unknown") warnings.add("Outbound assistant text has no actual sent evidence; it is not confirmation proof");
-      add(thread, {
-        at, anchor: at >= start.getTime() && at < end.getTime(), providerId,
-        message: {
-          key: messageKey(customerPhone, direction, providerId, `history:${session.id}:${index}`),
-          sessionId: session.id, customerPhone, businessPhone: null, direction, text,
-          providerMessageId: providerId,
-          occurredAt: new Date(at).toISOString(), observedAt: new Date(at).toISOString(),
-          timeBasis: "history", delivery, source: "conversation_history",
-        },
-      });
-    });
+    readHistoryEntries(session, customerPhone, start.getTime(), end.getTime(), cutoff,
+      reason => gap(thread, reason), reason => warnings.add(reason), entry => add(thread, entry));
   }
   for (const row of inbound) {
     const customerPhone = phone(row.fromPhone);
@@ -404,4 +407,287 @@ export async function readAuditRecords(input: ReadAuditRecordsInput, db?: Reader
   }
   if (records.some(record => record.paymentStatus === "captured" || record.paymentStatus === "paid")) warnings.add("Persisted paid/captured status has no paid amount in these sources; quoted totals are not capture amounts");
   return { records, truncated, warnings: warnings.list() };
+}
+
+const LOCAL_SESSION_CAP = 1_000;
+const LOCAL_INBOUND_CAP = 2_000;
+const LOCAL_BYTES = 4 * 1024 * 1024;
+const LOCAL_SCAN_MS = 12_000;
+const LOCAL_QUERY_MS = 2_000;
+const LOCAL_RECORD_PHASE_MS = 25_000;
+const LOCAL_THREAD_TEXT = 100_000;
+type LocalSession = HistoryRow & { leadPhone: string; leadName: string | null };
+type LocalInbound = { id: number; fromPhone: string; toPhone: string | null; message: string | null; openPhoneMessageId: string | null; receivedAt: number };
+
+/** Add only a private timeout transport to the existing snapshot helper. No pool,
+ * settings or legacy reader is changed. Late acquisitions are disposed, never leased indefinitely.
+ */
+function timedSnapshotDatabase(db: ReaderDatabase, deadline: number): ReaderDatabase {
+  const client = db.$client as unknown as { promise?: () => unknown; getConnection?: () => Promise<any> };
+  const pool = (typeof client?.promise === "function" ? client.promise() : client) as typeof client;
+  if (typeof pool?.getConnection !== "function") throw new AuditSnapshotError("DB_UNSUPPORTED");
+  return { $client: {
+    getConnection: async () => {
+      if (Date.now() >= deadline) throw new AuditSnapshotError("DB_TIMEOUT");
+      let abandoned = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const acquired = pool.getConnection!().then(owned => {
+        if (abandoned) { owned.destroy(); throw new AuditSnapshotError("DB_TIMEOUT"); }
+        return owned;
+      });
+      let owned: any;
+      try {
+        owned = await Promise.race([acquired, new Promise<never>((_, reject) => {
+          timer = setTimeout(() => { abandoned = true; reject(new AuditSnapshotError("DB_TIMEOUT")); }, Math.max(1, Math.min(LOCAL_QUERY_MS, deadline - Date.now())));
+        })]);
+      } finally { if (timer) clearTimeout(timer); }
+      let disposed = false;
+      const destroy = () => { if (!disposed) { disposed = true; owned.destroy(); } };
+      return {
+        query: async (options: string | { sql: string }, values?: unknown[]) => {
+          if (disposed) throw new AuditSnapshotError("DB_TIMEOUT");
+          if (Date.now() >= deadline) { destroy(); throw new AuditSnapshotError("DB_TIMEOUT"); }
+          const timeout = Math.max(1, Math.min(LOCAL_QUERY_MS, deadline - Date.now()));
+          let queryTimer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            return await Promise.race([
+              owned.query({ ...(typeof options === "string" ? { sql: options } : options), timeout }, values),
+              new Promise<never>((_, reject) => { queryTimer = setTimeout(() => { destroy(); reject(new AuditSnapshotError("DB_TIMEOUT")); }, timeout); }),
+            ]);
+          } finally { if (queryTimer) clearTimeout(queryTimer); }
+        },
+        release: () => { if (!disposed) owned.release(); }, destroy,
+      };
+    },
+  } as unknown as ReaderDatabase["$client"] };
+}
+
+export type ReadLeadFlowAuditDayInput = Pick<ReadAuditMessagesInput, "auditDate" | "timeZone" | "asOf">;
+export type ReadLeadFlowAuditDayResult = { threads: AuditThread[]; coverage: AuditCoverage; localSource: AuditLocalSource };
+
+/** Read every bounded captured page before returning a merged exact-phone view.
+ * A captured result is never a complete-provider claim or evidence of absence.
+ */
+export async function readLeadFlowAuditDay(input: ReadLeadFlowAuditDayInput, db?: ReaderDatabase): Promise<ReadLeadFlowAuditDayResult> {
+  const { start, end } = auditDayWindow(input.auditDate, input.timeZone ?? EASTERN);
+  const cutoff = instant(input.asOf);
+  if (cutoff === null) throw new Error("Invalid audit asOf; an explicit offset is required.");
+  const deadline = Date.now() + LOCAL_SCAN_MS;
+  const warnings = new Warnings();
+  const collected = new Map<string, CollectedThread>();
+  const names = new Map<string, Set<string>>();
+  const providerEntries = new Map<CollectedThread, Map<string, Entry[]>>();
+  const entryDates = new Map<Entry, string>();
+  let damaged = false;
+  let bounded = false;
+  let bytes = 0;
+  let sessionsRead = 0;
+  let inboundRead = 0;
+  const gap = (thread: CollectedThread, reason: string) => { thread.thread.truncated = true; damaged = true; warnings.add(reason); };
+  const getThread = (customerPhone: string, name: string | null) => {
+    let value = collected.get(customerPhone);
+    if (!value) {
+      value = { thread: { key: threadKey(customerPhone), customerPhone, customerName: null, messages: [], truncated: false }, entries: [], anchored: false };
+      collected.set(customerPhone, value); names.set(customerPhone, new Set());
+      providerEntries.set(value, new Map());
+    }
+    const known = names.get(customerPhone)!;
+    if (name) known.add(name);
+    value.thread.customerName = known.size === 1 ? Array.from(known)[0] : null;
+    if (known.size > 1) gap(value, "Multiple captured names for one exact phone; customer name is unknown, not first-session identity");
+    return value;
+  };
+  const add = (thread: CollectedThread, entry: Entry) => {
+    thread.anchored ||= entry.anchor;
+    const index = providerEntries.get(thread)!;
+    const sameId = entry.providerId ? index.get(entry.providerId) ?? [] : [];
+    if (entry.providerId) entryDates.set(entry, businessDate(entry.at, input.timeZone ?? EASTERN));
+    // Equal content is deduped ONLY with the same provider ID, phone and direction.
+    // Different known business lines, dates or directions remain ambiguous evidence.
+    const conflictingLine = sameId.some(other => !!other.message.businessPhone && !!entry.message.businessPhone
+      && other.message.businessPhone !== entry.message.businessPhone);
+    const equivalent = sameId.find(other => other.message.direction === entry.message.direction
+      && other.message.text === entry.message.text
+      && (!other.message.businessPhone || !entry.message.businessPhone || other.message.businessPhone === entry.message.businessPhone)
+      && (!conflictingLine || other.message.businessPhone === entry.message.businessPhone)
+      && entryDates.get(other) === entryDates.get(entry));
+    if (sameId.some(other => other.message.direction !== entry.message.direction || other.message.text !== entry.message.text
+      || (!!other.message.businessPhone && !!entry.message.businessPhone && other.message.businessPhone !== entry.message.businessPhone)
+      || entryDates.get(other) !== entryDates.get(entry))) {
+      gap(thread, "Conflicting captured provider ID content/direction/line/date; all variants retained and thread requires manual review");
+    }
+    if (equivalent) {
+      equivalent.anchor ||= entry.anchor;
+      // Retain identity metadata in the occurrence index even when one display
+      // message is enough; a null-line mirror cannot hide two conflicting lines.
+      sameId.push(entry);
+      warnings.add("Equivalent same-phone/direction provider IDs deduplicated in returned capture only");
+      return;
+    }
+    if (sameId.length) entry.message.key = `${entry.message.key}:variant:${hash(`${entry.message.source}:${entry.message.sessionId}:${entry.at}:${entry.message.text}:${entry.message.businessPhone}`)}`;
+    if (entry.providerId) { sameId.push(entry); index.set(entry.providerId, sameId); }
+    thread.entries.push(entry);
+  };
+  const admit = (row: LocalSession | LocalInbound) => {
+    const size = Buffer.byteLength(JSON.stringify(row), "utf8");
+    if (bytes + size > LOCAL_BYTES) { bounded = true; warnings.add("Captured row-byte budget reached; remaining local evidence was not read"); return false; }
+    bytes += size; return true;
+  };
+  const hasTime = () => {
+    // Reserve time for the next SELECT and snapshot close; stop rather than hold a lease.
+    if (Date.now() + LOCAL_QUERY_MS + 100 >= deadline) { bounded = true; warnings.add("Captured scan time budget reached; remaining local evidence was not read"); return false; }
+    return true;
+  };
+  await readAuditSnapshot(timedSnapshotDatabase(await database(db), deadline), async reader => {
+    const sessionFields = {
+      id: conversationSessions.id, leadPhone: conversationSessions.leadPhone, leadName: conversationSessions.leadName,
+      messageHistory: sql<string | null>`case when octet_length(${conversationSessions.messageHistory}) <= ${HISTORY_BYTES} then ${conversationSessions.messageHistory} else null end`,
+    };
+    const seenSessions = new Set<number>();
+    const consumeSession = (row: LocalSession) => {
+      if (seenSessions.has(row.id)) return true;
+      if (sessionsRead >= LOCAL_SESSION_CAP) { bounded = true; warnings.add("Captured session row cap reached; remaining conversation context is unknown"); return false; }
+      if (!admit(row)) return false;
+      seenSessions.add(row.id); sessionsRead++;
+      const customerPhone = phone(row.leadPhone);
+      if (!customerPhone) { damaged = true; warnings.add("Invalid/non-US session customer phones skipped; no identity guess"); return true; }
+      const thread = getThread(customerPhone, string(row.leadName));
+      readHistoryEntries(row, customerPhone, start.getTime(), end.getTime(), cutoff,
+        reason => gap(thread, reason), reason => warnings.add(reason), entry => add(thread, entry));
+      return true;
+    };
+    let after = 0;
+    let more = true;
+    // REPEATABLE READ's first SELECT fixes the snapshot/highwater for every page.
+    while (more && !bounded && hasTime()) {
+      const page = await reader.select(sessionFields).from(conversationSessions).where(and(
+        gte(conversationSessions.updatedAt, start), gt(conversationSessions.id, after),
+      )).orderBy(asc(conversationSessions.id)).limit(SESSION_PAGE + 1);
+      more = page.length > SESSION_PAGE;
+      for (const row of page.slice(0, SESSION_PAGE)) {
+        if (row.id <= after || !consumeSession(row)) { bounded = true; break; }
+        after = row.id;
+      }
+      if (more && sessionsRead >= LOCAL_SESSION_CAP) { bounded = true; warnings.add("Captured session row cap reached; remaining conversation context is unknown"); }
+    }
+    // Inbound is independently paged; orphan customer requests remain eligible.
+    after = 0; more = true;
+    while (more && bytes < LOCAL_BYTES && hasTime()) {
+      if (inboundRead >= LOCAL_INBOUND_CAP) { bounded = true; warnings.add("Captured inbound row cap reached; remaining intake is unknown"); break; }
+      const page = await reader.select({
+        id: inboundSms.id, fromPhone: inboundSms.fromPhone, toPhone: inboundSms.toPhone,
+        message: sql<string | null>`case when octet_length(${inboundSms.message}) <= ${HISTORY_BYTES} then ${inboundSms.message} else null end`,
+        openPhoneMessageId: inboundSms.openPhoneMessageId, receivedAt: inboundSms.receivedAt,
+      }).from(inboundSms).where(and(
+        gte(inboundSms.receivedAt, start.getTime()), lt(inboundSms.receivedAt, end.getTime()),
+        lte(inboundSms.receivedAt, cutoff), gt(inboundSms.id, after),
+      )).orderBy(asc(inboundSms.id)).limit(INBOUND_PAGE + 1);
+      more = page.length > INBOUND_PAGE;
+      let stopped = false;
+      for (const row of page.slice(0, INBOUND_PAGE)) {
+        if (row.id <= after || !admit(row)) { bounded = true; stopped = true; break; }
+        after = row.id; inboundRead++;
+        const customerPhone = phone(row.fromPhone);
+        if (!customerPhone) { damaged = true; warnings.add("Invalid/non-US inbound customer phones skipped; no identity guess"); continue; }
+        const thread = getThread(customerPhone, null);
+        const at = instant(row.receivedAt); const text = string(row.message);
+        if (at === null || !text) { gap(thread, "Malformed or SQL-size-capped inbound intake timestamp/text skipped; no time guessed"); continue; }
+        if (at < start.getTime() || at >= end.getTime() || at > cutoff) continue;
+        const providerId = string(row.openPhoneMessageId);
+        warnings.add("Inbound intake receivedAt is observed time only; it cannot prove the provider occurrence date");
+        add(thread, { at, anchor: true, providerId, message: {
+          key: messageKey(customerPhone, "inbound", providerId, `inbound:${row.id}`), sessionId: null,
+          customerPhone, businessPhone: phone(row.toPhone), direction: "inbound", text, providerMessageId: providerId,
+          occurredAt: null, observedAt: new Date(at).toISOString(), timeBasis: "received", delivery: "received", source: "inbound_sms",
+        } });
+      }
+      if (stopped) break;
+    }
+    // Only selected-day people (or genuinely unreadable candidate histories) can
+    // bring in earlier/later exact-phone context; unrelated outside-day personas cannot.
+    const scopedPhones = Array.from(collected).filter(([, value]) => value.anchored || (value.thread.truncated && !value.entries.length)).map(([customerPhone]) => customerPhone);
+    after = 0; more = scopedPhones.length > 0;
+    while (more && !bounded && hasTime()) {
+      const page = await reader.select(sessionFields).from(conversationSessions).where(and(
+        phoneMatch(conversationSessions.leadPhone, scopedPhones), gt(conversationSessions.id, after),
+      )).orderBy(asc(conversationSessions.id)).limit(SESSION_PAGE + 1);
+      more = page.length > SESSION_PAGE;
+      for (const row of page.slice(0, SESSION_PAGE)) {
+        if (row.id <= after || !consumeSession(row)) { bounded = true; break; }
+        after = row.id;
+      }
+    }
+  });
+  const threads: AuditThread[] = [];
+  for (const value of Array.from(collected.values())) {
+    if (!value.anchored && !(value.thread.truncated && !value.entries.length)) continue;
+    if (bounded) gap(value, "Bounded local scan is incomplete; missing acknowledgements or corrections cannot be ruled out");
+    const anchors = value.entries.filter(entry => entry.anchor).sort((a, b) => a.at - b.at || a.message.key.localeCompare(b.message.key));
+    const context = value.entries.filter(entry => !entry.anchor).sort((a, b) => {
+      const distance = (entry: Entry) => entry.at < start.getTime() ? start.getTime() - entry.at : entry.at - end.getTime();
+      return distance(a) - distance(b) || a.at - b.at;
+    });
+    let textBytes = 0;
+    const kept: Entry[] = [];
+    for (const entry of [...anchors, ...context]) {
+      const size = Buffer.byteLength(entry.message.text, "utf8");
+      if (kept.length >= THREAD_MESSAGES || textBytes + size > LOCAL_THREAD_TEXT) {
+        gap(value, "Per-thread message/byte cap omitted captured context; no message text was clipped"); continue;
+      }
+      textBytes += size; kept.push(entry);
+    }
+    value.thread.messages = kept.sort((a, b) => a.at - b.at || a.message.key.localeCompare(b.message.key)).map(entry => entry.message);
+    threads.push(value.thread);
+  }
+  const messagesRead = threads.reduce((sum, thread) => sum + thread.messages.length, 0);
+  return {
+    threads,
+    localSource: { status: damaged || bounded ? "partial" : "captured", sessionsRead, inboundRead, messagesRead, threadsRead: threads.length, providerRequests: 0 },
+    coverage: { status: "partial", messagesRead, threadsRead: threads.length, threadsAnalyzed: 0, truncated: damaged || bounded,
+      warnings: ["LeadFlow captured messages only, not complete provider coverage; missing capture and unverified sent evidence are not proof of absence.", ...warnings.list()] },
+  };
+}
+
+export type ReadLeadFlowAuditRecordsResult = ReadAuditRecordsResult & { incompleteThreadKeys: string[] };
+/** Candidate-first, independent exact-customer budgets. One person's cap/failure
+ * cannot turn another person's current state into a false absence or disable it.
+ */
+export async function readLeadFlowAuditRecords(input: ReadAuditRecordsInput, db?: ReaderDatabase): Promise<ReadLeadFlowAuditRecordsResult> {
+  const phaseDeadline = Date.now() + LOCAL_RECORD_PHASE_MS;
+  const warnings = new Set<string>();
+  const incomplete = new Set<string>();
+  const records = new Map<string, AuditRecord>();
+  const groups = new Map<string, AuditThread[]>();
+  const actionable = input.candidates.filter(candidate => !candidate.contextOnly);
+  for (const candidate of actionable) {
+    const matches = input.threads.filter(thread => thread.key === candidate.threadKey);
+    const phones = new Set(matches.map(thread => phone(thread.customerPhone)));
+    if (matches.length === 0 || phones.size !== 1 || phones.has(null)) {
+      incomplete.add(candidate.threadKey); warnings.add("Actionable thread has missing or ambiguous exact customer identity; no inferred lookup"); continue;
+    }
+    const customerPhone = Array.from(phones)[0]!;
+    const group = groups.get(customerPhone) ?? [];
+    for (const thread of matches) if (!group.some(existing => existing.key === thread.key)) group.push(thread);
+    groups.set(customerPhone, group);
+  }
+  for (const threads of Array.from(groups.values())) {
+    const keys = new Set(threads.map(thread => thread.key));
+    if (Date.now() >= phaseDeadline) {
+      for (const key of Array.from(keys)) incomplete.add(key);
+      warnings.add("Current-record audit budget exhausted; pending customer records are unknown, not evidence of absence. Captured action summaries are retained.");
+      continue;
+    }
+    try {
+      const boundedDb = timedSnapshotDatabase(await database(db), Math.min(phaseDeadline, Date.now() + LOCAL_SCAN_MS));
+      const result = await readAuditRecords({ threads, candidates: actionable.filter(candidate => keys.has(candidate.threadKey)) }, boundedDb);
+      for (const record of result.records) records.set(record.key, record);
+      for (const warning of result.warnings) warnings.add(warning);
+      if (result.truncated) for (const key of Array.from(keys)) incomplete.add(key);
+    } catch (error) {
+      for (const key of Array.from(keys)) incomplete.add(key);
+      const reason = error instanceof AuditSnapshotError ? error.reason : "DB_READ_FAILED";
+      warnings.add(`Current records for an actionable customer could not be read (${reason}); missing rows are unknown, not evidence of absence`);
+    }
+  }
+  return { records: Array.from(records.values()), warnings: Array.from(warnings), truncated: incomplete.size > 0, incompleteThreadKeys: Array.from(incomplete) };
 }

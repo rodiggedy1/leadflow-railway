@@ -12,6 +12,7 @@ export type VerifyAuditCandidatesInput = {
   threads: AuditThread[];
   candidates: AuditCandidate[];
   records: AuditRecord[];
+  evidenceMode?: "captured";
 };
 
 type Check = { status: AuditStatus; reason: string };
@@ -359,6 +360,119 @@ function laterCorrection(candidate: AuditCandidate, evidence: EvidenceCheck, sel
   return a.scope === b.scope && (a.date === b.date || (a.bookingReference !== null && a.bookingReference === b.bookingReference && unique(selection.group.records.filter(record => record.source === "leadflow_jobs").map(record => record.date)).length <= 1));
 }
 
+type CapturedEvidenceCheck = EvidenceCheck & { bound: boolean };
+
+/** Capture proves exact source binding and a review day, never provider occurrence time. */
+function capturedEvidenceFor(candidate: AuditCandidate, input: VerifyAuditCandidatesInput): CapturedEvidenceCheck {
+  const threads = input.threads.filter(thread => thread.key === candidate.threadKey);
+  const thread = threads.length === 1 ? threads[0] : null;
+  const phone = normalizeAuditPhone(thread?.customerPhone);
+  const result: CapturedEvidenceCheck = { thread, phone, evidence: [], anchor: null, error: null, bound: false };
+  const fail = (error: string) => ({ ...result, error });
+  if (!thread || !phone) return fail("Thread or exact valid customer phone is missing or ambiguous; names are not identity proof.");
+  if (!candidate.evidenceKeys.length || !candidate.evidenceKeys.includes(candidate.anchorMessageKey)) return fail("The anchor must be included in the candidate's source evidence keys.");
+  if (unique(candidate.evidenceKeys).length !== candidate.evidenceKeys.length) return fail("Duplicate evidence keys cannot establish source provenance.");
+  for (const key of candidate.evidenceKeys) {
+    const local = thread.messages.filter(message => message.key === key);
+    const global = input.threads.flatMap(other => other.messages).filter(message => message.key === key);
+    if (local.length !== 1 || global.length !== 1 || normalizeAuditPhone(local[0].customerPhone) !== phone) return fail("A source key is missing, duplicated, or belongs to a different thread/customer.");
+    result.evidence.push(local[0]);
+  }
+  result.anchor = result.evidence.find(message => message.key === candidate.anchorMessageKey) ?? null;
+  if (!result.anchor) return fail("The selected anchor could not be established.");
+  result.bound = true;
+  const anchor = result.anchor;
+  if (anchor.direction === "outbound") {
+    // A genuinely provider-verified sent promise retains its existing meaning.
+    // Never replace an outbound draft anchor with a fabricated inbound request.
+    const strict = evidenceFor(candidate, input);
+    return { ...strict, bound: result.bound };
+  }
+  if (anchor.delivery !== "received") return fail("A captured inbound anchor must be actually received; incomplete or failed incoming messages are not established requests.");
+  const at = authoritative(anchor) && instant(anchor.occurredAt) !== null ? anchor.occurredAt
+    : anchor.timeBasis === "history" && instant(anchor.occurredAt) !== null ? anchor.occurredAt
+    : anchor.observedAt;
+  if (instant(at) === null) return fail("The captured inbound anchor has no valid history/observed timestamp; its review day cannot be established.");
+  if (!candidate.contextOnly && auditBusinessDate(at, input.timeZone) !== input.auditDate) return fail("The captured inbound anchor's history/observed date is outside the selected business-timezone review day.");
+  if (instant(input.asOf) !== null && instant(at)! > instant(input.asOf)!) return fail("The captured inbound anchor is after the supplied snapshot asOf.");
+  return result;
+}
+
+function capturedIdentityError(phone: string, input: VerifyAuditCandidatesInput): string | null {
+  // Conflicting household names on an exact phone are a collision, not an
+  // invitation to choose a fuzzy name match, a nearby date, or a newer booking.
+  const names = unique([
+    ...input.threads.filter(thread => normalizeAuditPhone(thread.customerPhone) === phone).map(thread => text(thread.customerName)),
+    ...input.records.filter(record => normalizeAuditPhone(record.customerPhone) === phone).map(record => text(record.customerName)),
+  ].filter((name): name is string => name !== null));
+  return names.length > 1 ? "Conflicting customer/household names share this exact phone; identity is ambiguous and no fuzzy name selection is permitted." : null;
+}
+
+function capturedLaterCorrection(candidate: AuditCandidate, proof: CapturedEvidenceCheck, selection: Selection, input: VerifyAuditCandidatesInput): boolean {
+  // Local chronology alone cannot suppress an action. Unsent context, even when
+  // omitted from a model's cited keys, cannot prove a superseding agreement.
+  if (proof.thread?.messages.some(message => message.direction === "outbound" && !["sent", "delivered"].includes(message.delivery))) return false;
+  const strict = evidenceFor(candidate, input);
+  if (strict.error) return false;
+  const later = input.candidates.filter(other => other.anchorMessageKey === candidate.supersededByMessageKey && other.action === candidate.action);
+  if (later.length !== 1 || !Number.isFinite(later[0].confidence) || later[0].confidence < 0.8) return false;
+  return laterCorrection(candidate, strict, selection, input);
+}
+
+function verifyCapturedAuditCandidates(input: VerifyAuditCandidatesInput, globalError: string | null): AuditItem[] {
+  return input.candidates.filter(candidate => !candidate.contextOnly).map(candidate => {
+    const proof = capturedEvidenceFor(candidate, input);
+    const strict = proof.bound ? evidenceFor(candidate, input) : null;
+    const requestSupported = !proof.error && proof.anchor?.direction === "inbound" && proof.anchor.delivery === "received";
+    const unsentContext = proof.evidence.some(message => message.direction === "outbound" && !["sent", "delivered"].includes(message.delivery));
+    const confirmationSupported = strict !== null && !strict.error && !unsentContext;
+    const downgrade = candidate.agreement === "confirmed" && requestSupported && !confirmationSupported;
+    const effective = downgrade ? { ...candidate, agreement: "requested" as const } : candidate;
+    const warnings = [
+      "Captured evidence identifies the stored review day only; unverified provider-time is not authoritative message occurrence or historical timing proof.",
+      "The current snapshot does not prove historical completion, when changes were made, or charge events.",
+    ];
+    if (candidate.agreement !== "confirmed" || !confirmationSupported) warnings.push("No verified sent confirmation is established for this request; unknown/failed outbound text is not sent proof.");
+    if (downgrade) warnings.push("The model's confirmed label was downgraded to requested using the valid received inbound anchor; no outbound confirmation was fabricated.");
+    if (unsentContext) warnings.push("Unsent or unknown-delivery outbound context was not used to establish confirmation or supersession.");
+    let selection: Selection = { group: null, records: [], visit: null, error: null };
+    let check: Check;
+    const fatal = globalError || (!proof.bound ? proof.error : null)
+      || (input.candidates.filter(other => other.id === candidate.id).length !== 1 ? "Candidate IDs are duplicated; an arbitrary ID cannot suppress a finding." : null)
+      || (proof.phone ? capturedIdentityError(proof.phone, input) : null);
+    if (fatal) check = { status: "cannot_verify", reason: fatal };
+    else {
+      // Exact valid records remain useful candidate evidence even when message
+      // timing/meaning is uncertain. Selection errors never attach a household
+      // group, invalid identities, or cross-customer records as a chosen visit.
+      const selected = selectRecords(effective, proof.phone!, input.records);
+      if (!selected.error) selection = selected;
+      const uncertainty = proof.error || expectationError(effective)
+        || (candidate.agreement === "confirmed" && !confirmationSupported && !requestSupported ? "Confirmation is not established by sent source evidence, and no valid received inbound request anchor supports a downgrade." : null)
+        || (!Number.isFinite(candidate.confidence) || candidate.confidence < 0.8 ? "The action interpretation has low or invalid confidence; fulfillment cannot be verified." : null)
+        || (["declined", "unclear"].includes(candidate.agreement) ? "Declined/unclear conversation is not an agreed instruction or a matching confirmation." : null);
+      if (uncertainty || selected.error) {
+        check = { status: "cannot_verify", reason: uncertainty || selected.error! };
+        if (selection.records.length) warnings.push("These uniquely selected exact current records are candidate evidence only; they do not establish request meaning or fulfillment.");
+      } else if (capturedLaterCorrection(effective, proof, selection, input)) {
+        check = { status: "superseded", reason: "A strictly later, provider-validated same-customer action candidate corrects this same identified booking/visit and action." };
+      } else check = compareState(effective, selection, input.timeZone);
+    }
+    const links: AuditItem["recordLinks"] = [];
+    if (selection.records.some(record => record.source === "bookings")) links.push({ label: "Bookings", href: "/admin/bookings" });
+    if (selection.records.some(record => record.source === "leadflow_jobs")) links.push({ label: "Schedule", href: "/admin/schedule" });
+    return {
+      id: candidate.id, action: candidate.action, agreement: effective.agreement,
+      status: check.status, customerPhone: proof.phone ?? "", customerName: proof.thread?.customerName ?? null,
+      affectedDate: isValidAuditDate(candidate.expected.date) ? candidate.expected.date : isValidAuditDate(candidate.expected.originalDate) ? candidate.expected.originalDate : selection.visit,
+      expected: copyExpectation(candidate.expected), explanation: candidate.explanation,
+      verification: `${check.reason} ${warnings.join(" ")} Verification is limited to the supplied current snapshot as of ${input.asOf}; it does not prove historical changes, charge events, or message meaning beyond the cited source evidence.`,
+      evidence: proof.evidence.map(message => ({ ...message })), records: selection.records.map(copyRecord),
+      recordLinks: links, verifiedAt: input.asOf, evidenceBasis: "captured", evidenceWarnings: warnings,
+    };
+  });
+}
+
 /**
  * Pure read-only verifier. The extractor's IDs, confidence, prose and supersession hints
  * are never persistence or identity proof. No history, capture, mutation or provider
@@ -369,6 +483,7 @@ export function verifyAuditCandidates(input: VerifyAuditCandidatesInput): AuditI
     : !validTimeZone(input.timeZone) ? "Business timezone is invalid."
     : instant(input.asOf) === null ? "Snapshot asOf must be a valid timestamp with an explicit offset."
     : null;
+  if (input.evidenceMode === "captured") return verifyCapturedAuditCandidates(input, globalError);
   return input.candidates.filter(candidate => !candidate.contextOnly).map(candidate => {
     const proof = evidenceFor(candidate, input);
     let selection: Selection = { group: null, records: [], visit: null, error: null };

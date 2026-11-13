@@ -557,7 +557,8 @@ describe("reader fail-closed and source boundaries", () => {
     expect(source).not.toMatch(/\.for\s*\(/);
     expect(source).not.toMatch(/\b(fetch|sendSMS|sendEmail|JSON_SEARCH)\s*\(/);
     expect(source).not.toContain("./routers");
-    const referenced = [...source.matchAll(/\.from\((\w+)\)/g)].map(value => value[1]);
+    // Array.from converts collections; it is not an ORM table read.
+    const referenced = [...source.matchAll(/(\w+)?\.from\((\w+)\)/g)].filter(value => value[1] !== "Array").map(value => value[2]);
     expect(new Set(referenced)).toEqual(new Set(["conversationSessions", "inboundSms", "bookings", "leadflowJobs", "bookingAssignments", "bookingPaymentProfiles"]));
   });
 });

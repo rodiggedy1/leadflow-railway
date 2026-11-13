@@ -3,12 +3,11 @@ import { TRPCError } from "@trpc/server";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { isValidBookingRescheduleDate } from "../shared/bookingReschedule";
 import type { AuditAnalysis, AuditStatus, DailyActionAuditResult } from "../shared/dailyActionAudit";
-import { AUDIT_COLLECTION_FAILURES, auditFailureMessage, type AuditFailureStage } from "../shared/dailyActionAudit";
-import { auditDayWindow, readAuditRecords } from "./dailyActionAuditData";
+import { auditFailureMessage, type AuditFailureStage } from "../shared/dailyActionAudit";
+import { readLeadFlowAuditDay, readLeadFlowAuditRecords } from "./dailyActionAuditData";
 import { AuditSnapshotError } from "./dailyActionAuditSnapshot";
 import { interpretAuditThreads } from "./dailyActionAuditInterpret";
 import { verifyAuditCandidates } from "./dailyActionAuditEngine";
-import { collectAuditDaySms, prepareAuditDayThreads } from "./dailyActionAuditCollection";
 
 const cursorSchema = z.object({
   sessionAfterId: z.number().int().min(0), inboundAfterId: z.number().int().min(0), asOf: z.string().datetime(),
@@ -26,82 +25,86 @@ function dayInZone(now: Date, timeZone: string): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 export type DailyAuditDependencies = {
-  collect: typeof collectAuditDaySms; prepare: typeof prepareAuditDayThreads;
-  records: typeof readAuditRecords; interpret: typeof interpretAuditThreads;
-  verify: typeof verifyAuditCandidates; now: () => Date;
+  messages: typeof readLeadFlowAuditDay;
+  records: typeof readLeadFlowAuditRecords;
+  interpret: typeof interpretAuditThreads;
+  verify: typeof verifyAuditCandidates;
+  now: () => Date;
 };
 const defaults: DailyAuditDependencies = {
-  collect: collectAuditDaySms, prepare: prepareAuditDayThreads,
-  records: readAuditRecords, interpret: interpretAuditThreads, verify: verifyAuditCandidates,
-  now: () => new Date(),
+  messages: readLeadFlowAuditDay, records: readLeadFlowAuditRecords,
+  interpret: interpretAuditThreads, verify: verifyAuditCandidates, now: () => new Date(),
 };
 const emptyTotals = (): Record<AuditStatus, number> => ({ matches: 0, needs_action: 0, conflict: 0, superseded: 0, cannot_verify: 0 });
 
-/** Collect every provider page first. No persistence, sending, approval or booking edits. */
+/** Human-initiated captured-message review. No Quo download, persistence or system actions. */
 export async function runDailyActionAudit(input: z.infer<typeof dailyAuditInputSchema>, deps: DailyAuditDependencies = defaults): Promise<DailyActionAuditResult> {
   const now = deps.now();
   if (input.auditDate >= dayInZone(now, input.timeZone)) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a previous day to audit." });
-  if (input.cursor) throw new TRPCError({ code: "BAD_REQUEST", message: "This audit collects the full day before analysis. Start a new day scan instead of continuing an old sample." });
+  if (input.cursor) throw new TRPCError({ code: "BAD_REQUEST", message: "Start a new captured-conversation audit rather than continuing a legacy sample." });
   const asOf = now.toISOString();
   let failureStage: AuditFailureStage = "MESSAGE_READ";
   try {
-    const collection = await deps.collect(auditDayWindow(input.auditDate, input.timeZone));
-    if (collection.status !== "complete") {
-      return {
-        auditDate: input.auditDate, timeZone: input.timeZone, asOf, collection,
-        items: [], totals: emptyTotals(), nextCursor: null,
-        analysis: { status: "not_run", threadsTotal: 0, threadsAnalyzed: 0, failedThreads: 0, omittedMessages: 0, unsupportedMessages: 0 },
-        coverage: { status: "partial", messagesRead: collection.messages.length, threadsRead: 0, threadsAnalyzed: 0, truncated: true,
-          warnings: [AUDIT_COLLECTION_FAILURES[collection.failure ?? "FAILED"]] },
-      };
-    }
+    const source = await deps.messages({ auditDate: input.auditDate, timeZone: input.timeZone, asOf });
     failureStage = "PROCESSING";
-    const prepared = deps.prepare(collection);
-    // Only source-complete days may reach database/model work. Keep the DB snapshot
-    // released before waiting for the unchanged model transport.
+    // Merge all bounded captured pages before interpreting each person's requests.
+    // No DB lease is held while waiting for interpretation; current records are read afterward.
+    const interpreted = source.threads.length
+      ? await deps.interpret({ auditDate: input.auditDate, timeZone: input.timeZone,
+        threads: source.threads, records: [], evidenceMode: "captured" })
+      : { candidates: [], warnings: [], threadsAnalyzed: 0, failedThreads: 0, omittedMessages: 0 };
     failureStage = "RECORD_READ";
-    const records = prepared.threads.length ? await deps.records({ threads: prepared.threads, candidates: [] }) : { records: [], truncated: false, warnings: [] };
+    let recordFailure = false;
+    const records = await (interpreted.candidates.length
+      ? deps.records({ threads: source.threads, candidates: interpreted.candidates })
+      : Promise.resolve({ records: [], truncated: false, warnings: [], incompleteThreadKeys: [] }))
+      .catch(() => {
+        recordFailure = true;
+        return { records: [], truncated: true, incompleteThreadKeys: source.threads.map(thread => thread.key),
+          warnings: ["Current booking/job records could not be read. Captured action summaries remain available, but system fulfillment cannot be verified."] };
+      });
     failureStage = "PROCESSING";
     const checkedAt = deps.now().toISOString();
-    const threads = prepared.threads.map(thread => {
-      const names = Array.from(new Set(records.records.filter(record => record.customerPhone === thread.customerPhone).map(record => record.customerName).filter((name): name is string => Boolean(name))));
+    const threads = source.threads.map(thread => {
+      const names = Array.from(new Set(records.records.filter(record => record.customerPhone === thread.customerPhone)
+        .map(record => record.customerName).filter((name): name is string => Boolean(name))));
       return { ...thread, customerName: thread.customerName ?? (names.length === 1 ? names[0] : null) };
     });
-    const interpreted = threads.length
-      ? await deps.interpret({ auditDate: input.auditDate, timeZone: input.timeZone, threads, records: records.records })
-      : { candidates: [], warnings: [], threadsAnalyzed: 0, failedThreads: 0, omittedMessages: 0 };
+    const incomplete = new Set(records.incompleteThreadKeys);
+    const candidates = interpreted.candidates.map(candidate => incomplete.has(candidate.threadKey) ? { ...candidate, ambiguous: true } : candidate);
+    const items = deps.verify({ auditDate: input.auditDate, timeZone: input.timeZone, asOf: checkedAt,
+      threads, candidates, records: records.records, evidenceMode: "captured" });
+    if (recordFailure) for (const item of items) {
+      item.status = "cannot_verify";
+      item.verification = "Current records are unavailable. This captured request is not proof of a missed or completed system action.";
+    }
+    const totals = emptyTotals();
+    for (const item of items) totals[item.status]++;
     const failedThreads = interpreted.failedThreads ?? Math.max(0, threads.length - interpreted.threadsAnalyzed);
     const omittedMessages = interpreted.omittedMessages ?? 0;
     const analysis: AuditAnalysis = {
-      status: threads.length > 0 && interpreted.threadsAnalyzed === 0 && interpreted.candidates.length === 0 ? "failed"
-        : failedThreads || omittedMessages || prepared.unsupportedMessages || records.truncated ? "partial" : "complete",
+      status: threads.length > 0 && interpreted.threadsAnalyzed === 0 && items.length === 0 ? "failed"
+        : failedThreads || omittedMessages || source.coverage.truncated || records.truncated ? "partial" : "complete",
       threadsTotal: threads.length, threadsAnalyzed: interpreted.threadsAnalyzed,
-      failedThreads, omittedMessages, unsupportedMessages: prepared.unsupportedMessages,
+      failedThreads, omittedMessages, unsupportedMessages: 0,
     };
-    const candidates = records.truncated ? interpreted.candidates.map(candidate => ({ ...candidate, ambiguous: true })) : interpreted.candidates;
-    const items = deps.verify({ auditDate: input.auditDate, timeZone: input.timeZone, asOf: checkedAt, threads, candidates, records: records.records });
-    const totals = emptyTotals();
-    for (const item of items) totals[item.status]++;
     return {
-      auditDate: input.auditDate, timeZone: input.timeZone, asOf, collection, analysis, items, totals, nextCursor: null,
+      auditDate: input.auditDate, timeZone: input.timeZone, asOf, localSource: source.localSource,
+      analysis, items, totals, nextCursor: null,
       coverage: {
-        status: "partial", messagesRead: collection.messages.length,
-        threadsRead: threads.length, threadsAnalyzed: interpreted.threadsAnalyzed,
-        truncated: records.truncated || omittedMessages > 0,
-        warnings: Array.from(new Set([
-          ...prepared.warnings, ...records.warnings, ...interpreted.warnings,
-          "All provider pages for the selected message day were collected. This is not proof of historical action completion.",
-          "This audit compares the selected day's SMS with current records. Later-day corrections and unsupported group/media evidence require separate review.",
+        ...source.coverage, threadsAnalyzed: interpreted.threadsAnalyzed,
+        truncated: source.coverage.truncated || records.truncated || omittedMessages > 0,
+        warnings: Array.from(new Set([...source.coverage.warnings, ...records.warnings, ...interpreted.warnings,
+          "This review uses messages captured in LeadFlow; missing capture or unverified sent/occurrence evidence is not proof of no action.",
+          "Current system matches do not prove when an action was taken. No Quo message download was required.",
         ])),
       },
     };
   } catch (error) {
-    // Source errors may contain SMS, SQL or credentials. Return fixed codes only.
     const reason = error instanceof AuditSnapshotError ? error.reason : "FAILED";
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: auditFailureMessage(failureStage, reason) });
   }
 }
 export const dailyActionAuditRouter = router({
-  // Mutation is a human-initiated computation, not a database mutation.
   run: adminAgentProcedure.input(dailyAuditInputSchema).mutation(({ input }) => runDailyActionAudit(input)),
 });

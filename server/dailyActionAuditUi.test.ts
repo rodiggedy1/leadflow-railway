@@ -520,7 +520,10 @@ describe("Daily Action Audit actual read-only UI", () => {
       const attributes = all(file, ts.isJsxAttribute).filter(node => node.name.getText(file) === "type");
       expect(attributes.some(node => node.initializer?.getText(file) === '"date"' || node.initializer?.getText(file) === "'date'")).toBe(false);
     }
-    for (const forbidden of ["showPicker", "setInterval", "setTimeout", "EventSource", "WebSocket", "localStorage", "sessionStorage", "fetch(", "useCustomers", "download", "cleaner" + "_jobs", "cleaner" + "Jobs"]) expect(combined).not.toContain(forbidden);
+    // Permit the approved source-status copy only, not a download operation.
+    expect(combined.match(/No Quo message download/g)).toHaveLength(1);
+    const operationSource = combined.replace("No Quo message download", "No Quo message retrieval");
+    for (const forbidden of ["showPicker", "setInterval", "setTimeout", "EventSource", "WebSocket", "localStorage", "sessionStorage", "fetch(", "useCustomers", "download", "cleaner" + "_jobs", "cleaner" + "Jobs"]) expect(operationSource).not.toContain(forbidden);
     const calls = all(parse(pageSource), ts.isCallExpression).map(node => node.expression.getText());
     expect(calls.filter(call => call.endsWith(".useQuery"))).toEqual(["trpc.agents.me.useQuery"]);
     expect(calls.filter(call => call.endsWith(".useMutation"))).toEqual(["trpc.aiActions.dailyAudit.run.useMutation"]);
@@ -688,7 +691,8 @@ describe("Daily Action Audit collection-first source/status UI", () => {
     const work = workspace(() => response.promise);
     work.change("2026-11-11");
     const promise = work.submit();
-    expect(text(work.render())).toContain("Collecting the day’s SMS, then checking actions…");
+    expect(text(work.render())).toContain("Reading LeadFlow captured conversations, then checking actions…");
+    expect(text(work.render())).not.toContain("Collecting the day’s SMS");
     expect(work.mutateAsync).toHaveBeenCalledTimes(1);
     response.resolve(result([], { collection: collected(), analysis: analyzed(), nextCursor: { sessionAfterId: 20, inboundAfterId: 100, asOf: "2026-11-12T15:00:00Z" } }));
     await promise;

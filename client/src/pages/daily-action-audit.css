@@ -47,6 +47,11 @@
 .daily-action-audit-page .daa-filter-bar button[aria-pressed="true"] { border-color: #a3b499; background: #eaf0e3; color: #3e5c41; font-weight: 600; }
 .daily-action-audit-page .daa-filter-bar button span { margin-left: 4px; font-size: 11px; }
 .daily-action-audit-page .daa-results { min-width: 0; }
+.daily-action-audit-page .daa-local-source { min-width: 0; margin-bottom: 9px; padding: 8px 12px; border: 1px solid #d9e3d6; border-radius: 9px; background: #eef3e9; color: #536e55; font-size: 12px; overflow-wrap: anywhere; }
+.daily-action-audit-page .daa-local-source strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.daily-action-audit-page .daa-local-source p + p { margin-top: 2px; color: #66765b; }
+.daily-action-audit-page .daa-analysis-status.daa-local-analysis { padding: 8px 12px; }
+.daily-action-audit-page .daa-evidence-warnings { margin: 5px 0; padding-left: 18px; color: #806c43; font-size: 12px; overflow-wrap: anywhere; }
 .daily-action-audit-page .daa-collection-status,
 .daily-action-audit-page .daa-analysis-status { min-width: 0; margin-bottom: 9px; padding: 11px 14px; border: 1px solid #d9e3d6; border-left: 3px solid #8ca37b; border-radius: 9px; background: #eef3e9; color: #536e55; overflow-wrap: anywhere; }
 .daily-action-audit-page .daa-collection-status h2,

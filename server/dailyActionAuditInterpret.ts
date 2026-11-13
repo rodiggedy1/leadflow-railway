@@ -93,6 +93,7 @@ function businessDay(value: string | null, timeZone: string): string | null {
 
 export async function interpretAuditThreads(input: {
   auditDate: string; timeZone: string; threads: AuditThread[]; records: AuditRecord[];
+  evidenceMode?: "captured";
 }, call: (params: InvokeParams) => Promise<InvokeResult> = invokeLLM): Promise<{ candidates: AuditCandidate[]; warnings: string[]; threadsAnalyzed: number; failedThreads?: number; omittedMessages?: number }> {
   const candidates: AuditCandidate[] = [];
   const warnings: string[] = [];
@@ -101,6 +102,9 @@ export async function interpretAuditThreads(input: {
   const incomplete = new Set<string>();
   const seen = new Set<string>();
   const work: Array<{ originalKey: string; thread: AuditThread }> = [];
+  const captured = input.evidenceMode === "captured";
+  const analysisDeadline = Date.now() + 60_000;
+  let timedOut = false;
   for (const thread of input.threads) {
     const prioritized = [
       ...thread.messages.filter(message => businessDay(message.occurredAt ?? message.observedAt, input.timeZone) === input.auditDate),
@@ -110,20 +114,25 @@ export async function interpretAuditThreads(input: {
     let chunk: AuditThread["messages"] = [];
     let used = 0;
     for (const message of prioritized) {
-      if (message.text.length > 8_000) {
+      const size = captured ? JSON.stringify(message).length : message.text.length;
+      const chunkBudget = captured ? 16_000 : 8_000;
+      if (size > chunkBudget) {
         omittedMessages++; incomplete.add(thread.key);
         warnings.push("A collected SMS exceeded the model input budget. It remains in the day's source messages but was not analyzed.");
         continue;
       }
-      if (used + message.text.length > 8_000 && chunk.length) {
+      if (used + size > chunkBudget && chunk.length) {
         chunks.push(chunk); chunk = []; used = 0;
       }
-      chunk.push(message); used += message.text.length;
+      chunk.push(message); used += size;
     }
     if (chunk.length) chunks.push(chunk);
     if (!chunks.length && thread.messages.length) incomplete.add(thread.key);
     const split = chunks.length > 1;
-    if (split) warnings.push("A long conversation was analyzed in multiple bounded chunks. Cross-chunk agreement or correction context requires review.");
+    if (split) {
+      warnings.push("A long conversation was analyzed in multiple bounded chunks. Cross-chunk agreement or correction context requires review.");
+      if (captured) incomplete.add(thread.key);
+    }
     for (let index = 0; index < chunks.length; index++) {
       const included = new Set(chunks[index].map(message => message.key));
       work.push({ originalKey: thread.key, thread: {
@@ -134,9 +143,11 @@ export async function interpretAuditThreads(input: {
       } });
     }
   }
-  // Bounded sequential calls; no retries, persistence, tools or system actions.
-  for (let offset = 0; offset < work.length; offset += 6) {
-    const batchWork = work.slice(offset, offset + 6);
+  // Captured mode isolates conversations and limits how long this audit waits.
+  // A timed-out shared transport call may still finish; do not start another call.
+  const batchSize = captured ? 1 : 6;
+  for (let offset = 0; offset < work.length; offset += batchSize) {
+    const batchWork = work.slice(offset, offset + batchSize);
     const batch = batchWork.map(value => value.thread);
     const originalKeys = new Map(batchWork.map(value => [value.thread.key, value.originalKey]));
     const sentKeys = new Map<string, Set<string>>();
@@ -157,17 +168,42 @@ export async function interpretAuditThreads(input: {
         })),
       };
     });
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const response = await call({
+      if (captured && (timedOut || Date.now() >= analysisDeadline)) {
+        timedOut = true;
+        throw new Error("Analysis budget exhausted");
+      }
+      const parameters: InvokeParams = {
         messages: [
-          { role: "system", content: instructions },
+          { role: "system", content: captured ? `${instructions}\nThis is a LeadFlow CAPTURED-CONVERSATION review, not an authoritative provider-day reconciliation. Supplied history/received times identify the stored review day only. Keep explicit-date/time inbound requests actionable for current-state comparison; do not mark them ambiguous solely because their provider occurrence time is unverified. Relative dates require reliable message-day context and must remain ambiguous when timing could change their meaning. Unknown-delivery outbound entries are recorded text, not sent confirmations, and cannot anchor an instruction or supersede a real request. Never invent an action because a current record differs.` : instructions },
           { role: "user", content: JSON.stringify({ auditDate: input.auditDate, timeZone: input.timeZone, extrasCatalog: BOOKING_WIDGET_PRICED_EXTRAS.map(extra => ({ id: extra.id, label: extra.label, quantityUnit: extra.quantityUnit ?? null })), threads: prepared }) },
         ],
         response_format: { type: "json_schema", json_schema: { name: "daily_action_audit", strict: true, schema: auditInterpretationJsonSchema } },
-      });
+      };
+      if (captured && JSON.stringify(parameters).length > 32_000) throw new Error("Serialized input exceeds audit budget");
+      const response = captured ? await Promise.race([
+        call(parameters),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => { timedOut = true; reject(new Error("Audit interpretation timed out")); }, Math.min(20_000, Math.max(1, analysisDeadline - Date.now())));
+        }),
+      ]) : await call(parameters);
       const content = response.choices?.[0]?.message?.content;
       if (typeof content !== "string" || response.choices[0].finish_reason === "length") throw new Error("Invalid interpretation response");
-      const parsed = responseSchema.parse(JSON.parse(content));
+      let parsed: z.infer<typeof responseSchema>;
+      if (captured) {
+        const envelope = z.object({ actions: z.array(z.unknown()).max(80) }).strict().parse(JSON.parse(content));
+        const actions: z.infer<typeof predictionSchema>[] = [];
+        for (const raw of envelope.actions) {
+          const validated = predictionSchema.safeParse(raw);
+          if (validated.success) actions.push(validated.data);
+          else {
+            incomplete.add(batchWork[0].originalKey);
+            warnings.push("An invalid action was excluded from this captured conversation; valid referenced actions were retained.");
+          }
+        }
+        parsed = { actions };
+      } else parsed = responseSchema.parse(JSON.parse(content));
       const correctionReferences = new Set(parsed.actions.filter(action => {
         const owner = batch.find(thread => thread.key === action.threadKey);
         const anchor = owner?.messages.find(message => message.key === action.anchorMessageKey);
@@ -187,6 +223,10 @@ export async function interpretAuditThreads(input: {
           incomplete.add(originalKeys.get(thread.key)!);
           continue;
         }
+        if (captured && anchor.direction === "outbound" && !["sent", "delivered"].includes(anchor.delivery)) {
+          warnings.push("An unsent or unverified outbound draft could not anchor an action.");
+          continue;
+        }
         const contextOnly = businessDay(anchor.occurredAt ?? anchor.observedAt, input.timeZone) !== input.auditDate;
         if (contextOnly && !correctionReferences.has(`${action.threadKey}|${action.anchorMessageKey}|${action.action}`)) {
           warnings.push("An interpretation referenced a message outside the selected day and was discarded.");
@@ -195,7 +235,7 @@ export async function interpretAuditThreads(input: {
         }
         const context = prepared.find(value => value.key === thread.key)!;
         const expected = action.expected as AuditExpectation;
-        const uncertain = context.truncated || action.confidence < 0.8 || anchor.timeBasis === "received" || anchor.timeBasis === "unknown" || (expected.extras !== null && expected.extrasMode === "unspecified");
+        const uncertain = context.truncated || action.confidence < 0.8 || (!captured && anchor.timeBasis === "received") || anchor.timeBasis === "unknown" || (expected.extras !== null && expected.extrasMode === "unspecified");
         const originalKey = originalKeys.get(thread.key)!;
         candidates.push({
           ...action, threadKey: originalKey, expected, contextOnly,
@@ -208,7 +248,7 @@ export async function interpretAuditThreads(input: {
       // Do not expose provider errors, message text, phone numbers or payloads.
       for (const value of batchWork) failed.add(value.originalKey);
       warnings.push(`Message interpretation was unavailable for ${batch.length} conversation chunk(s). Collected SMS remain available; actionable items could not be determined for those chunks.`);
-    }
+    } finally { if (timer !== undefined) clearTimeout(timer); }
   }
   const unique = new Map<string, AuditCandidate>();
   for (const candidate of candidates) {
