@@ -95,6 +95,7 @@ const PaymentsExactLive = lazy(() => import("./pages/PaymentsExactLive"));
 const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashboardExactLive"));
 const AiTeamReview = lazy(() => import("./pages/AiTeamReview"));
 const AiActionsControlCenter = lazy(() => import("./pages/AiActionsControlCenter"));
+const DailyActionAudit = lazy(() => import("./pages/DailyActionAudit"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -194,6 +195,9 @@ function AiTeamReviewRoute() {
 function AiActionsControlCenterRoute() {
   return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/review/ai-actions"><AiActionsControlCenter /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
+function DailyActionAuditRoute() {
+  return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/admin/daily-action-audit"><DailyActionAudit /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
 
 function AdminPayrollSummaryExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/payroll-summary"><PayrollSummaryExactLive /></ReviewWorkspaceFrame>;
@@ -245,6 +249,7 @@ function Router() {
         <Route path={"/admin/sms"} component={AdminSmsExactLiveRoute} />
         <Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />
         <Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />
+        <Route path={"/admin/daily-action-audit"} component={DailyActionAuditRoute} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
         <Route path={"/agent"} component={AgentDashboard} />
         <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
