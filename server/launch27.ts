@@ -164,7 +164,7 @@ function getBearer(): string {
  */
 export async function getCompletedBookingsForDate(
   date: string,
-  opts?: { includeAll?: boolean } // if true, fetch all bookings (assigned + completed), not just completed
+  opts?: { includeAll?: boolean; request?: typeof fetch } // if true, fetch all bookings (assigned + completed), not just completed
 ): Promise<Launch27SyncResult> {
   const baseUrl = getBaseUrl();
   const bearer = getBearer();
@@ -188,7 +188,7 @@ export async function getCompletedBookingsForDate(
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await (opts?.request ?? fetch)(url, {
         headers: {
           Authorization: `Bearer ${bearer}`,
           "Content-Type": "application/json",

@@ -1,301 +1,233 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, like, lt, or, sql } from "drizzle-orm";
-import { int, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { desc, eq } from "drizzle-orm";
 import { conversationSessions } from "../drizzle/schema";
 import type { AuditMessage } from "../shared/dailyActionAudit";
-import type { LiveTextContext, LiveTextFeed, LiveTextRow } from "../shared/liveTextMonitor";
+import type { LiveTextContext, LiveTextFeed, LiveTextFeedFailure, LiveTextRow } from "../shared/liveTextMonitor";
 import { getDb } from "./db";
-import { AuditSnapshotError, readAuditSnapshot } from "./dailyActionAuditSnapshot";
 import { normalizePhone } from "./utils/phone";
 
-const EVENT_LIMIT = 500;
+const SESSION_LIMIT = 100;
+const HISTORY_LIMIT = 20;
 const FEED_LIMIT = 100;
-const PAYLOAD_BYTES = 64 * 1024;
-const SESSION_LIMIT = 50; // Last row is an overflow sentinel, not a guessed identity.
-const CONTEXT_LIMIT = 30;
-const CONTEXT_BYTES = 16_000;
-const QUERY_MS = 2_000;
-const REQUEST_MS = 5_000;
-type Database = { readonly $client: unknown };
-
-// A private SELECT projection of an existing table, not a schema change.
-const captures = mysqlTable("webhook_events", {
-  id: int("id").notNull(), source: varchar("source", { length: 50 }),
-  eventType: varchar("event_type", { length: 255 }), eventId: varchar("event_id", { length: 255 }),
-  fromPhone: varchar("from_phone", { length: 50 }), toPhone: varchar("to_phone", { length: 50 }),
-  rawPayload: text("raw_payload"), createdAt: timestamp("created_at"),
-});
+type Database = Pick<NonNullable<Awaited<ReturnType<typeof getDb>>>, "select">;
 const fields = {
-  id: captures.id, source: captures.source, eventType: captures.eventType, eventId: captures.eventId,
-  fromPhone: captures.fromPhone, toPhone: captures.toPhone,
-  rawPayload: sql<string | null>`case when octet_length(${captures.rawPayload}) <= ${PAYLOAD_BYTES} then ${captures.rawPayload} else null end`,
-  createdAt: captures.createdAt,
+  id: conversationSessions.id, leadPhone: conversationSessions.leadPhone, leadName: conversationSessions.leadName,
+  messageHistory: conversationSessions.messageHistory, updatedAt: conversationSessions.updatedAt,
 };
-type Capture = { id: number; source: string | null; eventType: string | null; eventId: string | null;
-  fromPhone: string | null; toPhone: string | null; rawPayload: string | null; createdAt: Date | null };
-type Session = { id: number; leadPhone: string; leadName: string | null };
-const messageFilter = () => and(eq(captures.source, "openphone"), like(captures.eventType, "message.%"));
-function hash(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
-function phone(value: unknown): string | null {
-  return typeof value === "string" && /^\+?[\d\s().-]+$/.test(value.trim()) ? normalizePhone(value.trim()) : null;
+type Session = { id: number; leadPhone: string; leadName: string | null; messageHistory: string; updatedAt: Date };
+type Entry = { row: LiveTextRow; index: number; at: number | null };
+type History = { session: Session; window: unknown[]; entries: Entry[]; partial: boolean; older: boolean };
+
+class LiveTextReadError extends Error {
+  constructor(readonly reason: LiveTextFeedFailure) {
+    super(reason === "DB_UNAVAILABLE" ? "Live text database is unavailable." : "Live text database read failed.");
+    this.name = "LiveTextReadError";
+  }
 }
-function nonempty(value: unknown): string | null { return typeof value === "string" && value.trim() ? value : null; }
+// Inspect exact driver codes (including Drizzle's cause), never SQL, parameters,
+// message substrings, or a guessed provider fallback. No retry or custom timeout.
+const CODE_FAILURES: Readonly<Record<string, LiveTextFeedFailure>> = {
+  ECONNREFUSED: "DB_UNAVAILABLE", ENOTFOUND: "DB_UNAVAILABLE", EAI_AGAIN: "DB_UNAVAILABLE",
+  ECONNRESET: "DB_UNAVAILABLE", EPIPE: "DB_UNAVAILABLE", PROTOCOL_CONNECTION_LOST: "DB_UNAVAILABLE",
+  ER_ACCESS_DENIED_ERROR: "DB_UNAVAILABLE", ER_CON_COUNT_ERROR: "DB_UNAVAILABLE",
+  ER_NO_SUCH_TABLE: "DB_SCHEMA", ER_BAD_FIELD_ERROR: "DB_SCHEMA", ER_BAD_DB_ERROR: "DB_SCHEMA",
+  ETIMEDOUT: "DB_TIMEOUT", ER_LOCK_WAIT_TIMEOUT: "DB_TIMEOUT", ER_QUERY_TIMEOUT: "DB_TIMEOUT",
+  ER_QUERY_INTERRUPTED: "DB_TIMEOUT", PROTOCOL_SEQUENCE_TIMEOUT: "DB_TIMEOUT",
+};
+function safeError(error: unknown): LiveTextReadError {
+  for (let depth = 0; depth < 5 && error && typeof error === "object"; depth++) {
+    if (error instanceof LiveTextReadError) return new LiveTextReadError(error.reason);
+    const value = error as { code?: unknown; cause?: unknown };
+    if (typeof value.code === "string" && Object.hasOwn(CODE_FAILURES, value.code)) {
+      return new LiveTextReadError(CODE_FAILURES[value.code]);
+    }
+    error = value.cause;
+  }
+  return new LiveTextReadError("DB_READ_FAILED");
+}
+async function database(db?: Database): Promise<Database> {
+  const result = db ?? await getDb();
+  if (!result) throw new LiveTextReadError("DB_UNAVAILABLE");
+  return result;
+}
+function hash(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
-function validId(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) > 0 && (value as number) <= 2_147_483_647; }
-
-/** Provider instants must be real ISO calendar dates with an explicit offset.
- * SQL Date objects represent observation time only, never provider occurrence.
+function string(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
+function phone(value: unknown): string | null {
+  return typeof value === "string" && /^\+?[\d\s().-]+$/.test(value.trim()) ? normalizePhone(value.trim()) : null;
+}
+function validId(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0 && (value as number) <= 2_147_483_647;
+}
+/** Stored numeric ts/timestamp values are Unix milliseconds, not provider proof.
+ * Missing/zero timestamps and invalid or offset-less dates remain unknown.
  */
-function providerInstant(value: unknown): string | null {
+function instant(value: unknown): number | null {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value !== 0 && Number.isFinite(new Date(value).getTime()) ? value : null;
+  }
   if (typeof value !== "string") return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.exec(value);
-  if (!match || +match[4] > 23 || +match[5] > 59 || +match[6] > 59) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match || +match[4] > 23 || +match[5] > 59 || +(match[6] ?? 0) > 59) return null;
   const date = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime()) || date.getUTCFullYear() !== +match[1]
     || date.getUTCMonth() + 1 !== +match[2] || date.getUTCDate() !== +match[3]) return null;
   if (match[7] !== "Z" && (+match[7].slice(1, 3) > 23 || +match[7].slice(4) > 59)) return null;
   const at = Date.parse(value);
-  return Number.isFinite(at) ? new Date(at).toISOString() : null;
+  return Number.isFinite(at) ? at : null;
 }
-function observedInstant(value: unknown): string | null {
-  return value instanceof Date && Number.isFinite(value.getTime()) ? value.toISOString() : providerInstant(value);
+function envelopes(item: Record<string, unknown>): Record<string, unknown>[] {
+  const metadata = object(item.metadata);
+  return metadata ? [item, metadata] : [item];
 }
-function scopeOf(customerPhone: string, businessPhone: string): string { return `${customerPhone}|${businessPhone}`; }
-function projectionMatches(row: Capture, customerPhone: string, businessPhone: string): boolean {
-  const from = phone(row.fromPhone); const to = phone(row.toPhone);
-  return (from === customerPhone && to === businessPhone) || (to === customerPhone && from === businessPhone);
+function providerIds(item: Record<string, unknown>): string[] {
+  return Array.from(new Set(envelopes(item).flatMap(value =>
+    [string(value.opMsgId), string(value.openPhoneId), string(value.providerMessageId)].filter((id): id is string => !!id))));
 }
-type Event = { capture: Capture; key: string; scope: string; customerPhone: string; businessPhone: string;
-  direction: AuditMessage["direction"]; providerId: string | null; text: string | null;
-  occurredAt: string | null; observedAt: string | null; delivery: AuditMessage["delivery"] | null;
-  rawStatus: string | null; ambiguous: boolean };
-function parse(row: Capture): Event | null {
-  if (!validId(row.id) || row.source !== "openphone" || !row.eventType?.startsWith("message.")
-    || typeof row.rawPayload !== "string" || Buffer.byteLength(row.rawPayload, "utf8") > PAYLOAD_BYTES) return null;
-  let root: Record<string, unknown> | null;
-  try { root = object(JSON.parse(row.rawPayload)); } catch { return null; }
-  if (!root || root.type !== row.eventType) return null;
-  const item = object(object(root.data)?.object);
-  if (!item || (item.direction !== "incoming" && item.direction !== "outgoing")) return null;
-  // Inspect ALL recipients. The captured to_phone is only a projection of to[0].
-  const recipients = Array.isArray(item.to) ? item.to : [item.to];
-  if (recipients.length !== 1) return null;
-  const from = phone(item.from); const to = phone(recipients[0]);
-  if (!from || !to || from === to) return null;
-  const direction = item.direction === "incoming" ? "inbound" : "outbound";
-  const customerPhone = direction === "inbound" ? from : to;
-  const businessPhone = direction === "inbound" ? to : from;
-  const providerId = nonempty(item.id);
-  if (providerId !== null && (providerId.length > 512 || providerId.trim() !== providerId)) return null;
-  // Missing provider IDs cannot attach delivery updates to any other capture.
-  const key = `live-text:${hash([customerPhone, businessPhone, direction, providerId ?? `capture:${row.id}`])}`;
-  const status = typeof item.status === "string" ? item.status.toLowerCase() : null;
-  let delivery: Event["delivery"] = null;
-  if (status !== null) {
-    delivery = direction === "inbound" && status === "received" ? "received"
-      : direction === "outbound" && status === "delivered" ? "delivered"
-      : direction === "outbound" && status === "sent" ? "sent" : "unknown";
-  } else if (direction === "inbound" && row.eventType === "message.received") delivery = "received";
-  else if (row.eventType !== "message.received") delivery = "unknown";
-  return {
-    capture: row, key, scope: scopeOf(customerPhone, businessPhone), customerPhone, businessPhone, direction,
-    providerId, text: nonempty(item.body) ?? (item.body == null ? nonempty(item.text) : null),
-    occurredAt: providerInstant(item.createdAt), observedAt: observedInstant(row.createdAt), delivery, rawStatus: status,
-    ambiguous: (row.eventId !== null && row.eventId !== providerId)
-      || (row.fromPhone !== null && phone(row.fromPhone) !== from)
-      || (row.toPhone !== null && phone(row.toPhone) !== to),
+function identity(item: Record<string, unknown>, sessionId: number, customerPhone: string, direction: AuditMessage["direction"]) {
+  const records = envelopes(item);
+  const explicitLines = records.filter(value => value.businessPhone != null).map(value => phone(value.businessPhone));
+  const businessPhone = explicitLines.find((value): value is string => value !== null) ?? null;
+  let ambiguous = explicitLines.some(value => value === null || value !== businessPhone) || businessPhone === customerPhone;
+  const agrees = (value: unknown, expected: string | null) => {
+    const values = Array.isArray(value) ? value : [value];
+    return values.length === 1 && phone(values[0]) !== null && (expected === null || phone(values[0]) === expected);
   };
-}
-type Entry = { row: LiveTextRow; scope: string; latestId: number; rawBinding: string; damaged: boolean };
-function collect(rows: Capture[]): { entries: Entry[]; damaged: Capture[] } {
-  const groups = new Map<string, Event[]>(); const damaged: Capture[] = [];
-  for (const capture of rows) {
-    const event = parse(capture);
-    if (!event) { damaged.push(capture); continue; }
-    const group = groups.get(event.key) ?? []; group.push(event); groups.set(event.key, group);
-  }
-  const entries: Entry[] = [];
-  for (const events of Array.from(groups.values())) {
-    events.sort((a, b) => b.capture.id - a.capture.id);
-    const bodies = events.filter(event => event.text !== null);
-    if (!bodies.length) { damaged.push(events[0].capture); continue; }
-    const latestBody = bodies[0];
-    // Stable anchor within the retained snapshot: equal-content retries/updates
-    // do not create another text. Newer conflicting body is shown, never guessed away.
-    const anchor = bodies.filter(event => event.text === latestBody.text).at(-1)!;
-    const ambiguous = events.some(event => event.ambiguous) || bodies.some(event => event.text !== latestBody.text);
-    const statusEvent = events.find(event => event.delivery !== null);
-    const delivery = statusEvent?.delivery ?? "unknown";
-    const occurrence = anchor.occurredAt ?? latestBody.occurredAt;
-    const observed = anchor.observedAt;
-    const evidenced = delivery !== "unknown" && !!occurrence && !!statusEvent?.occurredAt && !ambiguous;
-    const message: AuditMessage = {
-      key: anchor.key, sessionId: null, customerPhone: anchor.customerPhone, businessPhone: anchor.businessPhone,
-      direction: anchor.direction, text: latestBody.text!, providerMessageId: anchor.providerId,
-      occurredAt: occurrence, observedAt: observed,
-      timeBasis: occurrence ? "provider" : observed ? "received" : "unknown",
-      delivery, source: evidenced ? "provider" : "conversation_history",
-    };
-    entries.push({ scope: anchor.scope, latestId: anchor.capture.id,
-      rawBinding: hash([latestBody.text, delivery, statusEvent?.rawStatus, statusEvent?.occurredAt, evidenced, occurrence, observed, ambiguous]), damaged: ambiguous,
-      row: { key: anchor.key, captureId: anchor.capture.id, revision: "", customerName: null, message, identityAmbiguous: ambiguous } });
-  }
-  entries.sort((a, b) => b.latestId - a.latestId);
-  return { entries, damaged };
-}
-
-// Narrow per-request adaptation of the existing safe snapshot pattern. Timeout
-// destruction affects only this lease; late acquisitions are disposed once.
-async function bounded<T>(work: Promise<T>, deadline: number, expire: () => void = () => {}): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([work, new Promise<never>((_, reject) => {
-      timer = setTimeout(() => { try { expire(); } finally { reject(new AuditSnapshotError("DB_TIMEOUT")); } },
-        Math.max(1, Math.min(QUERY_MS, deadline - Date.now())));
-    })]);
-  } finally { if (timer) clearTimeout(timer); }
-}
-function timedDatabase(db: Database, deadline: number): Database {
-  type Lease = { query: (options: unknown, values?: unknown[]) => Promise<unknown>; release: () => void; destroy: () => void };
-  type Pool = { getConnection?: () => Promise<Lease>; promise?: () => Pool };
-  const client = db.$client as Pool | undefined;
-  const pool = typeof client?.promise === "function" ? client.promise() : client;
-  if (typeof pool?.getConnection !== "function") throw new AuditSnapshotError("DB_UNSUPPORTED");
-  return { $client: { getConnection: async () => {
-    if (Date.now() >= deadline) throw new AuditSnapshotError("DB_TIMEOUT");
-    let abandoned = false;
-    const acquired = pool.getConnection!().then(lease => {
-      if (abandoned) { try { lease.destroy(); } catch { /* Disposal attempted once. */ } throw new AuditSnapshotError("DB_TIMEOUT"); }
-      return lease;
-    });
-    const owned = await bounded(acquired, deadline, () => { abandoned = true; });
-    let disposed = false;
-    const destroy = () => { if (!disposed) { disposed = true; try { owned.destroy(); } catch { /* Never retried. */ } } };
-    return {
-      query: async (options: string | { sql: string }, values?: unknown[]) => {
-        if (disposed || Date.now() >= deadline) { destroy(); throw new AuditSnapshotError("DB_TIMEOUT"); }
-        const timeout = Math.max(1, Math.min(QUERY_MS, deadline - Date.now()));
-        return bounded(owned.query({ ...(typeof options === "string" ? { sql: options } : options), timeout }, values), deadline, destroy);
-      },
-      release: () => { if (!disposed) { owned.release(); disposed = true; } }, destroy,
-    };
-  } } };
-}
-function exactPhones(column: typeof conversationSessions.leadPhone | typeof captures.fromPhone | typeof captures.toPhone, phones: string[]) {
-  // SQL narrows candidates; canonical JS validation remains authoritative.
-  return and(sql`${column} regexp '^[+0-9 ().-]+$'`, inArray(sql<string>`regexp_replace(${column}, '[^0-9]', '')`,
-    phones.flatMap(value => [value.slice(2), value.slice(1)])));
-}
-type Snapshot = { recent: Capture[]; anchor: Capture | null; sessions: Session[]; older: boolean };
-async function snapshot(captureId: number | null, db?: Database): Promise<Snapshot> {
-  const deadline = Date.now() + REQUEST_MS;
-  const database = db ?? await bounded(getDb(), deadline);
-  if (!database) throw new AuditSnapshotError("DB_UNAVAILABLE");
-  return readAuditSnapshot(timedDatabase(database, deadline), async reader => {
-    // Always overlap-reread the same last-500 window on a NEW fixed snapshot.
-    // No monotonic cursor: a smaller ID committed late remains visible next poll.
-    const recent = await reader.select(fields).from(captures).where(messageFilter()).orderBy(desc(captures.id)).limit(EVENT_LIMIT);
-    const anchors = captureId === null ? [] : await reader.select(fields).from(captures)
-      .where(and(messageFilter(), eq(captures.id, captureId))).limit(1);
-    const anchor = anchors[0] ?? null;
-    const events = recent.map(parse).filter((value): value is Event => !!value);
-    const anchored = anchor ? parse(anchor) : null;
-    const phones = Array.from(new Set(events.concat(anchored ? [anchored] : []).map(event => event.customerPhone)));
-    const sessions = phones.length ? await reader.select({ id: conversationSessions.id, leadPhone: conversationSessions.leadPhone, leadName: conversationSessions.leadName })
-      .from(conversationSessions).where(exactPhones(conversationSessions.leadPhone, phones)).orderBy(desc(conversationSessions.id)).limit(SESSION_LIMIT) : [];
-    // A bounded existence probe, with no body transfer, marks a REAL older exact
-    // endpoint boundary. Unrelated older captures never mark this context capped.
-    const oldest = recent.at(-1)?.id;
-    const older = anchored && oldest && recent.length === EVENT_LIMIT ? await reader.select({ id: captures.id }).from(captures).where(and(
-      messageFilter(), lt(captures.id, oldest), sql`${captures.id} <> ${captureId}`,
-      or(and(exactPhones(captures.fromPhone, [anchored.customerPhone]), exactPhones(captures.toPhone, [anchored.businessPhone])),
-        and(exactPhones(captures.fromPhone, [anchored.businessPhone]), exactPhones(captures.toPhone, [anchored.customerPhone]))),
-    )).orderBy(desc(captures.id)).limit(1) : [];
-    return { recent, anchor, sessions, older: older.length > 0 };
-  });
-}
-function applyNames(entries: Entry[], sessions: Session[]): boolean {
-  const capped = sessions.length === SESSION_LIMIT;
-  for (const entry of entries) {
-    const matched = sessions.slice(0, SESSION_LIMIT - 1).filter(session => phone(session.leadPhone) === entry.row.message.customerPhone);
-    const names = Array.from(new Set(matched.map(session => nonempty(session.leadName)?.trim()).filter((value): value is string => !!value)));
-    entry.row.customerName = !capped && names.length === 1 ? names[0] : null;
-    // An incomplete display-name lookup is not an identity collision. Exact
-    // captured phone/line binding and fresh native records still verify actions.
-    entry.row.identityAmbiguous ||= names.length > 1;
-    entry.damaged ||= names.length > 1;
-    entry.row.message.sessionId = !capped && matched.length === 1 ? matched[0].id : null;
-  }
-  return capped;
-}
-function chronology(a: Entry, b: Entry): number {
-  const time = (entry: Entry) => {
-    const instant = entry.row.message.occurredAt ?? entry.row.message.observedAt;
-    return instant ? Date.parse(instant) : 0;
-  };
-  return time(a) - time(b) || a.latestId - b.latestId;
-}
-function contextFor(anchor: Entry, entries: Entry[], damaged: Capture[], older = false): LiveTextContext {
-  const scoped = entries.filter(entry => entry.scope === anchor.scope);
-  let partial = older || scoped.some(entry => entry.damaged)
-    || damaged.some(row => projectionMatches(row, anchor.row.message.customerPhone, anchor.row.message.businessPhone!));
-  // Reserve the clicked text before any other messages, including old anchors.
-  const priority = [anchor].concat(scoped.filter(entry => entry !== anchor));
-  const selected: Array<{ entry: Entry; message: AuditMessage }> = [];
-  for (const entry of priority) {
-    if (selected.length >= CONTEXT_LIMIT) { partial = true; continue; }
-    const message = { ...entry.row.message };
-    const fits = (candidate: AuditMessage) => Buffer.byteLength(JSON.stringify(selected.map(value => value.message).concat([candidate])), "utf8") <= CONTEXT_BYTES;
-    if (!fits(message)) {
-      partial = true;
-      // Keep the actual text intact on its row. A missing full anchor makes the
-      // service return Review; partial request text must never be interpreted.
-      continue;
+  for (const record of records) {
+    if (record.sessionId != null && record.sessionId !== sessionId) ambiguous = true;
+    if (record.customerPhone != null && !agrees(record.customerPhone, customerPhone)) ambiguous = true;
+    if (record.direction != null && record.direction !== direction
+      && record.direction !== (direction === "inbound" ? "incoming" : "outgoing")) ambiguous = true;
+    for (const name of ["from", "fromPhone", "to", "toPhone"] as const) {
+      if (record[name] == null) continue;
+      const customerEnd = direction === "inbound" ? name.startsWith("from") : name.startsWith("to");
+      if (!agrees(record[name], customerEnd ? customerPhone : businessPhone)) ambiguous = true;
     }
-    selected.push({ entry, message });
   }
-  selected.sort((a, b) => chronology(a.entry, b.entry));
-  const messages = selected.map(value => value.message);
-  const row: LiveTextRow = { ...anchor.row, message: { ...anchor.row.message } };
-  // Bind full text, latest delivery, exact metadata and interpreter
-  // input/context. Changes outside the displayed byte cap also invalidate checks.
-  row.revision = hash([row.key, row.captureId, row.customerName, row.identityAmbiguous, anchor.rawBinding,
-    scoped.map(entry => [entry.row.key, entry.rawBinding, entry.row.message.sessionId]), messages]);
+  for (const endpoint of ["from", "to"] as const) {
+    const values = records.flatMap(record => [record[endpoint], record[`${endpoint}Phone`]])
+      .filter(value => value != null).map(value => phone(Array.isArray(value) ? value[0] : value));
+    if (new Set(values).size > 1) ambiguous = true;
+    const businessEnd = direction === "inbound" ? endpoint === "to" : endpoint === "from";
+    if (businessEnd && values.includes(customerPhone)) ambiguous = true;
+  }
+  // Endpoint metadata may reveal contradictions, but never supplies a guessed line.
+  return { businessPhone, ambiguous };
+}
+function delivery(item: Record<string, unknown>, direction: AuditMessage["direction"]): AuditMessage["delivery"] {
+  if (direction === "inbound") return "received";
+  const statuses = Array.from(new Set(envelopes(item).flatMap(value =>
+    [string(value.status), string(value.deliveryStatus)].filter((status): status is string => !!status).map(status => status.toLowerCase()))));
+  return statuses.length === 1 && (statuses[0] === "sent" || statuses[0] === "delivered") ? statuses[0] : "unknown";
+}
+function readHistory(session: Session): History {
+  const result: History = { session, window: [], entries: [], partial: false, older: false };
+  const customerPhone = phone(session.leadPhone);
+  if (!validId(session.id) || !customerPhone) { result.partial = true; return result; }
+  let history: unknown;
+  try { history = JSON.parse(session.messageHistory ?? "[]"); }
+  catch { result.partial = true; return result; }
+  if (!Array.isArray(history)) { result.partial = true; return result; }
+  result.older = history.length > HISTORY_LIMIT;
+  result.partial = session.messageHistory == null;
+  // Match AI Team getSessionConversation: slice STORED entries first, then use
+  // the same content conversion, preserving the original array order and text.
+  result.window = history.slice(-HISTORY_LIMIT);
+  const duplicates = new Map<string, number>();
+  for (const raw of result.window) {
+    const item = object(raw);
+    if (!item || typeof item.role !== "string" || !["user", "customer", "assistant"].includes(item.role)) continue;
+    const id = providerIds(item)[0];
+    if (id) { const key = JSON.stringify([item.role, id]); duplicates.set(key, (duplicates.get(key) ?? 0) + 1); }
+  }
+  result.window.forEach((raw, offset) => {
+    const item = object(raw);
+    if (!item) { result.partial = true; return; }
+    if (typeof item.role !== "string" || !["user", "customer", "assistant"].includes(item.role)) {
+      if (!string(item.role)) result.partial = true;
+      return; // Notes/system/tool roles are not customer texts.
+    }
+    let text: string;
+    try { text = typeof item.content === "string" ? item.content : String(item.content ?? ""); }
+    catch { result.partial = true; return; }
+    if (!text.trim()) { result.partial = true; return; }
+    const index = history.length - result.window.length + offset;
+    const direction = item.role === "assistant" ? "outbound" as const : "inbound" as const;
+    const ids = providerIds(item); const providerId = ids[0] ?? null;
+    const binding = identity(item, session.id, customerPhone, direction);
+    const ambiguous = binding.ambiguous || ids.length > 1;
+    const at = instant(item.ts) ?? instant(item.timestamp)
+      ?? (item.source === "openphone_reconcile" ? instant(item.createdAt) : null);
+    if (at === null || ambiguous) result.partial = true;
+    // Repeated same-role provider IDs still keep every stored entry. Equal text
+    // never coalesces, and ordinary provider-ID keys survive body/status edits.
+    const repeated = providerId && duplicates.get(JSON.stringify([item.role, providerId]))! > 1;
+    const key = `session-text:${hash([session.id, item.role, providerId, providerId && !repeated ? null : index])}`;
+    const timestamp = at === null ? null : new Date(at).toISOString();
+    const message: AuditMessage = {
+      key, sessionId: session.id, customerPhone, businessPhone: binding.businessPhone, direction, text,
+      providerMessageId: providerId, occurredAt: timestamp, observedAt: timestamp,
+      timeBasis: timestamp ? "history" : "unknown", delivery: delivery(item, direction), source: "conversation_history",
+    };
+    result.entries.push({ index, at, row: { key, sessionId: session.id, revision: "",
+      customerName: string(session.leadName), message, identityAmbiguous: ambiguous } });
+  });
+  return result;
+}
+function contextFor(history: History, anchor: Entry): LiveTextContext {
+  // No phone/name/provider-ID sibling lookup. A known line includes only that
+  // explicit line; an unknown line cannot be silently merged with a known one.
+  const scoped = history.entries.filter(entry => entry.row.message.businessPhone === anchor.row.message.businessPhone);
+  const messages = scoped.map(entry => ({ ...entry.row.message }));
+  const partial = history.partial || scoped.length !== history.entries.length;
+  const row: LiveTextRow = { ...anchor.row, message: { ...anchor.row.message },
+    identityAmbiguous: anchor.row.identityAmbiguous || scoped.some(entry => entry.row.identityAmbiguous) };
+  row.revision = hash([row.key, history.session.id, history.session.leadPhone, history.session.leadName,
+    history.session.updatedAt, history.window, messages, partial, row.identityAmbiguous]);
   return { row, messages, partial };
 }
 
-/** Retained captured texts only. partial describes missing/capped/ambiguous
- * retained evidence, NOT provider or organization-wide completeness.
+/** Same ordinary Drizzle stored-history read as AI Team, with a single session
+ * overflow sentinel. No stage/source/pending filters or provider dependency.
  */
 export async function readLiveTextFeed(db?: Database): Promise<LiveTextFeed> {
   try {
-    const data = await snapshot(null, db);
-    const collected = collect(data.recent);
-    const namesCapped = applyNames(collected.entries, data.sessions);
-    const selected = collected.entries.slice(0, FEED_LIMIT).map(entry => contextFor(entry, collected.entries, collected.damaged));
-    return { rows: selected.map(context => context.row), checkedAt: new Date().toISOString(),
-      partial: namesCapped || collected.damaged.length > 0 || collected.entries.length > FEED_LIMIT || selected.some(context => context.partial), unavailable: false };
-  } catch {
-    return { rows: [], checkedAt: new Date().toISOString(), partial: true, unavailable: true };
+    const reader = await database(db);
+    const sessions = await reader.select(fields).from(conversationSessions)
+      .orderBy(desc(conversationSessions.updatedAt), desc(conversationSessions.id)).limit(SESSION_LIMIT + 1);
+    const histories = sessions.slice(0, SESSION_LIMIT).map(readHistory);
+    const entries = histories.flatMap(history => history.entries.map(entry => ({ history, entry })));
+    // Latest known history instants first; unknown-time texts remain visible.
+    // Session updatedAt is only a sorting fallback, NEVER a message timestamp.
+    const orderAt = (value: typeof entries[number]) => value.entry.at ?? instant(value.history.session.updatedAt) ?? 0;
+    entries.sort((a, b) => orderAt(b) - orderAt(a)
+      || b.history.session.id - a.history.session.id || b.entry.index - a.entry.index);
+    const contexts = entries.slice(0, FEED_LIMIT).map(({ history, entry }) => contextFor(history, entry));
+    return { rows: contexts.map(context => context.row), checkedAt: new Date().toISOString(),
+      partial: sessions.length > SESSION_LIMIT || entries.length > FEED_LIMIT || histories.some(history => history.partial || history.older)
+        || contexts.some(context => context.partial), unavailable: false };
+  } catch (error) {
+    return { rows: [], checkedAt: new Date().toISOString(), partial: true, unavailable: true, failure: safeError(error).reason };
   }
 }
 
-/** The server loads the exact capture; callers cannot supply a phone, body or
- * fabricated context. Missing/unidentifiable anchors fail closed.
+/** Re-read one exact server-owned session and find one exact retained key. The
+ * caller supplies no text/phone/context, and a missing key never picks a sibling.
  */
-export async function readLiveTextContext(captureId: number, db?: Database): Promise<LiveTextContext> {
-  if (!validId(captureId)) throw new Error("Invalid live text capture ID.");
-  const data = await snapshot(captureId, db);
-  const event = data.anchor ? parse(data.anchor) : null;
-  if (!event?.text) throw new Error("Live text capture is missing or unidentifiable.");
-  const rows = data.recent.slice();
-  if (!rows.some(row => row.id === captureId)) rows.push(data.anchor!);
-  const collected = collect(rows);
-  applyNames(collected.entries, data.sessions);
-  const entry = collected.entries.find(value => value.row.key === event.key);
-  if (!entry) throw new Error("Live text capture is missing or unidentifiable.");
-  entry.row.captureId = captureId;
-  return contextFor(entry, collected.entries, collected.damaged, data.older);
+export async function readLiveTextContext(sessionId: number, messageKey: string, db?: Database): Promise<LiveTextContext> {
+  if (!validId(sessionId)) throw new Error("Invalid live text session ID.");
+  if (typeof messageKey !== "string" || !/^session-text:[a-f0-9]{64}$/.test(messageKey)) throw new Error("Invalid live text message key.");
+  let sessions: Session[];
+  try {
+    const reader = await database(db);
+    sessions = await reader.select(fields).from(conversationSessions).where(eq(conversationSessions.id, sessionId)).limit(1);
+  } catch (error) { throw safeError(error); }
+  if (!sessions[0] || sessions[0].id !== sessionId) throw new Error("Live text session is missing.");
+  const history = readHistory(sessions[0]);
+  const anchor = history.entries.find(entry => entry.row.key === messageKey);
+  if (!anchor) throw new Error("Live text message is missing from the retained session history.");
+  return contextFor(history, anchor);
 }

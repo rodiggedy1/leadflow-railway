@@ -1,3 +1,4 @@
+.review-nav-host > .live-text-monitor-page { flex: 1 1 0; }
 .live-text-monitor-page {
   min-height: 100%;
   min-width: 0;
@@ -68,7 +69,14 @@
 .ltm-action dd { margin: 0; }
 .ltm-action nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .ltm-action a { color: #3e5c41; text-underline-offset: 3px; }
+.ltm-sync-status { margin-top: 6px !important; color: #66765b; font-size: 11px; }
+.ltm-sync-incomplete { color: #806c43; }
 .ltm-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 64px 20px; border: 1px dashed #d9e3d6; border-radius: 10px; color: #66765b; background: #fff; text-align: center; }
+.ltm-feed-error { margin-bottom: 12px; padding: 16px; border: 1px solid #e3d4bd; border-radius: 10px; color: #80603d; background: #fffaf2; }
+.ltm-feed-error h2 { font-size: 16px; font-weight: 650; }
+.ltm-feed-error p { margin-top: 5px; }
+.ltm-feed-error-empty { padding: 48px 20px; text-align: center; }
+.ltm-retry { margin-top: 12px; }
 .ltm-footnote { padding: 9px 2px; color: #718274; font-size: 11px; }
 .ltm-access { display: grid; justify-items: center; gap: 10px; padding: 60px 20px; text-align: center; }
 .ltm-access h1 { font-size: 22px; }

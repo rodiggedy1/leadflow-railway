@@ -23,7 +23,7 @@ const interpretationCache = createLiveTextInterpretCache();
 
 export type LiveTextMonitorDependencies = {
   feed: () => Promise<LiveTextFeed>;
-  context: (captureId: number) => Promise<LiveTextContext | null>;
+  context: (sessionId: number, messageKey: string) => Promise<LiveTextContext | null>;
   interpret: typeof interpretAuditThreads;
   model: typeof invokeLLM;
   records: typeof readLeadFlowAuditRecords;
@@ -36,11 +36,11 @@ const defaults: LiveTextMonitorDependencies = {
   model: invokeLLM, records: readLeadFlowAuditRecords, verify: verifyAuditCandidates, now: () => new Date(), cache: interpretationCache,
 };
 
-/** Feed reads captured rows only. Reading the page never invokes interpretation. */
+/** Feed reads stored session texts only. Reading the page never invokes interpretation. */
 export async function getLiveTextFeed(dependencies: Partial<LiveTextMonitorDependencies> = {}): Promise<LiveTextFeed> {
   const deps = { ...defaults, ...dependencies };
   try { return await deps.feed(); }
-  catch { return { rows: [], checkedAt: deps.now().toISOString(), partial: true, unavailable: true }; }
+  catch { return { rows: [], checkedAt: deps.now().toISOString(), partial: true, unavailable: true, failure: "DB_READ_FAILED" }; }
 }
 
 function copyMessage(message: AuditMessage): AuditMessage { return { ...message }; }
@@ -62,7 +62,8 @@ function boundContext(source: LiveTextContext): { thread: AuditThread; omitted: 
   if (!phone || matches.length !== 1 || JSON.stringify(matches[0]) !== JSON.stringify(target)) return null;
   const keys = new Set(source.messages.map(message => message.key));
   if (keys.size !== source.messages.length || source.messages.some(message => normalizeAuditPhone(message.customerPhone) !== phone
-    || normalizeAuditPhone(message.businessPhone) !== normalizeAuditPhone(target.businessPhone))) return null;
+    || normalizeAuditPhone(message.businessPhone) !== normalizeAuditPhone(target.businessPhone)
+    || message.sessionId !== source.row.sessionId)) return null;
   // Keep the entire exact target first, then nearest stored context in reader order.
   // Never clip a text or split this check into multiple model calls.
   const selected = new Set<string>();
@@ -78,7 +79,7 @@ function boundContext(source: LiveTextContext): { thread: AuditThread; omitted: 
   if (!selected.has(target.key)) return null;
   const omitted = selected.size !== source.messages.length;
   return { omitted, thread: {
-    key: `live-text-thread:${createHash("sha256").update(phone).digest("hex").slice(0, 24)}`,
+    key: `live-text-thread:${createHash("sha256").update(JSON.stringify([source.row.sessionId, phone])).digest("hex").slice(0, 24)}`,
     customerPhone: phone, customerName: null,
     messages: source.messages.filter(message => selected.has(message.key)).map(copyMessage),
     truncated: source.partial || omitted,
@@ -227,17 +228,23 @@ function presentAction(candidate: AuditCandidate, item: AuditItem | undefined, o
     evidence.push(`${record.source === "bookings" ? "Booking" : "Job"} ${record.publicBookingNumber ? `${tidy(record.publicBookingNumber)} ` : ""}(${record.key}): ${currentFields(record, candidate).join("; ")}.`);
   }
   evidence.push(override ?? (item ? shortReason(item) : "Current evidence is insufficient to verify this action."));
+  const explicitDate = candidate.expected.date ?? (candidate.action !== "reschedule" && candidate.action !== "book" ? candidate.expected.originalDate : null);
+  const syncServiceDate = candidate.action !== "payment" && !candidate.ambiguous && candidate.confidence >= 0.8
+    && !["unclear", "declined"].includes(candidate.agreement) && candidate.expected.scope !== "subsequent"
+    && isValidAuditDate(explicitDate) ? explicitDate : null;
   return { id: candidate.id, type: candidate.action, summary: actionSummary(candidate),
+    syncServiceDate,
     verified: override || !item ? "review" : decision(item), evidence: evidence.join(" "), records,
     links: item?.recordLinks.map(link => ({ ...link })) ?? [] };
 }
 
-/** Server-owned exact capture analysis. No durable state, daily scan, outbound action or retry. */
-export async function checkLiveText(captureId: number, dependencies: Partial<LiveTextMonitorDependencies> = {}): Promise<LiveTextCheck> {
-  if (!Number.isSafeInteger(captureId) || captureId <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a valid captured text." });
+/** Server-owned exact session text analysis. No durable state, daily scan, outbound action or retry. */
+export async function checkLiveText(input: { sessionId: number; messageKey: string }, dependencies: Partial<LiveTextMonitorDependencies> = {}): Promise<LiveTextCheck> {
+  if (!Number.isSafeInteger(input?.sessionId) || input.sessionId <= 0 || typeof input.messageKey !== "string"
+    || !/^session-text:[a-f0-9]{64}$/.test(input.messageKey)) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a valid captured text." });
   const deps = { ...defaults, ...dependencies };
   let loaded: LiveTextContext | null;
-  try { loaded = await deps.context(captureId); }
+  try { loaded = await deps.context(input.sessionId, input.messageKey); }
   catch { throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Captured text could not be read." }); }
   if (!loaded) throw new TRPCError({ code: "NOT_FOUND", message: "Captured text is unavailable." });
   // Take an immutable snapshot before awaiting the model: later reader revisions
@@ -246,8 +253,9 @@ export async function checkLiveText(captureId: number, dependencies: Partial<Liv
   try {
     if (!loaded.row?.message || !Array.isArray(loaded.messages)) throw new Error();
     source = { row: { ...loaded.row, message: copyMessage(loaded.row.message) }, messages: loaded.messages.map(copyMessage), partial: loaded.partial };
-    if (source.row.captureId !== captureId || typeof source.row.key !== "string" || !source.row.key
-      || typeof source.row.revision !== "string" || !source.row.revision || typeof source.row.message.key !== "string" || !source.row.message.key
+    if (source.row.sessionId !== input.sessionId || source.row.key !== input.messageKey
+      || source.row.message.key !== input.messageKey || source.row.message.sessionId !== input.sessionId
+      || typeof source.row.revision !== "string" || !source.row.revision
       || typeof source.row.message.text !== "string" || !source.row.message.text.trim()) throw new Error();
   } catch {
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Captured text identity could not be verified." });
