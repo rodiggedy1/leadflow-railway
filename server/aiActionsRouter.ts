@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { adminAgentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { dailyActionAuditRouter } from "./dailyActionAuditRouter";
+import { liveTextMonitorRouter } from "./liveTextMonitorRouter";
 
 const policyMode = z.enum(["approval_required", "suggest_only", "automatic"]);
 const merchantId = "default";
@@ -30,6 +31,7 @@ async function ensureDefaults(db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 
 export const aiActionsRouter = router({
   dailyAudit: dailyActionAuditRouter,
+  liveText: liveTextMonitorRouter,
   listPolicies: adminAgentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
