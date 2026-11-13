@@ -96,6 +96,52 @@ export type AuditCoverage = {
   truncated: boolean;
   warnings: string[];
 };
+/** Source collection precedes identity/action eligibility. Raw SMS are transient, never stored. */
+export type AuditDaySms = {
+  id: string;
+  from: string;
+  to: string[];
+  text: string;
+  phoneNumberId: string | null;
+  conversationId: string;
+  direction: "incoming" | "outgoing";
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  media: Array<{ url: string; type?: string | null }>;
+};
+export const AUDIT_COLLECTION_FAILURES = {
+  CONFIGURATION: "The existing SMS provider integration is unavailable in this environment. The day's SMS could not be collected.",
+  ACCESS: "The SMS provider denied access. The day's SMS collection is incomplete.",
+  RATE_LIMIT: "The SMS provider rate limit interrupted collection. The day's SMS collection is incomplete.",
+  TIMEOUT: "The SMS provider collection timed out before all pages were retrieved.",
+  RESPONSE: "The SMS provider returned invalid or inconsistent page evidence. The day's collection could not be verified.",
+  CURSOR: "The SMS provider pagination did not advance safely. The day's collection is incomplete.",
+  LIMIT: "The day's SMS exceeded this request's safety budget before collection finished. No analysis was performed.",
+  FAILED: "The day's SMS collection failed before all pages were retrieved. No analysis was performed.",
+} as const;
+export type AuditCollectionFailure = keyof typeof AUDIT_COLLECTION_FAILURES;
+export type AuditDayCollection = {
+  status: "complete" | "failed";
+  scope: "organization";
+  start: string;
+  end: string;
+  messages: AuditDaySms[];
+  pagesRead: number;
+  incoming: number;
+  outgoing: number;
+  duplicates: number;
+  outOfWindow: number;
+  failure: AuditCollectionFailure | null;
+};
+export type AuditAnalysis = {
+  status: "complete" | "partial" | "failed" | "not_run";
+  threadsTotal: number;
+  threadsAnalyzed: number;
+  failedThreads: number;
+  omittedMessages: number;
+  unsupportedMessages: number;
+};
 export type AuditCursor = {
   sessionAfterId: number;
   inboundAfterId: number;
@@ -113,6 +159,8 @@ export type DailyActionAuditResult = {
   coverage: AuditCoverage;
   totals: Record<AuditStatus, number>;
   nextCursor: AuditCursor | null;
+  collection?: AuditDayCollection;
+  analysis?: AuditAnalysis;
 };
 
 export const AUDIT_FAILURE_STAGES = {

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
-import type { AuditItem, AuditMessage, DailyActionAuditResult } from "../shared/dailyActionAudit";
+import type { AuditAnalysis, AuditDayCollection, AuditDaySms, AuditItem, AuditMessage, DailyActionAuditResult } from "../shared/dailyActionAudit";
 import * as auditFailures from "../shared/dailyActionAudit";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "../shared/bookingWidgetConfig";
 
@@ -65,6 +65,19 @@ function result(items: AuditItem[] = [], overrides: Partial<DailyActionAuditResu
     coverage: { status: "partial", messagesRead: 8, threadsRead: 3, threadsAnalyzed: 2, truncated: false, warnings: [] }, nextCursor: null, ...overrides };
 }
 const renderResults = (value: DailyActionAuditResult, filter = "all") => renderToStaticMarkup(React.createElement(ui.AuditResults, { result: value, filter }));
+function rawSms(id: string, overrides: Partial<AuditDaySms> = {}): AuditDaySms {
+  return { id, from: "+13015550123", to: ["+13015550987"], text: `Synthetic source ${id}`, phoneNumberId: "LINE-SYNTHETIC",
+    conversationId: "CONVERSATION-SYNTHETIC", direction: "incoming", status: "received", createdAt: "2026-11-11T17:00:00Z",
+    updatedAt: "2026-11-11T17:01:00Z", media: [], ...overrides };
+}
+function collected(messages: AuditDaySms[] = [rawSms("SMS-1")], overrides: Partial<AuditDayCollection> = {}): AuditDayCollection {
+  return { status: "complete", scope: "organization", start: "2026-11-11T05:00:00Z", end: "2026-11-12T05:00:00Z", messages,
+    pagesRead: 3, incoming: messages.filter(sms => sms.direction === "incoming").length,
+    outgoing: messages.filter(sms => sms.direction === "outgoing").length, duplicates: 0, outOfWindow: 0, failure: null, ...overrides };
+}
+function analyzed(overrides: Partial<AuditAnalysis> = {}): AuditAnalysis {
+  return { status: "complete", threadsTotal: 1, threadsAnalyzed: 1, failedThreads: 0, omittedMessages: 0, unsupportedMessages: 0, ...overrides };
+}
 function elements(tree: any): any[] {
   if (Array.isArray(tree)) return tree.flatMap(elements);
   if (!React.isValidElement(tree)) return [];
@@ -392,7 +405,9 @@ describe("Daily Action Audit actual read-only UI", () => {
       const error = find(work.render(), node => node.type === work.harness.loaded.AuditRunError);
       expect(error.props.safeMessage).toBeUndefined();
       const html = renderToStaticMarkup(error);
-      expect(html).toContain("No results are being shown. Check your access and connection");
+      expect(html).toContain("No results are being shown. The audit failed without a verified failure detail.");
+      expect(html).not.toContain("Check your access and connection");
+      expect(html).not.toContain("run the audit again");
       expect(html).not.toContain("SECRET");
       expect(html).not.toContain("+15550101234");
       expect(html).not.toContain("[DAA:");
@@ -400,7 +415,9 @@ describe("Daily Action Audit actual read-only UI", () => {
     }
     for (const safeMessage of unsafeMessages) {
       const html = renderToStaticMarkup(React.createElement(ui.AuditRunError, { safeMessage }));
-      expect(html).toContain("Check your access and connection");
+      expect(html).toContain("The audit failed without a verified failure detail.");
+      expect(html).not.toContain("Check your access and connection");
+      expect(html).not.toContain("run the audit again");
       expect(html).not.toContain("SECRET");
       expect(html).not.toContain("[DAA:");
     }
@@ -513,6 +530,173 @@ describe("Daily Action Audit actual read-only UI", () => {
     expect(calendarSource).toContain('aria-haspopup="dialog"');
     expect(calendarSource).toContain("document.removeEventListener('pointerdown', outside)");
     expect(calendarSource).toContain("document.removeEventListener('keydown', escape)");
+  });
+});
+
+describe("Daily Action Audit collection-first source/status UI", () => {
+  it("places complete organization-wide SMS and explicit analysis status before compact action counts", () => {
+    const value = result([item("action", "matches")], { collection: collected([
+      rawSms("SOURCE-IN"), rawSms("SOURCE-OUT", { direction: "outgoing" }),
+    ]), analysis: analyzed() });
+    const html = renderResults(value);
+    expect(html.indexOf('aria-label="SMS collection status"')).toBeLessThan(html.indexOf("Overall summary"));
+    expect(html.indexOf('aria-label="Action analysis status"')).toBeLessThan(html.indexOf("Overall summary"));
+    for (const label of ["SMS collection complete · all organization lines", "2 unique SMS", "1 incoming · 1 outgoing · 3 pages read", "before action analysis", "Action analysis complete", "1 of 1 threads analyzed · 0 failed · 0 unsupported messages · 0 omitted messages"]) expect(html).toContain(label);
+    expect(html).toContain("Nov 11, 2026, 12:00 AM EST");
+    expect(html).toContain("inclusive"); expect(html).toContain("exclusive");
+    expect(html).toContain("Partial coverage · not a complete reconciliation");
+    expect(html).toContain("Current LeadFlow records do not establish when an action happened");
+    expect(html).not.toContain("does not establish complete provider-message coverage");
+  });
+
+  it("shows no SMS returned only for proven complete empty collection, never an empty-action finding", () => {
+    const html = renderResults(result([], { collection: collected([]), analysis: analyzed({ status: "not_run", threadsTotal: 0, threadsAnalyzed: 0 }) }));
+    expect(html).toContain("No SMS returned for this day");
+    expect(html).toContain("SMS collection complete · all organization lines");
+    expect(html).toContain("No SMS to analyze");
+    expect(html).not.toContain("Overall summary");
+    expect(html).not.toContain("No actionable items");
+    expect(html).not.toContain('data-status-count=');
+    expect(html).not.toContain("SMS collection failed");
+  });
+
+  it("reports loaded SMS with no analyzed threads as unavailable for failed/not-run/zero-partial/legacy states", () => {
+    for (const analysis of [analyzed({ status: "failed", threadsAnalyzed: 0, failedThreads: 1 }), analyzed({ status: "not_run", threadsAnalyzed: 0 }), analyzed({ status: "partial", threadsAnalyzed: 0 }), analyzed({ status: "complete", threadsAnalyzed: 0 }), undefined]) {
+      const html = renderResults(result([], { collection: collected(), analysis, coverage: { ...result().coverage, threadsAnalyzed: 0 } }));
+      expect(html).toContain("SMS loaded; analysis unavailable");
+      expect(html).not.toContain("No actionable items");
+      expect(html).not.toContain("Overall summary");
+      expect(html).not.toContain('data-status-count=');
+      expect(html).toContain('data-sms-id="SMS-1"');
+    }
+    const missingNewAnalysis = renderResults(result([], { collection: collected(), analysis: undefined }));
+    expect(missingNewAnalysis).toContain("SMS loaded; analysis unavailable");
+    expect(missingNewAnalysis).not.toContain("Overall summary");
+    expect(missingNewAnalysis).not.toContain("No actionable items");
+    const legacy = renderResults(result([], { coverage: { status: "partial", messagesRead: 57, threadsRead: 13, threadsAnalyzed: 0, truncated: false, warnings: [] } }));
+    expect(legacy).toContain("SMS loaded; analysis unavailable");
+    expect(legacy).toContain("0 of 13 threads analyzed");
+    expect(legacy).toContain("SMS collection completeness not established");
+    expect(legacy).not.toContain("No actionable items");
+    expect(legacy).not.toContain("Overall summary");
+  });
+
+  it("failed source collection hides action findings/counts even if inconsistent items or analysis are present", () => {
+    for (const messages of [[], [rawSms("PREFIX-SMS")]]) {
+      const html = renderResults(result([item("inconsistent", "matches")], { collection: collected(messages, { status: "failed", failure: "TIMEOUT" }), analysis: analyzed() }));
+      expect(html).toContain("SMS collection failed");
+      expect(html).toContain(auditFailures.AUDIT_COLLECTION_FAILURES.TIMEOUT);
+      expect(html).toContain("Incomplete captured prefix only — not a full-day SMS collection");
+      expect(html).not.toContain("No SMS returned");
+      expect(html).not.toContain("0 unique SMS");
+      expect(html).not.toContain("No actionable items");
+      expect(html).not.toContain("Overall summary");
+      expect(html).not.toContain('data-audit-status="matches"');
+      expect(html).not.toContain('data-status-count=');
+      if (messages.length) {
+        expect(html).toContain("1 unique SMS captured before collection failed");
+        expect(html).toContain('data-sms-id="PREFIX-SMS"');
+        expect(html).toContain("Incomplete prefix");
+      } else expect(html).toContain("Collection stopped before any SMS could be verified");
+    }
+  });
+
+  it("selects only the fixed shared collection failure allowlist, never arbitrary failure/error content", () => {
+    for (const failure of Object.keys(auditFailures.AUDIT_COLLECTION_FAILURES) as auditFailures.AuditCollectionFailure[]) {
+      const html = renderResults(result([], { collection: collected([], { status: "failed", failure }), analysis: analyzed({ status: "not_run", threadsAnalyzed: 0 }) }));
+      expect(html).toContain(auditFailures.AUDIT_COLLECTION_FAILURES[failure].replaceAll("'", "&#x27;"));
+      expect(html).not.toMatch(/run the audit again|add.*key|retry|Check your access/i);
+    }
+    for (const failure of ["SECRET +15550101234", "toString", "__proto__", "TIMEOUT SECRET", { message: "SECRET" }, null]) {
+      const html = renderResults(result([], { collection: collected([], { status: "failed", failure: failure as any }) }));
+      expect(html).toContain(auditFailures.AUDIT_COLLECTION_FAILURES.FAILED.replaceAll("'", "&#x27;"));
+      expect(html).not.toContain("SECRET"); expect(html).not.toContain("+15550101234");
+    }
+  });
+
+  it("makes partial thread failures, model omissions, and unsupported SMS visible before returned counts", () => {
+    const value = result([item("returned", "needs_action")], { collection: collected(), analysis: analyzed({ status: "partial", threadsTotal: 13, threadsAnalyzed: 9, failedThreads: 2, omittedMessages: 7, unsupportedMessages: 4 }) });
+    const html = renderResults(value);
+    const counts = "9 of 13 threads analyzed · 2 failed · 4 unsupported messages · 7 omitted messages";
+    expect(html).toContain(counts);
+    expect(html.indexOf(counts)).toBeLessThan(html.indexOf("Overall summary"));
+    expect(html).toContain("Partial action analysis · returned findings only");
+    expect(html).toContain("Returned actions · partial analysis · all dates");
+    expect(html).toContain("Unsupported SMS remain in Day’s SMS");
+    expect(html).toContain("Failed threads or omitted SMS may still contain actions");
+    expect(html).not.toContain("Action analysis complete");
+    const empty = renderResults({ ...value, items: [] });
+    expect(empty).toContain("No actionable items returned from analyzed threads");
+    expect(empty).toContain("unanalyzed SMS may contain actions");
+    expect(empty).not.toContain("No actionable items found");
+  });
+
+  it("does not present a contradictory complete analysis with remaining gaps as a whole-day finding", () => {
+    for (const gap of [{ threadsTotal: 2 }, { failedThreads: 1 }, { omittedMessages: 1 }, { unsupportedMessages: 1 }]) {
+      const html = renderResults(result([], { collection: collected(), analysis: analyzed(gap) }));
+      expect(html).toContain("Partial action analysis · returned findings only");
+      expect(html).not.toContain("Action analysis complete");
+      expect(html).not.toContain("No actionable items found in analyzed SMS");
+    }
+  });
+
+  it("keeps all raw SMS groups, unknown identities, outgoing-only and media records in one closed corpus independent of action filters", () => {
+    const raw = [rawSms("GROUP-SMS", { from: "unknown sender", to: ["+13015550987", "+13015550124"], conversationId: "GROUP-CONVERSATION", phoneNumberId: null }),
+      rawSms("MEDIA-SMS", { text: "", media: [{ url: "https://external.invalid/image.png", type: "image/png" }, { url: "javascript:bad()", type: null }] }),
+      rawSms("OUTGOING-ONLY", { direction: "outgoing", from: "+13015550987", to: ["unknown recipient"], status: "queued" }),
+      rawSms("UNKNOWN-SMS", { from: "", to: [], conversationId: "", phoneNumberId: "OTHER-LINE" })];
+    const value = result([item("outside-filter", "matches", { affectedDate: "2026-11-20" })], { collection: collected(raw), analysis: analyzed({ status: "partial", unsupportedMessages: 3 }) });
+    const before = JSON.stringify(value);
+    const all = renderResults(value);
+    const filtered = renderResults(value, "affectsTomorrow");
+    const corpus = (html: string) => html.match(/<details class="daa-day-sms"[\s\S]*?<\/details>/)?.[0];
+    expect(corpus(filtered)).toBe(corpus(all));
+    expect(corpus(all)).toContain("Day’s SMS (4)");
+    expect(corpus(all)).not.toMatch(/<details[^>]*\sopen(?:=|\s|>)/);
+    for (const sms of raw) expect(corpus(all)).toContain(`data-sms-id="${sms.id}"`);
+    for (const label of ["unknown sender", "unknown recipient", "+13015550124", "GROUP-CONVERSATION", "OTHER-LINE", "Incoming SMS", "Outgoing SMS", "Status: queued", "Provider SMS date/time", "Provider updated", "2 attachments", "image/png", "https://external.invalid/image.png", "javascript:bad()", "No text supplied with this SMS."]) expect(corpus(all)).toContain(label);
+    expect(corpus(all)).not.toMatch(/<(?:img|a|iframe|video|audio)\b/);
+    expect(filtered).toContain("No dated actions affect tomorrow");
+    expect(filtered).toContain("4 unique SMS</strong> · 3 incoming · 1 outgoing");
+    expect(JSON.stringify(value)).toBe(before);
+  });
+
+  it("uses raw unique SMS IDs and directions, not action counts, overlapping counters, or provider totals", () => {
+    const duplicate = rawSms("SAME-ID", { direction: "outgoing", text: "Latest raw SMS" });
+    const html = renderResults(result([], { collection: collected([rawSms("SAME-ID"), duplicate, rawSms("OTHER-ID")], { incoming: 900, outgoing: 800, duplicates: 1, outOfWindow: 2 }), analysis: analyzed() }));
+    expect(html).toContain("2 unique SMS</strong> · 1 incoming · 1 outgoing");
+    expect(html).toContain("Day’s SMS (2)");
+    expect([...html.matchAll(/data-sms-id="SAME-ID"/g)]).toHaveLength(1);
+    expect(html).toContain("Latest raw SMS");
+    expect(html).toContain("1 duplicate SMS excluded · 2 out-of-window SMS excluded");
+    expect(html).not.toContain("900 incoming"); expect(html).not.toContain("800 outgoing");
+    expect(html).toContain("No actionable items found in analyzed SMS");
+  });
+
+  it("escapes every raw provider field and never turns media/source text into executable HTML or links", () => {
+    const unsafe = '<script>SECRET()</script> https://external.invalid/';
+    const value = result([], { collection: collected([rawSms(unsafe, { from: unsafe, to: [unsafe], text: unsafe, conversationId: unsafe, phoneNumberId: unsafe, status: unsafe, createdAt: unsafe, updatedAt: unsafe, media: [{ url: unsafe, type: unsafe }] })]), analysis: analyzed() });
+    const html = renderResults(value);
+    expect(html).toContain("&lt;script&gt;SECRET()&lt;/script&gt;");
+    expect(html).toContain("Timestamp unavailable");
+    expect(html).not.toMatch(/<(?:script|a|img|iframe)\b/);
+    expect(html).not.toContain('href='); expect(html).not.toContain('src=');
+  });
+
+  it("collects in one human-requested run, uses honest pending copy, and has no continuation for new collection results", async () => {
+    const response = deferred<DailyActionAuditResult>();
+    const work = workspace(() => response.promise);
+    work.change("2026-11-11");
+    const promise = work.submit();
+    expect(text(work.render())).toContain("Collecting the day’s SMS, then checking actions…");
+    expect(work.mutateAsync).toHaveBeenCalledTimes(1);
+    response.resolve(result([], { collection: collected(), analysis: analyzed(), nextCursor: { sessionAfterId: 20, inboundAfterId: 100, asOf: "2026-11-12T15:00:00Z" } }));
+    await promise;
+    expect(text(work.render())).not.toContain("Review next batch");
+    work.render(); work.render();
+    expect(work.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(work.mutateAsync.mock.calls[0][0]).toEqual({ auditDate: "2026-11-11", timeZone: "America/New_York" });
+    work.harness.dispose();
   });
 });
 

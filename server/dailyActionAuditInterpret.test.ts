@@ -139,4 +139,50 @@ describe("Daily Action Audit evidence-linked interpretation", () => {
     expect(Object.keys(schema.properties.actions.items.properties)).not.toContain("recordLinks");
     expect(Object.keys(schema.properties.actions.items.properties)).not.toContain("customerPhone");
   });
+
+  it("passes every collected day message beyond the old 8k budget to bounded chunks and remaps evidence to the original thread", async () => {
+    const messages = Array.from({ length: 30 }, (_, i) => ({ ...message, key: `all-${i}`, text: i === 29 ? message.text : `Message ${i} ${"x".repeat(900)}` }));
+    const included = new Set<string>(); let calls = 0;
+    const result = await interpretAuditThreads({ ...input, threads: [{ ...thread, messages }] }, async params => {
+      calls++; const payload = JSON.parse(params.messages[1].content as string);
+      const actions = payload.threads.flatMap((t: any) => {
+        for (const m of t.messages) included.add(m.key);
+        const anchor = t.messages.find((m: any) => m.key === "all-29");
+        return anchor ? [{ ...prediction, threadKey: t.key, anchorMessageKey: anchor.key, evidenceKeys: [anchor.key] }] : [];
+      });
+      for (const t of payload.threads) expect(t.messages.reduce((n: number, m: any) => n + m.text.length, 0)).toBeLessThanOrEqual(8_000);
+      return output(actions);
+    });
+    expect(calls).toBeGreaterThan(0); expect(included.size).toBe(30);
+    expect(result.omittedMessages).toBe(0); expect(result.threadsAnalyzed).toBe(1);
+    expect(result.candidates[0]).toMatchObject({ threadKey: "t1", anchorMessageKey: "all-29", ambiguous: true });
+    expect(result.warnings.join(" ")).toContain("Cross-chunk");
+  });
+
+  it("keeps oversized source messages accounted for rather than declaring complete analysis", async () => {
+    const result = await interpretAuditThreads({ ...input, threads: [{ ...thread, messages: [{ ...message, text: "x".repeat(8_001) }] }] }, async () => { throw new Error("must not call"); });
+    expect(result.omittedMessages).toBe(1); expect(result.failedThreads).toBe(1); expect(result.threadsAnalyzed).toBe(0);
+    expect(result.warnings.join(" ")).toContain("remains in the day's source messages");
+  });
+
+  it("counts each failed conversation rather than deduplicated warning strings", async () => {
+    const threads = Array.from({ length: 13 }, (_, i) => ({ ...thread, key: `failure-${i}`, messages: [{ ...message, key: `failure-message-${i}` }] }));
+    const result = await interpretAuditThreads({ ...input, threads }, async () => { throw new Error("provider secret"); });
+    expect(result.failedThreads).toBe(13); expect(result.threadsAnalyzed).toBe(0); expect(result.candidates).toHaveLength(0);
+    expect(result.warnings.join(" ")).not.toContain("provider secret");
+  });
+
+  it("does not count a partly failed split conversation as fully analyzed", async () => {
+    const messages = Array.from({ length: 9 }, (_, i) => ({ ...message, key: `split-${i}`, text: "x".repeat(7_000) }));
+    let calls = 0;
+    const result = await interpretAuditThreads({ ...input, threads: [{ ...thread, messages }] }, async () => {
+      calls++; if (calls === 2) throw new Error("offline failure"); return output([]);
+    });
+    expect(calls).toBe(2); expect(result.threadsAnalyzed).toBe(0); expect(result.failedThreads).toBe(1); expect(result.omittedMessages).toBe(0);
+  });
+
+  it("does not label source-reference rejection as successful full analysis", async () => {
+    const result = await interpretAuditThreads(input, async () => output([{ ...prediction, threadKey: "other-customer" }]));
+    expect(result.failedThreads).toBe(1); expect(result.threadsAnalyzed).toBe(0);
+  });
 });

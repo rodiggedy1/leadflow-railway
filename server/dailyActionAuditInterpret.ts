@@ -93,34 +93,59 @@ function businessDay(value: string | null, timeZone: string): string | null {
 
 export async function interpretAuditThreads(input: {
   auditDate: string; timeZone: string; threads: AuditThread[]; records: AuditRecord[];
-}, call: (params: InvokeParams) => Promise<InvokeResult> = invokeLLM): Promise<{ candidates: AuditCandidate[]; warnings: string[]; threadsAnalyzed: number }> {
+}, call: (params: InvokeParams) => Promise<InvokeResult> = invokeLLM): Promise<{ candidates: AuditCandidate[]; warnings: string[]; threadsAnalyzed: number; failedThreads?: number; omittedMessages?: number }> {
   const candidates: AuditCandidate[] = [];
   const warnings: string[] = [];
-  let threadsAnalyzed = 0;
-  // Fixed small batches prevent an audit from becoming unbounded model fan-out.
-  // There are no background jobs, retry loops, tools or write operations here.
-  for (let offset = 0; offset < input.threads.length; offset += 6) {
-    const batch = input.threads.slice(offset, offset + 6);
+  let omittedMessages = 0;
+  const failed = new Set<string>();
+  const incomplete = new Set<string>();
+  const seen = new Set<string>();
+  const work: Array<{ originalKey: string; thread: AuditThread }> = [];
+  for (const thread of input.threads) {
+    const prioritized = [
+      ...thread.messages.filter(message => businessDay(message.occurredAt ?? message.observedAt, input.timeZone) === input.auditDate),
+      ...thread.messages.filter(message => businessDay(message.occurredAt ?? message.observedAt, input.timeZone) !== input.auditDate).slice().reverse(),
+    ];
+    const chunks: AuditThread["messages"][] = [];
+    let chunk: AuditThread["messages"] = [];
+    let used = 0;
+    for (const message of prioritized) {
+      if (message.text.length > 8_000) {
+        omittedMessages++; incomplete.add(thread.key);
+        warnings.push("A collected SMS exceeded the model input budget. It remains in the day's source messages but was not analyzed.");
+        continue;
+      }
+      if (used + message.text.length > 8_000 && chunk.length) {
+        chunks.push(chunk); chunk = []; used = 0;
+      }
+      chunk.push(message); used += message.text.length;
+    }
+    if (chunk.length) chunks.push(chunk);
+    if (!chunks.length && thread.messages.length) incomplete.add(thread.key);
+    const split = chunks.length > 1;
+    if (split) warnings.push("A long conversation was analyzed in multiple bounded chunks. Cross-chunk agreement or correction context requires review.");
+    for (let index = 0; index < chunks.length; index++) {
+      const included = new Set(chunks[index].map(message => message.key));
+      work.push({ originalKey: thread.key, thread: {
+        ...thread,
+        key: split ? `chunk:${createHash("sha256").update(thread.key).digest("hex").slice(0, 24)}:${index}` : thread.key,
+        messages: thread.messages.filter(message => included.has(message.key)),
+        truncated: thread.truncated || split || incomplete.has(thread.key),
+      } });
+    }
+  }
+  // Bounded sequential calls; no retries, persistence, tools or system actions.
+  for (let offset = 0; offset < work.length; offset += 6) {
+    const batchWork = work.slice(offset, offset + 6);
+    const batch = batchWork.map(value => value.thread);
+    const originalKeys = new Map(batchWork.map(value => [value.thread.key, value.originalKey]));
     const sentKeys = new Map<string, Set<string>>();
     const prepared = batch.map(thread => {
-      let used = 0;
-      let trimmed = false;
-      const prioritized = [
-        ...thread.messages.filter(message => businessDay(message.occurredAt ?? message.observedAt, input.timeZone) === input.auditDate),
-        ...thread.messages.filter(message => businessDay(message.occurredAt ?? message.observedAt, input.timeZone) !== input.auditDate).slice().reverse(),
-      ];
-      const included = new Set<string>();
-      for (const message of prioritized) {
-        const next = used + message.text.length;
-        if (next > 8_000) { trimmed = true; continue; }
-        used = next; included.add(message.key);
-      }
-      const messages = thread.messages.filter(message => included.has(message.key));
-      if (trimmed) warnings.push("Some conversation context exceeded the interpretation budget; affected results require manual review.");
+      const messages = thread.messages;
       sentKeys.set(thread.key, new Set(messages.map(message => message.key)));
       const records = input.records.filter(record => record.customerPhone === thread.customerPhone).slice(0, 30);
       return {
-        key: thread.key, truncated: thread.truncated || trimmed,
+        key: thread.key, truncated: thread.truncated,
         messages: messages.map(message => ({
           key: message.key, direction: message.direction, text: message.text,
           day: businessDay(message.occurredAt ?? message.observedAt, input.timeZone),
@@ -153,31 +178,36 @@ export async function interpretAuditThreads(input: {
         const keys = sentKeys.get(action.threadKey);
         if (!thread || !keys || !keys.has(action.anchorMessageKey) || action.evidenceKeys.some(key => !keys.has(key)) || (action.supersededByMessageKey && !keys.has(action.supersededByMessageKey))) {
           warnings.push("An interpretation had invalid source references and was discarded; manual review is required.");
+          for (const value of batchWork) incomplete.add(value.originalKey);
           continue;
         }
         const anchor = thread.messages.find(message => message.key === action.anchorMessageKey)!;
         if (!action.evidenceKeys.includes(action.anchorMessageKey)) {
           warnings.push("An interpretation omitted its source message and was discarded.");
+          incomplete.add(originalKeys.get(thread.key)!);
           continue;
         }
         const contextOnly = businessDay(anchor.occurredAt ?? anchor.observedAt, input.timeZone) !== input.auditDate;
         if (contextOnly && !correctionReferences.has(`${action.threadKey}|${action.anchorMessageKey}|${action.action}`)) {
           warnings.push("An interpretation referenced a message outside the selected day and was discarded.");
+          incomplete.add(originalKeys.get(thread.key)!);
           continue;
         }
         const context = prepared.find(value => value.key === thread.key)!;
         const expected = action.expected as AuditExpectation;
         const uncertain = context.truncated || action.confidence < 0.8 || anchor.timeBasis === "received" || anchor.timeBasis === "unknown" || (expected.extras !== null && expected.extrasMode === "unspecified");
+        const originalKey = originalKeys.get(thread.key)!;
         candidates.push({
-          ...action, expected, contextOnly,
-          id: createHash("sha256").update(`${thread.key}|${action.anchorMessageKey}|${action.action}|${expected.date ?? ""}|${expected.bookingReference ?? ""}`).digest("hex").slice(0, 24),
+          ...action, threadKey: originalKey, expected, contextOnly,
+          id: createHash("sha256").update(`${originalKey}|${action.anchorMessageKey}|${action.action}|${expected.date ?? ""}|${expected.bookingReference ?? ""}`).digest("hex").slice(0, 24),
           ambiguous: action.ambiguous || uncertain,
         });
       }
-      threadsAnalyzed += batch.length;
+      for (const value of batchWork) seen.add(value.originalKey);
     } catch {
       // Do not expose provider errors, message text, phone numbers or payloads.
-      warnings.push(`Message interpretation was unavailable for ${batch.length} conversation(s). No system changes were made; rerun or review those conversations manually.`);
+      for (const value of batchWork) failed.add(value.originalKey);
+      warnings.push(`Message interpretation was unavailable for ${batch.length} conversation chunk(s). Collected SMS remain available; actionable items could not be determined for those chunks.`);
     }
   }
   const unique = new Map<string, AuditCandidate>();
@@ -186,5 +216,7 @@ export async function interpretAuditThreads(input: {
     if (!previous) unique.set(candidate.id, candidate);
     else unique.set(candidate.id, { ...previous, ambiguous: true, explanation: "Multiple interpretations of the same request conflict; review the original messages." });
   }
-  return { candidates: Array.from(unique.values()), warnings: Array.from(new Set(warnings)), threadsAnalyzed };
+  const threadsAnalyzed = input.threads.filter(thread => seen.has(thread.key) && !failed.has(thread.key) && !incomplete.has(thread.key)).length;
+  return { candidates: Array.from(unique.values()), warnings: Array.from(new Set(warnings)), threadsAnalyzed,
+    failedThreads: input.threads.filter(thread => failed.has(thread.key) || incomplete.has(thread.key)).length, omittedMessages };
 }

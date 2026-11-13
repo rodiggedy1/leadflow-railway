@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
-import type { AuditActionType, AuditExpectation, AuditItem, AuditMessage, AuditStatus, DailyActionAuditResult } from "../shared/dailyActionAudit";
+import type { AuditActionType, AuditDayCollection, AuditExpectation, AuditItem, AuditMessage, AuditStatus, DailyActionAuditResult } from "../shared/dailyActionAudit";
 import * as auditFailures from "../shared/dailyActionAudit";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "../shared/bookingWidgetConfig";
 
@@ -94,6 +94,12 @@ function result(items: AuditItem[] = [], overrides: Partial<DailyActionAuditResu
     coverage: { status: "partial", messagesRead: 8, threadsRead: 3, threadsAnalyzed: 2, truncated: false, warnings: [] },
     nextCursor: null, ...overrides,
   };
+}
+function collection(overrides: Partial<AuditDayCollection> = {}): AuditDayCollection {
+  return { status: "complete", scope: "organization", start: "2026-11-11T05:00:00Z", end: "2026-11-12T05:00:00Z",
+    messages: [{ id: "RAW-1", from: PHONE, to: ["+13015550987", "+13015550124"], text: "Synthetic grouped source", phoneNumberId: "LINE-1",
+      conversationId: "GROUP-1", direction: "incoming", status: "received", createdAt: "2026-11-11T17:00:00Z", updatedAt: "2026-11-11T17:01:00Z", media: [] }],
+    pagesRead: 2, incoming: 1, outgoing: 0, duplicates: 0, outOfWindow: 0, failure: null, ...overrides };
 }
 function expected(overrides: Partial<AuditExpectation>): AuditExpectation { return { ...item("base").expected, ...overrides }; }
 const htmlFor = (value: DailyActionAuditResult, filter: "all" | "affectsTomorrow" = "all", loaded = ui) => renderToStaticMarkup(React.createElement(loaded.AuditResults, { result: value, filter }));
@@ -488,5 +494,79 @@ describe("Daily Action Audit compact result hierarchy and safety", () => {
       const bodyCalls = all(declaration!, ts.isCallExpression).map(node => node.expression.getText(source));
       expect(bodyCalls.some(call => /(?:^|\.)use[A-Z]|mutate|fetch|setTimeout|setInterval/.test(call))).toBe(false);
     }
+  });
+
+  it("keeps proven SMS status and one closed source expander ahead of the compact overall summary and people", () => {
+    const value = result([item("move"), item("pay", "matches", { action: "payment" })], { collection: collection(),
+      analysis: { status: "partial", threadsTotal: 3, threadsAnalyzed: 2, failedThreads: 1, omittedMessages: 0, unsupportedMessages: 1 } });
+    const tree = rendered(value);
+    const sourceStatus = tree.find(node => classIs(node, "daa-collection-status"))!;
+    const corpus = tree.find(node => classIs(node, "daa-day-sms"))!;
+    const analysis = tree.find(node => classIs(node, "daa-analysis-status"))!;
+    const overview = tree.find(node => classIs(node, "daa-overview"))!;
+    const person = tree.find(node => classIs(node, "daa-person"))!;
+    expect(tree.indexOf(sourceStatus)).toBeLessThan(tree.indexOf(overview));
+    expect(tree.indexOf(corpus)).toBeLessThan(tree.indexOf(overview));
+    expect(tree.indexOf(analysis)).toBeLessThan(tree.indexOf(overview));
+    expect(tree.indexOf(overview)).toBeLessThan(tree.indexOf(person));
+    expect(sourceStatus.text).toContain("SMS collection complete · all organization lines");
+    expect(sourceStatus.text).toContain("1 unique SMS · 1 incoming · 0 outgoing · 2 pages read");
+    expect(analysis.text).toContain("2 of 3 threads analyzed · 1 failed · 1 unsupported messages · 0 omitted messages");
+    expect(corpus.type).toBe("details"); expect(corpus.props.open).toBeUndefined();
+    expect(corpus.children[0].type).toBe("summary");
+    expect(tree.filter(node => classIs(node, "daa-day-sms"))).toHaveLength(1);
+    expect(tree.filter(node => classIs(node, "daa-person"))).toHaveLength(1);
+    expect(tree.filter(node => classIs(node, "daa-action"))).toHaveLength(2);
+    expect(person.props.open).toBeUndefined();
+    expect(withoutNestedDetails(person.children.find(node => classIs(node, "daa-person-body"))!)).toContain("System record evidence");
+    expect(htmlFor(value)).not.toMatch(/full conversation|view full thread|conversation viewer/i);
+  });
+
+  it("legacy 57-message/13-thread/zero-analysis results never show a zero-action summary or empty-action finding", () => {
+    const value = result([], { coverage: { status: "partial", messagesRead: 57, threadsRead: 13, threadsAnalyzed: 0, truncated: false, warnings: [] } });
+    const html = htmlFor(value);
+    expect(html).toContain("SMS loaded; analysis unavailable");
+    expect(html).toContain("0 of 13 threads analyzed");
+    expect(html).toContain("SMS collection completeness not established");
+    expect(html).not.toContain("Overall summary");
+    expect(html).not.toContain("No actionable items");
+    expect(html).not.toContain('data-status-count=');
+  });
+
+  it("shows validated partial chunk findings even when no entire conversation completed analysis", () => {
+    const value = result([item("partial-chunk", "needs_action")], { collection: collection(),
+      analysis: { status: "partial", threadsTotal: 1, threadsAnalyzed: 0, failedThreads: 1, omittedMessages: 0, unsupportedMessages: 0 } });
+    const html = htmlFor(value);
+    expect(html).toContain("Partial action analysis · returned findings only");
+    expect(html).toContain("0 of 1 threads analyzed · 1 failed");
+    expect(html).toContain("Overall summary"); expect(html).toContain('data-audit-status="needs_action"');
+    expect(html).not.toContain("No actionable items"); expect(html).not.toContain("Action analysis complete");
+  });
+
+  it("source failure or unavailable analysis cannot surface stale item findings while retaining captured SMS", () => {
+    const unavailable: DailyActionAuditResult[] = [
+      result([item("stale", "matches")], { collection: collection({ status: "failed", failure: "ACCESS" }) }),
+      result([item("stale", "matches")], { collection: collection(), analysis: { status: "failed", threadsTotal: 1, threadsAnalyzed: 0, failedThreads: 1, omittedMessages: 0, unsupportedMessages: 0 } }),
+    ];
+    for (const value of unavailable) {
+      const html = htmlFor(value);
+      expect(html).toContain('data-sms-id="RAW-1"');
+      expect(html).not.toContain("Overall summary");
+      expect(html).not.toContain("No actionable items");
+      expect(html).not.toContain('data-audit-status="matches"');
+      expect(html).not.toContain('data-status-count=');
+    }
+  });
+
+  it("source grouping never changes existing action identity/conflicts/status when tomorrow filters the actions", () => {
+    const entries = [item("tomorrow", "matches", { customerName: "Synthetic Alpha" }), item("later", "needs_action", { customerName: "Synthetic Beta", affectedDate: "2026-11-20" })];
+    const value = result(entries, { collection: collection(), analysis: { status: "complete", threadsTotal: 1, threadsAnalyzed: 1, failedThreads: 0, omittedMessages: 0, unsupportedMessages: 0 } });
+    const html = htmlFor(value, "affectsTomorrow");
+    const row = html.match(/<summary class="daa-person-summary">([\s\S]*?)<\/summary>/)?.[1];
+    expect(row).toContain("Name needs review"); expect(row).toContain("Matches now");
+    expect(row).toContain("1 action"); expect(row).toContain("0 need review");
+    expect(html).toContain("GROUP-1"); expect(html).toContain("Synthetic grouped source");
+    expect(html).toContain("1 of 2 actions");
+    expect(entries.map(entry => entry.status)).toEqual(["matches", "needs_action"]);
   });
 });

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AlertCircle, ArrowRight, ChevronDown, ClipboardCheck, Clock3, FileSearch, LockKeyhole, MessageSquareText, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { safeAuditFailureMessage } from "@shared/dailyActionAudit";
-import type { AuditAgreement, AuditItem, AuditMessage, AuditRecord, AuditStatus, DailyActionAuditResult } from "@shared/dailyActionAudit";
+import { AUDIT_COLLECTION_FAILURES, safeAuditFailureMessage } from "@shared/dailyActionAudit";
+import type { AuditAgreement, AuditDayCollection, AuditDaySms, AuditItem, AuditMessage, AuditRecord, AuditStatus, DailyActionAuditResult } from "@shared/dailyActionAudit";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import AuditCalendar from "@/components/daily-action-audit/AuditCalendar";
 import "./daily-action-audit.css";
@@ -280,6 +280,75 @@ export function mergeAuditBatches(previous: DailyActionAuditResult | null, next:
   };
 }
 
+function uniqueDaySms(messages: AuditDaySms[]): AuditDaySms[] {
+  // Raw source identity is the provider SMS ID, never action/person eligibility.
+  return Array.from(new Map(messages.map(message => [message.id, message])).values());
+}
+
+function collectionFailureText(failure: AuditDayCollection["failure"]): string {
+  // Even malformed runtime values may only select fixed shared text, never error content.
+  return typeof failure === "string" && Object.prototype.hasOwnProperty.call(AUDIT_COLLECTION_FAILURES, failure)
+    ? AUDIT_COLLECTION_FAILURES[failure] : AUDIT_COLLECTION_FAILURES.FAILED;
+}
+
+function SmsCollectionStatus({ result, messages }: { result: DailyActionAuditResult; messages: AuditDaySms[] }) {
+  const collection = result.collection;
+  if (!collection) return <section className="daa-collection-status daa-collection-unproven" aria-label="SMS collection status"><h2>SMS collection completeness not established</h2><p>This legacy result does not include the day’s raw SMS corpus. Its source counters do not prove a complete organization-wide day collection.</p></section>;
+  const complete = collection.status === "complete";
+  const incoming = messages.filter(message => message.direction === "incoming").length;
+  const outgoing = messages.filter(message => message.direction === "outgoing").length;
+  return <section className={`daa-collection-status daa-collection-${collection.status}`} aria-label="SMS collection status" role={complete ? undefined : "alert"}>
+    <h2>{complete ? messages.length ? "SMS collection complete · all organization lines" : "No SMS returned for this day" : "SMS collection failed"}</h2>
+    {complete && !messages.length && <p><strong>SMS collection complete · all organization lines</strong></p>}
+    {complete || messages.length > 0 ? <p className="daa-source-count"><strong>{messages.length} unique SMS{!complete && " captured before collection failed"}</strong> · {incoming} incoming · {outgoing} outgoing · {collection.pagesRead} pages read</p> : <p>Collection stopped before any SMS could be verified · {collection.pagesRead} pages read</p>}
+    <p>Provider SMS window: {timestampLabel(collection.start)} inclusive → {timestampLabel(collection.end)} exclusive · Eastern Time</p>
+    <p>{complete ? "All organization SMS pages for this window were collected before action analysis. SMS collection is not proof that any requested action was completed." : "Incomplete captured prefix only — not a full-day SMS collection. No full-day action finding is available."}</p>
+    {!complete && <p className="daa-collection-failure">{collectionFailureText(collection.failure)}</p>}
+    {(collection.duplicates > 0 || collection.outOfWindow > 0) && <p className="daa-source-exclusions">{collection.duplicates} duplicate SMS excluded · {collection.outOfWindow} out-of-window SMS excluded</p>}
+  </section>;
+}
+
+function DaySmsCorpus({ collection, messages }: { collection: AuditDayCollection; messages: AuditDaySms[] }) {
+  // One closed native expander: all raw SMS remain inspectable without another request.
+  // Do not apply action filters, canonical-phone grouping, or model eligibility here.
+  return <details className="daa-day-sms" aria-label="Day's source SMS"><summary><MessageSquareText size={15} aria-hidden="true" /><strong>Day’s SMS ({messages.length})</strong>{collection.status === "failed" && <span>Incomplete prefix</span>}<ChevronDown size={15} className="daa-detail-chevron" aria-hidden="true" /></summary>
+    <div className="daa-day-sms-body"><p>All captured unique provider SMS, including groups, unknown identities, and attachments. Action filters do not change this source list. Attachments are listed as metadata only; they are not fetched or analyzed.</p>
+      {messages.length ? <ol className="daa-day-sms-list">{messages.map(message => <li className="daa-source-sms" key={message.id} data-sms-id={message.id}>
+        <header><strong>{message.direction === "incoming" ? "Incoming SMS" : "Outgoing SMS"}</strong><span>Status: {message.status || "Unavailable"}</span></header>
+        <p className="daa-message-time">Provider SMS date/time: {timestampLabel(message.createdAt)} · {message.createdAt || "Unavailable"}</p>
+        <dl><DetailRow label="SMS ID" value={message.id} /><DetailRow label="From" value={message.from} /><DetailRow label="To" value={message.to.join(", ")} /><DetailRow label="Organization line ID" value={message.phoneNumberId} /><DetailRow label="Conversation ID" value={message.conversationId} /><DetailRow label="Provider updated" value={message.updatedAt ? `${timestampLabel(message.updatedAt)} · ${message.updatedAt}` : null} /></dl>
+        <p className="daa-message-text">{message.text || "No text supplied with this SMS."}</p>
+        <p className="daa-source-attachments">{message.media.length} {message.media.length === 1 ? "attachment" : "attachments"} · metadata only</p>
+        {message.media.length > 0 && <ul className="daa-source-media">{message.media.map((media, index) => <li key={index}>Attachment {index + 1} · {media.type || "Type unavailable"} · {media.url || "URL unavailable"}</li>)}</ul>}
+      </li>)}</ol> : <p>{collection.status === "complete" ? "No SMS returned for this day." : "No verified SMS prefix was returned. Collection failed; this is not an empty-day finding."}</p>}
+    </div>
+  </details>;
+}
+
+function auditAnalysisState(result: DailyActionAuditResult, messages: AuditDaySms[]) {
+  const analysis = result.analysis;
+  const collectionFailed = result.collection?.status === "failed";
+  const emptyDay = result.collection?.status === "complete" && messages.length === 0;
+  const analyzed = analysis?.threadsAnalyzed ?? result.coverage.threadsAnalyzed;
+  const total = analysis?.threadsTotal ?? result.coverage.threadsRead;
+  const available = !collectionFailed && !emptyDay && (analyzed > 0 || result.items.length > 0) && (analysis ? analysis.status === "complete" || analysis.status === "partial" : !result.collection);
+  const partial = !analysis || analysis.status !== "complete" || analyzed < total || analysis.failedThreads > 0 || analysis.omittedMessages > 0 || analysis.unsupportedMessages > 0;
+  const smsLoaded = messages.length > 0 || (!result.collection && result.coverage.messagesRead > 0);
+  return { available, partial, analyzed, total, emptyDay, collectionFailed, smsLoaded };
+}
+
+function ActionAnalysisStatus({ result, state }: { result: DailyActionAuditResult; state: ReturnType<typeof auditAnalysisState> }) {
+  const analysis = result.analysis;
+  return <section className={`daa-analysis-status${state.available && !state.partial ? "" : " daa-analysis-incomplete"}`} aria-label="Action analysis status">
+    <h2>{state.collectionFailed ? "Action analysis unavailable · SMS collection failed" : state.emptyDay ? "No SMS to analyze" : !state.available ? state.smsLoaded ? "SMS loaded; analysis unavailable" : "Action analysis unavailable" : state.partial ? "Partial action analysis · returned findings only" : "Action analysis complete"}</h2>
+    {analysis ? <p className="daa-analysis-counts">{analysis.threadsAnalyzed} of {analysis.threadsTotal} threads analyzed · {analysis.failedThreads} failed · {analysis.unsupportedMessages} unsupported messages · {analysis.omittedMessages} omitted messages</p> : result.collection ? <p className="daa-analysis-counts">Explicit action-analysis status and counts were not returned.</p> : <p className="daa-analysis-counts">{state.analyzed} of {state.total} threads analyzed · Failure, omission, and unsupported-message counts are unavailable for this legacy result.</p>}
+    {!state.available && !state.emptyDay && <p>{analysis?.status === "not_run" || state.collectionFailed ? "Analysis was not run." : analysis?.status === "failed" ? "Analysis failed." : "No usable action analysis was returned."} No action finding or zero-action conclusion is available.</p>}
+    {state.available && state.partial && <p>Only successfully processed SMS evidence contributed returned actions. This is not a whole-day action finding.</p>}
+    {Boolean(analysis?.unsupportedMessages) && <p>Unsupported SMS remain in Day’s SMS; they were not analyzed for actions.</p>}
+    {Boolean(analysis?.failedThreads || analysis?.omittedMessages) && <p>Failed threads or omitted SMS may still contain actions requiring review.</p>}
+  </section>;
+}
+
 export function AuditResults({ result, filter = "all" }: { result: DailyActionAuditResult; filter?: AuditFilter }) {
   const tomorrow = shiftDay(easternDay(new Date(result.asOf)), 1);
   const items = uniqueAuditItems(result.items);
@@ -295,22 +364,27 @@ export function AuditResults({ result, filter = "all" }: { result: DailyActionAu
       status: visible[0].status,
     }];
   }).sort((a, b) => compareAuditItems(a.items[0], b.items[0]) || a.key.localeCompare(b.key));
+  const messages = result.collection ? uniqueDaySms(result.collection.messages) : [];
+  const analysisState = auditAnalysisState(result, messages);
   return <section className="daa-results" aria-label="Audit results">
-    <section className="daa-overview" aria-label="Action summary"><div className="daa-overview-heading"><h2>Overall summary</h2><span>Returned actions · all dates</span></div><div className="daa-overview-counts"><div><strong>{summary.people}</strong><span>People with actions</span></div><div><strong>{summary.actions}</strong><span>Actions</span></div><div className="daa-overview-review"><strong>{summary.needsReview}</strong><span>Needs review</span></div><div className="daa-overview-matches"><strong>{summary.matches}</strong><span>Matches now</span></div></div><div className="daa-status-counts" aria-label="All audit status counts">{STATUS_ORDER.map(status => <span key={status} className={`daa-count daa-count-${status}`} data-status-count={status}><strong>{summary.totals[status]}</strong> {STATUS_LABELS[status]}</span>)}</div></section>
-    <details className="daa-coverage-details" aria-label="Partial coverage warnings"><summary><AlertCircle size={16} aria-hidden="true" /><strong>Partial coverage · not a complete reconciliation</strong><span className="daa-coverage-flags">{result.coverage.truncated && <span>Scan truncated</span>}{result.coverage.warnings.length > 0 && <span>{result.coverage.warnings.length} analysis {result.coverage.warnings.length === 1 ? "warning" : "warnings"}</span>}</span><ChevronDown size={15} className="daa-detail-chevron" aria-hidden="true" /></summary><div className="daa-coverage-body"><p>Only the available SMS evidence and current LeadFlow records were checked. Missing messages or records may leave actions unverified. People and action counts come from unique returned action items, not conversation totals.</p><p className="daa-coverage-counts">Source counters may overlap across batches: {result.coverage.messagesRead} messages read · {result.coverage.threadsRead} threads read · {result.coverage.threadsAnalyzed} threads analyzed. These counters do not establish complete interaction coverage.</p>{result.coverage.truncated && <p className="daa-warning"><strong>Scan truncated.</strong> Some source evidence was not included.</p>}{result.coverage.warnings.length > 0 && <ul>{result.coverage.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div></details>
+    <SmsCollectionStatus result={result} messages={messages} />
+    {result.collection && <DaySmsCorpus collection={result.collection} messages={messages} />}
+    <ActionAnalysisStatus result={result} state={analysisState} />
+    {analysisState.available && <section className="daa-overview" aria-label="Action summary"><div className="daa-overview-heading"><h2>Overall summary</h2><span>{analysisState.partial ? "Returned actions · partial analysis · all dates" : "Returned actions · analyzed threads · all dates"}</span></div><div className="daa-overview-counts"><div><strong>{summary.people}</strong><span>People with actions</span></div><div><strong>{summary.actions}</strong><span>Actions</span></div><div className="daa-overview-review"><strong>{summary.needsReview}</strong><span>Needs review</span></div><div className="daa-overview-matches"><strong>{summary.matches}</strong><span>Matches now</span></div></div><div className="daa-status-counts" aria-label="All audit status counts">{STATUS_ORDER.map(status => <span key={status} className={`daa-count daa-count-${status}`} data-status-count={status}><strong>{summary.totals[status]}</strong> {STATUS_LABELS[status]}</span>)}</div></section>}
+    <details className="daa-coverage-details" aria-label="Partial coverage warnings"><summary><AlertCircle size={16} aria-hidden="true" /><strong>Partial coverage · not a complete reconciliation</strong><span className="daa-coverage-flags">{result.coverage.truncated && <span>Scan truncated</span>}{result.coverage.warnings.length > 0 && <span>{result.coverage.warnings.length} analysis {result.coverage.warnings.length === 1 ? "warning" : "warnings"}</span>}</span><ChevronDown size={15} className="daa-detail-chevron" aria-hidden="true" /></summary><div className="daa-coverage-body"><p>{result.collection?.status === "complete" ? "Complete SMS collection is separate from action analysis and historical proof. Current LeadFlow records do not establish when an action happened." : "Only the available SMS evidence and current LeadFlow records were checked. Missing messages or records may leave actions unverified."} People and action counts come from unique returned action items, not conversation totals.</p>{!result.collection && <p className="daa-coverage-counts">Source counters may overlap across batches: {result.coverage.messagesRead} messages read · {result.coverage.threadsRead} threads read · {result.coverage.threadsAnalyzed} threads analyzed. These counters do not establish complete interaction coverage.</p>}{result.coverage.truncated && <p className="daa-warning"><strong>Scan truncated.</strong> Some source evidence was not included.</p>}{result.coverage.warnings.length > 0 && <ul>{result.coverage.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div></details>
     <div className="daa-result-meta"><p>Message day <strong>{dateLabel(result.auditDate)}</strong> · Eastern Time</p><p><Clock3 size={13} aria-hidden="true" /> Message evidence cutoff {timestampLabel(result.asOf)}</p></div>
-    <div className="daa-results-heading"><div><h2>{filter === "affectsTomorrow" ? "People with actions affecting tomorrow" : "Actions by person"}</h2><p>Needs review first. Expand a person for concise actions and actual system evidence.</p></div><span>{people.length} {people.length === 1 ? "person" : "people"} · {filtered.length} of {summary.actions} actions</span></div>
-    {filter === "affectsTomorrow" && <p className="daa-filter-note">Tomorrow is {tomorrow ? dateLabel(tomorrow) : "unavailable because the snapshot timestamp is invalid"}, calculated in Eastern Time at this scan. Undated items are excluded; switch to all actions to review them. Counts above cover the full scan.</p>}
-    {!filtered.length && <div className="daa-empty"><FileSearch size={28} aria-hidden="true" /><h3>{items.length ? "No dated actions affect tomorrow in this scan" : "No actionable items found in the available evidence"}</h3><p>{items.length ? "Other service dates and undated actions remain in all actions." : "Partial coverage still applies. An empty scan does not confirm that every customer agreement was fulfilled."}</p></div>}
-    <div className="daa-people">{people.map(person => <AuditPerson person={person} key={person.key} />)}</div>
-    <p className="daa-batch-note">{result.nextCursor ? "More evidence batches are available. Review the next batch manually to extend this scan." : "No further batch is available for this scan. Coverage remains partial; this does not establish complete provider-message coverage."}</p>
+    {analysisState.available && <><div className="daa-results-heading"><div><h2>{filter === "affectsTomorrow" ? "People with actions affecting tomorrow" : "Actions by person"}</h2><p>Needs review first. Expand a person for concise actions and actual system evidence.</p></div><span>{people.length} {people.length === 1 ? "person" : "people"} · {filtered.length} of {summary.actions} actions</span></div>
+      {filter === "affectsTomorrow" && <p className="daa-filter-note">Tomorrow is {tomorrow ? dateLabel(tomorrow) : "unavailable because the snapshot timestamp is invalid"}, calculated in Eastern Time at this scan. Undated items are excluded; switch to all actions to review them. Counts above cover all returned actions, not unanalyzed SMS.</p>}
+      {!filtered.length && <div className="daa-empty"><FileSearch size={28} aria-hidden="true" /><h3>{items.length ? "No dated actions affect tomorrow in this scan" : analysisState.partial ? "No actionable items returned from analyzed threads" : "No actionable items found in analyzed SMS"}</h3><p>{items.length ? "Other service dates and undated actions remain in all actions." : `${analysisState.partial ? "Partial analysis still applies; unanalyzed SMS may contain actions. " : "Current-state evidence is not historical proof. "}An empty scan does not confirm that every customer agreement was fulfilled.`}</p></div>}
+      <div className="daa-people">{people.map(person => <AuditPerson person={person} key={person.key} />)}</div></>}
+    <p className="daa-batch-note">{result.collection ? result.collection.status === "complete" ? "SMS collection is complete. Current records still do not establish when an action happened." : "Incomplete SMS prefix only; not a full-day collection." : result.nextCursor ? "More evidence batches are available. Review the next batch manually to extend this scan." : "No further batch is available for this scan. Coverage remains partial; this does not establish complete provider-message coverage."}</p>
   </section>;
 }
 
 export function AuditRunError({ continuation = false, safeMessage }: { continuation?: boolean; safeMessage?: string }) {
   // Transport errors can contain source text. Render only an exact allowlist match.
   const message = safeAuditFailureMessage(safeMessage);
-  return <div className="daa-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><div><strong>{continuation ? "Next evidence batch could not be completed" : "Audit could not be completed"}</strong><p>{message ? `${message} No results are being shown. Run the audit again manually.` : "No results are being shown. Check your access and connection, then run the audit again manually."}</p></div></div>;
+  return <div className="daa-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><div><strong>{continuation ? "Next evidence batch could not be completed" : "Audit could not be completed"}</strong><p>{message ? `${message} No results are being shown.` : "No results are being shown. The audit failed without a verified failure detail. No changes were made."}</p></div></div>;
 }
 
 function AuditWorkspace() {
@@ -394,10 +468,10 @@ function AuditWorkspace() {
     <header className="daa-hero"><div><p className="daa-eyebrow"><ClipboardCheck size={15} aria-hidden="true" /> OPERATIONS · READ-ONLY REVIEW</p><h1>Daily Action Audit</h1><p className="daa-intro">What did customers ask for, and what does the schedule show now? Review a previous message day against current records.</p></div><span className="daa-readonly"><ShieldCheck size={16} aria-hidden="true" /> Read-only · nothing is changed</span></header>
     <form className="daa-run-panel" onSubmit={runAudit} aria-label="Run daily action audit"><div className="daa-date-field"><AuditCalendar value={isValidAuditDate(auditDate) ? auditDate : ""} min={MIN_DATE} onChange={changeDate} /><p>Previous days only · America/New_York</p></div><div className="daa-run-copy"><strong>Choose a message day, then run once.</strong><p>The scan compares SMS expectations with records as they exist now. It does not send messages, fix records, or run automatically.</p></div><button className="daa-run-button" type="submit" disabled={pending || run.isPending || Boolean(dateProblem)}><FileSearch size={17} aria-hidden="true" />{pending || run.isPending ? "Running audit…" : "Run audit"}</button></form>
     {(validation || dateProblem) && <p className="daa-date-error" role="alert">{validation || dateProblem}</p>}
-    <aside className="daa-limit-note"><AlertCircle size={16} aria-hidden="true" /><p><strong>Every scan has partial coverage.</strong> Review warnings and source SMS before drawing conclusions. A current-state match does not prove that an action happened on the selected message day.</p></aside>
+    <aside className="daa-limit-note"><AlertCircle size={16} aria-hidden="true" /><p><strong>SMS collection and action verification are separate.</strong> Review collection status, analysis gaps, and source SMS before drawing conclusions. A current-state match does not prove that an action happened on the selected message day.</p></aside>
     {failed && <AuditRunError continuation={batchFailed} safeMessage={safeMessage ?? undefined} />}
-    {(pending || run.isPending) && <div className="daa-empty daa-pending" role="status"><FileSearch size={28} aria-hidden="true" /><h2>Reading evidence and checking current records…</h2><p>No changes are made. Changing the message date discards this scan’s response.</p></div>}
-    {result && !pending && !run.isPending && <><div className="daa-filter-bar" aria-label="Audit result filters"><span>Show</span><button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All actions</button><button type="button" aria-pressed={filter === "affectsTomorrow"} onClick={() => setFilter("affectsTomorrow")}>Affects tomorrow <span>ET</span></button></div><AuditResults result={result} filter={filter} />{result.nextCursor && <div className="daa-continuation"><p>Scan another bounded batch only when you choose. Coverage stays partial.</p><button type="button" className="daa-run-button" disabled={pending || run.isPending} onClick={event => void runAudit(event, true)}><FileSearch size={16} aria-hidden="true" /> Review next batch</button></div>}</>}
+    {(pending || run.isPending) && <div className="daa-empty daa-pending" role="status"><FileSearch size={28} aria-hidden="true" /><h2>Collecting the day’s SMS, then checking actions…</h2><p>No changes are made. Changing the message date discards this scan’s response.</p></div>}
+    {result && !pending && !run.isPending && <><div className="daa-filter-bar" aria-label="Audit result filters"><span>Show</span><button type="button" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All actions</button><button type="button" aria-pressed={filter === "affectsTomorrow"} onClick={() => setFilter("affectsTomorrow")}>Affects tomorrow <span>ET</span></button></div><AuditResults result={result} filter={filter} />{!result.collection && result.nextCursor && <div className="daa-continuation"><p>Scan another bounded batch only when you choose. Coverage stays partial.</p><button type="button" className="daa-run-button" disabled={pending || run.isPending} onClick={event => void runAudit(event, true)}><FileSearch size={16} aria-hidden="true" /> Review next batch</button></div>}</>}
     {!result && !failed && !pending && !run.isPending && <div className="daa-empty daa-initial"><span className="daa-empty-icon"><ClipboardCheck size={29} aria-hidden="true" /></span><h2>Ready when you are</h2><p>Select a previous message day to review future service dates, unresolved actions, and their source SMS. Nothing runs until you click Run audit.</p><span className="daa-empty-footnote"><LockKeyhole size={13} aria-hidden="true" /> No automatic scans · no record changes</span></div>}
   </div></main>;
 }
