@@ -220,6 +220,89 @@ describe("Live Text Monitor actual-source UI safeguards", () => {
     expect(work.html()).toMatch(/<strong>0<\/strong> Needs action/);
     work.dispose();
   });
+  it.each(["unknown", "failed"] as const)("shows %s recorded outgoing informational No separately from scheduling Yes and current mismatch No", async delivery => {
+    const info = ["Please leave us a review after your cleaning.", "I'm on my way.", "Thanks!"].map((value, index) => row(index + 1, {
+      message: message(index + 1, { direction: "outbound", delivery, source: "conversation_history", timeBasis: "history", text: value }),
+    }));
+    const schedule = [4, 5].map(id => row(id, { message: message(id, { direction: "outbound", delivery, source: "conversation_history",
+      timeBasis: "history", text: "LF-TEST is confirmed at 9 AM on November 16, 2026." }) }));
+    const work = workspace({ rows: [...info, ...schedule], checkHandler: async input => {
+      const value = [...info, ...schedule].find(value => value.sessionId === input.sessionId)!;
+      return input.sessionId <= 3 ? checked(value, { required: "no", verified: "not_applicable", summary: "No action required.", evidence: "No operational request or commitment was found in this text.", actions: [], analysis: { status: "complete" } })
+        : checked(value, { required: "yes", verified: input.sessionId === 4 ? "yes" : "no", summary: "Reschedule cleaning to Nov 16, 2026 at 9:00 AM",
+          evidence: input.sessionId === 4 ? "Current records show 9:00 AM." : "Current records show 11:00 AM; scheduled time differs.", analysis: { status: "complete" } });
+    } });
+    await work.settle();
+    for (const value of info) {
+      const html = renderToStaticMarkup(work.detail(value.key));
+      expect(html).toMatch(/ltm-status-no">No<\/strong>/); expect(html).toContain("Not needed"); expect(html).not.toContain("Current record");
+      expect(work.entries().find(entry => entry.row.key === value.key).row.message.delivery).toBe(delivery);
+    }
+    const matched = renderToStaticMarkup(work.detail(schedule[0].key)); const mismatch = renderToStaticMarkup(work.detail(schedule[1].key));
+    expect(matched.match(/ltm-status-yes">Yes<\/strong>/g)).toHaveLength(2);
+    expect(mismatch).toMatch(/ltm-status-yes">Yes<\/strong>/); expect(mismatch).toMatch(/ltm-status-no">No<\/strong>/);
+    expect(matched).toContain("9:00 AM"); expect(mismatch).toContain("11:00 AM"); expect(work.html()).not.toContain("Check unavailable");
+    expect(work.html()).toMatch(/<strong>1<\/strong> Needs action/); expect(work.html()).toMatch(/<strong>1<\/strong> Verified/);
+    work.dispose();
+  });
+
+  it.each([
+    ["MODEL_TIMEOUT", "Text analysis timed out."],
+    ["MODEL_UNAVAILABLE", "Text analysis is unavailable."],
+    ["INVALID_MODEL_RESPONSE", "The AI returned an unreadable analysis."],
+    ["INVALID_ACTION", "An AI action result could not be validated."],
+    ["INVALID_SOURCE_REFERENCE", "The AI referenced a text outside this conversation."],
+    ["INPUT_TOO_LARGE", "Some text exceeds the analysis limit."],
+    ["PARTIAL_CONTEXT", "Some conversation context is unavailable."],
+    [undefined, "Text analysis is unavailable."],
+    ["PRIVATE SQL provider response", "Text analysis is unavailable."],
+  ])("renders unavailable %s as fixed reason and Not checked, never private errors or a false No", async (failure, reason) => {
+    const value = row(1);
+    const work = workspace({ rows: [value], checkHandler: async () => checked(value, { required: "review", verified: "review", actions: [],
+      summary: "PRIVATE SQL model response", evidence: "PRIVATE backend credentials", analysis: { status: "unavailable", failure: failure as any } }) });
+    await work.settle();
+    const html = renderToStaticMarkup(work.detail(value.key));
+    expect(html).toContain("Unavailable"); expect(html).toContain("Not checked"); expect(html).toContain(reason);
+    expect(html).toContain("Current records were not checked."); expect(html).not.toContain("PRIVATE");
+    expect(html).not.toMatch(/ltm-status-(?:yes|no)/); expect(html).not.toContain("Current record</h3>");
+    expect(work.html()).toMatch(/<strong>0<\/strong> Needs action/); expect(work.html()).toMatch(/<strong>0<\/strong> Verified/);
+    expect(work.entries()[0].state).toBe("done"); expect(work.mutateAsync).toHaveBeenCalledTimes(1); work.dispose();
+  });
+
+  it("partial analysis with no determined action stays Review/Not checked, while a valid explicit action stays Yes/Yes", async () => {
+    for (const actionable of [false, true]) {
+      const value = row(1, { message: message(1, { direction: "outbound", delivery: "unknown", text: "LF-TEST is confirmed at 9 AM on November 16, 2026." }) });
+      const result = checked(value, { required: actionable ? "yes" : "review", verified: actionable ? "yes" : "review",
+        summary: actionable ? "Reschedule cleaning to Nov 16, 2026 at 9:00 AM" : "PRIVATE partial model prose",
+        evidence: actionable ? "Current records show 9:00 AM." : "PRIVATE partial backend error",
+        ...(actionable ? {} : { actions: [] }), analysis: { status: "partial", failure: "PARTIAL_CONTEXT" } });
+      const work = workspace({ rows: [value], checkHandler: async () => result }); await work.settle();
+      const html = renderToStaticMarkup(work.detail(value.key));
+      expect(html).not.toContain("Unavailable</strong>"); expect(html).not.toContain("PRIVATE");
+      if (actionable) {
+        expect(html.match(/ltm-status-yes">Yes<\/strong>/g)).toHaveLength(2); expect(html).not.toContain("Not checked");
+        expect(html).toContain("9:00 AM"); expect(html).toContain("Current record</h3>");
+      } else {
+        expect(html).toMatch(/ltm-status-review">Review<\/strong>/); expect(html).toContain("Not checked");
+        expect(html).toContain("Some conversation context is unavailable."); expect(html).not.toContain("Current record</h3>");
+      }
+      expect(work.entries()[0].check).toEqual(result); work.dispose();
+    }
+  });
+
+  it("settled unavailable analysis is not automatically rechecked, but explicit Check can replace it with fresh Yes", async () => {
+    vi.useFakeTimers(); const value = row(1);
+    const work = workspace({ rows: [value], checkHandler: async () => checked(value, { required: "review", verified: "review", actions: [],
+      analysis: { status: "unavailable", failure: "MODEL_UNAVAILABLE" } }) }); await work.settle();
+    expect(work.html()).toContain("Text analysis is unavailable."); expect(work.html()).toContain("Not checked");
+    for (const event of ["onConnected", "onNewMessage", "onJobUpdate", "onBookingFunnelUpdate"]) work.event(event);
+    await vi.advanceTimersByTimeAsync(20_120); await work.settle(); expect(work.mutateAsync).toHaveBeenCalledTimes(1);
+    work.mutateAsync.mockResolvedValue(checked(value, { verified: "yes", evidence: "Fresh current records match.", analysis: { status: "complete" } }));
+    work.manual(value.key); await work.settle();
+    expect(work.mutateAsync).toHaveBeenCalledTimes(2); expect(work.html()).toContain("Fresh current records match.");
+    expect(work.html()).not.toContain("Text analysis is unavailable."); expect(work.html()).not.toContain("Not checked");
+    expect(work.html()).toMatch(/<strong>1<\/strong> Verified/); work.dispose(); expect(vi.getTimerCount()).toBe(0);
+  });
 
   it("expands via an accessible native button into chronological same-customer texts and relevant current fields only", () => {
     const newest = row(3, { message: message(3, { text: '<script>unsafe()</script> https://bad.invalid' }) });

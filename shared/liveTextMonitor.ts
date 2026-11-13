@@ -33,6 +33,11 @@ export type LiveTextAction = {
   records: AuditRecord[];
   links: Array<{ label: string; href: string }>;
 };
+export type LiveTextAnalysisFailure = "MODEL_TIMEOUT" | "MODEL_UNAVAILABLE" | "INVALID_MODEL_RESPONSE" | "INVALID_ACTION" | "INVALID_SOURCE_REFERENCE" | "INPUT_TOO_LARGE" | "PARTIAL_CONTEXT";
+export type LiveTextAnalysis = {
+  status: "complete" | "partial" | "unavailable";
+  failure?: LiveTextAnalysisFailure;
+};
 export type LiveTextCheck = {
   rowKey: string;
   revision: string;
@@ -43,6 +48,8 @@ export type LiveTextCheck = {
   actions: LiveTextAction[];
   conversation: AuditMessage[];
   checkedAt: string;
+  /** Recorded-content analysis only; never SMS delivery or historical completion proof. */
+  analysis?: LiveTextAnalysis;
   /** Only present when the foreground monitor automatically refreshes explicit future dates. */
   syncs?: LiveTextSyncSummary[];
 };

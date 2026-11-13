@@ -12,6 +12,8 @@ import { checkLiveText, createLiveTextInterpretCache, getLiveTextFeed, type Live
 import { liveTextCheckInputSchema, liveTextMonitorRouter } from "./liveTextMonitorRouter";
 import { interpretAuditThreads } from "./dailyActionAuditInterpret";
 import { verifyAuditCandidates } from "./dailyActionAuditEngine";
+import { checkAndSyncLiveText, createLiveTextAutoSyncCache } from "./liveTextMonitorAutoSync";
+import { syncAndCheckLiveText, type LiveTextSyncDependencies } from "./liveTextMonitorSync";
 import type { InvokeParams, InvokeResult } from "./_core/llm";
 
 const now = new Date("2026-11-13T18:00:00.000Z");
@@ -71,6 +73,16 @@ describe("Live text exact stored session row checks", () => {
     expect(result).toMatchObject({ required: "no", verified: "not_applicable", summary: "No action required.", actions: [] });
     expect(call).toHaveBeenCalledTimes(1); expect(d.records).not.toHaveBeenCalled();
   });
+  it.each(["unknown", "failed"] as const)("%s outgoing informational stored texts require no action after actual interpretation", async delivery => {
+    for (const text of ["Please leave us a review after your cleaning.", "I'm on my way.", "Thanks!"]) {
+      const target = message({ direction: "outbound", delivery, text }); const d = dependencies(context(target), model(() => []));
+      const result = await checkLiveText(checkInput, d);
+      expect(result).toMatchObject({ required: "no", verified: "not_applicable", actions: [], analysis: { status: "complete" } });
+      expect(d.interpret).toHaveBeenCalledWith(expect.objectContaining({ evidenceMode: "recorded", records: [] }), expect.any(Function));
+      expect(d.model).toHaveBeenCalledTimes(1); expect(d.records).not.toHaveBeenCalled(); expect(d.verify).not.toHaveBeenCalled();
+      expect(result.conversation).toEqual([target]); expect(target).toMatchObject({ delivery, direction: "outbound", timeBasis: "history", observedAt: null });
+    }
+  });
   it.each(["09:00", "11:00"])("compares requested 9 AM with actual fresh %s using the actual verifier", async time => {
     const d = dependencies(); d.records = vi.fn(async () => ({ records: [record("bookings"), record("leadflow_jobs", { time })], warnings: [], truncated: false, incompleteThreadKeys: [] }));
     const result = await checkLiveText(checkInput, d);
@@ -80,9 +92,9 @@ describe("Live text exact stored session row checks", () => {
     expect(result.evidence).toContain("Booking LF-TEST (booking:1)"); expect(result.evidence).toContain(`time ${time === "09:00" ? "9:00 AM" : "11:00 AM"}`);
     expect(result.evidence).not.toMatch(/historical completion|captured evidence identifies|when changes were made|charge events/i);
     expect(result.evidence).not.toMatch(/123 Fixture Street|Standard Cleaning|Fixture Team|payment state/);
-    expect(d.verify).toHaveBeenCalledWith(expect.objectContaining({ evidenceMode: "captured", records: expect.any(Array) }));
+    expect(d.verify).toHaveBeenCalledWith(expect.objectContaining({ evidenceMode: "recorded", records: expect.any(Array) }));
   });
-  it("preserves exact stored history text, timestamp, and session metadata for captured verification", async () => {
+  it("preserves exact stored history text, timestamp, and session metadata for recorded verification", async () => {
     const target = message({ businessPhone: null }); const source = context(target); const d = dependencies(source);
     const result = await checkLiveText(checkInput, d);
     expect(result).toMatchObject({ rowKey: checkInput.messageKey, required: "yes", verified: "yes" });
@@ -116,6 +128,44 @@ describe("Live text exact stored session row checks", () => {
     expect(result.summary).toContain("9:00 AM"); expect(result.actions[0].records).toHaveLength(2);
     expect(result.actions[0].syncServiceDate).toBeNull();
     expect(vi.mocked(d.verify).mock.calls[0][0].candidates[0].ambiguous).toBe(true);
+  });
+  it("one foreground future-date check retains usable partial analysis across all internal sync checks", async () => {
+    const target = message({ direction: "outbound", delivery: "unknown", text: "LF-TEST is confirmed at 9 AM on November 16, 2026." });
+    const source = context(target, [target], true), d = dependencies(source);
+    let time = "09:00";
+    d.records = vi.fn(async () => ({ records: [record("bookings"), record("leadflow_jobs", { time })], warnings: [], truncated: false, incompleteThreadKeys: [] }));
+    const check: LiveTextSyncDependencies["check"] = input => checkLiveText(input, d);
+    const fetchSource = vi.fn<LiveTextSyncDependencies["source"]>(async date => ({ date, fetched: 1,
+      bookings: [{}] as Awaited<ReturnType<LiveTextSyncDependencies["source"]>>["bookings"] }));
+    const persist = vi.fn<LiveTextSyncDependencies["persist"]>(async () => ({ complete: true, created: 0, updated: 1, protectedRecords: 0, refreshedJobIds: [2] }));
+    const sync: typeof syncAndCheckLiveText = input => syncAndCheckLiveText(input, { check, context: d.context, source: fetchSource,
+      persist, now: d.now, locks: new Set() });
+    const result = await checkAndSyncLiveText(checkInput, { check, sync, now: d.now, cache: createLiveTextAutoSyncCache() });
+    expect(result).toMatchObject({ required: "yes", verified: "yes", analysis: { status: "partial", failure: "PARTIAL_CONTEXT" },
+      syncs: [expect.objectContaining({ date: "2026-11-16", complete: true })] });
+    expect(d.model).toHaveBeenCalledTimes(1); expect(d.interpret).toHaveBeenCalledTimes(1); expect(d.cache.size).toBe(1);
+    expect(d.records).toHaveBeenCalledTimes(4); expect(fetchSource).toHaveBeenCalledTimes(1); expect(persist).toHaveBeenCalledTimes(1);
+    time = "11:00";
+    expect(await check(checkInput)).toMatchObject({ required: "yes", verified: "no", analysis: { status: "partial" } });
+    expect(d.records).toHaveBeenCalledTimes(5); expect(d.model).toHaveBeenCalledTimes(1); expect(d.interpret).toHaveBeenCalledTimes(1);
+  });
+  it("an explicit stored 9 AM target in partial context remains Yes/Yes with a partial-analysis caveat", async () => {
+    const target = message({ direction: "outbound", delivery: "unknown", text: "LF-TEST is confirmed at 9 AM on November 16, 2026." });
+    const d = dependencies(context(target, [target], true), model(owner => [prediction(owner, { agreement: "confirmed" })]));
+    const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "yes", verified: "yes", analysis: { status: "partial", failure: "PARTIAL_CONTEXT" }, conversation: [target] });
+    expect(result.actions).toHaveLength(1); expect(result.actions[0].syncServiceDate).toBe("2026-11-16");
+    await expect(vi.mocked(d.interpret).mock.results[0].value).resolves.toMatchObject({ threadsAnalyzed: 0, failedThreads: 1, failure: "PARTIAL_CONTEXT",
+      candidates: [expect.objectContaining({ ambiguous: false, anchorMessageKey: target.key, expected: expect.objectContaining({ time: "09:00" }) })] });
+    expect(d.records).toHaveBeenCalledTimes(1); expect(d.verify).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(d.verify).mock.calls[0][0].threads[0].messages).toEqual([target]);
+  });
+  it("known ambiguous outgoing meaning remains Review despite failed delivery and exact matching records", async () => {
+    const target = message({ direction: "outbound", delivery: "failed", text: "We'll move LF-TEST to November 16 at 9, but I may mean another visit." });
+    const d = dependencies(context(target), model(owner => [prediction(owner, { agreement: "confirmed", ambiguous: true })]));
+    const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "review", verified: "review", analysis: { status: "complete" } });
+    expect(result.actions[0].records).toHaveLength(2); expect(result.actions[0].syncServiceDate).toBeNull();
   });
   it("changed job date is no, not a current match", async () => {
     const d = dependencies(); d.records = vi.fn(async () => ({ records: [record("bookings"), record("leadflow_jobs", { date: "2026-11-17" })], warnings: [], truncated: false, incompleteThreadKeys: [] }));
@@ -181,21 +231,61 @@ describe("Live text exact stored session row checks", () => {
     const d = dependencies(); d.records = vi.fn(async () => ({ records: [], warnings: ["private source details"], truncated: true, incompleteThreadKeys: ["any"] }));
     const result = await checkLiveText(checkInput, d); expect(result.required).toBe("yes"); expect(result.verified).toBe("review"); expect(result.evidence).toContain("Current record coverage is incomplete."); expect(JSON.stringify(result)).not.toContain("private source details");
   });
-  it("failed LLM is review and cached without retry, never no", async () => {
+  it("a genuine model error reports fixed unavailable analysis, never a no-action finding or private error", async () => {
     const call = vi.fn(async () => { throw new Error("PRIVATE LLM ERROR"); }); const d = dependencies(context(), call);
-    const a = await checkLiveText(checkInput, d); const b = await checkLiveText(checkInput, d);
-    expect(a.required).toBe("review"); expect(b.required).toBe("review"); expect(call).toHaveBeenCalledTimes(1); expect(d.records).not.toHaveBeenCalled(); expect(JSON.stringify(a)).not.toContain("PRIVATE");
+    const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "review", verified: "review", actions: [], summary: "Text analysis is unavailable.",
+      evidence: "The action has not been determined; current records were not checked.", analysis: { status: "unavailable", failure: "MODEL_UNAVAILABLE" } });
+    expect(call).toHaveBeenCalledTimes(1); expect(d.records).not.toHaveBeenCalled(); expect(d.verify).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE|No action required/); expect(d.cache.size).toBe(0);
   });
   it("discarded or omitted invalid source evidence cannot produce a successful no-action result", async () => {
     const d = dependencies(context(), model(owner => [prediction(owner, { evidenceKeys: ["fabricated"] })]));
-    const result = await checkLiveText(checkInput, d); expect(result.required).toBe("review"); expect(result.actions).toEqual([]);
+    const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "review", verified: "review", actions: [], analysis: { status: "unavailable", failure: "INVALID_SOURCE_REFERENCE" } });
+    expect(d.records).not.toHaveBeenCalled(); expect(d.verify).not.toHaveBeenCalled();
   });
-  it.each([true, false])("partial/no-delivery target (%s) never becomes no-action proof", async partial => {
-    const target = message({ text: "Thanks", ...(partial ? {} : { direction: "outbound" as const, delivery: "unknown" as const }) });
-    const d = dependencies(context(target, [target], partial), model(() => [])); const result = await checkLiveText(checkInput, d);
-    expect(result.required).toBe("review");
+  it.each(["json", "envelope", "content", "length", "choices"])("malformed model %s remains unavailable, never no or private response prose", async malformed => {
+    const reply = response([]);
+    if (malformed === "json") reply.choices[0].message.content = "PRIVATE malformed JSON";
+    if (malformed === "envelope") reply.choices[0].message.content = JSON.stringify({ private: "PRIVATE response" });
+    if (malformed === "content") reply.choices[0].message.content = null as any;
+    if (malformed === "length") reply.choices[0].finish_reason = "length";
+    if (malformed === "choices") reply.choices = [];
+    const d = dependencies(context(), vi.fn(async () => reply)); const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "review", verified: "review", actions: [], summary: "The AI returned an unreadable analysis.",
+      analysis: { status: "unavailable", failure: "INVALID_MODEL_RESPONSE" } });
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE|No action required/); expect(d.cache.size).toBe(0);
+    expect(d.records).not.toHaveBeenCalled(); expect(d.verify).not.toHaveBeenCalled();
   });
-  it.each(["unknown", "failed"])("%s outbound history cannot falsely confirm or supersede an inbound request", async delivery => {
+  it("an invalid model action stays safely undetermined instead of becoming no action", async () => {
+    const d = dependencies(context(), model(owner => [prediction(owner, { expected: { ...expected, date: "2026-02-30" } })]));
+    const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "review", verified: "review", actions: [], analysis: { status: "unavailable", failure: "INVALID_ACTION" } });
+    expect(d.records).not.toHaveBeenCalled(); expect(d.cache.size).toBe(0);
+  });
+  it.each(["anchor", "omittedAnchor", "correction", "thread"])("invalid %s source reference cannot become an action or no-action proof", async invalid => {
+    const d = dependencies(context(), model(owner => [prediction(owner, invalid === "anchor" ? { anchorMessageKey: "fabricated" }
+      : invalid === "omittedAnchor" ? { evidenceKeys: [sessionTextKey("context-only")] }
+      : invalid === "correction" ? { supersededByMessageKey: "fabricated" } : { threadKey: "fabricated" })]));
+    const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "review", verified: "review", actions: [], analysis: { failure: "INVALID_SOURCE_REFERENCE" } });
+    expect(d.records).not.toHaveBeenCalled(); expect(d.verify).not.toHaveBeenCalled();
+  });
+  it("duplicate cited evidence cannot verify an outgoing stored action even if the records match", async () => {
+    const target = message({ direction: "outbound", delivery: "failed" });
+    const d = dependencies(context(target), model(owner => [prediction(owner, { evidenceKeys: [target.key, target.key] })]));
+    const result = await checkLiveText(checkInput, d);
+    expect(result.required).toBe("yes"); expect(result.verified).toBe("review"); expect(result.actions[0].records).toEqual([]);
+    expect(vi.mocked(d.verify).mock.results[0].value[0].verification).toContain("Duplicate evidence keys");
+  });
+  it("partial context never becomes no-action proof even when the recorded target is informational", async () => {
+    const target = message({ text: "Thanks" }); const d = dependencies(context(target, [target], true), model(() => []));
+    const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "review", verified: "review", actions: [], analysis: { failure: "PARTIAL_CONTEXT" } });
+    expect(d.records).not.toHaveBeenCalled();
+  });
+  it.each(["unknown", "failed", "sent", "delivered"])("%s recorded outbound context cannot fabricate confirmation or suppress the selected inbound target", async delivery => {
     const target = message(); const draft = message({ key: sessionTextKey("draft"), direction: "outbound",
       text: "Your booking LF-TEST has been moved to November 16, 2026 at 11am.",
       occurredAt: "2026-11-13T16:00:00.000Z", delivery: delivery as AuditMessage["delivery"] });
@@ -209,12 +299,23 @@ describe("Live text exact stored session row checks", () => {
     expect(result.conversation).toEqual([target, draft]);
     expect(vi.mocked(d.verify).mock.results[0].value[0]).toMatchObject({ agreement: "requested", status: "needs_action" });
   });
-  it.each(["unknown", "failed"])("%s outbound history cannot itself anchor a completed action", async delivery => {
-    const target = message({ direction: "outbound", delivery: delivery as AuditMessage["delivery"], text: "LF-TEST is confirmed at 9 AM on November 16, 2026." });
-    const d = dependencies(context(target), model(owner => [prediction(owner, { agreement: "confirmed" })]));
-    const result = await checkLiveText(checkInput, d);
-    expect(result).toMatchObject({ required: "review", verified: "review", actions: [] });
-    expect(d.model).toHaveBeenCalledTimes(1); expect(d.records).not.toHaveBeenCalled(); expect(d.verify).not.toHaveBeenCalled();
+  it.each(["unknown", "failed"] as const)("%s outgoing scheduling confirmation is an action whose stored 9 AM target compares current records without metadata rewrites", async delivery => {
+    for (const time of ["09:00", "11:00"]) {
+      const target = message({ direction: "outbound", delivery, text: "LF-TEST is confirmed at 9 AM on November 16, 2026." });
+      const source = context(target); const original = JSON.parse(JSON.stringify(source));
+      const d = dependencies(source, model(owner => [prediction(owner, { agreement: "confirmed" })]));
+      d.records = vi.fn(async () => ({ records: [record("bookings"), record("leadflow_jobs", { time })], warnings: [], truncated: false, incompleteThreadKeys: [] }));
+      const result = await checkLiveText(checkInput, d);
+      expect(result).toMatchObject({ required: "yes", verified: time === "09:00" ? "yes" : "no", analysis: { status: "complete" } });
+      expect(result.actions).toHaveLength(1); expect(result.summary).toContain("9:00 AM"); expect(result.conversation).toEqual([target]);
+      expect(d.model).toHaveBeenCalledTimes(1); expect(d.records).toHaveBeenCalledTimes(1); expect(d.verify).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(d.interpret).mock.calls[0][0].threads[0].messages).toEqual([target]);
+      expect(vi.mocked(d.verify).mock.calls[0][0]).toMatchObject({ evidenceMode: "recorded", threads: [{ messages: [target] }] });
+      const item = vi.mocked(d.verify).mock.results[0].value[0];
+      expect(item).toMatchObject({ agreement: "requested", status: time === "09:00" ? "matches" : "needs_action", evidence: [target] });
+      expect(item.verification).toContain("recorded text does not prove sent confirmation, historical completion");
+      expect(source).toEqual(original); expect(target).toMatchObject({ direction: "outbound", delivery, timeBasis: "history", observedAt: null, source: "conversation_history" });
+    }
   });
   it("does not claim a paid charge based on captured text or delivery", async () => {
     const target = message({ text: "I paid $100 for LF-TEST." });
@@ -226,6 +327,23 @@ describe("Live text exact stored session row checks", () => {
     const d = dependencies(context(target), model(owner => [prediction(owner, { action: "payment", expected: { ...expected, time: null, timeKind: "unspecified", amountCents: 10000 } })]));
     d.records = vi.fn(async () => ({ records: [record("bookings", { paymentStatus: "captured", paidAmountCents: 10000 })], warnings: [], truncated: false, incompleteThreadKeys: [] }));
     const result = await checkLiveText(checkInput, d); expect(result.verified).toBe("yes"); expect(result.evidence).toContain("payment state captured");
+  });
+  it.each([
+    { paymentStatus: "paid", paidAmountCents: 10000, verified: "yes" },
+    { paymentStatus: "captured", paidAmountCents: 10000, verified: "yes" },
+    { paymentStatus: "paid", paidAmountCents: 11000, verified: "no" },
+    { paymentStatus: "authorized", paidAmountCents: 10000, verified: "no" },
+    { paymentStatus: "paid", paidAmountCents: null, verified: "review" },
+    { paymentStatus: null, paidAmountCents: 10000, verified: "review" },
+  ] as const)("outgoing payment claim uses only persisted status $paymentStatus and amount $paidAmountCents for $verified", async ({ paymentStatus, paidAmountCents, verified }) => {
+    const target = message({ direction: "outbound", delivery: "failed", text: "We received your $100 payment for LF-TEST." });
+    const d = dependencies(context(target), model(owner => [prediction(owner, { action: "payment", agreement: "confirmed",
+      expected: { ...expected, time: null, timeKind: "unspecified", amountCents: 10000 } })]));
+    d.records = vi.fn(async () => ({ records: [record("bookings", { paymentStatus, paidAmountCents })], warnings: [], truncated: false, incompleteThreadKeys: [] }));
+    const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "yes", verified }); expect(result.summary).toContain("$100.00");
+    expect(vi.mocked(d.verify).mock.results[0].value[0].agreement).toBe("requested");
+    expect(result.conversation[0].delivery).toBe("failed");
   });
   it("no model input contains more than 30 messages or 16K serialized messages and target is never clipped", async () => {
     const target = message(); const all = Array.from({ length: 40 }, (_, index) => message({ key: sessionTextKey(`context:${index}`), text: "Context " + "x".repeat(800) })); all.splice(20, 0, target);
@@ -260,6 +378,15 @@ describe("Live text exact stored session row checks", () => {
       const d = dependencies(context(target, messages)); const result = await checkLiveText(checkInput, d); expect(result.required).toBe("review"); expect(d.interpret).not.toHaveBeenCalled();
     }
   });
+  it.each(["text", "delivery", "timestamp"])("the exact target key cannot bind different stored %s metadata into recorded analysis", async field => {
+    const target = message({ direction: "outbound", delivery: "unknown" }); const copied = { ...target };
+    if (field === "text") copied.text = "Different same-key instruction";
+    if (field === "delivery") copied.delivery = "sent";
+    if (field === "timestamp") copied.occurredAt = "2026-11-13T16:00:00.000Z";
+    const d = dependencies(context(target, [copied])); const result = await checkLiveText(checkInput, d);
+    expect(result).toMatchObject({ required: "review", verified: "review", summary: "Exact text context could not be verified.", conversation: [target] });
+    expect(d.interpret).not.toHaveBeenCalled(); expect(d.model).not.toHaveBeenCalled(); expect(d.records).not.toHaveBeenCalled();
+  });
   it("unexpected verifier failure is short fixed review while preserving summary", async () => {
     const d = dependencies(); d.verify = () => { throw new Error("PRIVATE VERIFY SQL"); };
     const result = await checkLiveText(checkInput, d); expect(result.summary).toContain("9:00 AM"); expect(result.verified).toBe("review"); expect(JSON.stringify(result)).not.toContain("PRIVATE");
@@ -267,6 +394,16 @@ describe("Live text exact stored session row checks", () => {
 });
 
 describe("Live text interpreter-only bounded cache", () => {
+  it("evicts settled failed analysis and lets a later explicit Check succeed without an automatic retry", async () => {
+    const call = model(); call.mockRejectedValueOnce(new Error("PRIVATE model failure")); const d = dependencies(context(), call);
+    const first = await checkLiveText(checkInput, d);
+    expect(first).toMatchObject({ required: "review", verified: "review", analysis: { status: "unavailable", failure: "MODEL_UNAVAILABLE" } });
+    expect(d.cache.size).toBe(0); expect(call).toHaveBeenCalledTimes(1); expect(d.records).not.toHaveBeenCalled();
+    await Promise.resolve(); expect(call).toHaveBeenCalledTimes(1);
+    const next = await checkLiveText(checkInput, d);
+    expect(next).toMatchObject({ required: "yes", verified: "yes", analysis: { status: "complete" } });
+    expect(call).toHaveBeenCalledTimes(2); expect(d.records).toHaveBeenCalledTimes(1); expect(d.verify).toHaveBeenCalledTimes(1); expect(d.cache.size).toBe(1);
+  });
   it("reuses interpretation but calls current records and verifier freshly on every check", async () => {
     const call = model(); const d = dependencies(context(), call); let reads = 0;
     d.records = vi.fn(async () => ({ records: [record("bookings"), record("leadflow_jobs", { time: ++reads === 1 ? "09:00" : "11:00" })], warnings: [], truncated: false, incompleteThreadKeys: [] }));
@@ -290,11 +427,18 @@ describe("Live text interpreter-only bounded cache", () => {
       let clock = now.getTime(); d.now = () => new Date(clock);
       const first = checkLiveText(checkInput, d);
       await vi.advanceTimersByTimeAsync(20001);
-      expect((await first).required).toBe("review"); expect(call).toHaveBeenCalledTimes(1);
+      expect(await first).toMatchObject({ required: "review", verified: "review", analysis: { status: "unavailable", failure: "MODEL_TIMEOUT" } });
+      expect(call).toHaveBeenCalledTimes(1); expect(d.cache.size).toBe(1); expect(Array.from(d.cache.values())[0].pending).toBe(true);
       clock += 6 * 60000;
-      expect((await checkLiveText(checkInput, d)).required).toBe("review");
+      const duplicates = await Promise.all([checkLiveText(checkInput, d), checkLiveText(checkInput, d)]);
+      for (const result of duplicates) expect(result).toMatchObject({ required: "review", verified: "review", analysis: { failure: "MODEL_TIMEOUT" } });
       expect(call).toHaveBeenCalledTimes(1); expect(d.records).not.toHaveBeenCalled();
+      expect(d.cache.size).toBe(1); expect(Array.from(d.cache.values())[0].pending).toBe(true);
       finish(response([])); await vi.advanceTimersByTimeAsync(0);
+      expect(d.cache.size).toBe(0); expect(call).toHaveBeenCalledTimes(1);
+      call.mockImplementation(model());
+      expect(await checkLiveText(checkInput, d)).toMatchObject({ required: "yes", verified: "yes", analysis: { status: "complete" } });
+      expect(call).toHaveBeenCalledTimes(2); expect(d.records).toHaveBeenCalledTimes(1);
     } finally { vi.useRealTimers(); }
   });
   it("keeps immutable response revision/text even if stored context mutates while model is pending", async () => {

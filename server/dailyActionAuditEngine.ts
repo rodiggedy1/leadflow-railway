@@ -12,7 +12,7 @@ export type VerifyAuditCandidatesInput = {
   threads: AuditThread[];
   candidates: AuditCandidate[];
   records: AuditRecord[];
-  evidenceMode?: "captured";
+  evidenceMode?: "captured" | "recorded";
 };
 
 type Check = { status: AuditStatus; reason: string };
@@ -473,6 +473,87 @@ function verifyCapturedAuditCandidates(input: VerifyAuditCandidatesInput, global
   });
 }
 
+/** Stored text proves a comparison target and exact source binding, not delivery or occurrence time. */
+function recordedEvidenceFor(candidate: AuditCandidate, input: VerifyAuditCandidatesInput): EvidenceCheck {
+  const threads = input.threads.filter(thread => thread.key === candidate.threadKey);
+  const thread = threads.length === 1 ? threads[0] : null;
+  const phone = normalizeAuditPhone(thread?.customerPhone);
+  const result: EvidenceCheck = { thread, phone, evidence: [], anchor: null, error: null };
+  const fail = (error: string) => ({ ...result, error });
+  if (!thread || !phone) return fail("Thread or exact valid customer phone is missing or ambiguous; names are not identity proof.");
+  if (!candidate.evidenceKeys.length || !candidate.evidenceKeys.includes(candidate.anchorMessageKey)) return fail("The anchor must be included in the candidate's source evidence keys.");
+  if (unique(candidate.evidenceKeys).length !== candidate.evidenceKeys.length) return fail("Duplicate evidence keys cannot establish source provenance.");
+  for (const key of candidate.evidenceKeys) {
+    const local = thread.messages.filter(message => message.key === key);
+    const global = input.threads.flatMap(other => other.messages).filter(message => message.key === key);
+    if (local.length !== 1 || global.length !== 1 || normalizeAuditPhone(local[0].customerPhone) !== phone) return fail("A source key is missing, duplicated, or belongs to a different thread/customer.");
+    result.evidence.push(local[0]);
+  }
+  result.anchor = result.evidence.find(message => message.key === candidate.anchorMessageKey) ?? null;
+  const anchor = result.anchor;
+  if (!anchor || !validId(anchor.sessionId)) return fail("The recorded anchor has no exact valid stored session identity.");
+  const line = normalizeAuditPhone(anchor.businessPhone);
+  if ((anchor.businessPhone !== null && !line) || line === phone) return fail("The recorded business-line source binding is invalid or conflicts with the customer phone.");
+  // The entire supplied thread must be scoped to this session/customer/line,
+  // including uncited context. An unknown line stays unknown, never a sibling line.
+  if (unique(thread.messages.map(message => message.key)).length !== thread.messages.length
+    || thread.messages.some(message => message.sessionId !== anchor.sessionId
+      || normalizeAuditPhone(message.customerPhone) !== phone
+      || (message.businessPhone !== null && normalizeAuditPhone(message.businessPhone) === null)
+      || normalizeAuditPhone(message.businessPhone) !== line)) {
+    return fail("Recorded source context crosses or ambiguously binds customer, session, business line, or message keys; no sibling context is permitted.");
+  }
+  if (result.evidence.some(message => typeof message.text !== "string" || !message.text.trim()
+    || !["inbound", "outbound"].includes(message.direction)
+    || !["inbound_sms", "conversation_history", "madison_sent", "provider"].includes(message.source))) {
+    return fail("Recorded evidence lacks full nonempty stored text or a valid source/direction binding.");
+  }
+  return result;
+}
+
+function verifyRecordedAuditCandidates(input: VerifyAuditCandidatesInput, globalError: string | null): AuditItem[] {
+  return input.candidates.filter(candidate => !candidate.contextOnly).map(candidate => {
+    const proof = recordedEvidenceFor(candidate, input);
+    // Requested/stated targets both use current-state mismatch semantics. This
+    // does not fabricate receipt, sending, agreement, fulfillment or a charge.
+    const effective = ["declined", "unclear"].includes(candidate.agreement)
+      ? candidate : { ...candidate, agreement: "requested" as const };
+    const warnings = [
+      "Recorded text supplies the requested/stated comparison target only; delivery and provider occurrence time are not established or upgraded.",
+      "The supplied current snapshot does not prove historical completion, when changes were made, sent confirmation, or charge events.",
+    ];
+    let selection: Selection = { group: null, records: [], visit: null, error: null };
+    let check: Check;
+    const fatal = globalError || proof.error
+      || (input.candidates.filter(other => other.id === candidate.id).length !== 1 ? "Candidate IDs are duplicated; an arbitrary ID cannot suppress a finding." : null)
+      || (proof.phone ? capturedIdentityError(proof.phone, input) : null);
+    if (fatal) check = { status: "cannot_verify", reason: fatal };
+    else {
+      const selected = selectRecords(effective, proof.phone!, input.records);
+      if (!selected.error) selection = selected;
+      const uncertainty = expectationError(effective)
+        || (!Number.isFinite(candidate.confidence) || candidate.confidence < 0.8 ? "The action interpretation has low or invalid confidence; the comparison target cannot be verified." : null)
+        || (["declined", "unclear"].includes(candidate.agreement) ? "Declined/unclear recorded text requires review; it is not an established comparison instruction." : null);
+      if (uncertainty || selected.error) check = { status: "cannot_verify", reason: uncertainty || selected.error! };
+      // Recorded chronology/model hints never suppress another recorded action,
+      // even when delivery metadata happens to contain a sent label.
+      else check = compareState(effective, selection, input.timeZone);
+    }
+    const links: AuditItem["recordLinks"] = [];
+    if (selection.records.some(record => record.source === "bookings")) links.push({ label: "Bookings", href: "/admin/bookings" });
+    if (selection.records.some(record => record.source === "leadflow_jobs")) links.push({ label: "Schedule", href: "/admin/schedule" });
+    return {
+      id: candidate.id, action: candidate.action, agreement: effective.agreement,
+      status: check.status, customerPhone: proof.phone ?? "", customerName: proof.thread?.customerName ?? null,
+      affectedDate: isValidAuditDate(candidate.expected.date) ? candidate.expected.date : isValidAuditDate(candidate.expected.originalDate) ? candidate.expected.originalDate : selection.visit,
+      expected: copyExpectation(candidate.expected), explanation: candidate.explanation,
+      verification: `${check.reason} Verification is limited to the supplied current snapshot as of ${input.asOf}; recorded text does not prove sent confirmation, historical completion, when changes were made, or charge events.`,
+      evidence: proof.evidence.map(message => ({ ...message })), records: selection.records.map(copyRecord),
+      recordLinks: links, verifiedAt: input.asOf, evidenceBasis: "captured", evidenceWarnings: warnings,
+    };
+  });
+}
+
 /**
  * Pure read-only verifier. The extractor's IDs, confidence, prose and supersession hints
  * are never persistence or identity proof. No history, capture, mutation or provider
@@ -484,6 +565,7 @@ export function verifyAuditCandidates(input: VerifyAuditCandidatesInput): AuditI
     : instant(input.asOf) === null ? "Snapshot asOf must be a valid timestamp with an explicit offset."
     : null;
   if (input.evidenceMode === "captured") return verifyCapturedAuditCandidates(input, globalError);
+  if (input.evidenceMode === "recorded") return verifyRecordedAuditCandidates(input, globalError);
   return input.candidates.filter(candidate => !candidate.contextOnly).map(candidate => {
     const proof = evidenceFor(candidate, input);
     let selection: Selection = { group: null, records: [], visit: null, error: null };

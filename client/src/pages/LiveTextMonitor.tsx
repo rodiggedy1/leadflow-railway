@@ -3,7 +3,7 @@ import { ChevronDown, LockKeyhole, MessageSquareText, Pause, Play, ShieldCheck }
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import type { AuditMessage, AuditRecord } from "@shared/dailyActionAudit";
-import type { LiveTextAction, LiveTextCheck, LiveTextFeed, LiveTextFeedFailure, LiveTextRow } from "@shared/liveTextMonitor";
+import type { LiveTextAction, LiveTextAnalysisFailure, LiveTextCheck, LiveTextFeed, LiveTextFeedFailure, LiveTextRow } from "@shared/liveTextMonitor";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
 import "./live-text-monitor.css";
 
@@ -38,6 +38,17 @@ function feedFailureReason(failure: LiveTextFeedFailure | undefined): string {
     case "DB_SCHEMA": return "Stored conversation history could not be read in its current format.";
     case "DB_TIMEOUT": return "Reading stored conversation history timed out.";
     default: return "Stored conversation history could not be read. Please try again.";
+  }
+}
+function analysisFailureReason(failure: LiveTextAnalysisFailure | undefined): string {
+  switch (failure) {
+    case "MODEL_TIMEOUT": return "Text analysis timed out.";
+    case "INVALID_MODEL_RESPONSE": return "The AI returned an unreadable analysis.";
+    case "INVALID_ACTION": return "An AI action result could not be validated.";
+    case "INVALID_SOURCE_REFERENCE": return "The AI referenced a text outside this conversation.";
+    case "INPUT_TOO_LARGE": return "Some text exceeds the analysis limit.";
+    case "PARTIAL_CONTEXT": return "Some conversation context is unavailable.";
+    default: return "Text analysis is unavailable.";
   }
 }
 function recordFields(type: LiveTextAction["type"], record: AuditRecord): Array<[string, string | null]> {
@@ -85,8 +96,9 @@ export function LiveTextMessageRow({ entry, entries, enabled, onCheck }: { entry
   const required = state === "error" ? "review" : check?.required;
   const verified = state === "error" ? "review" : check?.verified;
   const label = (decision: string | undefined) => decision === "yes" ? "Yes" : decision === "no" ? "No" : decision === "not_applicable" ? "Not needed" : decision === "review" ? "Review" : state === "pending" ? "Checking…" : "Not checked";
-  const requiredDetail = state === "error" ? "Check unavailable" : check?.summary ?? "";
-  const verifiedDetail = state === "error" ? "Check again to review the record" : check?.evidence ?? "";
+  const analysisUndetermined = check && check.analysis?.status !== "complete" && check.analysis !== undefined && !check.actions.length;
+  const requiredDetail = state === "error" ? "Check unavailable" : analysisUndetermined ? analysisFailureReason(check.analysis?.failure) : check?.summary ?? "";
+  const verifiedDetail = state === "error" ? "Check again to review the record" : analysisUndetermined ? "Current records were not checked." : check?.evidence ?? "";
   return <div className="ltm-row" role="row">
     <div className="ltm-person" role="cell"><strong>{row.identityAmbiguous || recordNames.length > 1 ? "Name needs review" : displayName || "Name unavailable"}</strong><span>{row.message.customerPhone || "Phone unavailable"}</span></div>
     <div className="ltm-conversation" role="cell">
@@ -98,8 +110,8 @@ export function LiveTextMessageRow({ entry, entries, enabled, onCheck }: { entry
         {check?.actions.map(action => <section className="ltm-action" key={action.id}><h3>Requested action</h3><p>{short(action.summary)}</p><h3>Current record</h3><p>{short(action.evidence) || "Record needs review"}</p>{action.records.map((record, index) => <dl key={record.key || index}>{recordFields(action.type, record).map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value || "Unavailable"}</dd></div>)}</dl>)}{action.links.some(link => safeLink(link.href)) && <nav aria-label="Current record links">{action.links.filter(link => safeLink(link.href)).map((link, index) => <a key={index} href={link.href}>{link.label || "Open record"}</a>)}</nav>}</section>)}
       </div>}
     </div>
-    <div className="ltm-required" role="cell" aria-label="Action required"><span className="ltm-mobile-label">Action required</span><Status label={state === "pending" ? "Checking…" : label(required)} detail={requiredDetail} tone={state === "pending" ? "pending" : required ?? state} /></div>
-    <div className="ltm-verified" role="cell" aria-label="Action verified"><span className="ltm-mobile-label">Action verified</span><Status label={state === "pending" ? "Checking…" : label(verified)} detail={verifiedDetail} tone={state === "pending" ? "pending" : verified ?? state} /></div>
+    <div className="ltm-required" role="cell" aria-label="Action required"><span className="ltm-mobile-label">Action required</span><Status label={state === "pending" ? "Checking…" : check?.analysis?.status === "unavailable" ? "Unavailable" : label(required)} detail={requiredDetail} tone={state === "pending" ? "pending" : required ?? state} /></div>
+    <div className="ltm-verified" role="cell" aria-label="Action verified"><span className="ltm-mobile-label">Action verified</span><Status label={state === "pending" ? "Checking…" : analysisUndetermined ? "Not checked" : label(verified)} detail={verifiedDetail} tone={state === "pending" ? "pending" : verified ?? state} /></div>
   </div>;
 }
 

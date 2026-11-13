@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import type { AuditCandidate, AuditExpectation, AuditItem, AuditMessage, AuditRecord, AuditThread } from "../shared/dailyActionAudit";
-import type { LiveTextAction, LiveTextCheck, LiveTextContext, LiveTextDecision, LiveTextFeed } from "../shared/liveTextMonitor";
+import type { LiveTextAction, LiveTextAnalysis, LiveTextAnalysisFailure, LiveTextCheck, LiveTextContext, LiveTextDecision, LiveTextFeed } from "../shared/liveTextMonitor";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "../shared/bookingWidgetConfig";
 import { auditBusinessDate, isValidAuditDate, normalizeAuditPhone, normalizeAuditTime, verifyAuditCandidates } from "./dailyActionAuditEngine";
 import { interpretAuditThreads } from "./dailyActionAuditInterpret";
@@ -48,6 +48,32 @@ function review(source: LiveTextContext, checkedAt: string, reason: string, conv
   return { rowKey: source.row.key, revision: source.row.revision, required: "review", verified: "review",
     summary: reason, evidence: reason, actions: [], conversation: conversation.map(copyMessage), checkedAt };
 }
+function completeInterpretation(result: Interpretation): boolean {
+  return result.threadsAnalyzed === 1 && !(result.failedThreads ?? 0) && !(result.omittedMessages ?? 0)
+    && !result.warnings.length && !result.failure;
+}
+function cacheableInterpretation(result: Interpretation): boolean {
+  return completeInterpretation(result) || (result.candidates.length > 0
+    && ["PARTIAL_CONTEXT", "INVALID_ACTION", "INVALID_SOURCE_REFERENCE"].includes(result.failure ?? ""));
+}
+function interpretationFailure(result: Interpretation): LiveTextAnalysisFailure {
+  const known: LiveTextAnalysisFailure[] = ["MODEL_TIMEOUT", "MODEL_UNAVAILABLE", "INVALID_MODEL_RESPONSE", "INVALID_ACTION", "INVALID_SOURCE_REFERENCE", "INPUT_TOO_LARGE", "PARTIAL_CONTEXT"];
+  return known.includes(result.failure as LiveTextAnalysisFailure) ? result.failure as LiveTextAnalysisFailure
+    : (result.failedThreads ?? 0) || !result.threadsAnalyzed ? "MODEL_UNAVAILABLE"
+    : (result.omittedMessages ?? 0) ? "INPUT_TOO_LARGE" : "PARTIAL_CONTEXT";
+}
+function analysisMessage(failure: LiveTextAnalysisFailure): string {
+  const reasons: Record<LiveTextAnalysisFailure, string> = {
+    MODEL_TIMEOUT: "Text analysis timed out.",
+    MODEL_UNAVAILABLE: "Text analysis is unavailable.",
+    INVALID_MODEL_RESPONSE: "The AI returned an unreadable analysis.",
+    INVALID_ACTION: "An AI action result could not be validated.",
+    INVALID_SOURCE_REFERENCE: "The AI referenced a text outside this conversation.",
+    INPUT_TOO_LARGE: "Some text exceeds the analysis limit.",
+    PARTIAL_CONTEXT: "Some conversation context is unavailable.",
+  };
+  return reasons[failure];
+}
 function messageDate(message: AuditMessage): string | null {
   // A trustworthy occurrence/history instant identifies its stored day; received
   // evidence uses observed time. Neither is upgraded to provider proof here.
@@ -89,34 +115,39 @@ function boundContext(source: LiveTextContext): { thread: AuditThread; omitted: 
 async function interpretOnce(source: LiveTextContext, thread: AuditThread, auditDate: string, deps: LiveTextMonitorDependencies): Promise<Interpretation> {
   // Full source metadata + all exact context + partial flag participates, even if
   // the bounded model window is identical. No phone/text from the client is used.
-  const key = createHash("sha256").update(JSON.stringify({ row: source.row, messages: source.messages, partial: source.partial, auditDate, thread })).digest("hex");
+  const key = createHash("sha256").update(JSON.stringify({ evidenceMode: "recorded", row: source.row, messages: source.messages, partial: source.partial, auditDate, thread })).digest("hex");
   const now = deps.now().getTime();
   for (const [entryKey, entry] of Array.from(deps.cache)) {
     if (!entry.pending && entry.expiresAt <= now) deps.cache.delete(entryKey);
   }
   const existing = deps.cache.get(key);
   if (existing && existing.interpret === deps.interpret && existing.model === deps.model) return existing.promise;
-  // An in-flight entry is never evicted/retried, including while the unchanged
-  // interpreter waits for a transport timeout. Retain failed output for the TTL.
-  if (existing?.pending) return { candidates: [], warnings: ["Checking is unavailable."], threadsAnalyzed: 0, failedThreads: 1, omittedMessages: 0 };
+  // Never duplicate an in-flight call. Once it actually settles, failed analysis
+  // is removed so a later explicit Check can retry instead of replaying a failure.
+  if (existing?.pending) return { candidates: [], warnings: ["Checking is unavailable."], threadsAnalyzed: 0, failedThreads: 1, omittedMessages: 0, failure: "MODEL_UNAVAILABLE" };
   if (deps.cache.size >= CACHE_CAP) {
     const evictable = Array.from(deps.cache).find(([, entry]) => !entry.pending);
-    if (!evictable) return { candidates: [], warnings: ["Checking is unavailable."], threadsAnalyzed: 0, failedThreads: 1, omittedMessages: 0 };
+    if (!evictable) return { candidates: [], warnings: ["Checking is unavailable."], threadsAnalyzed: 0, failedThreads: 1, omittedMessages: 0, failure: "MODEL_UNAVAILABLE" };
     deps.cache.delete(evictable[0]);
   }
   const entry: CacheEntry = { interpret: deps.interpret, model: deps.model, promise: Promise.resolve({ candidates: [], warnings: [], threadsAnalyzed: 0 }), expiresAt: now + CACHE_TTL, pending: true };
   let callsInFlight = 0;
   let interpretationFinished = false;
+  let failed = false;
+  const settleEntry = () => {
+    entry.pending = !interpretationFinished || callsInFlight > 0;
+    if (!entry.pending && failed && deps.cache.get(key) === entry) deps.cache.delete(key);
+  };
   // Observe settlement only: same existing transport, exact same parameters,
-  // no extra deadline, retry, cancellation, model or prompt change.
+  // no extra deadline, automatic retry, cancellation or model change.
   const trackedModel: typeof invokeLLM = async params => {
     callsInFlight++;
     try { return await deps.model(params); }
-    finally { callsInFlight--; entry.pending = !interpretationFinished || callsInFlight > 0; }
+    finally { callsInFlight--; settleEntry(); }
   };
-  entry.promise = Promise.resolve().then(() => deps.interpret({ auditDate, timeZone: TIME_ZONE, threads: [thread], records: [], evidenceMode: "captured" }, trackedModel))
-    .catch((): Interpretation => ({ candidates: [], warnings: ["Text analysis is unavailable."], threadsAnalyzed: 0, failedThreads: 1, omittedMessages: 0 }))
-    .then(result => { interpretationFinished = true; entry.pending = callsInFlight > 0; entry.expiresAt = deps.now().getTime() + CACHE_TTL; return result; });
+  entry.promise = Promise.resolve().then(() => deps.interpret({ auditDate, timeZone: TIME_ZONE, threads: [thread], records: [], evidenceMode: "recorded" }, trackedModel))
+    .catch((): Interpretation => ({ candidates: [], warnings: ["Text analysis is unavailable."], threadsAnalyzed: 0, failedThreads: 1, omittedMessages: 0, failure: "MODEL_UNAVAILABLE" }))
+    .then(result => { interpretationFinished = true; failed = !cacheableInterpretation(result); entry.expiresAt = deps.now().getTime() + CACHE_TTL; settleEntry(); return result; });
   deps.cache.set(key, entry);
   return entry.promise;
 }
@@ -274,14 +305,20 @@ export async function checkLiveText(input: { sessionId: number; messageKey: stri
   const candidates = interpreted.candidates.filter(candidate => candidate.threadKey === bounded.thread.key);
   const targets = candidates.filter(candidate => candidate.anchorMessageKey === source.row.message.key && !candidate.contextOnly);
   const verifiedAt = deps.now().toISOString();
+  const interpretationComplete = completeInterpretation(interpreted);
+  const analysis: LiveTextAnalysis = interpretationComplete ? { status: "complete" }
+    : { status: targets.length || interpreted.threadsAnalyzed ? "partial" : "unavailable", failure: interpretationFailure(interpreted) };
   if (!targets.length) {
-    const complete = interpreted.threadsAnalyzed === 1 && !(interpreted.failedThreads ?? 0) && !(interpreted.omittedMessages ?? 0)
-      && !interpreted.warnings.length && !source.partial && !bounded.omitted
-      && source.row.message.timeBasis !== "unknown"
-      && (source.row.message.direction === "inbound" ? source.row.message.delivery === "received" : ["sent", "delivered"].includes(source.row.message.delivery));
-    if (!complete) return review(source, verifiedAt, "Text analysis is incomplete; review this text.", bounded.thread.messages);
+    // This is a conclusion about the recorded content, not whether it was sent.
+    const complete = interpretationComplete && !source.partial && !bounded.omitted;
+    if (!complete) {
+      const failure = interpretationComplete ? "PARTIAL_CONTEXT" : interpretationFailure(interpreted);
+      return { ...review(source, verifiedAt, analysisMessage(failure), bounded.thread.messages),
+        evidence: "The action has not been determined; current records were not checked.",
+        analysis: interpretationComplete ? { status: "partial", failure } : analysis };
+    }
     return { rowKey: source.row.key, revision: source.row.revision, required: "no", verified: "not_applicable",
-      summary: "No action required.", evidence: "No operational request or commitment was found in this text.", actions: [], conversation: bounded.thread.messages.map(copyMessage), checkedAt: verifiedAt };
+      summary: "No action required.", evidence: "No operational request or commitment was found in this text.", actions: [], conversation: bounded.thread.messages.map(copyMessage), checkedAt: verifiedAt, analysis };
   }
   let recordResult: Awaited<ReturnType<typeof readLeadFlowAuditRecords>>;
   let recordFailure = false;
@@ -295,7 +332,7 @@ export async function checkLiveText(input: { sessionId: number; messageKey: stri
     : { ...candidate, contextOnly: true });
   let items: AuditItem[] = [];
   let processingFailure = false;
-  try { items = deps.verify({ auditDate, timeZone: TIME_ZONE, asOf: deps.now().toISOString(), threads: [thread], candidates: verifierCandidates, records: recordResult.records, evidenceMode: "captured" }); }
+  try { items = deps.verify({ auditDate, timeZone: TIME_ZONE, asOf: deps.now().toISOString(), threads: [thread], candidates: verifierCandidates, records: recordResult.records, evidenceMode: "recorded" }); }
   catch { processingFailure = true; }
   const override = recordFailure ? "Current records are unavailable."
     : incomplete ? "Current record coverage is incomplete."
@@ -307,5 +344,5 @@ export async function checkLiveText(input: { sessionId: number; messageKey: stri
   return { rowKey: source.row.key, revision: source.row.revision, required, verified,
     summary: actions.length === 1 ? actions[0].summary : `${actions[0].summary} (+${actions.length - 1} more action${actions.length > 2 ? "s" : ""})`,
     evidence: actions.length === 1 ? actions[0].evidence : `${actions.filter(action => action.verified === "yes").length} match; ${actions.filter(action => action.verified === "no").length} differ; ${actions.filter(action => action.verified === "review").length} need review.`,
-    actions, conversation: bounded.thread.messages.map(copyMessage), checkedAt: deps.now().toISOString() };
+    actions, conversation: bounded.thread.messages.map(copyMessage), checkedAt: deps.now().toISOString(), analysis };
 }
