@@ -37,12 +37,12 @@ export function nativeBookingServiceDateTime(booking: BookingRow): string {
   ).toISOString();
 }
 
-export function nativeBookingExtras(booking: BookingRow): string {
+export function nativeBookingExtras(booking: Pick<BookingRow, "extras">): string {
   return JSON.stringify(booking.extras.map((extra) => extra.id));
 }
 
 export function nativeBookingCustomerNotes(
-  booking: BookingRow,
+  booking: Pick<BookingRow, "specialRequestNotes" | "companyNotes">,
   companyNotes = booking.companyNotes,
 ): string | null {
   const notes = [...booking.specialRequestNotes, companyNotes?.trim() ?? ""].filter(Boolean);

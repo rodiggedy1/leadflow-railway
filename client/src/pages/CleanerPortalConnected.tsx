@@ -33,6 +33,12 @@ type PortalJob = {
   staffNotes: string | null;
 };
 
+function withCurrentVisitDetails(job: PortalJob, currentJobs: PortalJob[] | undefined): PortalJob {
+  const current = currentJobs?.find(item => item.portalJobKey === job.portalJobKey);
+  if (!current) return job;
+  return { ...job, customerNotes: current.customerNotes, staffNotes: current.staffNotes, extras: current.extras };
+}
+
 type WeekJob = {
   portalJobKey: string;
   customerName: string;
@@ -537,8 +543,8 @@ function CleanerPortalConnected() {
       </main>
     </div>
     <AvailabilityDialog open={availabilityOpen} schedule={teamScheduleQuery.data?.schedule} onClose={() => setAvailabilityOpen(false)} onSave={values => availabilityMutation.mutate(values)} saving={availabilityMutation.isPending} />
-    {tomorrowDetailsJob && <TomorrowJobDetailsDrawer job={tomorrowDetailsJob} onClose={() => setTomorrowDetailsJob(null)} />}
-    {selectedJob && <JobDrawer job={{ ...selectedJob, ...progressByJobKey[selectedJob.portalJobKey] }} onClose={() => setSelectedJob(null)} onProgress={progress => setProgressByJobKey(current => ({ ...current, [selectedJob.portalJobKey]: progress }))} onContact={() => setContactJob(selectedJob)} />}
+    {tomorrowDetailsJob && <TomorrowJobDetailsDrawer job={withCurrentVisitDetails(tomorrowDetailsJob, tomorrowQuery.data as PortalJob[] | undefined)} onClose={() => setTomorrowDetailsJob(null)} />}
+    {selectedJob && <JobDrawer job={{ ...withCurrentVisitDetails(selectedJob, todayQuery.data as PortalJob[] | undefined), ...progressByJobKey[selectedJob.portalJobKey] }} onClose={() => setSelectedJob(null)} onProgress={progress => setProgressByJobKey(current => ({ ...current, [selectedJob.portalJobKey]: progress }))} onContact={() => setContactJob(selectedJob)} />}
     {contactJob && <ContactClientPanel job={{ ...contactJob, ...progressByJobKey[contactJob.portalJobKey] }} onClose={() => setContactJob(null)} onCall={callClient} />}
   </div>;
 }

@@ -192,6 +192,42 @@ describe("canonical BookingCRM schedule saves through real routers (offline)", (
     expect(db.state.bookingSeries[0]).toMatchObject({ anchorLocalDate: "2026-11-03", anchorLocalTime: "08:00", frequency: "weekly" });
     expect(mocks.reschedule).not.toHaveBeenCalled();
   });
+  it.each(["popup", "full_page", "imported"])("projects saved CRM notes for an assigned %s booking through the existing portal refresh path", async source => {
+    seed({ source });
+    db.state.bookingAssignments = [{ bookingId: 7, status: "assigned", teamId: 3, teamName: "Test team" }];
+    db.state.leadflowJobs[0] = { ...db.state.leadflowJobs[0], teamId: 3, teamName: "Test team", bookingStatus: "assigned", hasStripeCard: 1 };
+    db.state.leadflowJobs.push({ id: 99, bookingId: 99, jobDate: date, customerNotes: "Another customer's note", jobTotalCents: 8000 });
+    const before = structuredClone(db.state);
+    const saved = await native().updateDetails({ bookingId: 7, companyNotes: " Use the side entrance\nDog stays upstairs " });
+    expect(saved.companyNotes).toBe("Use the side entrance\nDog stays upstairs");
+    expect(db.state.bookings[0]).toMatchObject({
+      specialRequestNotes: before.bookings[0].specialRequestNotes,
+      paymentStatus: before.bookings[0].paymentStatus,
+      firstCleaningTotalCents: before.bookings[0].firstCleaningTotalCents,
+      futureVisitTotalCents: before.bookings[0].futureVisitTotalCents,
+      requestedLocalDate: date, requestedLocalTime: time,
+    });
+    expect(db.state.leadflowJobs[0]).toMatchObject({
+      customerNotes: "Keep this customer note\nUse the side entrance\nDog stays upstairs",
+      jobDate: date, serviceDateTime: before.leadflowJobs[0].serviceDateTime,
+      jobTotalCents: before.leadflowJobs[0].jobTotalCents,
+      teamId: 3, teamName: "Test team", bookingStatus: "assigned", hasStripeCard: 1,
+    });
+    expect(db.state.leadflowJobs[1]).toEqual(before.leadflowJobs[1]);
+    expect(db.state.bookingAssignments).toEqual(before.bookingAssignments);
+    expect(mocks.reschedule).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+  it.each([{ specialRequestNotes: [] }, { specialRequestNotes: ["Keep this customer note"] }])("clears CRM company notes without deleting customer special requests %j", async ({ specialRequestNotes }) => {
+    seed({ specialRequestNotes });
+    db.state.bookingAssignments = [{ bookingId: 7, status: "assigned", teamId: 3, teamName: "Test team" }];
+    await native().updateDetails({ bookingId: 7, companyNotes: null });
+    expect(db.state.bookings[0].companyNotes).toBeNull();
+    expect(db.state.bookings[0].specialRequestNotes).toEqual(specialRequestNotes);
+    expect(db.state.leadflowJobs[0].customerNotes).toBe(specialRequestNotes.length ? "Keep this customer note" : null);
+    expect(mocks.reschedule).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
   it("combined commercial and schedule saves project selected details without any extra date/time/frequency write", async () => {
     db.state.bookingAssignments = [{ bookingId: 7, status: "assigned", teamId: 3, teamName: "Test team" }];
     db.state.leadflowJobs.push({ id: 71, bookingId: 7, jobDate: "2026-11-17", frequency: "Weekly", serviceDateTime: "2026-11-17T14:00:00.000Z", jobTotalCents: 16000 });

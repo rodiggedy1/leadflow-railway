@@ -44,7 +44,8 @@ describe("Cleaner Portal live-update boundary", () => {
   it("subscribes only after cleaner authentication and refetches only currently enabled job queries", () => {
     expect(cleanerHook).toContain('new EventSource("/api/cleaner-portal-stream", { withCredentials: true })');
     expect(cleanerHook).toContain('update.type === "jobs_changed"');
-    expect(cleanerHook).toContain("if (connectedOnceRef.current) callbacksRef.current.onJobsChanged?.()");
+    expect(cleanerHook).toContain("callbacksRef.current.onJobsChanged?.()");
+    expect(cleanerHook).not.toContain("if (connectedOnceRef.current) callbacksRef.current.onJobsChanged?.()");
     expect(cleanerPage).toContain("useCleanerPortalUpdates");
     expect(cleanerPage).toContain("enabled: Boolean(meQuery.data)");
     expect(cleanerPage).toContain("refreshQueuedRef.current = true");

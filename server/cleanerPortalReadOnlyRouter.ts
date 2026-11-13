@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerPortalJobProgress, cleanerProfiles, leadflowJobs, schedulingTeams, teamWorkSchedule } from "../drizzle/schema";
+import { bookings, cleanerPortalJobProgress, cleanerProfiles, leadflowJobs, schedulingTeams, teamWorkSchedule } from "../drizzle/schema";
 import { leadflowJobPayrollAdjustments } from "../drizzle/leadflowPayrollAdjustments";
 import { cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
@@ -9,6 +9,7 @@ import { normalizePayrollPercent } from "./payrollNormalization";
 import { getPayWeekStart } from "./teamPayRouter";
 import { listOwnedLeadflowJobs } from "./cleanerPortalJobResolver";
 import { findCleanerPortalTeam } from "./cleanerPortalOwnership";
+import { nativeBookingCustomerNotes, nativeBookingExtras } from "./bookingLifecycleService";
 
 function etDate(offsetDays = 0) {
   const raw = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + offsetDays * 86_400_000));
@@ -119,7 +120,20 @@ async function adjustmentCentsByJob(db: NonNullable<Awaited<ReturnType<typeof ge
 async function listOwnedImportedJobs(cleanerId: number, startDate: string, endDate: string) {
   const { db, team, jobs } = await listOwnedLeadflowJobs(cleanerId, startDate, endDate, "Cleaner Portal is temporarily unavailable.");
   const adjustmentCents = await adjustmentCentsByJob(db, jobs.map(({ job }) => job.id));
-  return { cleaner: team, jobs, adjustmentCents };
+  const bookingIds = Array.from(new Set(jobs.map(({ job }) => job.bookingId).filter((id): id is number => id !== null)));
+  const savedBookings = bookingIds.length ? await db.select({
+    id: bookings.id,
+    specialRequestNotes: bookings.specialRequestNotes,
+    companyNotes: bookings.companyNotes,
+    extras: bookings.extras,
+  }).from(bookings).where(inArray(bookings.id, bookingIds)) : [];
+  const savedDetailsByBookingId = new Map(savedBookings.map(booking => [booking.id, {
+    customerNotes: nativeBookingCustomerNotes(booking), extras: nativeBookingExtras(booking),
+  }]));
+  const jobsWithSavedNotes = jobs.map(row => row.job.bookingId !== null && savedDetailsByBookingId.has(row.job.bookingId)
+    ? { ...row, job: { ...row.job, ...savedDetailsByBookingId.get(row.job.bookingId)! } }
+    : row);
+  return { cleaner: team, jobs: jobsWithSavedNotes, adjustmentCents };
 }
 
 export const cleanerPortalReadOnlyRouter = router({

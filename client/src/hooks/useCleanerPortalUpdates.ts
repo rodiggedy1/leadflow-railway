@@ -9,8 +9,8 @@ const MAX_RETRY_MS = 60_000;
 
 /**
  * Maintains the Cleaner Portal's dedicated, cookie-authenticated SSE connection.
- * The stream contains only a generic jobs-changed hint. A reconnect invokes the
- * same callback once to catch an update that may have occurred while disconnected.
+ * The stream contains only a generic jobs-changed hint. Every connection invokes
+ * the same callback once to catch an update before subscription or while disconnected.
  */
 export function useCleanerPortalUpdates(
   callbacks: CleanerPortalUpdateCallbacks,
@@ -39,7 +39,7 @@ export function useCleanerPortalUpdates(
 
       stream.addEventListener("connected", () => {
         retryDelay = MIN_RETRY_MS;
-        if (connectedOnceRef.current) callbacksRef.current.onJobsChanged?.();
+        callbacksRef.current.onJobsChanged?.();
         connectedOnceRef.current = true;
       });
 

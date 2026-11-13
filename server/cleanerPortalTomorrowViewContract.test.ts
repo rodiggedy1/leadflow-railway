@@ -38,7 +38,7 @@ describe("visible Cleaner Portal Tomorrow view", () => {
     expect(page).toContain("isTomorrow && onViewTomorrowDetails");
     expect(page).toContain("View details");
     expect(page).toContain("const [tomorrowDetailsJob, setTomorrowDetailsJob]");
-    expect(page).toContain("<TomorrowJobDetailsDrawer job={tomorrowDetailsJob}");
+    expect(page).toContain("<TomorrowJobDetailsDrawer job={withCurrentVisitDetails(tomorrowDetailsJob, tomorrowQuery.data as PortalJob[] | undefined)}");
     expect(page).toContain('onViewTomorrowDetails={viewingTomorrow ? () => setTomorrowDetailsJob(job) : undefined}');
     expect(page).toContain("!viewingTomorrow && nextJob");
     const tomorrowDrawer = page.slice(page.indexOf("function TomorrowJobDetailsDrawer"), page.indexOf("function JobDrawer"));
