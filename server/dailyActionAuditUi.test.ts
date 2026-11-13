@@ -42,19 +42,19 @@ function compile(source: string, react: any = React, trpc: any = {}, extra: Reco
 }
 const ui = compile(pageSource);
 function message(direction: "inbound" | "outbound", overrides: Partial<AuditMessage> = {}): AuditMessage {
-  return { key: direction, sessionId: 1, customerPhone: "+15550101234", businessPhone: "+15550987654", direction,
+  return { key: direction, sessionId: 1, customerPhone: "+13015550123", businessPhone: "+13015550987", direction,
     text: direction === "inbound" ? "Please move my cleaning to Friday at 10." : "Confirmed, Friday at 10.",
     occurredAt: "2026-11-11T17:00:00Z", observedAt: "2026-11-11T17:01:00Z", timeBasis: "provider",
     delivery: direction === "inbound" ? "received" : "delivered", source: direction === "inbound" ? "inbound_sms" : "madison_sent", ...overrides };
 }
 function item(id: string, status: AuditItem["status"], overrides: Partial<AuditItem> = {}): AuditItem {
-  return { id, action: "reschedule", agreement: "confirmed", status, customerPhone: "+15550101234", customerName: `Synthetic ${id}`,
+  return { id, action: "reschedule", agreement: "confirmed", status, customerPhone: "+13015550123", customerName: "Synthetic customer",
     affectedDate: "2026-11-13", expected: { bookingReference: "REF-1", date: "2026-11-13", originalDate: "2026-11-12", time: "10:00",
       timeKind: "exact", windowEnd: null, scope: "visit", address: "Synthetic street", serviceName: "Standard", extras: ["Oven"], teamName: "Team A", amountCents: 15000 },
     explanation: "The SMS requests a different service date.", verification: "The current booking is still on the original date.",
     evidence: [message("inbound"), message("outbound")],
     records: [{ key: "booking-1", source: "bookings", bookingId: 1, jobId: null, publicBookingNumber: "TEST-1", seriesId: null,
-      customerPhone: "+15550101234", customerName: "Synthetic customer", date: "2026-11-12", time: "09:00", timeZone: "America/New_York", status: "scheduled",
+      customerPhone: "+13015550123", customerName: "Synthetic customer", date: "2026-11-12", time: "09:00", timeZone: "America/New_York", status: "scheduled",
       address: "Synthetic street", serviceName: "Standard", extras: [], teamName: "Team B", recurrence: "weekly", paymentStatus: "paid", paidAmountCents: 15000 }],
     recordLinks: [{ label: "Bookings", href: "/admin/bookings" }, { label: "Schedule", href: "/admin/schedule" }], verifiedAt: "2026-11-12T15:00:00Z", ...overrides };
 }
@@ -148,18 +148,24 @@ function all<T extends ts.Node>(node: ts.Node, guard: (node: ts.Node) => node is
 }
 
 describe("Daily Action Audit actual read-only UI", () => {
-  it("SSR exposes all status counts and prioritizes unresolved over matches across dates", () => {
+  it("SSR exposes all status counts and prioritizes unresolved people over matches across dates", () => {
     const html = renderResults(result([
-      item("match", "matches", { affectedDate: "2026-11-12" }), item("conflict", "conflict"),
-      item("needs", "needs_action"), item("unknown", "cannot_verify", { affectedDate: null }), item("old", "superseded"),
+      item("match", "matches", { customerName: "Synthetic match", customerPhone: "+13015550124", affectedDate: "2026-11-12" }),
+      item("conflict", "conflict", { customerName: "Synthetic conflict", customerPhone: "+13015550125" }),
+      item("needs", "needs_action", { customerName: "Synthetic needs", customerPhone: "+13015550126" }),
+      item("unknown", "cannot_verify", { customerName: "Synthetic unknown", customerPhone: "+13015550127", affectedDate: null, expected: { ...item("base", "matches").expected, date: null } }),
+      item("old", "superseded", { customerName: "Synthetic old", customerPhone: "+13015550128" }),
     ]));
     for (const status of ["needs_action", "conflict", "cannot_verify", "matches", "superseded"]) {
       expect(html).toContain(`data-status-count="${status}"><strong>1</strong>`);
     }
     expect(html.indexOf("Synthetic needs")).toBeLessThan(html.indexOf("Synthetic conflict"));
     expect(html.indexOf("Synthetic unknown")).toBeLessThan(html.indexOf("Synthetic match"));
-    expect(html).toContain("Undated queue");
-    expect(html).toContain("Future service date from message day");
+    expect(html).toMatch(/Overall summary/i);
+    expect(html).toMatch(/By person/i);
+    expect(html).toMatch(/Date not available|date[^<]*(?:undated|unresolved)/i);
+    expect(html).toContain("daa-person-summary");
+    expect(html).not.toContain("daa-date-group");
   });
 
   it("keeps partial coverage and server warnings prominent, including all-matched and empty scans", () => {
@@ -178,7 +184,7 @@ describe("Daily Action Audit actual read-only UI", () => {
 
   it("shows expected versus actual, request versus confirmation, SMS directions and ET timestamps", () => {
     const html = renderResults(result([item("request", "needs_action", { agreement: "requested" }), item("confirmed", "matches")]));
-    for (const label of ["Expected from SMS", "Actual · current records", "Requested · not confirmed", "Confirmed in SMS", "Inbound · customer", "Outbound · business", "Provider timestamp", "Nov 11, 2026, 12:00 PM EST", "Current state verified at", "does not establish when an action was completed", "Source SMS evidence", "Team A", "Team B", "$150.00", "Paid amount"]) expect(html).toContain(label);
+    for (const label of ["Expected from SMS", "Actual system evidence", "current records", "Requested · not confirmed", "Confirmed in SMS", "Inbound · customer", "Outbound · business", "Provider timestamp", "Nov 11, 2026, 12:00 PM EST", "Current records checked at", "does not establish when an action", "Cited SMS only", "Team A", "Team B", "$150.00", "Paid amount"]) expect(html).toContain(label);
     expect(html).toContain("Message evidence cutoff");
     expect(html).not.toContain("completed yesterday");
     expect(html).toContain("<details");
@@ -190,16 +196,16 @@ describe("Daily Action Audit actual read-only UI", () => {
     expect(html).toContain("Source SMS evidence is missing");
     expect(html).toContain("Timestamp unavailable");
     expect(html).toContain("Date not available");
-    expect(html).toContain("Undated queue");
+    expect(html).toContain("daa-person-summary");
   });
 
   it("filters tomorrow using Eastern Time at the fixed cutoff, not browser dates", () => {
-    const value = result([item("ET-tomorrow", "needs_action", { affectedDate: "2026-11-12" }), item("UTC-tomorrow", "conflict", { affectedDate: "2026-11-13" }), item("undated", "cannot_verify", { affectedDate: null })], { asOf: "2026-11-12T02:00:00Z" });
+    const value = result([item("ET-tomorrow", "needs_action", { customerName: "Synthetic ET-tomorrow", customerPhone: "+13015550124", affectedDate: "2026-11-12" }), item("UTC-tomorrow", "conflict", { customerName: "Synthetic UTC-tomorrow", customerPhone: "+13015550125", affectedDate: "2026-11-13" }), item("undated", "cannot_verify", { customerName: "Synthetic undated", customerPhone: "+13015550126", affectedDate: null })], { asOf: "2026-11-12T02:00:00Z" });
     const html = renderResults(value, "affectsTomorrow");
     expect(html).toContain("Synthetic ET-tomorrow");
     expect(html).not.toContain("Synthetic UTC-tomorrow");
     expect(html).not.toContain("Synthetic undated");
-    expect(html).toContain("1 of 3 items");
+    expect(html).toContain("1 of 3 actions");
     expect(html).toContain("Undated items are excluded");
     expect(renderResults({ ...value, asOf: "invalid" }, "affectsTomorrow")).toContain("snapshot timestamp is invalid");
   });

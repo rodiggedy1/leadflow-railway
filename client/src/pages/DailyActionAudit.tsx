@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, ClipboardCheck, Clock3, FileSearch, LockKeyhole, MessageSquareText, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, ChevronDown, ClipboardCheck, Clock3, FileSearch, LockKeyhole, MessageSquareText, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { safeAuditFailureMessage } from "@shared/dailyActionAudit";
 import type { AuditAgreement, AuditItem, AuditMessage, AuditRecord, AuditStatus, DailyActionAuditResult } from "@shared/dailyActionAudit";
@@ -11,7 +11,7 @@ export const AUDIT_TIME_ZONE = "America/New_York";
 const MIN_DATE = "1970-01-01";
 export type AuditFilter = "all" | "affectsTomorrow";
 const STATUS_LABELS: Record<AuditStatus, string> = {
-  needs_action: "Needs action", conflict: "Conflict", cannot_verify: "Cannot verify", matches: "Matches current state", superseded: "Superseded",
+  needs_action: "Needs action", conflict: "Conflict", cannot_verify: "Cannot verify", matches: "Matches now", superseded: "Superseded",
 };
 const STATUS_ORDER: AuditStatus[] = ["needs_action", "conflict", "cannot_verify", "matches", "superseded"];
 const AGREEMENT_LABELS: Record<AuditAgreement, string> = {
@@ -85,9 +85,119 @@ function extrasLabel(values: string[]): string {
   return values.map(value => BOOKING_WIDGET_PRICED_EXTRAS.find(extra => extra.id === value)?.label ?? value).join(", ");
 }
 
+function uniqueAuditItems(items: AuditItem[]): AuditItem[] {
+  // Match batch merge identity: the latest item with the same server ID wins.
+  return Array.from(new Map(items.map(item => [item.id, item])).values());
+}
+
+function isCanonicalAuditPhone(value: string): boolean {
+  // Validate the server's canonical US E.164 result only. Never normalize or repair it here.
+  return /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(value);
+}
+
+function compareAuditItems(a: AuditItem, b: AuditItem): number {
+  const severity = STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status);
+  if (severity) return severity;
+  const aDate = a.affectedDate && isValidAuditDate(a.affectedDate) ? a.affectedDate : "undated";
+  const bDate = b.affectedDate && isValidAuditDate(b.affectedDate) ? b.affectedDate : "undated";
+  return aDate.localeCompare(bDate) || a.id.localeCompare(b.id);
+}
+
+export function groupAuditPeople(items: AuditItem[]): { key: string; customerPhone: string; customerName: string | null; nameConflict: boolean; items: AuditItem[]; reviewCount: number; status: AuditStatus }[] {
+  const groups = new Map<string, AuditItem[]>();
+  for (const item of uniqueAuditItems(items)) {
+    const key = isCanonicalAuditPhone(item.customerPhone) ? `phone:${item.customerPhone}` : `item:${item.id}`;
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  return Array.from(groups, ([key, group]) => {
+    const sorted = [...group].sort(compareAuditItems);
+    const names = Array.from(new Set(sorted.map(item => item.customerName?.trim()).filter((name): name is string => Boolean(name))));
+    return {
+      key, customerPhone: sorted[0].customerPhone, customerName: names.length === 1 ? names[0] : null,
+      nameConflict: names.length > 1, items: sorted,
+      reviewCount: sorted.filter(item => item.status === "needs_action" || item.status === "conflict" || item.status === "cannot_verify").length,
+      status: sorted[0].status,
+    };
+  }).sort((a, b) => compareAuditItems(a.items[0], b.items[0]) || a.key.localeCompare(b.key));
+}
+
+export function summarizeAuditItems(items: AuditItem[]): { people: number; actions: number; needsReview: number; matches: number; superseded: number; totals: Record<AuditStatus, number> } {
+  const unique = uniqueAuditItems(items);
+  const totals: Record<AuditStatus, number> = { needs_action: 0, conflict: 0, cannot_verify: 0, matches: 0, superseded: 0 };
+  for (const item of unique) totals[item.status] += 1;
+  return {
+    people: groupAuditPeople(unique).length, actions: unique.length,
+    needsReview: totals.needs_action + totals.conflict + totals.cannot_verify,
+    matches: totals.matches, superseded: totals.superseded, totals,
+  };
+}
+
+function conciseValue(value: string): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  return text.length > 80 ? `${text.slice(0, 77)}…` : text;
+}
+
+export function actionSummary(item: AuditItem): string {
+  const expected = item.expected;
+  const date = expected.date && isValidAuditDate(expected.date) ? expected.date : item.affectedDate && isValidAuditDate(item.affectedDate) ? item.affectedDate : "date unresolved";
+  const arrival = item.action === "reschedule" || item.action === "book"
+    ? expected.time ? ` · ${conciseValue(expected.time)}${expected.windowEnd ? `–${conciseValue(expected.windowEnd)}` : ""}${expected.timeKind === "window" ? " arrival window" : expected.timeKind === "exact" ? " exact time" : " (time unspecified)"}` : " · time unspecified"
+    : "";
+  const scope = expected.scope === "subsequent" ? "subsequent visits" : expected.scope === "visit" ? "this visit" : "scope unspecified";
+  const affected = item.affectedDate && isValidAuditDate(item.affectedDate) && item.affectedDate !== date ? ` · affects ${item.affectedDate}` : "";
+  let action: string;
+  switch (item.action) {
+    case "reschedule": action = "Reschedule"; break;
+    case "cancel": action = "Cancellation"; break;
+    case "book": action = `New booking${expected.serviceName ? ` · ${conciseValue(expected.serviceName)}` : ""}`; break;
+    case "address": action = `Address change · ${expected.address ? conciseValue(expected.address) : "address unspecified"}`; break;
+    case "service": action = `Service change${expected.serviceName ? ` · ${conciseValue(expected.serviceName)}` : ""}${expected.extras !== null ? ` · ${expected.extrasMode ?? "unspecified"} extras: ${conciseValue(extrasLabel(expected.extras)) || "none specified"}` : ""}`; break;
+    case "assignment": action = `Team assignment · ${expected.teamName ? conciseValue(expected.teamName) : "team unspecified"}`; break;
+    case "payment": action = `Payment · ${expected.amountCents !== null ? money(expected.amountCents) : "amount unspecified"}`; break;
+  }
+  const original = item.action === "reschedule" && expected.originalDate && isValidAuditDate(expected.originalDate) ? `${expected.originalDate} → ` : "";
+  return `${action} · ${original}${date}${arrival} · ${scope}${affected}`;
+}
+
+function serviceContext(item: AuditItem): string {
+  const expected = item.expected;
+  const parts = [expected.date ? `Service date: ${dateLabel(expected.date)}` : `Service date: undated / unresolved${item.affectedDate ? ` · affects ${dateLabel(item.affectedDate)}` : ""}`];
+  if (expected.originalDate) parts.push(`Original date: ${dateLabel(expected.originalDate)}`);
+  if (item.affectedDate && expected.date && item.affectedDate !== expected.date) parts.push(`Affects: ${dateLabel(item.affectedDate)}`);
+  parts.push(expected.time ? `Arrival: ${expected.time}${expected.windowEnd ? ` – ${expected.windowEnd}` : ""} · ${expected.timeKind === "window" ? "arrival window" : expected.timeKind === "exact" ? "exact time" : "time unspecified"}` : `Arrival: time unspecified${expected.windowEnd ? ` · window end ${expected.windowEnd}` : ""}`);
+  parts.push(`Scope: ${expected.scope === "visit" ? "this visit" : expected.scope === "subsequent" ? "subsequent visits" : "not specified"}`);
+  return parts.join(" · ");
+}
+
+function recordReference(record: AuditRecord): string {
+  const references = [record.publicBookingNumber ? `#${record.publicBookingNumber}` : null, record.bookingId !== null ? `Booking ID ${record.bookingId}` : null, record.jobId !== null ? `Job ID ${record.jobId}` : null].filter(Boolean);
+  return `${record.source === "leadflow_jobs" ? "LeadFlow job (leadflow_jobs)" : "Booking (bookings)"} · ${references.join(" · ") || "record reference unavailable"}`;
+}
+
+function relevantRecordValue(item: AuditItem, record: AuditRecord): string | null {
+  switch (item.action) {
+    case "address": return `Actual address: ${record.address || "unavailable"}`;
+    case "service": return `Actual service: ${record.serviceName || "unavailable"} · Extras: ${record.extras === null ? "unavailable" : extrasLabel(record.extras) || "none"}`;
+    case "assignment": return `Actual team: ${record.teamName || "unavailable"}`;
+    case "payment": return `Actual payment status: ${record.paymentStatus || "unavailable"} · Paid amount: ${money(record.paidAmountCents)}`;
+    case "reschedule":
+    case "book": {
+      const fields: string[] = [];
+      if (item.expected.address !== null) fields.push(`Actual address: ${record.address || "unavailable"}`);
+      if (item.expected.serviceName !== null) fields.push(`Actual service: ${record.serviceName || "unavailable"}`);
+      if (item.expected.extras !== null) fields.push(`Actual extras: ${record.extras === null ? "unavailable" : extrasLabel(record.extras) || "none"}`);
+      if (item.expected.teamName !== null) fields.push(`Actual team: ${record.teamName || "unavailable"}`);
+      return fields.length ? fields.join(" · ") : null;
+    }
+    default: return null;
+  }
+}
+
 function ExpectedDetails({ item }: { item: AuditItem }) {
   const expected = item.expected;
-  return <section className="daa-comparison-panel daa-expected"><h4><MessageSquareText size={14} aria-hidden="true" /> Expected from SMS</h4><dl>
+  return <section className="daa-fields daa-expected"><h4><MessageSquareText size={14} aria-hidden="true" /> Expected from SMS · not system proof</h4><dl>
     <DetailRow label="Service date" value={expected.date ? dateLabel(expected.date) : null} />
     {expected.originalDate && <DetailRow label="Original date" value={dateLabel(expected.originalDate)} />}
     <DetailRow label="Arrival" value={expected.time ? `${expected.time}${expected.windowEnd ? ` – ${expected.windowEnd}` : ""} · ${expected.timeKind === "window" ? "arrival window" : expected.timeKind === "exact" ? "exact time" : "time unspecified"}` : null} />
@@ -102,7 +212,7 @@ function ExpectedDetails({ item }: { item: AuditItem }) {
 }
 
 function CurrentRecord({ record }: { record: AuditRecord }) {
-  return <div className="daa-record"><p className="daa-record-source">{record.source === "leadflow_jobs" ? "LeadFlow job" : "Booking"}{record.publicBookingNumber ? ` · #${record.publicBookingNumber}` : record.bookingId !== null ? ` · ID ${record.bookingId}` : record.jobId !== null ? ` · ID ${record.jobId}` : ""}</p><dl>
+  return <div className="daa-record"><p className="daa-record-source">{recordReference(record)}</p><dl>
     <DetailRow label="Service date" value={record.date ? dateLabel(record.date) : null} />
     <DetailRow label="Arrival" value={record.time ? `${record.time}${record.timeZone ? ` · ${record.timeZone}` : " · timezone unavailable"}` : null} />
     <DetailRow label="Status" value={record.status} />
@@ -127,26 +237,24 @@ function SmsEvidence({ message }: { message: AuditMessage }) {
   </li>;
 }
 
-function AuditCard({ item }: { item: AuditItem }) {
+function AuditAction({ item }: { item: AuditItem }) {
   const links = item.recordLinks.filter(link => isSafeAuditRecordLink(link.href));
-  return <article className={`daa-audit-card daa-status-${item.status}`} data-audit-status={item.status}>
-    <header className="daa-item-header"><div className="daa-item-identity"><span className="daa-customer-icon" aria-hidden="true"><MessageSquareText size={17} /></span><div><h3>{item.customerName || "Customer name unavailable"}</h3><p>{item.customerPhone || "Phone unavailable"} <span>· {ACTION_LABELS[item.action]}</span></p></div></div><span className={`daa-status-pill daa-pill-${item.status}`}>{STATUS_LABELS[item.status]}</span></header>
-    <div className="daa-item-context"><span className={`daa-agreement daa-agreement-${item.agreement}`}>{AGREEMENT_LABELS[item.agreement]}</span><p>{item.explanation || "No explanation supplied."}</p></div>
-    <div className="daa-comparison"><ExpectedDetails item={item} /><section className="daa-comparison-panel daa-actual"><h4><ClipboardCheck size={14} aria-hidden="true" /> Actual · current records</h4>{item.records.length ? item.records.map(record => <CurrentRecord key={record.key} record={record} />) : <p className="daa-missing">No matching current record was available. This is not proof that the action was missed.</p>}</section></div>
-    <div className="daa-verification"><FileSearch size={15} aria-hidden="true" /><p>{item.verification || "Verification detail unavailable."}<small>Current state verified at {timestampLabel(item.verifiedAt)}. This does not establish when an action was completed.</small></p></div>
-    <details className="daa-evidence"><summary><MessageSquareText size={15} aria-hidden="true" /><span>Source SMS evidence <small>({item.evidence.length})</small></span><span className="daa-evidence-hint">View messages</span></summary>{item.evidence.length ? <ol className="daa-message-list">{item.evidence.map(message => <SmsEvidence key={message.key} message={message} />)}</ol> : <p className="daa-missing">Source SMS evidence is missing. Do not treat this item as a verified agreement.</p>}</details>
+  return <article className={`daa-action daa-status-${item.status}`} data-audit-status={item.status}>
+    <header className="daa-action-header"><h3>{actionSummary(item)}</h3><span className={`daa-status-pill daa-pill-${item.status}`}>{STATUS_LABELS[item.status]}</span></header>
+    <p className={`daa-agreement daa-agreement-${item.agreement}`}>{AGREEMENT_LABELS[item.agreement]} · SMS agreement, not system proof</p>
+    <p className="daa-service-context">{serviceContext(item)}</p>
+    <section className="daa-system-evidence" aria-label="Actual system evidence"><h4><ClipboardCheck size={14} aria-hidden="true" /> System record evidence · current records</h4>{item.records.length ? <ul className="daa-system-records">{item.records.map(record => <li key={record.key}><strong>{recordReference(record)}</strong><p>Actual service date: {record.date ? dateLabel(record.date) : "unavailable"} · Arrival: {record.time ? `${record.time}${record.timeZone ? ` · ${record.timeZone}` : " · timezone unavailable"}` : "unavailable"} · Status: {record.status || "unavailable"}</p>{relevantRecordValue(item, record) && <p>{relevantRecordValue(item, record)}</p>}</li>)}</ul> : <p className="daa-missing">No matching current record was available. This is not proof that the action was missed.</p>}<p className="daa-verification">{item.verification || "Verification detail unavailable."}</p><p className="daa-snapshot-note">Current records checked at {timestampLabel(item.verifiedAt)}. A match now does not establish when an action happened.</p></section>
+    <details className="daa-record-details"><summary><FileSearch size={14} aria-hidden="true" /><span>Full action &amp; record fields</span><ChevronDown size={14} className="daa-detail-chevron" aria-hidden="true" /></summary><div className="daa-expanded-fields"><dl><DetailRow label="Supplied name" value={item.customerName} /><DetailRow label="Customer phone" value={item.customerPhone} /></dl><p className="daa-explanation"><strong>{ACTION_LABELS[item.action]} assessment:</strong> {item.explanation || "No explanation supplied."}</p><p className="daa-verification"><strong>Current-state comparison:</strong> {item.verification || "Verification detail unavailable."}</p><ExpectedDetails item={item} /><section className="daa-fields daa-actual"><h4>Actual system record fields</h4>{item.records.map(record => <CurrentRecord key={record.key} record={record} />)}{!item.records.length && <p className="daa-missing">No current record fields available.</p>}</section></div></details>
+    <details className="daa-evidence"><summary><MessageSquareText size={14} aria-hidden="true" /><span>Cited SMS only <small>({item.evidence.length})</small></span><ChevronDown size={14} className="daa-detail-chevron" aria-hidden="true" /></summary>{item.evidence.length ? <ol className="daa-message-list">{item.evidence.map(message => <SmsEvidence key={message.key} message={message} />)}</ol> : <p className="daa-missing">Source SMS evidence is missing. Do not treat this item as a verified agreement.</p>}</details>
     {links.length > 0 && <nav className="daa-record-links" aria-label="Current record links">{links.map((link, index) => <a key={`${link.href}-${index}`} href={link.href}>{link.label || "Open current record"}<ArrowRight size={13} aria-hidden="true" /></a>)}</nav>}
   </article>;
 }
 
-function DateGroups({ items, auditDate }: { items: AuditItem[]; auditDate: string }) {
-  const groups = new Map<string, AuditItem[]>();
-  for (const item of items) {
-    const key = item.affectedDate && isValidAuditDate(item.affectedDate) ? item.affectedDate : "undated";
-    groups.set(key, [...(groups.get(key) ?? []), item]);
-  }
-  const dates = Array.from(groups.keys()).sort((a, b) => a === "undated" ? 1 : b === "undated" ? -1 : a.localeCompare(b));
-  return <>{dates.map(date => <section className="daa-date-group" key={date}><header className="daa-group-header"><CalendarDays size={15} aria-hidden="true" /><h3>{date === "undated" ? "Undated queue · service date unresolved" : dateLabel(date)}</h3><span>{date === "undated" ? "Date needs review" : date > auditDate ? "Future service date from message day" : "Service date"} · {groups.get(date)!.length} items</span></header><div className="daa-cards">{groups.get(date)!.map(item => <AuditCard item={item} key={item.id} />)}</div></section>)}</>;
+function AuditPerson({ person }: { person: ReturnType<typeof groupAuditPeople>[number] }) {
+  return <details className={`daa-person daa-status-${person.status}`} data-person-key={person.key}>
+    <summary className="daa-person-summary"><span className="daa-person-identity"><strong>{person.nameConflict ? "Name needs review" : person.customerName || "Customer name unavailable"}</strong><span>{isCanonicalAuditPhone(person.customerPhone) ? person.customerPhone : person.customerPhone ? `Phone needs review · ${person.customerPhone}` : "Phone unavailable · separate item"}</span></span><span className="daa-person-work"><span className="daa-person-counts"><strong>{person.items.length} {person.items.length === 1 ? "action" : "actions"}</strong><span>{person.reviewCount} need review</span></span><span className="daa-action-preview">{actionSummary(person.items[0])}{person.items.length > 1 ? ` · +${person.items.length - 1} more` : ""}</span></span><span className={`daa-status-pill daa-pill-${person.status}`}>{STATUS_LABELS[person.status]}</span><ChevronDown size={17} className="daa-person-chevron" aria-hidden="true" /></summary>
+    <div className="daa-person-body"><h3 className="daa-section-label">Action items</h3>{person.nameConflict && <p className="daa-name-warning"><AlertCircle size={14} aria-hidden="true" /> Different names appear for this phone. Name needs review; no name was chosen as the identity.</p>}{!isCanonicalAuditPhone(person.customerPhone) && <p className="daa-name-warning">Phone is missing or not a trusted canonical result. This action has not been merged with another person.</p>}{person.items.map(item => <AuditAction item={item} key={item.id} />)}</div>
+  </details>;
 }
 
 export function mergeAuditBatches(previous: DailyActionAuditResult | null, next: DailyActionAuditResult): DailyActionAuditResult {
@@ -174,19 +282,27 @@ export function mergeAuditBatches(previous: DailyActionAuditResult | null, next:
 
 export function AuditResults({ result, filter = "all" }: { result: DailyActionAuditResult; filter?: AuditFilter }) {
   const tomorrow = shiftDay(easternDay(new Date(result.asOf)), 1);
-  const filtered = result.items.filter(item => filter === "all" || Boolean(tomorrow && item.affectedDate === tomorrow));
-  const sorted = [...filtered].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status));
-  const unresolved = sorted.filter(item => ["needs_action", "conflict", "cannot_verify"].includes(item.status));
-  const reviewed = sorted.filter(item => item.status === "matches" || item.status === "superseded");
+  const items = uniqueAuditItems(result.items);
+  const filtered = items.filter(item => filter === "all" || Boolean(tomorrow && item.affectedDate === tomorrow));
+  const summary = summarizeAuditItems(items);
+  const visibleIds = new Set(filtered.map(item => item.id));
+  // Date filters narrow actions, not the identity/conflicts established by the full scan.
+  const people = groupAuditPeople(items).flatMap(person => {
+    const visible = person.items.filter(item => visibleIds.has(item.id));
+    if (!visible.length) return [];
+    return [{ ...person, items: visible,
+      reviewCount: visible.filter(item => item.status === "needs_action" || item.status === "conflict" || item.status === "cannot_verify").length,
+      status: visible[0].status,
+    }];
+  }).sort((a, b) => compareAuditItems(a.items[0], b.items[0]) || a.key.localeCompare(b.key));
   return <section className="daa-results" aria-label="Audit results">
-    <section className="daa-coverage" aria-label="Partial coverage warnings"><AlertCircle size={19} aria-hidden="true" /><div><h2>Partial coverage · not a complete reconciliation</h2><p>Only the available SMS evidence and current LeadFlow records were checked. Missing messages or records may leave actions unverified.</p><p className="daa-coverage-counts">{result.coverage.messagesRead} messages read · {result.coverage.threadsRead} threads read · {result.coverage.threadsAnalyzed} threads analyzed</p>{result.coverage.truncated && <p className="daa-warning"><strong>Scan truncated.</strong> Some source evidence was not included.</p>}{result.coverage.warnings.length > 0 && <ul>{result.coverage.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div></section>
+    <section className="daa-overview" aria-label="Action summary"><div className="daa-overview-heading"><h2>Overall summary</h2><span>Returned actions · all dates</span></div><div className="daa-overview-counts"><div><strong>{summary.people}</strong><span>People with actions</span></div><div><strong>{summary.actions}</strong><span>Actions</span></div><div className="daa-overview-review"><strong>{summary.needsReview}</strong><span>Needs review</span></div><div className="daa-overview-matches"><strong>{summary.matches}</strong><span>Matches now</span></div></div><div className="daa-status-counts" aria-label="All audit status counts">{STATUS_ORDER.map(status => <span key={status} className={`daa-count daa-count-${status}`} data-status-count={status}><strong>{summary.totals[status]}</strong> {STATUS_LABELS[status]}</span>)}</div></section>
+    <details className="daa-coverage-details" aria-label="Partial coverage warnings"><summary><AlertCircle size={16} aria-hidden="true" /><strong>Partial coverage · not a complete reconciliation</strong><span className="daa-coverage-flags">{result.coverage.truncated && <span>Scan truncated</span>}{result.coverage.warnings.length > 0 && <span>{result.coverage.warnings.length} analysis {result.coverage.warnings.length === 1 ? "warning" : "warnings"}</span>}</span><ChevronDown size={15} className="daa-detail-chevron" aria-hidden="true" /></summary><div className="daa-coverage-body"><p>Only the available SMS evidence and current LeadFlow records were checked. Missing messages or records may leave actions unverified. People and action counts come from unique returned action items, not conversation totals.</p><p className="daa-coverage-counts">Source counters may overlap across batches: {result.coverage.messagesRead} messages read · {result.coverage.threadsRead} threads read · {result.coverage.threadsAnalyzed} threads analyzed. These counters do not establish complete interaction coverage.</p>{result.coverage.truncated && <p className="daa-warning"><strong>Scan truncated.</strong> Some source evidence was not included.</p>}{result.coverage.warnings.length > 0 && <ul>{result.coverage.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div></details>
     <div className="daa-result-meta"><p>Message day <strong>{dateLabel(result.auditDate)}</strong> · Eastern Time</p><p><Clock3 size={13} aria-hidden="true" /> Message evidence cutoff {timestampLabel(result.asOf)}</p></div>
-    <div className="daa-status-counts" aria-label="All audit status counts">{STATUS_ORDER.map(status => <div key={status} className={`daa-count daa-count-${status}`} data-status-count={status}><strong>{result.totals[status]}</strong><span>{STATUS_LABELS[status]}</span></div>)}</div>
-    <div className="daa-results-heading"><div><h2>{filter === "affectsTomorrow" ? "Actions affecting tomorrow" : "Actions by service date"}</h2><p>Unresolved items first. Requests and SMS confirmations are shown separately from current records.</p></div><span>{filtered.length} of {result.items.length} items</span></div>
+    <div className="daa-results-heading"><div><h2>{filter === "affectsTomorrow" ? "People with actions affecting tomorrow" : "Actions by person"}</h2><p>Needs review first. Expand a person for concise actions and actual system evidence.</p></div><span>{people.length} {people.length === 1 ? "person" : "people"} · {filtered.length} of {summary.actions} actions</span></div>
     {filter === "affectsTomorrow" && <p className="daa-filter-note">Tomorrow is {tomorrow ? dateLabel(tomorrow) : "unavailable because the snapshot timestamp is invalid"}, calculated in Eastern Time at this scan. Undated items are excluded; switch to all actions to review them. Counts above cover the full scan.</p>}
-    {!filtered.length && <div className="daa-empty"><FileSearch size={28} aria-hidden="true" /><h3>{result.items.length ? "No dated actions affect tomorrow in this scan" : "No actionable items found in the available evidence"}</h3><p>{result.items.length ? "Other service dates and the undated queue remain in all actions." : "Partial coverage still applies. An empty scan does not confirm that every customer agreement was fulfilled."}</p></div>}
-    {unresolved.length > 0 && <section className="daa-priority-section" aria-label="Unresolved actions"><h2 className="daa-section-label"><AlertCircle size={15} aria-hidden="true" /> Needs review <span>{unresolved.length}</span></h2><DateGroups items={unresolved} auditDate={result.auditDate} /></section>}
-    {reviewed.length > 0 && <section className="daa-priority-section" aria-label="Matching and superseded actions"><h2 className="daa-section-label"><CheckCircle2 size={15} aria-hidden="true" /> Matching / superseded <span>{reviewed.length}</span></h2><DateGroups items={reviewed} auditDate={result.auditDate} /></section>}
+    {!filtered.length && <div className="daa-empty"><FileSearch size={28} aria-hidden="true" /><h3>{items.length ? "No dated actions affect tomorrow in this scan" : "No actionable items found in the available evidence"}</h3><p>{items.length ? "Other service dates and undated actions remain in all actions." : "Partial coverage still applies. An empty scan does not confirm that every customer agreement was fulfilled."}</p></div>}
+    <div className="daa-people">{people.map(person => <AuditPerson person={person} key={person.key} />)}</div>
     <p className="daa-batch-note">{result.nextCursor ? "More evidence batches are available. Review the next batch manually to extend this scan." : "No further batch is available for this scan. Coverage remains partial; this does not establish complete provider-message coverage."}</p>
   </section>;
 }
