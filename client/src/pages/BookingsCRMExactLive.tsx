@@ -5,6 +5,7 @@ import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { trpc } from "@/lib/trpc";
 import { PUBLIC_BOOKING_PRICED_EXTRAS } from "@shared/publicBookingPricing";
+import { getBookingArrivalWindowLabel } from "@/lib/bookingArrivalDisplay";
 import { useEffect, useState } from "react";
 import {
   CalendarDays,
@@ -196,7 +197,7 @@ function BookingListRow({
           {row.status === "lead"
             ? "Lead"
             : row.requestedLocalTime
-              ? displayRequestedTime(row.requestedLocalTime)
+              ? getBookingArrivalWindowLabel(row.requestedLocalTime, row.arrivalPreference) ?? displayRequestedTime(row.requestedLocalTime)
               : "—"}
         </b>
         <i
@@ -824,7 +825,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
                 <small>REQUESTED TIME</small>
                 <strong>
                   {active.requestedLocalTime && active.requestedLocalDate
-                    ? `${displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}`
+                    ? `${getBookingArrivalWindowLabel(active.requestedLocalTime, active.arrivalPreference) ?? displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}`
                     : "Not selected yet"}
                 </strong>
               </span>

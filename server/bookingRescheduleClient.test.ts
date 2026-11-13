@@ -9,6 +9,8 @@ import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import * as reschedule from "../shared/bookingReschedule";
 import * as dialog from "../client/src/components/ui/dialog";
+import { getPublicBookingArrivalPreference } from "../shared/publicBookingPricing";
+import { getBookingArrivalWindowLabel } from "../client/src/lib/bookingArrivalDisplay";
 
 /**
  * OFFLINE ONLY. Execute current TSX with an explicit import allowlist. All query
@@ -145,6 +147,8 @@ function workspace(source: Source = "booking", recurrence: string | null = "one-
     "@/lib/trpc": { trpc }, "@/hooks/useOpsStream": { useOpsStream: stub },
     "@/components/BookingRescheduleChoice": { BookingRescheduleChoice },
     "@shared/bookingReschedule": reschedule,
+    "@shared/publicBookingPricing": { getPublicBookingArrivalPreference },
+    "@/lib/bookingArrivalDisplay": { getBookingArrivalWindowLabel },
     "@shared/bookingWidgetConfig": { BOOKING_WIDGET_PRICED_EXTRAS: [] },
     "@/components/BookingPaymentActions": { BookingPaymentActions: stub },
     "@/components/PortalRequestPaymentActions": { PortalRequestPaymentActions: stub },
@@ -162,6 +166,7 @@ function workspace(source: Source = "booking", recurrence: string | null = "one-
   const result = {
     get model() { return model; }, render, mutations, queries, refetch,
     get choice() { return elements(tree).find(node => node.type === BookingRescheduleChoice)?.props; },
+    renderNative() { return runtime.render(() => Component({ realtimeEnabled: false })); },
     draft(date = NEW_DATE, time = NEW_TIME) { model.setRescheduleDate(date); model.setRescheduleTime(time); render(); },
     savedRow(field: "requestedLocalDate" | "requestedLocalTime", value: string) {
       if (source === "booking") queries["bookings.get"] = { ...queries["bookings.get"], [field]: value };
@@ -190,7 +195,7 @@ function drawer(model: any, commercialDraft: any = null) {
   const stub = () => null;
   const scope = Object.fromEntries([...icons, "NativeBookingCommercialEditor", "BookingPayrollPanel", "BookingPaymentActions", "PortalRequestPaymentActions"].map(name => [name, stub]));
   const { BookingDetailDrawer } = execute(`${helpers.map(node => printer.printNode(ts.EmitHint.Unspecified, node, file)).join("\n")}\n${named("BookingDetailDrawer")}\nmodule.exports = { BookingDetailDrawer };`, {}, {
-    ...scope, useState: () => [commercialDraft, vi.fn()],
+    ...scope, getBookingArrivalWindowLabel, useState: () => [commercialDraft, vi.fn()],
   });
   return BookingDetailDrawer({ model });
 }

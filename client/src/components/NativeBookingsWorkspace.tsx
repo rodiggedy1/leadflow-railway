@@ -6,6 +6,9 @@ import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { InternalBooking } from "@/pages/InternalBooking";
 import { BOOKING_WIDGET_PRICED_EXTRAS } from "@shared/bookingWidgetConfig";
+import type { BookingArrivalPreference } from "@shared/bookingArrival";
+import { getPublicBookingArrivalPreference } from "@shared/publicBookingPricing";
+import { getBookingArrivalWindowLabel } from "@/lib/bookingArrivalDisplay";
 import {
   CalendarDays,
   ChevronLeft,
@@ -65,6 +68,7 @@ type WorkspaceRow = {
   status: string;
   requestedLocalDate: string | null;
   requestedLocalTime: string | null;
+  arrivalPreference?: BookingArrivalPreference | null;
   address: string | null;
   serviceName: string | null;
   homeType?: "House" | "Apartment" | "Townhome" | "Condo" | null;
@@ -144,6 +148,14 @@ const displayTime = (value: string) => {
 };
 const displayRequestedTime = (value: string) =>
   /^\d{2}:\d{2}$/.test(value) ? displayTime(value) : value;
+const funnelArrivalPreference = (
+  lead: { bookingId: number | null; requestedLocalTime: string | null; priceSnapshot: unknown },
+  bookings: readonly { id: number; requestedLocalTime: string; arrivalPreference?: BookingArrivalPreference | null }[],
+) => {
+  if (!lead.bookingId) return getPublicBookingArrivalPreference(lead.priceSnapshot);
+  const booking = bookings.find(value => value.id === lead.bookingId);
+  return booking?.requestedLocalTime === lead.requestedLocalTime ? booking.arrivalPreference : undefined;
+};
 const labelStatus = (value: string | null | undefined) => {
   const normalized = typeof value === "string" && value.trim() ? value : "unknown";
   return normalized === "lead"
@@ -466,7 +478,7 @@ function BookingListRow({
       <span className="bookings-customer-cell">
         <b>
           {row.requestedLocalTime
-            ? displayRequestedTime(row.requestedLocalTime)
+            ? getBookingArrivalWindowLabel(row.requestedLocalTime, row.arrivalPreference) ?? displayRequestedTime(row.requestedLocalTime)
             : "Lead"}
         </b>
         <i
@@ -713,6 +725,7 @@ export default function NativeBookingsWorkspace({
         status: booking.status,
         requestedLocalDate: booking.requestedLocalDate,
         requestedLocalTime: booking.requestedLocalTime,
+        arrivalPreference: booking.arrivalPreference,
         address: booking.address,
         serviceName: booking.serviceName,
         homeType: booking.homeType,
@@ -751,6 +764,7 @@ export default function NativeBookingsWorkspace({
         status: lead.stage,
         requestedLocalDate: lead.requestedLocalDate,
         requestedLocalTime: lead.requestedLocalTime,
+        arrivalPreference: funnelArrivalPreference(lead, bookings),
         address: lead.address,
         serviceName: lead.serviceName,
         bedrooms: lead.bedrooms,
@@ -782,6 +796,7 @@ export default function NativeBookingsWorkspace({
         status: lead.stage,
         requestedLocalDate: lead.requestedLocalDate,
         requestedLocalTime: lead.requestedLocalTime,
+        arrivalPreference: funnelArrivalPreference(lead, bookings),
         address: lead.address,
         serviceName: lead.serviceName,
         bedrooms: lead.bedrooms,
@@ -931,6 +946,7 @@ export default function NativeBookingsWorkspace({
         status: booking.status,
         requestedLocalDate: booking.requestedLocalDate,
         requestedLocalTime: booking.requestedLocalTime,
+        arrivalPreference: booking.arrivalPreference,
         address: booking.address,
         serviceName: booking.serviceName,
         homeType: booking.homeType,
@@ -966,6 +982,7 @@ export default function NativeBookingsWorkspace({
         status: lead.stage,
         requestedLocalDate: lead.requestedLocalDate,
         requestedLocalTime: lead.requestedLocalTime,
+        arrivalPreference: funnelArrivalPreference(lead, bookings),
         address: lead.address,
         serviceName: lead.serviceName,
         bedrooms: lead.bedrooms,
@@ -992,6 +1009,7 @@ export default function NativeBookingsWorkspace({
     return rows.find(row => row.key === activeKey) ?? null;
   }, [
     activeKey,
+    bookings,
     detailQuery.data,
     funnelDetailQuery.data,
     rows,
@@ -1706,7 +1724,7 @@ export default function NativeBookingsWorkspace({
                   <small>REQUESTED TIME</small>
                   <strong>
                     {active.requestedLocalTime && active.requestedLocalDate
-                      ? `${displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}`
+                      ? `${getBookingArrivalWindowLabel(active.requestedLocalTime, active.arrivalPreference) ?? displayTime(active.requestedLocalTime)} · ${displayDate(active.requestedLocalDate)}`
                       : "Not selected yet"}
                   </strong>
                 </span>

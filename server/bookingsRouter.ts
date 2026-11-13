@@ -51,6 +51,7 @@ import { ENV } from "./_core/env";
 import { getOrCreateCustomerPortalMagicLink } from "./customerPortalService";
 import {
   calculatePublicBookingPrice,
+  getPublicBookingArrivalPreference,
   isPublicBookingPriceSnapshot,
   PUBLIC_BOOKING_PRICED_EXTRAS,
   PUBLIC_BOOKING_POST_BOOKING_UPSELLS,
@@ -349,6 +350,7 @@ function mapAdminBooking(
     address: row.address,
     requestedLocalDate: row.requestedLocalDate,
     requestedLocalTime: row.requestedLocalTime,
+    arrivalPreference: getPublicBookingArrivalPreference(row.priceSnapshot) ?? null,
     requestedTimeZone: row.requestedTimeZone,
     requestedStartAt: row.requestedStartAt,
     recurrence: row.recurrence,
