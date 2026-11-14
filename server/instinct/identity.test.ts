@@ -18,8 +18,8 @@ describe("source-authorized exact identity", () => {
   it("discovers only source endpoints then corroborates native and actual session", async () => { const candidate = await resolveSourceIdentity(scope, ctx(), options); expect(candidate.decision).toBe("unavailable"); expect(candidate.phone).toBe(phone); expect(candidate.reasons).toEqual(["NATIVE_CONTACT_CORROBORATION_REQUIRED"]); const result = await resolve.resolve(scope, ctx(), snap()); expect(result.decision).toBe("verified"); expect(result.customerPortalAccountId).toBeNull(); expect(result.email).toBe(email); });
   it("normalizes email without changing tags/dots", () => { expect(normalizeIdentityEmail(" A.B+Tag@example.test ")).toBe("a.b+tag@example.test"); expect(normalizeIdentityEmail("Alice <a@example.test>")).toBeNull(); });
   it("fails foreign account without returning foreign refs", async () => { const e = item(); e.ref = { ...e.ref, sourceAccountKey: "other" }; const result = await resolve.resolve(scope, ctx([e]), snap()); expect(result.decision).toBe("unavailable"); expect(result.evidenceRefs).toEqual([]); });
-  it("requires trusted business line and never latest-line/name/text inference", async () => { const e = item({ participants: { ...item().participants, businessLine: null }, originalText: "I am Alice +13015550123" }); expect((await resolve.resolve(scope, ctx([e]), snap())).reasons).toContain("BUSINESS_LINE_UNVERIFIED"); });
-  it("rejects multiple business lines in one context", async () => { const e = item({ ref: { ...item().ref, sourceId: "session:7:1" }, participants: { ...item().participants, businessLine: "+13015550789", to: ["+13015550789"] } }); expect((await resolve.resolve(scope, ctx([item(), e]), snap())).decision).toBe("ambiguous"); });
+  it("uses the saved session contact with an unknown line and never infers identity from body names/numbers", async () => { const e = item({ participants: { ...item().participants, businessLine: null }, originalText: "I am Alice +13015550999" }); const result = await resolve.resolve(scope, ctx([e]), snap()); expect(result.decision).toBe("verified"); expect(result.phone).toBe(phone); expect(e.participants.businessLine).toBeNull(); });
+  it("retains the same saved sender across different historical business lines without choosing a routing line", async () => { const e = item({ ref: { ...item().ref, sourceId: "session:7:1" }, participants: { ...item().participants, businessLine: "+13015550789", to: ["+13015550789"] } }); const result = await resolve.resolve(scope, ctx([item(), e]), snap()); expect(result.decision).toBe("verified"); expect(result.phone).toBe(phone); expect(e.participants.businessLine).toBe("+13015550789"); });
   it("does not select a customer from names or malformed phone", async () => { const e = item({ participants: { ...item().participants, from: "+442079460000" } }); expect((await resolve.resolve(scope, ctx([e]), snap())).decision).not.toBe("verified"); });
   it("fails session contact conflicts and missing binding", async () => { const wrong = createIdentityResolver({ ...options, readSessionContacts: async () => [{ sessionId: "7", phone: "+13015550888" }] }); expect((await wrong.resolve(scope, ctx(), snap())).reasons).toContain("SESSION_CONTACT_CONFLICT"); expect((await createIdentityResolver({ getAccountBindings: options.getAccountBindings }).resolve(scope, ctx(), snap())).reasons).toContain("SESSION_CONTACT_BINDING_UNAVAILABLE"); });
   it("allows exact outbound endpoint but not reversed direction", async () => { const e = item({ direction: "outbound", participants: { ...item().participants, from: line, to: [phone] } }); expect((await resolve.resolve(scope, ctx([e]), snap())).decision).toBe("verified"); expect((await resolve.resolve(scope, ctx([item({ direction: "outbound" })]), snap())).decision).toBe("ambiguous"); });
@@ -28,6 +28,47 @@ describe("source-authorized exact identity", () => {
   it.each(["forward", "cc", "group", "mailbox"])("fails closed on email %s", async kind => { const e = emailItem(); if (kind === "forward") e.originalText = "Forwarded message\nMove it"; if (kind === "cc") e.participants.cc = ["other@example.test"]; if (kind === "group") e.participants.to.push("other@example.test"); if (kind === "mailbox") e.participants.mailbox = "foreign@example.test"; expect((await resolve.resolve(scope, ctx([e]), snap())).decision).not.toBe("verified"); });
   it("unknown call speaker and unverified handling never establish customer", async () => { const e = item({ ref: { ...item().ref, store: "voice_calls", sourceKind: "ai_call", sourceId: "voice:1" } }); expect((await resolve.resolve(scope, ctx([e]), snap())).reasons).toContain("CUSTOMER_SPEAKER_UNVERIFIED"); });
   it("incomplete snapshots cannot verify identity", async () => { expect((await resolve.resolve(scope, ctx(), snap([], { availability: "partial", limitations: ["DB_SCHEMA"] }))).decision).toBe("unavailable"); });
+});
+
+describe("saved conversation SMS sender attribution", () => {
+  const saved = { getAccountBindings: () => ({ sourceAccountKey: "account", businessLines: [] as string[], mailboxes: [] as string[] }), readSessionContacts: async () => [{ sessionId: "7", phone, displayName: "Saved SMS contact" }] };
+  const ordinary = () => item({ participants: { ...item().participants, from: phone, to: [], businessLine: null } });
+  it("uses the exact saved conversation phone/name without inventing a receiving line", async () => {
+    const context = ctx([ordinary()]); const discovery = await resolveSourceIdentity(scope, context, saved);
+    expect(discovery).toMatchObject({ phone, displayName: "Saved SMS contact", decision: "unavailable", reasons: ["NATIVE_CONTACT_CORROBORATION_REQUIRED"] });
+    const result = await createIdentityResolver(saved).resolve(scope, context, snap());
+    expect(result).toMatchObject({ phone, displayName: "Saved SMS contact", decision: "verified" });
+    expect(context.evidence[0].participants.businessLine).toBeNull();
+  });
+  it("preserves the known sender while a missing native record remains unavailable", async () => {
+    const result = await createIdentityResolver(saved).resolve(scope, ctx([ordinary()]), snap([]));
+    expect(result).toMatchObject({ phone, displayName: "Saved SMS contact", decision: "unavailable", reasons: ["NATIVE_CONTACT_NOT_FOUND"] });
+  });
+  it("normalizes a stored session phone and returns phone-only when no saved name exists", async () => {
+    const result = await resolveSourceIdentity(scope, ctx([ordinary()]), { ...saved, readSessionContacts: async () => [{ sessionId: "7", phone: "301-555-0123" }] });
+    expect(result.phone).toBe(phone); expect(result.displayName).toBeNull();
+  });
+  it.each([{ contacts: [] }, { contacts: [{ sessionId: "7", phone: null }] }, { contacts: [{ sessionId: "7", phone }, { sessionId: "7", phone }] }])("cannot borrow an absent, malformed or duplicate session contact", async ({ contacts }) => {
+    const result = await resolveSourceIdentity(scope, ctx([ordinary()]), { ...saved, readSessionContacts: async () => contacts });
+    expect(result.decision).not.toBe("verified"); expect(result.phone).toBeNull();
+    expect(result.reasons).toContain("SESSION_CONTACT_BINDING_UNAVAILABLE");
+  });
+  it("rejects reversed endpoints, multiparty recipients and customer/session phone conflicts", async () => {
+    const variants = [item({ direction: "outbound" }), ordinary(), ordinary()];
+    variants[1].participants.to = [line, "+13015550789"];
+    variants[2].participants.from = "+13015550999";
+    for (const value of variants) expect((await createIdentityResolver(saved).resolve(scope, ctx([value]), snap())).decision).not.toBe("verified");
+  });
+  it("keeps native shared-contact protection and never selects a booking by display name", async () => {
+    const result = await createIdentityResolver(saved).resolve(scope, ctx([ordinary()]), snap([rec(), rec({ key: "booking:2", bookingId: "2", customerEmail: "other@example.test" })]));
+    expect(result.decision).toBe("ambiguous"); expect(result.reasons).toContain("SHARED_PHONE");
+    expect(result.phone).toBe(phone); expect(result.displayName).toBe("Saved SMS contact");
+  });
+  it("still requires verified provider-line provenance for an unlinked inbound SMS record", async () => {
+    const e = ordinary(); e.ref = { ...e.ref, store: "inbound_sms", sourceId: "sms:1", sessionId: null };
+    const result = await resolveSourceIdentity(scope, ctx([e]), saved);
+    expect(result.phone).toBeNull(); expect(result.reasons).toContain("BUSINESS_LINE_UNVERIFIED");
+  });
 });
 
 describe("exact native occurrence", () => {

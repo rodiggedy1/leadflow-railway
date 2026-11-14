@@ -80,6 +80,63 @@ describe("read-only actual dependency orchestration", () => {
     const evidence = await h.service.evidence(fixtureScope, selected(result.issues[0])); expect(evidence.citations[0].exactQuote).toBe(inventory.items[0].originalText); expect(evidence.snapshot?.records).toHaveLength(2);
     expect(h.db.calls.every(call => call.sql.startsWith("SELECT "))).toBe(true); expect(h.model).toHaveBeenCalledTimes(1);
   });
+  it("identifies the saved SMS sender without receiving-line metadata or configured business lines", async () => {
+    const h = serviceHarness({ businessLines: [] });
+    h.db.tables.conversation_sessions = [fixtureSession("7", "", { leadName: "Saved Command Chat name", messageHistory: JSON.stringify([
+      { role: "user", content: "Move my appointment LF-1 to 2026-11-16 at 9 AM", ts: fixtureAt },
+      { role: "assistant", content: "I will check that appointment.", ts: fixtureAt },
+    ]) })];
+    const { result } = await firstCheck(h);
+    expect(result.issues[0].identity).toMatchObject({ phone: fixturePhone, displayName: "Saved Command Chat name", decision: "verified" });
+    expect(result.issues[0].identity.reasons).not.toContain("BUSINESS_LINE_UNVERIFIED");
+    expect(result.issues[0].outcome).toBe("review"); // Partial stored capture is not fabricated complete proof.
+    expect(result.issues[0].identity.evidenceRefs.map(ref => ref.sessionId)).toEqual(["7", "7"]);
+    expect(h.db.calls.every(call => call.sql.startsWith("SELECT "))).toBe(true);
+  });
+  it("keeps a known sender without a native booking, without claiming booking fulfillment", async () => {
+    const h = serviceHarness({ businessLines: [] });
+    h.db.tables.conversation_sessions = [fixtureSession("7", "", { leadName: "Known prospective customer", messageHistory: JSON.stringify([{ role: "user", content: "Move my appointment LF-1 to 2026-11-16 at 9 AM", ts: fixtureAt }]) })];
+    h.db.tables.bookings = []; h.db.tables.leadflow_jobs = [];
+    const { result } = await firstCheck(h);
+    expect(result.issues[0].identity).toMatchObject({ phone: fixturePhone, displayName: "Known prospective customer", decision: "unavailable" });
+    expect(result.issues[0].identity.reasons).toContain("NATIVE_CONTACT_NOT_FOUND");
+    expect(result.issues[0].outcome).not.toBe("matches_current");
+    expect(result.issues[0].fulfillment).not.toBe("verified_current");
+  });
+  it("recognizes equivalent formatted sender endpoints without a false contact conflict", async () => {
+    const h = serviceHarness();
+    h.db.tables.conversation_sessions = [fixtureSession("7", "", { leadName: "Formatted contact", leadPhone: "(301) 555-0123", messageHistory: JSON.stringify([{ role: "user", content: "Move my appointment LF-1 to 2026-11-16 at 9 AM", ts: fixtureAt, fromPhone: fixturePhone, toPhone: fixtureLine }]) })];
+    const { result } = await firstCheck(h);
+    expect(result.issues[0].identity).toMatchObject({ phone: fixturePhone, displayName: "Formatted contact", decision: "verified" });
+    expect(result.issues[0].outcome).toBe("matches_current");
+  });
+  it("does not borrow the saved session phone over a conflicting explicit message endpoint", async () => {
+    const h = serviceHarness({ businessLines: [] });
+    h.db.tables.conversation_sessions = [fixtureSession("7", "", { messageHistory: JSON.stringify([{ role: "user", content: "Move my appointment LF-1 to 2026-11-16 at 9 AM", ts: fixtureAt, fromPhone: "+13015550999" }]) })];
+    const { result } = await firstCheck(h);
+    expect(result.issues[0].identity.decision).not.toBe("verified");
+    expect(result.issues[0].identity.reasons).toContain("SESSION_CONTACT_CONFLICT");
+    expect(result.issues[0].outcome).not.toBe("matches_current");
+  });
+  it.each([
+    { metadata: { fromPhone: 13015550999 } },
+    { metadata: { fromPhone: { phone: fixturePhone } } },
+    { metadata: { fromPhone: [] } },
+    { metadata: { fromPhone: [fixturePhone, 13015550999] } },
+    { metadata: { toPhone: 13015550456 } },
+    { metadata: { cc: ["+13015550999"] } },
+    { metadata: { cc: "malformed" } },
+    { metadata: { customerPhone: "+13015550999" } },
+    { metadata: { direction: "outbound" } },
+  ])("does not promote a saved sender over explicit malformed/group/conflicting metadata $metadata", async ({ metadata }) => {
+    const h = serviceHarness({ businessLines: [] });
+    h.db.tables.conversation_sessions = [fixtureSession("7", "", { messageHistory: JSON.stringify([{ role: "user", content: "Move my appointment LF-1 to 2026-11-16 at 9 AM", ts: fixtureAt, metadata }]) })];
+    const { inventory, result } = await firstCheck(h);
+    expect(inventory.items[0].limitations).toContain("Explicit message participants or direction conflict with stored session");
+    expect(result.issues[0].identity.decision).not.toBe("verified");
+    expect(result.issues[0].identity.reasons).toContain("SOURCE_PROVENANCE_UNVERIFIED");
+    expect(result.issues[0].outcome).not.toBe("matches_current");
+  });
   it("record 9 to 11 to 9 uses one interpretation, fresh snapshots and stable issue identity", async () => {
     const h = serviceHarness(), { result, input } = await firstCheck(h), original = result.issues[0], before = h.db.snapshots;
     h.db.tables.bookings = [fixtureBooking("11:00")]; h.db.tables.leadflow_jobs = [fixtureJob("11:00")];
