@@ -80,7 +80,7 @@ function mergeGroups(left: IssueGroup[], right: IssueGroup[]): IssueGroup[] {
 }
 
 /** Foreground-only, injected read transport. Construction performs no reads, timers,
- * model calls or writes. Cursor pages preserve the entire corpus; submitted calls
+ * model calls or writes. Cursor pages preserve the selected recent window; submitted calls
  * finish on Pause, while no new work starts hidden, paused or after disposal. */
 export class InstinctController {
   private state: InstinctState;
@@ -89,8 +89,11 @@ export class InstinctController {
   private disposed = false;
   private queue: string[] = [];
   private work = new Map<string, InstinctWork>();
-  private refs = new Map<string, StoredEvidence>();
+  private refs = new Map<string, EvidenceRef>();
+  private inventoryRefs = new Map<string, EvidenceRef>();
   private pendingCheck: string | null = null;
+  private feedBusy = false;
+  private feedDirty = false;
   private refreshBusy = false;
   private refreshDirty = false;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -165,26 +168,41 @@ export class InstinctController {
     } else if (current) this.publish({ selected: current });
     this.publish({ feed, coverage: feed.coverage });
   }
+  private async refreshFeed() {
+    if (!this.canRun()) return;
+    if (this.feedBusy) { this.feedDirty = true; return; }
+    this.feedBusy = true;
+    try {
+      do {
+        this.feedDirty = false;
+        let cursor: string | undefined;
+        let accumulated: IssueGroup[] = [];
+        const seen = new Set<string>();
+        do {
+          if (!this.canRun()) return;
+          const feed = feedSchema.parse(await this.api.feed({ filter: "all", ...(cursor ? { cursor } : {}) }));
+          if (!this.canRun()) return;
+          accumulated = mergeGroups(accumulated, feed.groups);
+          this.acceptFeed(withGroups(feed, accumulated));
+          cursor = feed.continuation ?? undefined;
+          if (cursor && seen.has(cursor)) throw new Error("STALE_CONTEXT");
+          if (cursor) seen.add(cursor);
+        } while (cursor);
+      } while (this.feedDirty && this.canRun());
+      this.publish({ loading: false, error: null });
+    } catch {
+      if (this.active && !this.disposed) this.publish({ loading: false, error: "Stored updates unavailable. Retry to resume; prior results are cached." });
+    } finally {
+      this.feedBusy = false;
+    }
+  }
   private async refresh() {
     if (!this.canRun()) return;
     if (this.refreshBusy) { this.refreshDirty = true; return; }
     this.refreshBusy = true;
     try {
-      let cursor: string | undefined;
-      let accumulated: IssueGroup[] = [];
-      const seen = new Set<string>();
-      do {
-        if (!this.canRun()) return;
-        const feed = feedSchema.parse(await this.api.feed({ filter: "all", ...(cursor ? { cursor } : {}) }));
-        if (!this.canRun()) return;
-        accumulated = mergeGroups(accumulated, feed.groups);
-        this.acceptFeed(withGroups(feed, accumulated));
-        cursor = feed.continuation ?? undefined;
-        if (cursor && seen.has(cursor)) throw new Error("STALE_CONTEXT");
-        if (cursor) seen.add(cursor);
-      } while (cursor);
-      this.publish({ loading: false, error: null });
-      await this.scan();
+      await this.refreshFeed();
+      if (this.canRun()) await this.scan();
     } catch {
       if (this.active && !this.disposed) this.publish({ loading: false, scanning: false, error: "Stored updates unavailable. Retry to resume; prior results are cached." });
     } finally {
@@ -192,9 +210,19 @@ export class InstinctController {
       if (this.refreshDirty) { this.refreshDirty = false; this.requestRefresh(); }
     }
   }
+  private enqueueContext(refs: EvidenceRef[]) {
+    if (!refs.length) return;
+    const key = `${refs[0].sourceAccountKey}:${refs[0].contextFingerprint}`;
+    if (this.work.has(key)) return;
+    this.work.set(key, { key, refs, revision: refs[0].contextFingerprint, state: "queued" });
+    this.queue.push(key);
+  }
   private async scan() {
     this.publish({ scanning: true });
-    if (!this.inventoryInProgress) { this.inventoryCursor = undefined; this.inventoryPages = []; this.inventoryInProgress = true; }
+    if (!this.inventoryInProgress) {
+      this.inventoryCursor = undefined; this.inventoryPages = []; this.inventoryRefs = new Map(); this.inventoryInProgress = true;
+      this.publish({ scanComplete: false });
+    }
     const seen = new Set<string>();
     do {
       if (!this.canRun()) { this.publish({ scanning: false }); return; }
@@ -203,24 +231,32 @@ export class InstinctController {
       if (!this.canRun()) { this.publish({ scanning: false }); return; }
       this.inventoryPages.push(...inventory.items);
       this.inventoryCursor = inventory.continuation ?? undefined;
-      this.publish({ sources: Array.from(new Map(this.inventoryPages.map(item => [refKey(item.ref), item])).values()), coverage: inventory.coverage });
+      for (const item of inventory.items) {
+        this.inventoryRefs.set(refKey(item.ref), item.ref); this.refs.set(refKey(item.ref), item.ref);
+      }
+      // The server marks a fully loaded conversation, not a message count or
+      // corpus threshold. Older transports without this marker wait for all refs.
+      for (const context of inventory.readyContexts ?? []) {
+        for (const ref of context.refs) { this.inventoryRefs.set(refKey(ref), ref); this.refs.set(refKey(ref), ref); }
+        this.enqueueContext(context.refs);
+      }
+      this.publish({ sources: Array.from(new Map(this.inventoryPages.map(item => [refKey(item.ref), item])).values()), coverage: inventory.coverage,
+        work: Array.from(this.work.values()) });
+      void this.drain();
       if (this.inventoryCursor && seen.has(this.inventoryCursor)) throw new Error("STALE_CONTEXT");
       if (this.inventoryCursor) seen.add(this.inventoryCursor);
     } while (this.inventoryCursor);
     this.inventoryInProgress = false;
     const originals = Array.from(new Map(this.inventoryPages.map(item => [refKey(item.ref), item])).values());
-    this.refs = new Map(originals.map(item => [refKey(item.ref), item]));
+    this.refs = new Map(this.inventoryRefs);
     const contexts = new Map<string, EvidenceRef[]>();
-    for (const item of originals) {
-      const key = `${item.ref.sourceAccountKey}:${item.ref.contextFingerprint}`;
-      contexts.set(key, [...(contexts.get(key) ?? []), item.ref]);
+    for (const ref of Array.from(this.inventoryRefs.values())) {
+      const key = `${ref.sourceAccountKey}:${ref.contextFingerprint}`;
+      contexts.set(key, [...(contexts.get(key) ?? []), ref]);
     }
     // New/changed contexts only. A fallback never invokes analysis for unchanged
     // sources, including settled failures, which require an explicit Retry.
-    for (const [key, refs] of Array.from(contexts)) if (!this.work.has(key)) {
-      this.work.set(key, { key, refs, revision: refs[0].contextFingerprint, state: "queued" });
-      this.queue.push(key);
-    }
+    for (const refs of Array.from(contexts.values())) this.enqueueContext(refs);
     for (const [key] of Array.from(this.work)) if (!contexts.has(key) && key !== this.pendingCheck) this.work.delete(key);
     this.queue = this.queue.filter(key => contexts.has(key));
     const selected = this.state.selected;
@@ -230,14 +266,15 @@ export class InstinctController {
     }
     this.publish({ sources: originals, scanning: false, scanComplete: true, work: Array.from(this.work.values()) });
     void this.drain();
+    if (this.work.size && this.pendingCheck === null) void this.refreshFeed();
   }
   private workFresh(task: InstinctWork): boolean {
-    return task.refs.every(ref => { const latest = this.refs.get(refKey(ref))?.ref;
+    return task.refs.every(ref => { const latest = this.refs.get(refKey(ref));
       return latest?.sourceRevision === ref.sourceRevision && latest.contextFingerprint === ref.contextFingerprint; });
   }
   private issueFresh(issue: InstinctIssue): boolean {
     const refs = [...issue.identity.evidenceRefs, ...issue.citations.map(value => value.ref)];
-    return refs.every(ref => { const latest = this.refs.get(refKey(ref))?.ref;
+    return refs.every(ref => { const latest = this.refs.get(refKey(ref));
       return !latest ? !this.state.scanComplete : latest.sourceRevision === ref.sourceRevision && latest.contextFingerprint === ref.contextFingerprint; });
   }
   private publishWork() { this.publish({ work: Array.from(this.work.values()) }); }
@@ -259,8 +296,9 @@ export class InstinctController {
         submitted.state = "error"; this.requestRefresh();
       } else {
         submitted.state = result.analysis.status === "unavailable" ? "error" : "done";
-        // The server remains the grouping authority; refresh does not re-analyze.
-        this.requestRefresh();
+        // Publish the server's customer groups now; never restart the recent
+        // inventory merely to show a completed interpretation.
+        void this.refreshFeed();
       }
     } catch { if (!this.disposed) submitted.state = "error"; }
     finally {

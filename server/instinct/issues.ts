@@ -116,15 +116,20 @@ function assertCoverage(scope: AuthorizedScope, value: CoverageReceipt): Coverag
 }
 function observationCoverage(scope: AuthorizedScope, observation: IssueObservation): CoverageReceipt {
   const original = assertCoverage(scope, observation.coverage), { analysis, context } = observation;
-  const unavailable = analysis.status === "unavailable" || observation.verifications?.some(entry => entry.verification.outcome === "record_unavailable");
+  // Completed interpretation describes usable originals, not identity/record proof.
+  // A partial receipt counts only if every segment and the reduction succeeded.
+  const analyzed = (analysis.status === "complete" || analysis.status === "partial") && analysis.totalSegments > 0
+    && analysis.completedSegments === analysis.totalSegments && analysis.reductionComplete
+    && (analysis.failure === null || analysis.failure === "PARTIAL_CONTEXT");
+  const unavailable = analysis.status === "unavailable";
   const complete = analysis.status === "complete" && context.manifest.complete
     && (!analysis.actions.length || (observation.verifications?.length === analysis.actions.length && observation.verifications.every(entry => ["matches_current", "discrepancy"].includes(entry.verification.outcome))));
   const read = original.read;
   const exclusions = unique([...original.exclusions, ...context.manifest.limitations, ...analysis.limitations,
-    ...(!complete ? [unavailable ? "Analysis or exact record proof unavailable within observed context" : "Context or exact request verification remains partial/unprocessed"] : [])]);
-  return coverageReceiptSchema.parse({ ...original, analyzed: complete ? read - original.unavailable : 0,
+    ...(!complete ? [unavailable ? "Analysis or exact record proof unavailable within observed context" : "Context or exact request verification remains partial; completed original analysis is counted separately."] : [])]);
+  return coverageReceiptSchema.parse({ ...original, analyzed: analyzed ? read - original.unavailable : 0,
     unavailable: unavailable ? read : original.unavailable,
-    unprocessed: complete || unavailable ? 0 : read - original.unavailable,
+    unprocessed: analyzed || unavailable ? 0 : read - original.unavailable,
     partial: !!original.continuation || original.unavailable > 0 || original.boundaries.some(boundary => boundary.availability !== "complete") || !complete || exclusions.length > 0, exclusions });
 }
 function verificationFor(identity: VerifiedIdentity, action: ExtractionAction, value: VerificationResult): VerificationResult {

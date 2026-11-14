@@ -47,7 +47,8 @@ function feed(issues: InstinctIssue[] = [], extra: Partial<InstinctFeed> = {}): 
 }
 function inventory(items: StoredEvidence[], continuation: string | null = null): SourceInventory {
   return { binding: { requestId: "sources-request", contextRevision: null, selectedIssueId: null, selectedIssueRevision: null }, coverage: coverage(items.length, { analyzed: 0, unprocessed: items.length, partial: items.length > 0 || continuation !== null, continuation }),
-    capabilities: caps, limitations: [], items, inventory: { inventoryId: "inventory-fixture", sourceAccountKey: "fixture-account", authorizationVersion: "auth-v1", sourceKinds: ["sms"], families: [], capturedAtUtc: stamp }, continuation };
+    capabilities: caps, limitations: [], items, inventory: { inventoryId: "inventory-fixture", sourceAccountKey: "fixture-account", authorizationVersion: "auth-v1", sourceKinds: ["sms"],
+      families: Array.from(new Set(items.map(item => item.ref.store))).map(store => ({ store, throughId: "9007199254740999", observedAtUtc: stamp, availability: "complete" as const, limitations: [] })), capturedAtUtc: stamp }, continuation };
 }
 function checked(input: contract.CheckInput, extra: Partial<CheckResult> = {}): CheckResult {
   return { binding: { requestId: "check-request", contextRevision: input.expectedContextRevision, selectedIssueId: null, selectedIssueRevision: null }, contextRevision: input.expectedContextRevision,
@@ -101,6 +102,64 @@ describe("Instinct actual-source foreground and literal V6 UI", () => {
     vi.useFakeTimers(); const first = evidence(1), second = { ...evidence(2), ref: ref(2, { contextFingerprint: first.ref.contextFingerprint }) };
     const work = harness({ sources: vi.fn(async input => input.cursor ? inventory([second]) : inventory([first], "next")) }); await work.settle();
     expect(work.api.check).toHaveBeenCalledTimes(1); expect(work.api.check).toHaveBeenCalledWith({ sourceRefs: [first.ref, second.ref], expectedContextRevision: first.ref.contextFingerprint }); work.dispose();
+  });
+  it("starts one complete conversation check while the next recent-source page is still pending", async () => {
+    vi.useFakeTimers(); const next = deferred<SourceInventory>(); const first = evidence(1);
+    const page = { ...inventory([first], "recent-next"), readyContexts: [{ contextFingerprint: first.ref.contextFingerprint, refs: [first.ref] }] };
+    const work = harness({ sources: vi.fn(async input => input.cursor ? next.promise : page) }); await work.settle();
+    expect(work.snapshot().scanning).toBe(true); expect(work.snapshot().scanComplete).toBe(false);
+    expect(work.api.check).toHaveBeenCalledTimes(1); expect(work.snapshot().work[0]?.state).toBe("done");
+    next.resolve(inventory([evidence(2)])); await work.settle(); expect(work.api.check).toHaveBeenCalledTimes(2); work.dispose();
+  });
+  it("checks all messages of a loaded conversation together, not once per text or at a 1000-entry threshold", async () => {
+    vi.useFakeTimers(); const next = deferred<SourceInventory>(); const first = evidence(1);
+    const entries = Array.from({ length: 1001 }, (_, index) => ({ ...evidence(index + 1), ref: ref(index + 1, { contextFingerprint: first.ref.contextFingerprint }) }));
+    const page = { ...inventory(entries, "recent-next"), readyContexts: [{ contextFingerprint: first.ref.contextFingerprint, refs: entries.map(item => item.ref) }] };
+    const work = harness({ sources: vi.fn(async input => input.cursor ? next.promise : page) }); await work.settle();
+    expect(work.api.check).toHaveBeenCalledTimes(1); expect(vi.mocked(work.api.check).mock.calls[0][0].sourceRefs).toHaveLength(1001);
+    expect(work.snapshot().work).toHaveLength(1); work.dispose(); next.resolve(inventory([])); await work.settle();
+  });
+  it("publishes checked findings before source traversal finishes and retains the exact source cursor", async () => {
+    vi.useFakeTimers(); const next = deferred<SourceInventory>(); const first = evidence(1); let checkedFirst = false;
+    const work = harness({
+      sources: vi.fn(async input => input.cursor ? next.promise : { ...inventory([first], "recent-next"), readyContexts: [{ contextFingerprint: first.ref.contextFingerprint, refs: [first.ref] }] }),
+      check: vi.fn(async input => { checkedFirst = true; return checked(input); }),
+      feed: vi.fn(async () => feed(checkedFirst ? [issue(1)] : [])),
+    }); await work.settle();
+    expect(work.snapshot().feed?.groups).toHaveLength(1); expect(work.snapshot().scanning).toBe(true);
+    expect(work.api.sources).toHaveBeenCalledTimes(2); expect(vi.mocked(work.api.sources).mock.calls[1][0].cursor).toBe("recent-next");
+    work.dispose(); next.resolve(inventory([])); await work.settle();
+  });
+  it("restores completed-analysis coverage after a delayed final inventory receipt", async () => {
+    vi.useFakeTimers(); const next = deferred<SourceInventory>(); const first = evidence(1); let complete = false;
+    const work = harness({
+      sources: vi.fn(async input => input.cursor ? next.promise : { ...inventory([first], "recent-next"), readyContexts: [{ contextFingerprint: first.ref.contextFingerprint, refs: [first.ref] }] }),
+      check: vi.fn(async input => { complete = true; return checked(input); }),
+      feed: vi.fn(async () => feed([], { coverage: coverage(1, { analyzed: complete ? 1 : 0, unprocessed: complete ? 0 : 1, partial: !complete }) })),
+    }); await work.settle(); expect(work.snapshot().coverage?.analyzed).toBe(1);
+    next.resolve(inventory([])); await work.settle(); expect(work.snapshot().coverage?.analyzed).toBe(1); expect(work.snapshot().work).toHaveLength(1); work.dispose();
+  });
+  it("resumes the retained recent cursor without rechecking an unchanged completed conversation", async () => {
+    vi.useFakeTimers(); const next = deferred<SourceInventory>(); const first = evidence(1), second = evidence(2);
+    const sources = vi.fn(async (input: contract.SourcesInput) => input.cursor ? next.promise : {
+      ...inventory([first], "recent-next"), readyContexts: [{ contextFingerprint: first.ref.contextFingerprint, refs: [first.ref] }],
+    });
+    const work = harness({ sources }); await work.settle(); expect(work.api.check).toHaveBeenCalledTimes(1);
+    work.controller.togglePause(); next.resolve({ ...inventory([second]), readyContexts: [{ contextFingerprint: second.ref.contextFingerprint, refs: [second.ref] }] }); await work.settle();
+    expect(work.api.check).toHaveBeenCalledTimes(1); work.controller.togglePause(); await work.settle();
+    expect(work.api.check).toHaveBeenCalledTimes(2); expect(sources.mock.calls.filter(call => call[0].cursor === "recent-next")).toHaveLength(2);
+    expect(html(work.controller)).toContain("Last two days only"); expect(html(work.controller)).toContain("2 conversations checked"); work.dispose();
+  });
+  it("does not start a loaded conversation check when its inventory response arrives while hidden", async () => {
+    vi.useFakeTimers(); const response = deferred<SourceInventory>(); const first = evidence(1);
+    const work = harness({ sources: vi.fn(async () => response.promise) }); await work.settle(); work.visibility(false);
+    response.resolve({ ...inventory([first]), readyContexts: [{ contextFingerprint: first.ref.contextFingerprint, refs: [first.ref] }] }); await work.settle();
+    expect(work.api.check).not.toHaveBeenCalled(); work.visibility(true); await work.settle(); expect(work.api.check).toHaveBeenCalledTimes(1); work.dispose();
+  });
+  it("rejects a ready-conversation handoff with conflicting source-account identity", async () => {
+    vi.useFakeTimers(); const first = evidence(1); const forged = { ...first.ref, sourceAccountKey: "another-account" };
+    const work = harness({ sources: vi.fn(async () => ({ ...inventory([first]), readyContexts: [{ contextFingerprint: first.ref.contextFingerprint, refs: [forged] }] })) }); await work.settle();
+    expect(work.api.check).not.toHaveBeenCalled(); expect(work.snapshot().error).toContain("unavailable"); work.dispose();
   });
   it("fallback and event bursts refresh stored data but never model-poll unchanged revisions", async () => {
     vi.useFakeTimers(); const work = harness({}, { items: [evidence(1)] }); await work.settle(); expect(work.api.check).toHaveBeenCalledTimes(1);

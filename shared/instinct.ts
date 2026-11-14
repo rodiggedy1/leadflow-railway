@@ -459,9 +459,26 @@ export const askInputSchema = z.object({
 }).strict().superRefine((input, ctx) => {
   if ((input.selectedIssueId === undefined) !== (input.selectedIssueRevision === undefined)) ctx.addIssue({ code: "custom", message: "Question selection must include the exact revision" });
 });
-export const sourceInventorySchema = z.object({ ...envelopeShape, items: z.array(storedEvidenceSchema), inventory: inventoryBoundarySchema, continuation: opaqueIdSchema.nullable() }).strict().superRefine((inventory, ctx) => {
+/** The complete available recent conversation work unit loaded on THIS page.
+ * This is not a claim of complete historical/provider capture. Grouped sources
+ * retain every original ref here even when inventory items are canonicalized. */
+export const readySourceContextSchema = z.object({ contextFingerprint: fingerprintSchema, refs: z.array(evidenceRefSchema).min(1) }).strict();
+export const sourceInventorySchema = z.object({ ...envelopeShape, items: z.array(storedEvidenceSchema), inventory: inventoryBoundarySchema, continuation: opaqueIdSchema.nullable(), readyContexts: z.array(readySourceContextSchema).optional() }).strict().superRefine((inventory, ctx) => {
   if (inventory.inventory.sourceAccountKey !== inventory.coverage.sourceAccountKey || inventory.continuation !== inventory.coverage.continuation
     || inventory.items.some(item => item.ref.sourceAccountKey !== inventory.inventory.sourceAccountKey)) ctx.addIssue({ code: "custom", message: "Inventory account and continuation must match its coverage" });
+  const contexts = new Set<string>(); const refs = new Set<string>();
+  inventory.readyContexts?.forEach((ready, index) => {
+    if (contexts.has(ready.contextFingerprint) || !inventory.items.some(item => item.ref.contextFingerprint === ready.contextFingerprint)) ctx.addIssue({ code: "custom", path: ["readyContexts", index], message: "Ready context must uniquely name a conversation loaded on this page" });
+    contexts.add(ready.contextFingerprint);
+    ready.refs.forEach((ref, refIndex) => {
+      const key = `${ref.store}:${ref.sourceId}`;
+      if (refs.has(key) || ref.contextFingerprint !== ready.contextFingerprint || ref.sourceAccountKey !== inventory.inventory.sourceAccountKey
+        || !inventory.inventory.families.some(family => family.store === ref.store)
+        || (inventory.items.some(item => item.ref.store === ref.store && item.ref.sourceId === ref.sourceId) && !inventory.items.some(item => sameEvidenceRef(item.ref, ref)))) ctx.addIssue({ code: "custom", path: ["readyContexts", index, "refs", refIndex], message: "Ready refs must be unique, exact and scoped to their loaded context and source families" });
+      refs.add(key);
+    });
+    if (inventory.items.some(item => item.ref.contextFingerprint === ready.contextFingerprint && !ready.refs.some(ref => sameEvidenceRef(item.ref, ref)))) ctx.addIssue({ code: "custom", path: ["readyContexts", index], message: "Ready context must include every loaded inventory original" });
+  });
 });
 export const feedSchema = z.object({
   ...envelopeShape, groups: z.array(issueGroupSchema), continuation: opaqueIdSchema.nullable(),

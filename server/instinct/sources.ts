@@ -56,6 +56,49 @@ function projection(store: SourceStore): string { return SOURCE_COLUMNS[store].m
 function rows(port: SelectPort, store: SourceStore, where: string, params: readonly (string | number | null)[]): Promise<SqlRow[]> {
   return port.select(`SELECT ${projection(store)} FROM \`${store}\` ${where}`, params);
 }
+/** Inclusive rolling 48h maximum, captured once per traversal. localDay may
+ * select conversations inside this slice; it never expands the maximum. */
+interface RecentWindow { start: string; end: string }
+function recentWindow(capturedAtUtc: string): RecentWindow {
+  return { start: new Date(Date.parse(capturedAtUtc) - 48 * 60 * 60 * 1000).toISOString(), end: capturedAtUtc };
+}
+function within(at: string | null, window: RecentWindow): boolean { return at !== null && at >= window.start && at <= window.end; }
+function occurrence(store: SourceStore, row: SqlRow): string | null {
+  return store === "openphone_call_recordings" ? sourceInstant(row.callStartedAt)
+    : store === "call_log" || store === "confirmation_calls" ? sourceInstant(row.firedAt) : null;
+}
+function observation(store: SourceStore, row: SqlRow): string | null {
+  return store === "inbound_sms" ? sourceInstant(row.receivedAt) ?? sourceInstant(row.createdAt)
+    : store === "gmail_thread_meta" ? sourceInstant(row.lastMessageAt) ?? sourceInstant(row.updatedAt) ?? sourceInstant(row.createdAt)
+      : store === "madison_email_drafts" || store === "conversation_sessions" ? sourceInstant(row.updatedAt) ?? sourceInstant(row.createdAt)
+        : store === "field_mgmt_calls" ? sourceInstant(row.completedAt) ?? sourceInstant(row.createdAt)
+          : sourceInstant(row.updatedAt) ?? sourceInstant(row.createdAt);
+}
+function recentRow(store: SourceStore, row: SqlRow, window: RecentWindow): boolean {
+  return within(occurrence(store, row) ?? observation(store, row), window);
+}
+/** SQL narrowing precedes history parsing and transcript loading. TIMESTAMP and
+ * DATETIME binds use UTC mysql strings; the verified BIGINT columns use Unix ms.
+ * A known old original call can never re-enter through a recent update. */
+function recentPredicate(store: SourceStore, window: RecentWindow): { sql: string; params: (string | number)[] } {
+  const date = (at: string) => at.replace("T", " ").replace("Z", "");
+  const dated = (expr: string) => ({ sql: `${expr} >= ? AND ${expr} <= ?`, params: [date(window.start), date(window.end)] });
+  const numeric = (expr: string) => ({ sql: `${expr} >= ? AND ${expr} <= ?`, params: [Date.parse(window.start), Date.parse(window.end)] });
+  if (store === "inbound_sms" || store === "gmail_thread_meta") {
+    const column = store === "inbound_sms" ? "`receivedAt`" : "`lastMessageAt`";
+    const original = numeric(column); const fallback = dated("COALESCE(`updatedAt`, `createdAt`)");
+    if (store === "inbound_sms") return original;
+    return { sql: `((${original.sql}) OR (${column} IS NULL AND ${fallback.sql}))`, params: [...original.params, ...fallback.params] };
+  }
+  if (store === "call_log" || store === "confirmation_calls") {
+    const original = numeric("`firedAt`"); const fallback = dated("COALESCE(`updatedAt`, `createdAt`)");
+    return { sql: `((${original.sql}) OR (` + "`firedAt` IS NULL AND " + `${fallback.sql}))`, params: [...original.params, ...fallback.params] };
+  }
+  if (store === "openphone_call_recordings") return dated("COALESCE(`callStartedAt`, `createdAt`)");
+  if (store === "field_mgmt_calls") return dated("COALESCE(`completedAt`, `createdAt`)");
+  if (store === "voice_calls") return dated("`createdAt`");
+  return dated("COALESCE(`updatedAt`, `createdAt`)");
+}
 export class SourceReadError extends Error {
   constructor(readonly code: "INVALID_SCOPE" | "INVALID_SOURCE_REFERENCE" | "STALE_CONTEXT" | "SOURCE_UNAVAILABLE") { super(code); this.name = "SourceReadError"; }
 }
@@ -78,12 +121,23 @@ interface Traversal {
 interface BoundState { scopeKey: string; inputKey: string; boundary: InventoryBoundary; localDay?: string; acceptedBoundaries: Set<string>; revisions: Map<string, string> }
 const emptyParticipants = () => ({ from: null as string | null, to: [] as string[], cc: [] as string[], replyTo: null as string | null, businessLine: null as string | null, mailbox: null as string | null });
 
-/** Parse every stored entry, including malformed/system entries as explicit
- * coverage gaps. Never slice a recent tail or coerce object content to a quote. */
-function normalizeRow(store: SourceStore, row: SqlRow, scope: AuthorizedScope, fallbackAt: string, workflowVerified = false): StoredEvidence[] {
+/** Parse only SQL-selected recent rows, normalize only timestamp-eligible SMS.
+ * Unknown-time SMS bodies never enter analysis; one unavailable gap accounts
+ * for them without importing an unbounded undated historical conversation. */
+function normalizeRow(store: SourceStore, row: SqlRow, scope: AuthorizedScope, fallbackAt: string, window: RecentWindow, workflowVerified = false): StoredEvidence[] {
   const rowId = id(row.id); if (!rowId) throw new SourceReadError("SOURCE_UNAVAILABLE");
-  const observedAtUtc = sourceInstant(row.updatedAt) ?? sourceInstant(row.createdAt) ?? fallbackAt;
-  const revision = hash([scope.installationScope, scope.sourceAccountKey, store, row]);
+  const observedAtUtc = observation(store, row) ?? occurrence(store, row) ?? fallbackAt;
+  let history: unknown; const selected: { value: unknown; index: number }[] = []; let unknownCount = 0;
+  if (store === "conversation_sessions") {
+    try { history = typeof row.messageHistory === "string" ? JSON.parse(row.messageHistory) : row.messageHistory; } catch { history = null; }
+    if (Array.isArray(history)) history.forEach((value, index) => {
+      const entry = object(value); const at = sourceInstant(entry?.ts) ?? sourceInstant(entry?.timestamp);
+      if (within(at, window)) selected.push({ value, index });
+      else if (!at) unknownCount++;
+    });
+  }
+  const { messageHistory: _history, ...metadata } = row;
+  const revision = hash([scope.installationScope, scope.sourceAccountKey, store, store === "conversation_sessions" ? [metadata, selected, unknownCount, Array.isArray(history)] : row]);
   const common = (sourceId: string, sourceKind: SourceKind, providerId: string | null, sessionId: string | null, threadId: string | null, occurredAtUtc: string | null, timeBasis: EvidenceRef["timeBasis"], handlingEvidence: string | null): EvidenceRef => ({
     store, sourceId, sourceKind, providerId, sourceRevision: revision, contextFingerprint: "0".repeat(64),
     sourceAccountKey: scope.sourceAccountKey, sessionId, threadId, occurredAtUtc, observedAtUtc, timeBasis, handlingEvidence,
@@ -94,14 +148,12 @@ function normalizeRow(store: SourceStore, row: SqlRow, scope: AuthorizedScope, f
     limitations: [...limitations], ...additions,
   });
   if (store === "conversation_sessions") {
-    let history: unknown;
-    try { history = typeof row.messageHistory === "string" ? JSON.parse(row.messageHistory) : row.messageHistory; } catch { history = null; }
     if (!Array.isArray(history) || !history.length) return [build(common(`session:${rowId}:history`, "sms", null, rowId, null, null, "unknown", null), null,
       [Array.isArray(history) ? "Stored conversation history is empty" : "Stored conversation history is malformed"], { availability: Array.isArray(history) ? "missing" : "malformed" })];
     const providerCounts = new Map<string, number>();
     const entryIds = (entry: Record<string, unknown>): string[] => [...Array.from(new Set([entry, object(entry.metadata)].flatMap(value => value ? [value.opMsgId, value.openPhoneId, value.openPhoneMessageId, value.providerMessageId].map(provider).filter((value): value is string => value !== null) : [])))];
-    for (const value of history) { const entry = object(value); if (entry) for (const key of entryIds(entry)) providerCounts.set(key, (providerCounts.get(key) ?? 0) + 1); }
-    return history.map((value, index) => {
+    for (const { value } of selected) { const entry = object(value); if (entry) for (const key of entryIds(entry)) providerCounts.set(key, (providerCounts.get(key) ?? 0) + 1); }
+    const evidence = selected.map(({ value, index }) => {
       const entry = object(value); const metadata = object(entry?.metadata); const envelopes = [entry, metadata].filter((value): value is Record<string, unknown> => value !== null);
       const limitations: string[] = []; const originalText = typeof entry?.content === "string" ? entry.content : null;
       const role: OriginalTurn["role"] = entry?.role === "user" || entry?.role === "customer" ? "customer" : entry?.role === "assistant" ? "assistant" : entry?.role === "staff" ? "staff" : "unknown";
@@ -126,6 +178,9 @@ function normalizeRow(store: SourceStore, row: SqlRow, scope: AuthorizedScope, f
       if (!entry || originalText === null) item.availability = "malformed";
       return item;
     });
+    if (unknownCount) evidence.push(build(common(`session:${rowId}:history`, "sms", null, rowId, null, null, "unknown", null), null,
+      [`${unknownCount} stored history entries have missing or invalid original timestamp; two-day membership is unresolved and their text is withheld`], { availability: "missing" }));
+    return evidence;
   }
   if (store === "inbound_sms") {
     const ref = common(`sms:${rowId}`, "sms", provider(row.openPhoneMessageId), null, null, null, "received", null);
@@ -178,7 +233,7 @@ function normalizeRow(store: SourceStore, row: SqlRow, scope: AuthorizedScope, f
 export function createStoredSourceReader(options: StoredSourceOptions): SourceReader {
   const db = options.db ?? createLazyReadDb(); const clock = options.clock ?? { now: () => new Date() };
   const boundaries = new Map<string, BoundState>(); const cursors = new Map<string, { scopeKey: string; traversal: Traversal }>();
-  const observations = new Map<string, string>();
+  const capturedContexts = new Map<string, { window: RecentWindow; capturedAtUtc: string }>();
   const scopeKey = (scope: AuthorizedScope) => hash([scope.installationScope, scope.sourceAccountKey, scope.authorizationVersion, scope.actor]);
   const authorize = (scope: AuthorizedScope): void => {
     const parsed = authorizedScopeSchema.safeParse(scope);
@@ -190,7 +245,8 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
     const capturedAtUtc = now(); const families: InventoryBoundary["families"] = [];
     for (const store of storesFor(input.sourceKinds)) {
       try {
-        const result = await db.select(`SELECT MAX(\`id\`) AS \`throughId\` FROM \`${store}\``);
+        const recent = recentPredicate(store, recentWindow(capturedAtUtc));
+        const result = await db.select(`SELECT MAX(\`id\`) AS \`throughId\` FROM \`${store}\` WHERE ${recent.sql}`, recent.params);
         const upper = result[0]?.throughId; const throughId = upper == null ? null : id(upper);
         if (upper != null && throughId === null) throw new SourceReadError("SOURCE_UNAVAILABLE");
         families.push({ store, throughId, observedAtUtc: capturedAtUtc, availability: "complete", limitations: [] });
@@ -206,7 +262,7 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
     if (!state || state.scopeKey !== scopeKey(scope) || !state.acceptedBoundaries.has(hash(boundary))) throw new SourceReadError("INVALID_SCOPE");
     return state;
   };
-  const contextFor = async (scope: AuthorizedScope, store: SourceStore, row: SqlRow, at: string, port: SelectPort): Promise<RowContext> => {
+  const contextFor = async (scope: AuthorizedScope, store: SourceStore, row: SqlRow, at: string, port: SelectPort, window = recentWindow(at)): Promise<RowContext> => {
     const related: { store: SourceStore; row: SqlRow; verified: boolean }[] = [];
     const gaps: string[] = [];
     const pid = AI_STORES.includes(store) ? provider(row.vapiCallId) : null;
@@ -215,8 +271,10 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
       const families = pid ? AI_STORES : ["gmail_thread_meta", "madison_email_drafts"] as const;
       for (const family of families) {
         try {
-          const found = await rows(port, family, `WHERE \`${pid ? "vapiCallId" : "threadId"}\` = ? ORDER BY \`id\` ASC`, [pid ?? thread]);
+          const recent = recentPredicate(family, window);
+          const found = await rows(port, family, `WHERE \`${pid ? "vapiCallId" : "threadId"}\` = ? AND (${recent.sql}) ORDER BY \`id\` ASC`, [pid ?? thread, ...recent.params]);
           for (const item of found) {
+            if (!recentRow(family, item, window)) continue;
             let verified = false;
             if ((family === "confirmation_calls" || family === "field_mgmt_calls") && options.validateWorkflow) {
               try { verified = await options.validateWorkflow(scope, family, item, port); } catch { gaps.push(`Workflow validation unavailable: ${family}`); }
@@ -227,20 +285,23 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
       }
     }
     if (!related.some(item => item.store === store && id(item.row.id) === id(row.id))) related.push({ store, row, verified: false });
-    const raw = related.flatMap(item => normalizeRow(item.store, item.row, scope, at, item.verified));
+    const raw = related.filter(item => recentRow(item.store, item.row, window)).flatMap(item => normalizeRow(item.store, item.row, scope, at, window, item.verified));
     const phones = [...Array.from(new Set(raw.flatMap(item => [item.participants.from, ...item.participants.to]).filter((value): value is string => !!value && value.startsWith("+"))))];
     const originals = [...Array.from(new Set(raw.map(item => item.originalText).filter((value): value is string => value !== null)))];
     if (pid && phones.length > 1) gaps.push("Cross-family Vapi customer contacts conflict; originals retained");
     if (pid && originals.length > 1) gaps.push("Cross-family Vapi original transcripts differ; all versions retained without precedence erasure");
-    const contextFingerprint = hash([scope.installationScope, scope.sourceAccountKey, related, gaps]);
+    // Hash only actual slice membership/content/provenance, never the shifting
+    // cutoff or capture clock. An unchanged recent refresh does not re-model.
+    const contextFingerprint = hash([scope.installationScope, scope.sourceAccountKey, raw, gaps]);
     const evidence = raw.map(item => storedEvidenceSchema.parse({ ...item, ref: { ...item.ref, contextFingerprint }, limitations: [...item.limitations, ...gaps], availability: gaps.length && item.availability === "complete" ? "partial" : item.availability }));
-    evidence.forEach(item => observations.set(hash([scopeKey(scope), item.ref.store, item.ref.sourceId, item.ref.sourceRevision]), item.ref.observedAtUtc));
     const limitations = [...Array.from(new Set([...gaps, ...evidence.flatMap(item => item.limitations)]))];
     const canonicalKey = pid ? `vapi:${pid}` : thread ? `email-thread:${thread}` : `${store}:${id(row.id)}`;
     const manifest = { contextId: `context:${hash([scope.sourceAccountKey, canonicalKey])}`, revision: contextFingerprint, contextFingerprint, sourceAccountKey: scope.sourceAccountKey,
       entries: evidence.map((item, ordinal) => ({ ref: item.ref, ordinal, originalTextLength: item.originalText?.length ?? null, turnCount: item.originalTurns.length, availability: item.availability })),
       complete: evidence.every(item => item.availability === "complete") && !limitations.length, continuation: null, capturedAtUtc: at, limitations };
     const context = sourceContextSchema.parse({ manifest, evidence });
+    const capturedKey = hash([scopeKey(scope), contextFingerprint]);
+    if (evidence.length && !capturedContexts.has(capturedKey)) capturedContexts.set(capturedKey, { window, capturedAtUtc: at });
     // Trusted workflow provenance changes preference, not retained content. A
     // more complete original is never erased: readContext returns every version.
     const ranked = [...evidence].sort((a, b) => {
@@ -255,14 +316,13 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
     const pattern = ref.store === "conversation_sessions" ? /^session:([1-9]\d*):(?:message:\d+|history)$/ : /^(?:sms|draft|thread-meta|call):([1-9]\d*)$/;
     const rowId = pattern.exec(ref.sourceId)?.[1];
     if (!rowId) throw new SourceReadError("INVALID_SOURCE_REFERENCE");
+    const captured = capturedContexts.get(hash([scopeKey(scope), ref.contextFingerprint]));
+    if (!captured) throw new SourceReadError("INVALID_SOURCE_REFERENCE");
     return db.snapshot(async port => {
       let found: SqlRow[];
       try { found = await rows(port, ref.store, "WHERE `id` = ?", [rowId]); } catch { throw new SourceReadError("SOURCE_UNAVAILABLE"); }
       if (found.length !== 1) throw new SourceReadError("SOURCE_UNAVAILABLE");
-      const trustedAt = sourceInstant(found[0].updatedAt) ?? sourceInstant(found[0].createdAt)
-        ?? observations.get(hash([scopeKey(scope), ref.store, ref.sourceId, ref.sourceRevision]));
-      if (!trustedAt) throw new SourceReadError("INVALID_SOURCE_REFERENCE");
-      const result = await contextFor(scope, ref.store, found[0], trustedAt, port);
+      const result = await contextFor(scope, ref.store, found[0], captured.capturedAtUtc, port, captured.window);
       const actual = result.context.evidence.find(item => item.ref.store === ref.store && item.ref.sourceId === ref.sourceId);
       if (!actual || !sameEvidenceRef(actual.ref, ref)) throw new SourceReadError("STALE_CONTEXT");
       return result;
@@ -271,25 +331,29 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
   const inDay = (context: SourceContext, localDay?: string): boolean => {
     if (!localDay) return true;
     const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
-    // Include unknown timestamps rather than silently excluding possible day input.
+    // Unknown-time records are unavailable/observation evidence, not original
+    // day provenance; they remain explicit gaps within the maximum window.
     return context.evidence.some(item => !item.ref.occurredAtUtc || formatter.format(new Date(item.ref.occurredAtUtc)) === localDay);
   };
   const nextPage = async (scope: AuthorizedScope, traversal: Traversal): Promise<SourceInventory> => {
     const items: StoredEvidence[] = []; const exclusions = new Set<string>();
+    const readyContexts: NonNullable<SourceInventory["readyContexts"]> = [];
     const families = [...traversal.boundary.families];
     while (traversal.familyIndex < families.length && !items.length) {
       const family = families[traversal.familyIndex];
       family.limitations.forEach(value => exclusions.add(`${family.store}: ${value}`));
       if (!family.throughId || family.availability !== "complete") { traversal.familyIndex++; traversal.afterId = null; continue; }
       try {
-        // One stored conversation row is a natural API work unit, not a corpus
-        // ceiling. Its complete history/originals are returned; cursor retains tail.
-        const found = await rows(db, family.store, "WHERE `id` > ? AND `id` <= ? ORDER BY `id` ASC LIMIT ?", [traversal.afterId ?? "0", family.throughId, 1]);
+        // One conversation is a natural page, not a corpus/message capacity cap.
+        // SQL excludes inactive old rows before histories/transcripts are loaded.
+        const recent = recentPredicate(family.store, recentWindow(traversal.boundary.capturedAtUtc));
+        const found = await rows(db, family.store, `WHERE \`id\` > ? AND \`id\` <= ? AND (${recent.sql}) ORDER BY \`id\` ASC LIMIT ?`, [traversal.afterId ?? "0", family.throughId, ...recent.params, 1]);
         if (!found.length) { traversal.familyIndex++; traversal.afterId = null; continue; }
         const rowId = id(found[0].id);
         if (!rowId || (traversal.afterId !== null && BigInt(rowId) <= BigInt(traversal.afterId)) || BigInt(rowId) > BigInt(family.throughId)) throw new SourceReadError("SOURCE_UNAVAILABLE");
         traversal.afterId = rowId;
         const result = await db.snapshot(port => contextFor(scope, family.store, found[0], traversal.boundary.capturedAtUtc, port));
+        if (!result.context.evidence.length) continue;
         if (traversal.seen.has(result.canonicalKey)) continue;
         traversal.seen.add(result.canonicalKey);
         traversal.revisions.set(result.canonicalKey, result.context.manifest.revision);
@@ -297,6 +361,7 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
         if (!inDay(result.context, traversal.localDay)) continue;
         if (AI_STORES.includes(family.store)) items.push(result.primary);
         else items.push(...result.context.evidence);
+        readyContexts.push({ contextFingerprint: result.context.manifest.contextFingerprint, refs: result.context.evidence.map(item => item.ref) });
       } catch (error) {
         exclusions.add(`${family.store}: ${safeReadDbError(error).reason}`);
         families[traversal.familyIndex] = { ...family, availability: "missing", limitations: [...family.limitations, safeReadDbError(error).reason] };
@@ -306,18 +371,18 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
     traversal.boundary = { ...traversal.boundary, families };
     const finished = traversal.familyIndex >= families.length;
     if (finished && traversal.phase === "reconciliation" && traversal.prior) {
-      for (const key of Array.from(traversal.prior.keys())) if (!traversal.revisions.has(key)) exclusions.add(`Previously observed source is missing/deleted or unavailable: ${key}`);
+      for (const key of Array.from(traversal.prior.keys())) if (!traversal.revisions.has(key)) exclusions.add(`Previously observed source is outside the recent window, missing/deleted or unavailable: ${key}`);
     }
     let continuation: string | null = null;
     if (!finished) { continuation = `cursor:${randomUUID()}`; cursors.set(continuation, { scopeKey: scopeKey(scope), traversal: { ...traversal, seen: new Set(traversal.seen) } }); }
     const checkedAtUtc = now();
     const unavailable = items.filter(item => item.originalText === null || item.availability === "malformed" || item.availability === "missing").length;
     items.flatMap(item => item.limitations).forEach(value => exclusions.add(value));
-    if (traversal.localDay && items.some(item => !item.ref.occurredAtUtc)) exclusions.add("Unknown original timestamps included; captured-day membership is unresolved");
+    if (items.some(item => !item.ref.occurredAtUtc)) exclusions.add("Original two-day occurrence membership is unresolved for observation-only or unavailable evidence; no occurrence time fabricated");
     const state = boundaries.get(traversal.boundary.inventoryId);
     if (state) { state.acceptedBoundaries.add(hash(traversal.boundary)); for (const [key, value] of Array.from(traversal.revisions)) state.revisions.set(key, value); }
     return sourceInventorySchema.parse({
-      items, inventory: traversal.boundary, continuation, capabilities: STAGE1_CAPABILITIES, limitations: [...Array.from(exclusions)],
+      items, readyContexts, inventory: traversal.boundary, continuation, capabilities: STAGE1_CAPABILITIES, limitations: [...Array.from(exclusions)],
       binding: { requestId: `sources:${randomUUID()}`, contextRevision: items.length && new Set(items.map(item => item.ref.contextFingerprint)).size === 1 ? items[0].ref.contextFingerprint : null, selectedIssueId: null, selectedIssueRevision: null },
       coverage: { receiptId: `coverage:${randomUUID()}`, authorizedScope: scope.installationScope, sourceAccountKey: scope.sourceAccountKey, sourceKinds: traversal.sourceKinds, boundaries: families, continuation,
         read: items.length, analyzed: 0, unprocessed: items.length - unavailable, unavailable, partial: !!continuation || !!items.length || !!exclusions.size || families.some(family => family.availability !== "complete"), exclusions: [...Array.from(exclusions)], checkedAtUtc },
@@ -356,8 +421,8 @@ export function createStoredSourceReader(options: StoredSourceOptions): SourceRe
         if (traversal.originInventoryId !== boundary.inventoryId && traversal.boundary.inventoryId !== boundary.inventoryId) throw new SourceReadError("INVALID_SCOPE");
         return nextPage(scope, traversal);
       }
-      // Full stable-ID hash reconciliation deliberately includes old-row edits,
-      // late transcript finalization and arrivals beyond the earlier boundary.
+      // Reconcile only the fresh rolling 48h slice, including eligible old-ID
+      // edits/late finalization and new arrivals, never historical corpus scans.
       const fresh = await capture(scope, { sourceKinds: [...boundary.sourceKinds], localDay: previous.localDay });
       return nextPage(scope, { originInventoryId: boundary.inventoryId, boundary: fresh, sourceKinds: [...boundary.sourceKinds], localDay: previous.localDay, familyIndex: 0, afterId: null, seen: new Set(), revisions: new Map(), prior: new Map(previous.revisions), phase: "reconciliation" });
     },
