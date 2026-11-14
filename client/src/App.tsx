@@ -96,6 +96,7 @@ const OperationsDashboardExactLive = lazy(() => import("./pages/OperationsDashbo
 const AiTeamReview = lazy(() => import("./pages/AiTeamReview"));
 const AiActionsControlCenter = lazy(() => import("./pages/AiActionsControlCenter"));
 const LiveTextMonitor = lazy(() => import("./pages/LiveTextMonitor"));
+const InstinctCustomerIntelligence = lazy(() => import("./pages/InstinctCustomerIntelligence"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -198,6 +199,9 @@ function AiActionsControlCenterRoute() {
 function LiveTextMonitorRoute() {
   return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/admin/live-text-monitor"><LiveTextMonitor /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
+function InstinctCustomerIntelligenceRoute() {
+  return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/admin/live-text-monitor"><InstinctCustomerIntelligence /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
 
 function AdminPayrollSummaryExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/payroll-summary"><PayrollSummaryExactLive /></ReviewWorkspaceFrame>;
@@ -251,6 +255,7 @@ function Router() {
         <Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />
         <Route path={"/admin/daily-action-audit"} component={LiveTextMonitorRoute} />
         <Route path={"/admin/live-text-monitor"} component={LiveTextMonitorRoute} />
+        <Route path={"/admin/customer-intelligence"} component={InstinctCustomerIntelligenceRoute} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
         <Route path={"/agent"} component={AgentDashboard} />
         <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
@@ -340,6 +345,7 @@ function PollingInstrumentation() {
 function DayBoardSafePollingInstrumentation() {
   const [location] = useLocation();
   if (location.startsWith("/invoice/") || location === "/admin/invoices/collect") return null;
+  if (location === "/admin/customer-intelligence") return null;
   if (isDayBoardExactLiveRoute(location)) return null;
   return <PollingInstrumentation />;
 }
@@ -347,6 +353,7 @@ function DayBoardSafePollingInstrumentation() {
 function DayBoardSafeRuntimeWatchers() {
   const [location] = useLocation();
   if (location.startsWith("/invoice/") || location === "/admin/invoices/collect") return null;
+  if (location === "/admin/customer-intelligence") return null;
   if (isDayBoardExactLiveRoute(location)) return null;
   return <LeadAssignmentWatcher />;
 }
