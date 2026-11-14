@@ -101,6 +101,29 @@ describe("selected customer/revision binding and async races", () => {
   it("changed selected issue revision during pending records cannot publish stale investigation", async () => { const h = await harness(), wait = deferred<NativeSnapshot>(), entered = deferred<void>(); const native = { ...h.nativeRecords, readExact: async () => { entered.resolve(); return wait.promise; } }; const tools = createEvidenceTools({ sources: h.sources, nativeRecords: native, verifier: h.verifier, store: h.store, reviewDay: h.day }); const pending = tools.readScopedEvidence(scope, selected(h.issue)); await entered.promise; await h.store.publish(scope, { ...h.observation, analysis: { ...h.observation.analysis, actions: [{ ...h.action, expected: { ...h.action.expected, time: "11:00" } }] } }); wait.resolve(h.proof.snapshot!); await expect(pending).rejects.toThrow("STALE_ISSUE"); });
   it("source changes during pending records reject even without a feed refresh", async () => { const h = await harness(), wait = deferred<NativeSnapshot>(), entered = deferred<void>(); const native = { ...h.nativeRecords, readExact: async () => { entered.resolve(); return wait.promise; } }; const tools = createEvidenceTools({ sources: h.sources, nativeRecords: native, verifier: h.verifier, store: h.store, reviewDay: h.day }); const pending = tools.readScopedEvidence(scope, selected(h.issue)); await entered.promise; h.db.tables.conversation_sessions = [session("Changed to 11 AM")]; wait.resolve(h.proof.snapshot!); await expect(pending).rejects.toThrow("STALE_CONTEXT"); });
   it("source changes during pending reverify cannot install the result into ledger", async () => { const h = await harness(), wait = deferred<VerificationResult>(), entered = deferred<void>(); const verifier = { verify: async () => { entered.resolve(); return wait.promise; } }; const tools = createEvidenceTools({ sources: h.sources, nativeRecords: h.nativeRecords, verifier, store: h.store, reviewDay: h.day }); const pending = tools.reverifySelectedIssue(scope, selected(h.issue)); await entered.promise; h.db.tables.conversation_sessions = [session("Actually 11 AM")]; wait.resolve({ ...h.proof, outcome: "discrepancy", fulfillment: "not_verified" }); await expect(pending).rejects.toThrow("STALE_CONTEXT"); expect((await h.store.getIssue(scope, selected(h.issue)))?.outcome).toBe("matches_current"); });
+  it("usable partial analysis rechecks the same originals without a completion prerequisite or invented fulfillment", async () => {
+    const h = await harness();
+    const partial = { ...h.observation.analysis, status: "partial" as const, failure: "PARTIAL_CONTEXT" as const, limitations: ["Stored context remains partial"] };
+    const [issue] = await h.store.publish(scope, { ...h.observation, analysis: partial });
+    expect(issue.outcome).toBe("review");
+    const before = h.db.snapshots;
+    const result = await h.tools.reverifySelectedIssue(scope, selected(issue));
+    expect(result.issue).toMatchObject({ issueId: issue.issueId, revision: issue.revision, outcome: "review", fulfillment: "unknown", notification: "unknown", delivery: "unknown", verification: null, recordFingerprint: null });
+    expect(result.issue.analysis).toEqual(partial);
+    expect(h.db.snapshots).toBeGreaterThan(before);
+    expect(result.coverage.partial).toBe(true);
+    expect(h.db.calls.every(call => /^SELECT\b/.test(call.sql))).toBe(true);
+  });
+  it("genuinely ambiguous requests recheck as Review rather than a false stale-issue failure", async () => {
+    const h = await harness();
+    const a = { ...h.action, ambiguous: true, missingParameters: ["Which requested time?"] };
+    const [issue] = await h.store.publish(scope, { ...h.observation, analysis: { ...h.observation.analysis, actions: [a] }, verifications: [] });
+    const before = h.db.calls.length;
+    const result = await h.tools.reverifySelectedIssue(scope, selected(issue));
+    expect(result.issue).toMatchObject({ issueId: issue.issueId, revision: issue.revision, outcome: "review", fulfillment: "not_verified", notification: "unknown", delivery: "unknown" });
+    expect(result.issue.verification?.limitations).toContain("REQUEST_UNCERTAIN");
+    expect(h.db.calls.slice(before).every(call => call.sql.includes("conversation_sessions"))).toBe(true);
+  });
   it("unavailable/partial extraction cannot be upgraded by reverify tool", async () => { const h = await harness(); const [issue] = await h.store.publish(scope, { ...h.observation, analysis: { ...h.observation.analysis, status: "unavailable", failure: "MODEL_UNAVAILABLE", reductionComplete: false } }); await expect(h.tools.reverifySelectedIssue(scope, selected(issue))).rejects.toThrow("DB_UNAVAILABLE"); });
 });
 

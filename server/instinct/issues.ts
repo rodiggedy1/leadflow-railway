@@ -299,12 +299,17 @@ export function createIssueLedger(options: IssueLedgerOptions = {}): IssueLedger
     async getIssue(scope, input) { const { state } = await stateFor(scope); return clone(selected(state, input)?.issue ?? null); },
     async replaceVerification(scopeValue, input, value) {
       const { state } = await stateFor(scopeValue), retained = selected(state, input);
-      if (!retained?.action || retained.issue.analysis.status !== "complete" || retained.action.ambiguous || retained.action.missingParameters.length) throw new IssueError("STALE_ISSUE");
+      if (!retained?.action || !["complete", "partial"].includes(retained.issue.analysis.status)) throw new IssueError("STALE_ISSUE");
       const verification = verificationFor(retained.issue.identity, retained.action, value);
       if (targetOccurrenceKey(retained.issue.target) && targetOccurrenceKey(verification.target) && targetOccurrenceKey(retained.issue.target) !== targetOccurrenceKey(verification.target)) throw new IssueError("INVALID_SOURCE_REFERENCE");
-      const issue = instinctIssueSchema.parse({ ...retained.issue, verification, target: verification.target, outcome: verification.outcome, explanation: verification.explanation,
-        priorityReason: verification.outcome === "discrepancy" ? verification.priorityReason : null, recordFingerprint: verification.recordFingerprint, checkedAtUtc: verification.checkedAtUtc,
-        fulfillment: verification.fulfillment, notification: verification.notification, delivery: verification.delivery });
+      // Rechecks use the same certainty policy as initial publication: uncertain
+      // requests remain Review, never a fabricated match or fulfillment upgrade.
+      const uncertain = retained.issue.analysis.status !== "complete" || retained.action.ambiguous || retained.action.missingParameters.length > 0;
+      const outcome = uncertain ? "review" : verification.outcome;
+      const proof = outcome === verification.outcome ? verification : null;
+      const issue = instinctIssueSchema.parse({ ...retained.issue, verification: proof, target: verification.target, outcome, explanation: proof?.explanation ?? retained.issue.explanation,
+        priorityReason: outcome === "discrepancy" ? proof?.priorityReason ?? null : null, recordFingerprint: proof?.recordFingerprint ?? null, checkedAtUtc: proof?.checkedAtUtc ?? null,
+        fulfillment: proof?.fulfillment ?? "unknown", notification: proof?.notification ?? "unknown", delivery: proof?.delivery ?? "unknown" });
       state.retained.set(issue.issueId, clone({ ...retained, issue }));
       const contextRetained = [...Array.from(state.retained.values())].filter(item => item.context.manifest.contextId === retained.context.manifest.contextId && item.action && item.issue.supersededBy === null);
       const sourceUnavailable = retained.context.evidence.filter(item => item.availability === "missing" || item.availability === "malformed" || item.originalText === null).length;

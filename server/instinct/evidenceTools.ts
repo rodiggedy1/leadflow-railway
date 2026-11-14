@@ -120,7 +120,7 @@ export function createEvidenceTools(options: EvidenceToolsOptions): InstinctEvid
   };
   const reverifySelectedIssue: EvidenceTools["reverifySelectedIssue"] = async (scopeValue, inputValue) => {
     const scope = await authorize(scopeValue), input = selectedIssueInputSchema.parse(inputValue), selected = await retained(scope, input), context = await freshContext(scope, selected);
-    if (!selected.action || selected.issue.analysis.status !== "complete") throw new EvidenceToolError("DB_UNAVAILABLE");
+    if (!selected.action || !["complete", "partial"].includes(selected.issue.analysis.status)) throw new EvidenceToolError("DB_UNAVAILABLE");
     let verification;
     try {
       verification = await options.verifier.verify(scope, selected.issue.identity, selected.action, {
