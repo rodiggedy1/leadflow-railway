@@ -84,20 +84,6 @@ function html(controller: InstinctController) { return renderToStaticMarkup(Reac
 afterEach(() => vi.useRealTimers());
 
 describe("Instinct actual-source foreground and literal V6 UI", () => {
-  it("displays saved SMS sender name or phone independently of an unavailable booking match", async () => {
-    vi.useFakeTimers();
-    for (const name of ["Saved Command Chat sender", null]) {
-      const known = issue(1);
-      known.identity = { ...known.identity, displayName: name, decision: "unavailable", reasons: ["NATIVE_CONTACT_NOT_FOUND"], fingerprint: null };
-      const knownFeed = feed([known]); knownFeed.groups[0].verifiedCustomer = false; knownFeed.totals.verifiedCustomers = 0;
-      const work = harness({ feed: vi.fn(async () => knownFeed) }, { issues: [known] }); await work.settle();
-      const output = html(work.controller);
-      expect(output).toContain(name ?? known.identity.phone!);
-      expect(output).not.toContain("Identity needs review");
-      expect(output).toContain("Needs clarification");
-      work.dispose();
-    }
-  });
   it("constructs without reads and stays silent hidden until visible", async () => {
     vi.useFakeTimers(); const work = harness({}, { hidden: true }); await work.settle();
     expect(work.api.feed).not.toHaveBeenCalled(); expect(work.api.sources).not.toHaveBeenCalled(); expect(work.api.check).not.toHaveBeenCalled();

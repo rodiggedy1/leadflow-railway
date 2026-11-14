@@ -265,8 +265,8 @@ export function createSessionContactReader(db: ReadDb, authorizeScope: NativeRec
     return db.snapshot(async (port: SelectPort) => {
       const contacts: IdentitySessionContact[] = [];
       for (const sessionId of [...Array.from(new Set(sessionIds))]) {
-        const rows = await port.select("SELECT CAST(`id` AS CHAR) AS `id`, `leadPhone`, `leadName` FROM `conversation_sessions` WHERE `id` = ? ORDER BY `id` ASC", [sessionId]);
-        for (const row of rows) { const rowId = id(row.id); if (!rowId || rowId !== sessionId) throw new Error("SESSION_CONTACT_CONFLICT"); contacts.push({ sessionId: rowId, phone: normalizePhone(text(row.leadPhone)), displayName: text(row.leadName)?.trim() || null }); }
+        const rows = await port.select("SELECT CAST(`id` AS CHAR) AS `id`, `leadPhone` FROM `conversation_sessions` WHERE `id` = ? ORDER BY `id` ASC", [sessionId]);
+        for (const row of rows) { const rowId = id(row.id); if (!rowId || rowId !== sessionId) throw new Error("SESSION_CONTACT_CONFLICT"); contacts.push({ sessionId: rowId, phone: normalizePhone(text(row.leadPhone)) }); }
       }
       return contacts;
     });

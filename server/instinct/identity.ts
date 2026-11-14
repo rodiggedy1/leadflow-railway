@@ -17,7 +17,7 @@ export interface IdentityAccountBindings {
   readonly businessLines: readonly string[];
   readonly mailboxes: readonly string[];
 }
-export interface IdentitySessionContact { readonly sessionId: string; readonly phone: string | null; readonly displayName?: string | null }
+export interface IdentitySessionContact { readonly sessionId: string; readonly phone: string | null }
 export interface IdentityResolverOptions {
   readonly getAccountBindings: (scope: AuthorizedScope) => IdentityAccountBindings | Promise<IdentityAccountBindings>;
   readonly readSessionContacts?: (scope: AuthorizedScope, sessionIds: readonly string[]) => Promise<readonly IdentitySessionContact[]>;
@@ -42,8 +42,7 @@ function emptyTarget(scope: TargetOccurrence["scope"] = "unspecified"): TargetOc
     scope, localDate: null, localTime: null, arrivalWindow: null, timeZone: null, occurredAtUtc: null };
 }
 function uncertain(identity: VerifiedIdentity, decision: "ambiguous" | "unavailable", reasons: readonly string[]): VerifiedIdentity {
-  // A saved conversation label is display-only, not proof of a booking match.
-  return verifiedIdentitySchema.parse({ ...identity, decision, reasons: unique(reasons), fingerprint: null });
+  return verifiedIdentitySchema.parse({ ...identity, decision, reasons: unique(reasons), fingerprint: null, displayName: null });
 }
 
 /** Contact discovery for the initial SELECT, not yet a verified customer. Source
@@ -65,38 +64,10 @@ export async function resolveSourceIdentity(scopeValue: AuthorizedScope, context
   const lines = unique(bindings.businessLines.map(normalizePhone).filter((value): value is string => value !== null));
   const mailboxes = unique(bindings.mailboxes.map(normalizeIdentityEmail).filter((value): value is string => value !== null));
   const phones: string[] = [], emails: string[] = [], sourceLines: string[] = [], sourceMailboxes: string[] = [], reasons: string[] = [];
-  // Same authority as Command Chat/Live Text Monitor: the exact stored session's
-  // leadPhone and leadName. Historical receiving-line metadata governs routing,
-  // not who owns a source conversation. Never link an unbound provider SMS here.
-  const smsSessionIds = unique(context.evidence.flatMap(item => item.ref.sourceKind === "sms" && item.ref.store === "conversation_sessions" && item.ref.sessionId ? [item.ref.sessionId] : []));
-  const smsContacts = new Map<string, IdentitySessionContact>();
-  if (smsSessionIds.length) {
-    if (!options.readSessionContacts) return uncertain(identity, "unavailable", ["SESSION_CONTACT_BINDING_UNAVAILABLE"]);
-    let sessions: readonly IdentitySessionContact[];
-    try { sessions = await options.readSessionContacts(scope, smsSessionIds); } catch { return uncertain(identity, "unavailable", ["SESSION_CONTACT_BINDING_UNAVAILABLE"]); }
-    if (sessions.some(session => !smsSessionIds.includes(session.sessionId)) || smsSessionIds.some(id => sessions.filter(session => session.sessionId === id).length !== 1)
-      || sessions.some(session => !normalizePhone(session.phone))) return uncertain(identity, "unavailable", ["SESSION_CONTACT_BINDING_UNAVAILABLE"]);
-    sessions.forEach(session => smsContacts.set(session.sessionId, session));
-  }
-  const sourceNames: string[] = [];
   let ambiguous = false;
   for (const item of context.evidence) {
     const p = item.participants;
-    const savedSms = item.ref.sourceKind === "sms" && item.ref.store === "conversation_sessions" && item.ref.sessionId ? smsContacts.get(item.ref.sessionId) : undefined;
-    if (savedSms) {
-      const phone = normalizePhone(savedSms.phone)!;
-      const from = normalizePhone(p.from), to = p.to.map(normalizePhone);
-      if (p.cc.length || p.to.length > 1) { reasons.push("MULTIPARTY_PHONE_SOURCE"); ambiguous = true; continue; }
-      if (item.direction !== "inbound" && item.direction !== "outbound") { reasons.push("PHONE_DIRECTION_OR_CONTACT_UNVERIFIED"); ambiguous = true; continue; }
-      const customerConflict = item.direction === "inbound" ? p.from !== null && from !== phone : p.to.length === 1 && to[0] !== phone;
-      const reversed = item.direction === "inbound" ? to.includes(phone) : from === phone;
-      if (customerConflict || reversed || normalizePhone(p.businessLine) === phone || lines.includes(phone)
-        || item.limitations.some(value => /customer\/session binding conflicts/i.test(value))) {
-        reasons.push("SESSION_CONTACT_CONFLICT"); ambiguous = true; continue;
-      }
-      phones.push(phone);
-      const name = savedSms.displayName?.trim(); if (name) sourceNames.push(name);
-    } else if (item.ref.sourceKind === "email") {
+    if (item.ref.sourceKind === "email") {
       const mailbox = normalizeIdentityEmail(p.mailbox);
       if (!mailbox || !mailboxes.includes(mailbox)) { reasons.push("MAILBOX_UNVERIFIED"); continue; }
       sourceMailboxes.push(mailbox);
@@ -133,9 +104,7 @@ export async function resolveSourceIdentity(scopeValue: AuthorizedScope, context
   if (unique(sourceLines).length > 1 || unique(sourceMailboxes).length > 1) { reasons.push("MULTIPLE_SOURCE_IDENTITIES"); ambiguous = true; }
   const phoneValues = unique(phones), emailValues = unique(emails);
   if (phoneValues.length > 1 || emailValues.length > 1) { reasons.push("SOURCE_CONTACT_CONFLICT"); ambiguous = true; }
-  const names = unique(sourceNames);
-  const candidate = { ...identity, phone: phoneValues.length === 1 ? phoneValues[0] : null, email: emailValues.length === 1 ? emailValues[0] : null,
-    displayName: phoneValues.length === 1 && names.length === 1 ? names[0] : null };
+  const candidate = { ...identity, phone: phoneValues.length === 1 ? phoneValues[0] : null, email: emailValues.length === 1 ? emailValues[0] : null };
   if (reasons.length) return uncertain(candidate, ambiguous ? "ambiguous" : "unavailable", reasons);
   if (!candidate.phone && !candidate.email) return uncertain(candidate, "unavailable", ["SOURCE_CONTACT_UNAVAILABLE"]);
   return uncertain(candidate, "unavailable", ["NATIVE_CONTACT_CORROBORATION_REQUIRED"]);
@@ -304,7 +273,7 @@ export function createIdentityResolver(options: IdentityResolverOptions): Identi
       if (unique(contacts.map(record => record.customerPhone).filter(Boolean)).length > 1 || unique(contacts.map(record => record.customerEmail).filter(Boolean)).length > 1) return uncertain(identity, "ambiguous", ["NATIVE_CONTACT_CONFLICT"]);
       return verifiedIdentitySchema.parse({ ...identity, phone: corroboratedPhone, email: corroboratedEmail,
         decision: "verified", reasons: [], fingerprint: hash([scope.installationScope, scope.sourceAccountKey, corroboratedPhone, corroboratedEmail]),
-        displayName: identity.displayName ?? contacts[0]?.customerName ?? null });
+        displayName: contacts[0]?.customerName ?? null });
     },
     async occurrence(scope: AuthorizedScope, identity: VerifiedIdentity, expected: Expectation, records: NativeSnapshot) { return resolveOccurrence(scope, identity, expected, records); },
   });

@@ -7,7 +7,6 @@ import {
   type SourcesInput, type StoredEvidence,
 } from "../../shared/instinct";
 import { createLazyReadDb, safeReadDbError, type InstallationReadScope, type ReadDb, type SelectPort, type SqlRow } from "./readDb";
-import { normalizePhone } from "../utils/phone";
 
 /** Verified projections from schema.ts and their source writers. No SELECT *,
  * inferred tenant FK, operational legacy link, provider detail or source write. */
@@ -163,26 +162,14 @@ function normalizeRow(store: SourceStore, row: SqlRow, scope: AuthorizedScope, f
       if (!entry || originalText === null || !originalText.trim()) limitations.push("Stored history entry has no valid original text");
       if (role === "unknown") limitations.push("Stored history entry is not an attributed conversation speaker");
       if (!at) limitations.push("Original message occurrence timestamp is missing or invalid");
-      const get = (keys: string[]): string[] => [...Array.from(new Set(envelopes.flatMap(value => keys.flatMap(key => Array.isArray(value[key]) ? value[key] : [value[key]]).filter((value): value is string => typeof value === "string" && !!value).map(value => normalizePhone(value) ?? value))))];
+      const get = (keys: string[]): string[] => [...Array.from(new Set(envelopes.flatMap(value => keys.flatMap(key => Array.isArray(value[key]) ? value[key] : [value[key]]).filter((value): value is string => typeof value === "string" && !!value))))];
       const from = get(["from", "fromPhone"]); const to = get(["to", "toPhone"]); const lines = get(["businessPhone", "businessLine"]);
       const businessEndpoints = direction === "inbound" ? to : direction === "outbound" ? from : [];
       const businessLine = [...Array.from(new Set([...lines, ...businessEndpoints]))];
       if (!businessLine.length) limitations.push("Historical per-message business line is not stored");
       if (businessLine.length > 1 || from.length > 1 || to.length > 1) limitations.push("Conflicting or grouped message endpoints");
       const customerEndpoint = direction === "inbound" ? from : direction === "outbound" ? to : [];
-      const sessionPhone = normalizePhone(text(row.leadPhone));
-      const explicitConflict = envelopes.some(value => {
-        for (const key of ["from", "fromPhone", "to", "toPhone", "businessPhone", "businessLine", "customerPhone"]) {
-          if (value[key] == null) continue;
-          const values = Array.isArray(value[key]) ? value[key] : [value[key]];
-          if (values.length !== 1 || typeof values[0] !== "string" || !normalizePhone(values[0])) return true;
-          if (key === "customerPhone" && normalizePhone(values[0]) !== sessionPhone) return true;
-        }
-        if (value.cc != null && (!Array.isArray(value.cc) || value.cc.length > 0)) return true;
-        return value.direction != null && value.direction !== direction && value.direction !== (direction === "inbound" ? "incoming" : "outgoing");
-      });
-      if (explicitConflict) limitations.push("Explicit message participants or direction conflict with stored session");
-      if (customerEndpoint.some(value => !sessionPhone || normalizePhone(value) !== sessionPhone) || envelopes.some(value => value.sessionId != null && id(value.sessionId) !== rowId)) limitations.push("Message customer/session binding conflicts with stored session");
+      if (customerEndpoint.some(value => value !== row.leadPhone) || envelopes.some(value => value.sessionId != null && id(value.sessionId) !== rowId)) limitations.push("Message customer/session binding conflicts with stored session");
       const ids = entry ? entryIds(entry) : [];
       if (ids.length > 1 || ids.some(key => (providerCounts.get(key) ?? 0) > 1)) limitations.push("Conflicting or repeated provider message identity; all originals retained");
       const ref = common(`session:${rowId}:message:${index}`, "sms", ids[0] ?? null, rowId, null, at, at ? "history" : "unknown", null);
