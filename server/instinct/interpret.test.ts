@@ -78,10 +78,57 @@ describe("source-grounded read-only extraction", () => {
     const item = evidence(text, 0, { direction: "outbound", originalTurns: [] });
     const model = fixtureModel({ actions: [] }); const result = await createRequestInterpreter({ model }).interpret(scope, request(context([item])));
     expect(result).toMatchObject({ status: "complete", actions: [], totalSegments: 1, completedSegments: 1, reductionComplete: true, failure: null });
-    expect(model.mock.calls[0][0]).not.toHaveProperty("maxTokens"); expect(model.mock.calls[0][0]).not.toHaveProperty("max_tokens"); expect(model.mock.calls[0][0]).not.toHaveProperty("tools");
+    expect(model).not.toHaveBeenCalled();
     expect(INSTINCT_EXTRACTION_PROMPT).toContain("Unknown/failed outbound delivery is NOT");
   });
-  it("recorded outbound commitment remains an actionable target without delivery proof", async () => { const text = "I will move your appointment to 2026-11-16 at 9 AM"; const result = await extract({ actions: [action(text)] }, context([evidence(text, 0, { direction: "outbound", originalTurns: [] })])); expect(result.actions[0].ambiguous).toBe(false); expect(result.actions[0].expected.time).toBe("09:00"); });
+  it.each(["I will move your appointment to 2026-11-16 at 9 AM", "Reminder: your appointment is 2026-11-16 at 9 AM"])("outgoing alone never generates a finding or model work: %s", async text => {
+    const model = fixtureModel({ actions: [action(text)] });
+    const result = await createRequestInterpreter({ model }).interpret(scope, request(context([evidence(text, 0, { direction: "outbound", originalTurns: [] })])));
+    expect(result).toMatchObject({ status: "complete", actions: [], failure: null }); expect(model).not.toHaveBeenCalled();
+  });
+  it("retains an incoming request and full outgoing acknowledgment/context but filters outgoing actions", async () => {
+    const incoming = evidence(), outgoing = evidence("I will move your appointment to 2026-11-16 at 9 AM", 1, { direction: "outbound", originalTurns: [] });
+    const model = fixtureModel({ actions: [action(incoming.originalText!, 0, { citations: [quote(incoming.originalText!), quote(outgoing.originalText!, 1)] }), action(outgoing.originalText!, 1)] });
+    const result = await createRequestInterpreter({ model }).interpret(scope, request(context([incoming, outgoing])));
+    expect(result).toMatchObject({ status: "complete", failure: null }); expect(result.actions).toHaveLength(1); expect(result.actions[0].anchorRef).toEqual(incoming.ref);
+    expect(result.actions[0].citations.map(citation => citation.exactQuote)).toEqual([incoming.originalText, outgoing.originalText]);
+    const params = model.mock.calls[0][0], sent = JSON.parse(String(params.messages[1].content));
+    expect(sent.context.evidence.map((item: StoredEvidence) => item.originalText)).toEqual([incoming.originalText, outgoing.originalText]);
+    expect(sent.messages.map((item: { findingAnchorEligible: boolean }) => item.findingAnchorEligible)).toEqual([true, false]);
+    expect(params).not.toHaveProperty("maxTokens"); expect(params).not.toHaveProperty("max_tokens"); expect(params).not.toHaveProperty("tools");
+  });
+  it.each(["mixed", "unknown"] as const)("%s message direction cannot become an incoming action", async direction => {
+    const model = fixtureModel({ actions: [action()] }); const result = await createRequestInterpreter({ model }).interpret(scope, request(context([evidence(undefined, 0, { direction })])));
+    expect(result).toMatchObject({ status: "partial", failure: "PARTIAL_CONTEXT", actions: [] }); expect(model).not.toHaveBeenCalled();
+  });
+  it.each(["mixed", "unknown"] as const)("a %s companion stays contextual while the known incoming request remains reviewable", async direction => {
+    const companion = evidence(undefined, 1, { direction });
+    const result = await extract({ actions: [action(), action(companion.originalText!, 1)] }, context([evidence(), companion]));
+    expect(result).toMatchObject({ status: "partial", failure: "PARTIAL_CONTEXT" }); expect(result.actions).toHaveLength(1);
+    expect(result.actions[0].anchorRef).toEqual(evidence().ref); expect(result.actions[0].ambiguous).toBe(true);
+  });
+  it.each(["staff", "assistant"] as const)("explicit %s speaker contradicting inbound direction is not an incoming anchor", async role => {
+    const item = evidence(); item.originalTurns[0].role = role;
+    const model = fixtureModel({ actions: [action()] }); const result = await createRequestInterpreter({ model }).interpret(scope, request(context([item])));
+    expect(result).toMatchObject({ status: "partial", actions: [], failure: "PARTIAL_CONTEXT" }); expect(model).not.toHaveBeenCalled();
+  });
+  it("known incoming direction with unknown original speaker retains the request for honest Review", async () => {
+    const item = evidence(); item.originalTurns[0].role = "unknown";
+    const result = await extract({ actions: [action()] }, context([item]));
+    expect(result).toMatchObject({ status: "partial", failure: "PARTIAL_CONTEXT" }); expect(result.actions).toHaveLength(1);
+    expect(result.actions[0]).toMatchObject({ ambiguous: true, missingParameters: expect.arrayContaining(["SPEAKER_OR_DIRECTION_UNVERIFIED"]) });
+  });
+  it("outgoing message acknowledgment cannot supersede the incoming request", async () => {
+    const outgoing = evidence("I will move your appointment to 2026-11-16 at 9 AM", 1, { direction: "outbound", originalTurns: [], ref: { ...evidence().ref, sourceId: "message:1", occurredAtUtc: "2026-11-13T18:01:00.000Z" } });
+    const result = await extract({ actions: [action(undefined, 0, { citations: [quote(evidence().originalText!), quote(outgoing.originalText!, 1)], supersededByEvidenceIndex: 1 })] }, context([evidence(), outgoing]));
+    expect(result.actions).toHaveLength(1); expect(result.actions[0].supersededByRef).toBeNull(); expect(result.actions[0].ambiguous).toBe(true);
+  });
+  it("outbound recorded call commitment retains the existing call interpretation", async () => {
+    const text = "I will move your appointment to 2026-11-16 at 9 AM";
+    const item = evidence(text, 0, { direction: "outbound", originalTurns: [], ref: { ...evidence().ref, store: "voice_calls", sourceKind: "ai_call", sourceId: "call:1", providerId: "call:1" } });
+    const result = await extract({ actions: [action(text)] }, context([item]));
+    expect(result).toMatchObject({ status: "complete", failure: null }); expect(result.actions).toHaveLength(1); expect(result.actions[0].expected.time).toBe("09:00");
+  });
   it.each(["cancel", "reschedule", "arrival_window", "access_notes", "notes", "service", "extras"] as const)("extracts approved %s with exact originals and no generated identity", async kind => {
     const text = "For my appointment 2026-11-16 arrive 12 to 5 PM; Gate 2841; add Inside oven; Deep cleaning";
     const changes: Partial<Expectation> = kind === "arrival_window" ? { time: "12:00", timeKind: "window", windowEnd: "17:00" } : kind === "notes" || kind === "access_notes" ? { notes: "Gate 2841", notesDestination: "cleaner_instructions" } : kind === "extras" ? { extras: ["Inside oven"], extrasMode: "add" } : kind === "service" ? { serviceName: "Deep cleaning" } : {};

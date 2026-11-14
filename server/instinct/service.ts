@@ -14,7 +14,7 @@ import { createStoredSourceReader } from "./sources";
 import { createLazyReadDb, ReadDbError, type ReadDb, type InstallationReadScope } from "./readDb";
 import { createNativeRecordReader, createSessionContactReader } from "./nativeRecords";
 import { createIdentityResolver, resolveSourceIdentity, type IdentityResolverOptions } from "./identity";
-import { createAnalysisRequest, createRequestInterpreter, type RequestInterpreter } from "./interpret";
+import { canAnchorInstinctFinding, createAnalysisRequest, createRequestInterpreter, type RequestInterpreter } from "./interpret";
 import { createRequestVerifier, type RequestVerifier } from "./verify";
 import { buildIssueFeed, createIssueLedger, targetOccurrenceKey, type IssueLedger } from "./issues";
 import { createEvidenceTools, type InstinctEvidenceTools } from "./evidenceTools";
@@ -223,6 +223,32 @@ export function createInstinctService(options: InstinctServiceOptions): Instinct
   };
   const runCheck = async (scope: AuthorizedScope, input: CheckInput): Promise<CheckResult> => {
     const context = await freshContext(scope, input);
+    if (context.evidence.length && !context.evidence.some(canAnchorInstinctFinding)) {
+      // Outgoing/unknown message originals remain inventoried and available in
+      // an incoming finding's whole context, but cannot create their own cards.
+      // The interpreter settles source-policy coverage without model requests.
+      const analysis = { ...analysisReceiptSchema.parse(await interpreter.interpret(scope, createAnalysisRequest(context))), actions: [] };
+      const fresh = await freshContext(scope, input);
+      if (analysis.contextRevision !== context.manifest.revision || analysis.contextFingerprint !== context.manifest.contextFingerprint
+        || fresh.manifest.contextId !== context.manifest.contextId || JSON.stringify(fresh.manifest.entries) !== JSON.stringify(context.manifest.entries)
+        || JSON.stringify(fresh.evidence) !== JSON.stringify(context.evidence) || fresh.manifest.complete !== context.manifest.complete
+        || JSON.stringify(fresh.manifest.limitations) !== JSON.stringify(context.manifest.limitations)) throw new InstinctServiceError("STALE_CONTEXT");
+      const base = contextCoverage(scope, context);
+      const analyzed = (analysis.status === "complete" || analysis.status === "partial") && analysis.totalSegments > 0
+        && analysis.completedSegments === analysis.totalSegments && analysis.reductionComplete
+        && (analysis.failure === null || analysis.failure === "PARTIAL_CONTEXT");
+      const unavailable = analysis.status === "unavailable" ? base.read : base.unavailable;
+      const coverage = coverageReceiptSchema.parse({ ...base, analyzed: analyzed ? base.read - unavailable : 0,
+        unavailable, unprocessed: analyzed || analysis.status === "unavailable" ? 0 : base.read - unavailable,
+        partial: analysis.status !== "complete" || !context.manifest.complete || unavailable > 0,
+        exclusions: unique([...base.exclusions, ...analysis.limitations]) });
+      await authorize(scope);
+      actor(scope).checks.set(context.manifest.contextFingerprint, { revision: context.manifest.revision, coverage });
+      await updateCoverage(scope);
+      return checkResultSchema.parse({ binding: { requestId: `check:${hash([scope, input])}`, contextRevision: context.manifest.revision, selectedIssueId: null, selectedIssueRevision: null },
+        coverage: aggregate(scope, actor(scope)), capabilities: STAGE1_CAPABILITIES,
+        limitations: unique([transientLimitation, ...coverage.exclusions, ...analysis.limitations]), analysis, issues: [], contextRevision: context.manifest.revision });
+    }
     // Discovery is intentionally NOT a verified identity. Native and actual source
     // session bindings must corroborate it before any definitive comparison.
     const discovery = await resolveSourceIdentity(scope, context, identityOptions);
@@ -235,12 +261,14 @@ export function createInstinctService(options: InstinctServiceOptions): Instinct
         || JSON.stringify(fresh.manifest.limitations) !== JSON.stringify(context.manifest.limitations)) throw new InstinctServiceError("STALE_CONTEXT");
     };
     await unchangedContext();
-    const analysis = analysisReceiptSchema.parse(await interpreter.interpret(scope, createAnalysisRequest(context)));
-    if (analysis.contextRevision !== context.manifest.revision || analysis.contextFingerprint !== context.manifest.contextFingerprint) throw new InstinctServiceError("STALE_CONTEXT");
-    for (const action of analysis.actions) {
+    const parsedAnalysis = analysisReceiptSchema.parse(await interpreter.interpret(scope, createAnalysisRequest(context)));
+    if (parsedAnalysis.contextRevision !== context.manifest.revision || parsedAnalysis.contextFingerprint !== context.manifest.contextFingerprint) throw new InstinctServiceError("STALE_CONTEXT");
+    for (const action of parsedAnalysis.actions) {
       if (action.contextId !== context.manifest.contextId || !context.evidence.some(item => sameEvidenceRef(item.ref, action.anchorRef))) throw new InstinctServiceError("INVALID_SOURCE_REFERENCE");
       action.citations.forEach(citation => validateCitation(citation, scope, context.evidence));
     }
+    const analysis = { ...parsedAnalysis, actions: parsedAnalysis.actions.filter(action => canAnchorInstinctFinding(
+      context.evidence.find(item => sameEvidenceRef(item.ref, action.anchorRef))!)) };
     await unchangedContext();
     const verifications = [];
     const retainedFeed = await store.feed(scope, { filter: "all" });
@@ -282,7 +310,14 @@ export function createInstinctService(options: InstinctServiceOptions): Instinct
       return actor(scope).missing.has(observationKey(ref)) || (observed && (observed.ref.contextFingerprint !== ref.contextFingerprint
         || (ref.sourceKind !== "ai_call" && observed.ref.sourceRevision !== ref.sourceRevision)));
     });
-    const items = result.groups.flatMap(group => group.issues).map(issue => stale(issue) ? {
+    const eligible: InstinctIssue[] = [];
+    for (const issue of result.groups.flatMap(group => group.issues)) {
+      const retained = await store.getRetained(scope, { issueId: issue.issueId, issueRevision: issue.revision });
+      const anchor = retained?.action && retained.context.evidence.find(item => sameEvidenceRef(item.ref, retained.action!.anchorRef));
+      if (retained?.context.evidence.length && !(anchor ? canAnchorInstinctFinding(anchor) : retained.context.evidence.some(canAnchorInstinctFinding))) continue;
+      eligible.push(issue);
+    }
+    const items = eligible.map(issue => stale(issue) ? {
       ...issue, outcome: "review" as const, explanation: "Stored source context changed; earlier interpretation and current-state proof require a fresh check.",
       verification: null, checkedAtUtc: null, recordFingerprint: null, priorityReason: null,
       fulfillment: "unknown" as const, notification: "unknown" as const, delivery: "unknown" as const,

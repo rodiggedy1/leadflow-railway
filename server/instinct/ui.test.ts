@@ -289,6 +289,33 @@ describe("Instinct actual-source foreground and literal V6 UI", () => {
     expect(right.includes("Original source that prompted this finding")).toBe(true); expect(work.api.evidence).toHaveBeenCalledTimes(1);
     work.dispose();
   });
+  it("shows only incoming SMS in the main history and keeps outgoing reminders inside closed conversation details", async () => {
+    vi.useFakeTimers(); const a = issue(1); const data = investigation(a);
+    const outgoing = { ...evidence(2), ref: ref(2, { sessionId: "1", contextFingerprint: fingerprint(1) }), originalText: "OUTGOING REMINDER: your cleaning is tomorrow.", direction: "outbound" as const };
+    data.evidence.push(outgoing);
+    data.citations = [...data.citations, { ref: outgoing.ref, start: 0, end: outgoing.originalText.length, exactQuote: outgoing.originalText }];
+    const work = harness({ evidence: vi.fn(async () => data) }, { items: data.evidence, issues: [a] });
+    await work.settle(); work.controller.select(a); await work.settle();
+    const rendered = html(work.controller), left = rendered.split('<section class="left">')[1].split('</section>')[0];
+    const [primary, details] = left.split('<details class="sms-conversation-details">');
+    expect(primary.includes("Incoming SMS history")).toBe(true); expect(primary.includes("Synthetic request 1")).toBe(true);
+    expect(primary.includes(outgoing.originalText)).toBe(false); expect(details).toBeDefined();
+    expect(details.includes("Conversation details")).toBe(true); expect(details.includes(outgoing.originalText)).toBe(true);
+    expect(left.includes('<details class="sms-conversation-details" open')).toBe(false);
+    expect(work.api.evidence).toHaveBeenCalledTimes(1); work.dispose();
+  });
+  it.each(["outbound", "mixed", "unknown"] as const)("never labels %s SMS as incoming in the primary history", async direction => {
+    vi.useFakeTimers(); const a = issue(1); const data = investigation(a);
+    const contextOnly = { ...evidence(2), ref: ref(2, { sessionId: "1", contextFingerprint: fingerprint(1) }), originalText: `CONTEXT ONLY ${direction}`, direction };
+    data.evidence.push(contextOnly);
+    const work = harness({ evidence: vi.fn(async () => data) }, { items: data.evidence, issues: [a] });
+    await work.settle(); work.controller.select(a); await work.settle();
+    const left = html(work.controller).split('<section class="left">')[1].split('</section>')[0];
+    const [primary, details] = left.split('<details class="sms-conversation-details">');
+    expect(primary.includes(contextOnly.originalText)).toBe(false); expect(details).toBeDefined();
+    expect(details.includes(contextOnly.originalText)).toBe(true); expect(details.includes(direction)).toBe(true);
+    work.dispose();
+  });
   it("retains inventory continuation across pause rather than skipping the next page", async () => {
     vi.useFakeTimers(); const next = deferred<SourceInventory>(); const sources = vi.fn(async (input: contract.SourcesInput) => input.cursor ? next.promise : inventory([evidence(1)], "next-page"));
     const work = harness({ sources }); await work.settle(); work.controller.togglePause(); next.resolve(inventory([evidence(2)])); await work.settle();

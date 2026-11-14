@@ -70,6 +70,59 @@ export async function firstCheck(h: ReturnType<typeof serviceHarness>) {
 const selected = (issue: { issueId: string; revision: string }) => ({ issueId: issue.issueId, issueRevision: issue.revision });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 
+describe("incoming-only customer findings with whole verified conversation context", () => {
+  const historyMessage = (role: string, content: string, _index = 0) => ({ role, content, ts: fixtureAt,
+    fromPhone: role === "user" ? fixturePhone : fixtureLine, toPhone: role === "user" ? fixtureLine : fixturePhone });
+  it.each(["Reminder: appointment LF-1 is 2026-11-16 at 9 AM", "Move my appointment LF-1 to 2026-11-16 at 9 AM"])("outgoing-only %s creates no model/record work or cards in check/feed/day review", async text => {
+    const model = vi.fn<ModelCallable>(async () => { throw new Error("No outgoing model call authorized"); }), h = serviceHarness({ model });
+    h.db.tables.conversation_sessions = [fixtureSession("7", "", { messageHistory: JSON.stringify([historyMessage("assistant", text)]) })];
+    const { result } = await firstCheck(h);
+    expect(result.analysis).toMatchObject({ status: "complete", actions: [], failure: null }); expect(result.issues).toEqual([]);
+    expect(result.coverage).toMatchObject({ read: 1, analyzed: 1, unavailable: 0, unprocessed: 0 }); expect(model).not.toHaveBeenCalled();
+    expect(h.db.calls.every(call => !/FROM `(bookings|leadflow_jobs|booking_series)`/.test(call.sql))).toBe(true);
+    expect((await h.service.feed(fixtureScope, { filter: "all" })).groups).toEqual([]);
+    const day = await h.service.dayReview(fixtureScope, { localDate: "2026-11-13", timeZone: "America/New_York", sourceKinds: ["sms"] });
+    expect(day.groups).toEqual([]); expect(day.coverage).toMatchObject({ read: 1, analyzed: 1, unavailable: 0 }); expect(model).not.toHaveBeenCalled();
+  });
+  it("incoming request plus outgoing acknowledgment produces one incoming action and all details originals", async () => {
+    const h = serviceHarness(), incoming = "Move my appointment LF-1 to 2026-11-16 at 9 AM", outgoing = "Acknowledged, I will move LF-1 to 2026-11-16 at 9 AM";
+    h.db.tables.conversation_sessions = [fixtureSession("7", "", { messageHistory: JSON.stringify([historyMessage("user", incoming), historyMessage("assistant", outgoing, 1)]) })];
+    const { result } = await firstCheck(h);
+    expect(result.issues).toHaveLength(1); expect(result.issues[0].outcome).toBe("matches_current"); expect(result.analysis.actions[0].anchorRef.sourceId).toBe("session:7:message:0");
+    expect(result.issues[0].coverage).toMatchObject({ read: 2, analyzed: 2, unavailable: 0 });
+    const details = await h.service.evidence(fixtureScope, selected(result.issues[0]));
+    expect(details.evidence.map(item => item.originalText)).toEqual([incoming, outgoing]); expect(details.evidence.map(item => item.direction)).toEqual(["inbound", "outbound"]);
+    expect((await h.service.feed(fixtureScope, { filter: "all" })).totals.requests).toBe(1); expect(h.model).toHaveBeenCalledTimes(1);
+  });
+  it("genuine incoming model failure stays visible with outgoing context and explicitly retries", async () => {
+    let fail = true; const success = fixtureModel(), model = vi.fn<ModelCallable>(async params => { if (fail) throw new Error("Offline provider failure"); return success(params); });
+    const h = serviceHarness({ model }); h.db.tables.conversation_sessions = [fixtureSession("7", "", { messageHistory: JSON.stringify([
+      historyMessage("user", "Move my appointment LF-1 to 2026-11-16 at 9 AM"), historyMessage("assistant", "Acknowledged", 1),
+    ]) })];
+    const { result, input } = await firstCheck(h); expect(result.issues).toHaveLength(1); expect(result.issues[0].outcome).toBe("analysis_unavailable"); expect(result.coverage.unavailable).toBe(2);
+    const details = await h.service.evidence(fixtureScope, selected(result.issues[0])); expect(details.evidence).toHaveLength(2);
+    expect((await h.service.feed(fixtureScope, { filter: "all" })).groups[0].issues[0].outcome).toBe("analysis_unavailable"); expect(model).toHaveBeenCalledTimes(1);
+    fail = false; const retried = await h.service.check(fixtureScope, input); expect(retried.issues[0].outcome).toBe("matches_current"); expect(model).toHaveBeenCalledTimes(2);
+  });
+  it("unknown stored message role never becomes incoming or a context-only attention card", async () => {
+    const h = serviceHarness(); h.db.tables.conversation_sessions = [fixtureSession("7", "", { messageHistory: JSON.stringify([historyMessage("unattributed", "Move my appointment LF-1 to 2026-11-16 at 9 AM")]) })];
+    const { result } = await firstCheck(h); expect(result.analysis).toMatchObject({ status: "partial", failure: "PARTIAL_CONTEXT", actions: [] });
+    expect(result.issues).toEqual([]); expect(result.coverage.partial).toBe(true); expect((await h.service.feed(fixtureScope, { filter: "all" })).groups).toEqual([]); expect(h.model).not.toHaveBeenCalled();
+  });
+  it.each(["outgoing action", "outgoing unavailable", "outgoing no-action"] as const)("retained %s is suppressed without altering ledger or coverage", async kind => {
+    const seed = createIssueLedger({ clock: { now: () => new Date(fixtureAt) } }), store = createIssueLedger({ clock: { now: () => new Date(fixtureAt) } }), h = serviceHarness({ store: seed });
+    const { result } = await firstCheck(h), retained = await seed.getRetained(fixtureScope, selected(result.issues[0]));
+    const ctx = retained!.context;
+    for (const item of ctx.evidence) { item.direction = "outbound"; item.originalTurns.forEach(turn => { turn.role = "assistant"; }); }
+    const analysis = kind === "outgoing action" ? result.analysis : { ...result.analysis, actions: [], ...(kind === "outgoing unavailable" ? { status: "unavailable" as const, failure: "MODEL_TIMEOUT" as const, completedSegments: 0, reductionComplete: false } : {}) };
+    await store.publish(fixtureScope, { context: ctx, identity: result.issues[0].identity, analysis, coverage: result.issues[0].coverage,
+      verifications: kind === "outgoing action" ? [{ actionId: analysis.actions[0].id, verification: result.issues[0].verification! }] : [] });
+    expect((await store.feed(fixtureScope, { filter: "all" })).groups.length).toBeGreaterThan(0);
+    const service = createInstinctService({ ...h.options, store }); await service.sources(fixtureScope, { sourceKinds: ["sms"] });
+    const feed = await service.feed(fixtureScope, { filter: "all" }); expect(feed.groups).toEqual([]); expect(feed.totals.requests).toBe(0); expect(feed.coverage.read).toBe(1);
+  });
+});
+
 describe("read-only actual dependency orchestration", () => {
   it("sources/check/feed/evidence/reverify compose actual injected SQL/model and preserve exact identity", async () => {
     const h = serviceHarness(), { inventory, result } = await firstCheck(h);

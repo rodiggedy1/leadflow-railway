@@ -12,7 +12,7 @@ function request(texts = ["Move my appointment to 2026-11-16 at 9 AM"]): Analysi
   return createAnalysisRequest(context);
 }
 const expected: Expectation = { bookingReference: null, date: "2026-11-16", originalDate: null, time: "09:00", timeKind: "exact", windowEnd: null, timeZone: "America/New_York", scope: "visit", address: null, serviceName: null, extras: null, extrasMode: "unspecified", teamName: null, amountCents: null, notes: null, notesDestination: "unspecified" };
-interface Message { key: string; text: string; originalRange: { evidenceIndex: number; start: number; end: number } }
+ interface Message { key: string; text: string; findingAnchorEligible?: boolean; originalRange: { evidenceIndex: number; start: number; end: number } }
 interface Child { actions: KeyedAction[]; contextFacts: Array<{ text: string; evidenceKeys: string[] }>; leaves: string[] }
 interface Payload { threadKey: string; messages: Message[]; context?: unknown; originals?: Array<{ originalText: string; originalRange: Message["originalRange"] }>; segmentId?: string; orderedChildren?: Child[]; expectedSegments?: string[] }
 function payload(params: InstinctInvokeParams): Payload { return JSON.parse(String(params.messages[1].content)); }
@@ -30,6 +30,36 @@ describe("server-owned SMS model message keys", () => {
     expect(keyedOutputSchema.safeParse({ actions: [action(payload(model.mock.calls[0][0]))] }).success).toBe(true);
     const empty = await extract(() => ({ actions: [] }), request(["Thanks! Cleaner ETA is 10 minutes."]));
     expect(empty.receipt).toMatchObject({ status: "complete", actions: [], failure: null });
+  });
+  it.each(["sms", "email"] as const)("%s keyed findings use only incoming anchors while all original context remains supplied", async kind => {
+    const req = request(["Move my appointment to 2026-11-16 at 9 AM", "I will move your appointment to 2026-11-16 at 9 AM"]);
+    req.context.evidence[1].direction = "outbound";
+    if (kind === "email") for (const [index, item] of Array.from(req.context.evidence.entries())) {
+      item.ref = { ...item.ref, store: "madison_email_drafts", sourceKind: "email", sourceId: `draft:${index}`, providerId: `mail:${index}`, threadId: "mail-thread:1" };
+      item.participants = { from: index === 0 ? "customer@example.test" : "office@example.test", to: [index === 0 ? "office@example.test" : "customer@example.test"], cc: [], replyTo: null, businessLine: null, mailbox: "office@example.test" };
+      req.context.manifest.entries[index].ref = item.ref;
+    }
+    const { model, receipt } = await extract(data => ({ actions: [action(data, 0, { evidenceKeys: data.messages.map(message => message.key) }), action(data, 1)] }), req);
+    expect(receipt).toMatchObject({ status: "complete", failure: null }); expect(receipt.actions).toHaveLength(1); expect(receipt.actions[0].anchorRef).toEqual(req.context.evidence[0].ref);
+    expect(receipt.actions[0].citations.map(citation => citation.exactQuote)).toEqual(req.context.evidence.map(item => item.originalText));
+    const data = payload(model.mock.calls[0][0]); expect(data.messages.map(message => message.findingAnchorEligible)).toEqual([true, false]);
+    expect(data.messages.map(message => message.text)).toEqual(req.context.evidence.map(item => item.originalText));
+  });
+  it("adaptive keyed reduction preserves outgoing facts as context and only incoming request anchors", async () => {
+    const req = request(["Move my appointment to 2026-11-16 at 9 AM", "Acknowledged: I will move your appointment to 2026-11-16 at 9 AM"]);
+    req.context.evidence[1].direction = "outbound";
+    const model = vi.fn<ModelCallable>(async params => {
+      const data = payload(params);
+      if (data.context) throw new Error("MODEL_CONTEXT_CONSTRAINT");
+      if (data.originals) return reply({ actions: [action(data)], contextFacts: data.messages.map(message => ({ text: "Original conversation context", evidenceKeys: [message.key] })) });
+      expect(data.orderedChildren!.flatMap(child => child.actions)).toHaveLength(1);
+      expect(data.messages.map(message => message.findingAnchorEligible)).toEqual([true, false]);
+      return reply({ actions: data.orderedChildren!.flatMap(child => child.actions).map(value => ({ ...value, evidenceKeys: data.messages.map(message => message.key) })),
+        contextFacts: data.orderedChildren!.flatMap(child => child.contextFacts), accountedSegments: data.expectedSegments });
+    });
+    const receipt = await createRequestInterpreter({ model }).interpret(scope, req);
+    expect(receipt).toMatchObject({ status: "complete", reductionComplete: true, totalSegments: 2 }); expect(receipt.actions).toHaveLength(1);
+    expect(receipt.actions[0].anchorRef).toEqual(req.context.evidence[0].ref); expect(receipt.actions[0].citations.map(citation => citation.exactQuote)).toEqual(req.context.evidence.map(item => item.originalText));
   });
   it("calculates emoji UTF-16 citations server-side and keeps distinct requests in one body separate", async () => {
     const text = "Hello 🧼. Move my appointment to 2026-11-16 at 9 AM. Move my appointment to 2026-11-17 at 11 AM.";
@@ -61,6 +91,8 @@ describe("server-owned SMS model message keys", () => {
     if (defect === "other turn") {
       const boundary = text.indexOf("Use side door.");
       req.context.evidence[0].originalTurns = [{ turnId: "customer:1", speaker: "customer", role: "customer", text: text.slice(0, boundary), start: 0, end: boundary, occurredAtUtc: now, timeBasis: "turn" }, { turnId: "staff:1", speaker: "staff", role: "staff", text: text.slice(boundary), start: boundary, end: text.length, occurredAtUtc: now, timeBasis: "turn" }];
+      req.context.evidence[0].ref = { ...req.context.evidence[0].ref, store: "voice_calls", sourceKind: "ai_call", sourceId: "call:1", providerId: "call:1" };
+      req.context.manifest.entries[0].ref = req.context.evidence[0].ref;
       req.context.manifest.entries[0].turnCount = 2;
     }
     const { receipt } = await extract(data => ({ actions: [action(data, 0, { action: "access_notes", expected: { ...expected, date: null, time: null, timeKind: "unspecified", scope: "unspecified", notes: "Gate 2841. Use side door.", notesDestination: "cleaner_instructions" }, evidenceKeys: data.messages.filter(message => !message.text.startsWith("OMITTED")).map(message => message.key) })] }), req);

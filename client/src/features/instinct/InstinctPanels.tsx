@@ -39,20 +39,30 @@ function SelectedSmsHistory({ binding }: { binding: InstinctWorkspaceBinding }) 
   const issue = state.selected;
   const investigation = state.investigation;
   const messages = investigation?.evidence.filter(evidence => evidence.ref.sourceKind === "sms") ?? [];
+  const incoming = messages.filter(evidence => evidence.direction === "inbound");
   const citations = investigation?.citations.filter(citation => citation.ref.sourceKind === "sms") ?? [];
   if (!issue || !state.evidenceVisible || !messages.length && ![...issue.identity.evidenceRefs, ...issue.citations.map(citation => citation.ref)].some(ref => ref.sourceKind === "sms")) return null;
   return <div className="selected-sms-history" role="region" aria-label={`SMS history for ${person(issue)}`} style={{ marginTop: 14 }}>
-    <div className="label">SMS history</div>
+    <div className="label">Incoming SMS history</div>
     {state.investigating && !investigation ? <div className="prose" role="status">Loading SMS history…</div> : !investigation ? <div className="prose" role="status">SMS history unavailable. Retry evidence for this card.</div> : <>
-      {citations.map((citation, index) => <div className="proof" key={`${citation.ref.store}:${citation.ref.sourceId}:${index}`}><small className="source-meta">{sourceLabel(citation.ref.sourceKind)} · {citation.ref.store}:{citation.ref.sourceId} · {citation.ref.providerId ?? "Provider ID unavailable"} · {time(citation.ref.occurredAtUtc)} · {citation.ref.timeBasis} · revision {citation.ref.sourceRevision}</small>{citation.exactQuote}</div>)}
-      {messages.map(evidence => {
+      {incoming.map(evidence => {
         const prompted = citations.some(citation => sameEvidenceRef(citation.ref, evidence.ref));
         return <details open key={`${evidence.ref.store}:${evidence.ref.sourceId}`}>
-          <summary className="source-meta">{prompted ? "Text message that prompted this finding" : "Full stored context"} · {sourceLabel(evidence.ref.sourceKind)} · {time(evidence.ref.occurredAtUtc)} · {evidence.direction} · {evidence.availability} · {evidence.contentBasis}</summary>
+          <summary className="source-meta">{prompted ? "Text message that prompted this finding" : "Incoming customer message"} · {sourceLabel(evidence.ref.sourceKind)} · {time(evidence.ref.occurredAtUtc)} · {evidence.direction} · {evidence.availability} · {evidence.contentBasis}</summary>
           <div className="proof" style={{ whiteSpace: "pre-wrap" }}>{evidence.originalText ?? "Original body/transcript unavailable"}</div>
           <div className="prose">{evidence.limitations.join(" · ")}</div>
         </details>;
       })}
+      {!!messages.length && !incoming.length && <div className="prose">No verified incoming SMS originals are available for this finding.</div>}
+      {!!messages.length && <details className="sms-conversation-details" key={`${issue.issueId}:${issue.revision}`}>
+        <summary className="source-meta">Conversation details</summary>
+        {citations.map((citation, index) => <div className="proof" key={`${citation.ref.store}:${citation.ref.sourceId}:${index}`}><small className="source-meta">{sourceLabel(citation.ref.sourceKind)} · {citation.ref.store}:{citation.ref.sourceId} · {citation.ref.providerId ?? "Provider ID unavailable"} · {time(citation.ref.occurredAtUtc)} · {citation.ref.timeBasis} · revision {citation.ref.sourceRevision}</small>{citation.exactQuote}</div>)}
+        {messages.map(evidence => <div key={`${evidence.ref.store}:${evidence.ref.sourceId}`}>
+          <div className="source-meta">{sourceLabel(evidence.ref.sourceKind)} · {time(evidence.ref.occurredAtUtc)} · {evidence.direction} · {evidence.availability} · {evidence.contentBasis}</div>
+          <div className="proof" style={{ whiteSpace: "pre-wrap" }}>{evidence.originalText ?? "Original body/transcript unavailable"}</div>
+          <div className="prose">{evidence.limitations.join(" · ")}</div>
+        </div>)}
+      </details>}
       {!messages.length && <div className="prose">No SMS originals available for this finding.</div>}
     </>}
   </div>;

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createInstinctService } from "./service";
 import { assertReadSelect, type ReadDb, type SelectPort, type SqlRow, type SqlValue } from "./readDb";
+import { createSessionContactReader } from "./nativeRecords";
 
 const at = "2026-11-13T18:00:00.000Z", phone = "+13015550123", other = "+13015550888", line = "+13015550456";
 const scope = { installationScope: "installation", sourceAccountKey: "account", authorizationVersion: "v1", actor: { staffId: "1", role: "admin" as const } };
@@ -55,9 +56,13 @@ describe("existing exact-session sender authority", () => {
     const { result } = await check({ from: "301-555-0123", fromPhone: phone, customerPhone: ["301-555-0123"], sessionId: "7", direction: "incoming" });
     expect(result.issues[0].identity.decision).toBe("verified");
   });
-  it("uses exact session phone for outbound role/content/ts history as well", async () => {
-    const { result } = await check({ role: "assistant", to: "301-555-0123", toPhone: phone });
-    expect(result.issues[0].identity).toMatchObject({ phone, displayName: "Saved sender", decision: "verified" });
+  it("keeps exact session sender metadata for outgoing details without creating an outgoing card", async () => {
+    const { db, model, inventory, result } = await check({ role: "assistant", to: "301-555-0123", toPhone: phone });
+    expect(result.issues).toEqual([]); expect(model).not.toHaveBeenCalled();
+    expect(inventory.items[0]).toMatchObject({ direction: "outbound", participants: { to: expect.arrayContaining(["301-555-0123", phone]) } });
+    const contacts = await createSessionContactReader(db, async value => value.installationScope === scope.installationScope && value.sourceAccountKey === scope.sourceAccountKey)(scope, ["7"]);
+    expect(contacts).toEqual([{ sessionId: "7", phone, displayName: "Saved sender" }]);
+    expect(db.calls.filter(call => call.sql.includes("`leadPhone`, `leadName` FROM `conversation_sessions`")).every(call => call.params[0] === "7")).toBe(true);
   });
   it.each([
     { fromPhone: 3015550123 }, { from: { phone } }, { from: [] }, { from: [phone, phone] }, { fromPhone: other },
