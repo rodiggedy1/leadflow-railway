@@ -233,6 +233,60 @@ describe("Instinct actual-source foreground and literal V6 UI", () => {
     expect(rendered).toContain("Text message that prompted this finding");
     expect(rendered).toContain("Synthetic request 1"); expect(rendered).toContain("<details open=\"\">");
     expect(rendered).toContain("Fulfillment:"); expect(rendered).toContain("Customer notification:");
+    const left = rendered.split('<section class="left">')[1].split('</section>')[0];
+    const right = rendered.split('<section class="right">')[1];
+    expect(left.includes("SMS history")).toBe(true);
+    expect(left.includes("Synthetic request 1")).toBe(true);
+    expect(right.includes("Synthetic request 1")).toBe(false);
+    expect(right.includes("Text message that prompted this finding")).toBe(false);
+    expect(right.includes("Independent booking check:")).toBe(true);
+    work.dispose();
+  });
+  it("shows selected SMS loading in the left card and does not render another customer's history", async () => {
+    vi.useFakeTimers(); const pending = deferred<Investigation>(); const a = issue(1);
+    const work = harness({ evidence: vi.fn(() => pending.promise) }, { items: [evidence(1)], issues: [a] });
+    await work.settle(); work.controller.select(a);
+    const rendered = html(work.controller), left = rendered.split('<section class="left">')[1].split('</section>')[0];
+    expect(left.includes("Loading SMS history")).toBe(true);
+    expect(rendered.split('<section class="right">')[1].includes("SMS history")).toBe(false);
+    pending.resolve(investigation(a)); await work.settle(); expect(html(work.controller).includes("Synthetic request 1")).toBe(true);
+    work.dispose();
+  });
+  it("shows every supplied selected SMS original on the left, even without an actionable citation", async () => {
+    vi.useFakeTimers(); const a = issue(1, { citations: [] }); const data = investigation(a);
+    const older = { ...evidence(2), ref: ref(2, { sessionId: "1", contextFingerprint: fingerprint(1) }) };
+    data.evidence.push(older);
+    const work = harness({ evidence: vi.fn(async () => data) }, { items: [evidence(1)], issues: [a] });
+    await work.settle(); work.controller.select(a); await work.settle();
+    const rendered = html(work.controller), left = rendered.split('<section class="left">')[1].split('</section>')[0], right = rendered.split('<section class="right">')[1];
+    expect(left.includes("Synthetic request 1")).toBe(true); expect(left.includes("Synthetic request 2")).toBe(true);
+    expect((left.match(/<details open="">/g) ?? []).length).toBe(2);
+    expect(right.includes("Synthetic request 1")).toBe(false); expect(right.includes("Synthetic request 2")).toBe(false);
+    work.dispose();
+  });
+  it("keeps a missing SMS original explicit in the left history, not a fabricated conversation", async () => {
+    vi.useFakeTimers(); const a = issue(1, { citations: [] }); const data = investigation(a);
+    data.evidence[0] = { ...data.evidence[0], originalText: null, availability: "missing", limitations: ["Stored original unavailable"] };
+    const work = harness({ evidence: vi.fn(async () => data) }, { items: [evidence(1)], issues: [a] });
+    await work.settle(); work.controller.select(a); await work.settle();
+    const rendered = html(work.controller), left = rendered.split('<section class="left">')[1].split('</section>')[0];
+    expect(left.includes("Original body/transcript unavailable")).toBe(true);
+    expect(left.includes("Stored original unavailable")).toBe(true); expect(left.includes("Synthetic request 1")).toBe(false);
+    work.dispose();
+  });
+  it("moves only SMS history left and preserves non-SMS originals in the right investigation", async () => {
+    vi.useFakeTimers(); const a = issue(1); const data = investigation(a);
+    const emailRef = ref(2, { store: "gmail_thread_meta", sourceKind: "email", sessionId: null, threadId: "stored-email-thread", providerId: "stored-email-message", contextFingerprint: fingerprint(1) });
+    data.evidence.push({ ...evidence(2), ref: emailRef, participants: { from: "customer@example.invalid", to: ["office@example.invalid"], cc: [], replyTo: null, businessLine: null, mailbox: "office@example.invalid" } });
+    data.citations.push({ ref: emailRef, start: 0, end: 9, exactQuote: "Synthetic" });
+    expect(contract.investigationSchema.safeParse(data).error?.issues).toBeUndefined();
+    const work = harness({ evidence: vi.fn(async () => data) }, { items: data.evidence, issues: [a] });
+    await work.settle(); work.controller.select(a); await work.settle();
+    expect(work.snapshot().error).toBeNull();
+    const rendered = html(work.controller), left = rendered.split('<section class="left">')[1].split('</section>')[0], right = rendered.split('<section class="right">')[1];
+    expect(left.includes("Synthetic request 1")).toBe(true); expect(left.includes("Synthetic request 2")).toBe(false);
+    expect(right.includes("Synthetic request 1")).toBe(false); expect(right.includes("Synthetic request 2")).toBe(true);
+    expect(right.includes("Original source that prompted this finding")).toBe(true); expect(work.api.evidence).toHaveBeenCalledTimes(1);
     work.dispose();
   });
   it("retains inventory continuation across pause rather than skipping the next page", async () => {
@@ -251,7 +305,10 @@ describe("Instinct actual-source foreground and literal V6 UI", () => {
     vi.useFakeTimers(); const pending = deferred<Investigation>(); const a = issue(1), b = issue(2);
     const work = harness({ evidence: vi.fn(input => input.issueId === a.issueId ? pending.promise : Promise.resolve(investigation(b))) }, { items: [evidence(1), evidence(2)], issues: [a, b] });
     await work.settle(); work.controller.select(a); work.controller.select(b); await work.settle(); pending.resolve(investigation(a)); await work.settle();
-    expect(work.snapshot().investigation?.issue.issueId).toBe(b.issueId); work.dispose();
+    expect(work.snapshot().investigation?.issue.issueId).toBe(b.issueId);
+    const rendered = html(work.controller), left = rendered.split('<section class="left">')[1].split('</section>')[0];
+    expect(left.includes("Synthetic request 2")).toBe(true); expect(left.includes("Synthetic request 1")).toBe(false);
+    work.dispose();
   });
   it("rejects forged quotes and stale issue revisions rather than rendering evidence", async () => {
     vi.useFakeTimers(); const a = issue(1); const bad = investigation(a); bad.citations = [{ ...a.citations[0], exactQuote: "Fabricate", end: 9 }];

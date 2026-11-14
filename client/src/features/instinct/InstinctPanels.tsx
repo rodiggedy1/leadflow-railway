@@ -34,6 +34,29 @@ function current(record: NativeRecord, issue: InstinctIssue): string {
       record.timeZone, record.status].filter(Boolean).join(" · ") || "Current fields unavailable";
   }
 }
+function SelectedSmsHistory({ binding }: { binding: InstinctWorkspaceBinding }) {
+  const { state } = binding;
+  const issue = state.selected;
+  const investigation = state.investigation;
+  const messages = investigation?.evidence.filter(evidence => evidence.ref.sourceKind === "sms") ?? [];
+  const citations = investigation?.citations.filter(citation => citation.ref.sourceKind === "sms") ?? [];
+  if (!issue || !state.evidenceVisible || !messages.length && ![...issue.identity.evidenceRefs, ...issue.citations.map(citation => citation.ref)].some(ref => ref.sourceKind === "sms")) return null;
+  return <div className="selected-sms-history" role="region" aria-label={`SMS history for ${person(issue)}`} style={{ marginTop: 14 }}>
+    <div className="label">SMS history</div>
+    {state.investigating && !investigation ? <div className="prose" role="status">Loading SMS history…</div> : !investigation ? <div className="prose" role="status">SMS history unavailable. Retry evidence for this card.</div> : <>
+      {citations.map((citation, index) => <div className="proof" key={`${citation.ref.store}:${citation.ref.sourceId}:${index}`}><small className="source-meta">{sourceLabel(citation.ref.sourceKind)} · {citation.ref.store}:{citation.ref.sourceId} · {citation.ref.providerId ?? "Provider ID unavailable"} · {time(citation.ref.occurredAtUtc)} · {citation.ref.timeBasis} · revision {citation.ref.sourceRevision}</small>{citation.exactQuote}</div>)}
+      {messages.map(evidence => {
+        const prompted = citations.some(citation => sameEvidenceRef(citation.ref, evidence.ref));
+        return <details open key={`${evidence.ref.store}:${evidence.ref.sourceId}`}>
+          <summary className="source-meta">{prompted ? "Text message that prompted this finding" : "Full stored context"} · {sourceLabel(evidence.ref.sourceKind)} · {time(evidence.ref.occurredAtUtc)} · {evidence.direction} · {evidence.availability} · {evidence.contentBasis}</summary>
+          <div className="proof" style={{ whiteSpace: "pre-wrap" }}>{evidence.originalText ?? "Original body/transcript unavailable"}</div>
+          <div className="prose">{evidence.limitations.join(" · ")}</div>
+        </details>;
+      })}
+      {!messages.length && <div className="prose">No SMS originals available for this finding.</div>}
+    </>}
+  </div>;
+}
 function IssueInvestigation({ binding }: { binding: InstinctWorkspaceBinding }) {
   const { state, controller } = binding;
   const issue = state.selected;
@@ -55,9 +78,9 @@ function IssueInvestigation({ binding }: { binding: InstinctWorkspaceBinding }) 
       {!investigation && <button type="button" className="btn" onClick={() => void controller.investigate()} disabled={state.investigating || state.paused || !state.foreground}>Retry evidence</button>}</div>
     <div className="smallprint">Review and corrections unavailable · Findings are process-local and transient</div>
     {state.evidenceVisible && investigation && <div>
-      <div className="label" style={{ marginTop: 14 }}>Source evidence</div>
-      {investigation.citations.map((citation, index) => <div className="proof" key={`${citation.ref.store}:${citation.ref.sourceId}:${index}`}><small className="source-meta">{sourceLabel(citation.ref.sourceKind)} · {citation.ref.store}:{citation.ref.sourceId} · {citation.ref.providerId ?? "Provider ID unavailable"} · {time(citation.ref.occurredAtUtc)} · {citation.ref.timeBasis} · revision {citation.ref.sourceRevision}</small>{citation.exactQuote}</div>)}
-      {investigation.evidence.map(evidence => {
+      {investigation.evidence.some(evidence => evidence.ref.sourceKind !== "sms") && <div className="label" style={{ marginTop: 14 }}>Source evidence</div>}
+      {investigation.citations.filter(citation => citation.ref.sourceKind !== "sms").map((citation, index) => <div className="proof" key={`${citation.ref.store}:${citation.ref.sourceId}:${index}`}><small className="source-meta">{sourceLabel(citation.ref.sourceKind)} · {citation.ref.store}:{citation.ref.sourceId} · {citation.ref.providerId ?? "Provider ID unavailable"} · {time(citation.ref.occurredAtUtc)} · {citation.ref.timeBasis} · revision {citation.ref.sourceRevision}</small>{citation.exactQuote}</div>)}
+      {investigation.evidence.filter(evidence => evidence.ref.sourceKind !== "sms").map(evidence => {
         const prompted = investigation.citations.some(citation => sameEvidenceRef(citation.ref, evidence.ref));
         return <details open={prompted} key={`${evidence.ref.store}:${evidence.ref.sourceId}`}>
           <summary className="source-meta">{prompted ? evidence.ref.sourceKind === "sms" ? "Text message that prompted this finding" : "Original source that prompted this finding" : "Full stored context"} · {sourceLabel(evidence.ref.sourceKind)} · {time(evidence.ref.occurredAtUtc)} · {evidence.availability} · {evidence.contentBasis}</summary>
@@ -106,6 +129,7 @@ export function InstinctPanels({ binding }: { binding: InstinctWorkspaceBinding 
             <div className="issue-desc">{issue.expectation ? `Requested: ${expectation(issue.expectation)}` : "Open this finding to inspect its evidence and limitations."}{group.issues.length > 1 ? ` · ${group.issues.length} independent findings` : ""}<span className="source-meta">{Array.from(new Set([...issue.citations.map(value => value.ref.sourceKind), ...issue.identity.evidenceRefs.map(ref => ref.sourceKind)])).map(sourceLabel).join(" + ") || "Source provenance unavailable"}</span></div>
             <div className="bottom"><span className={`chip ${issue.priorityReason ? "" : "normal"}`}>{issue.priorityReason ? "Urgent" : outcomes[issue.outcome]}</span><span style={{ color: "#a995c7", fontSize: 12 }}>Investigate →</span></div></button>
             {active && group.issues.length > 1 && <div className="requests" aria-label="Independent requests">{group.issues.map(value => <button type="button" className="btn" key={value.issueId} disabled={disabled} onClick={() => controller.select(value)} aria-pressed={value.issueId === state.selected?.issueId}>{value.action?.replace(/_/g, " ") ?? outcomes[value.outcome]}</button>)}</div>}
+            {active && <SelectedSmsHistory binding={binding} />}
           </div>;
         })}
           {!groups.length && <div className="empty" role="status">{state.filter === "reviewed" ? "Durable reviewed acknowledgments are unavailable in Stage 1." : state.loading ? "Loading available stored conversations…" : state.error ? "Stored source updates unavailable." : "No loaded attention findings in this filter. Unchecked or unavailable sources are not all caught up."}</div>}
