@@ -95,6 +95,7 @@ const AiTeamReview = lazy(() => import("./pages/AiTeamReview"));
 const AiActionsControlCenter = lazy(() => import("./pages/AiActionsControlCenter"));
 const LeadflowIntelligenceReview = lazy(() => import("./pages/LeadflowIntelligenceReview"));
 const DailyActionAudit = lazy(() => import("./pages/DailyActionAudit"));
+const InstinctCustomerIntelligence = lazy(() => import("./pages/InstinctCustomerIntelligence"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -197,6 +198,9 @@ function AiActionsControlCenterRoute() {
 function DailyActionAuditRoute() {
   return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/admin/daily-action-audit"><DailyActionAudit /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
+function InstinctCustomerIntelligenceRoute() {
+  return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/admin/live-text-monitor"><InstinctCustomerIntelligence /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
 
 function LeadflowIntelligenceReviewRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/leadflow-intelligence"><LeadflowIntelligenceReview /></ReviewWorkspaceFrame>;
@@ -247,6 +251,7 @@ function Router() {
         <Route path={"/admin/emails"} component={AdminEmailsExactLiveRoute} />
         <Route path={"/admin/command-chat"} component={AdminCommandChatExactLiveRoute} />
         <Route path={"/admin/daily-action-audit"} component={DailyActionAuditRoute} />
+        <Route path={"/admin/customer-intelligence"} component={InstinctCustomerIntelligenceRoute} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
         <Route path={"/agent"} component={AgentDashboard} />
         <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />
@@ -333,12 +338,14 @@ function PollingInstrumentation() {
 
 function DayBoardSafePollingInstrumentation() {
   const [location] = useLocation();
+  if (location === "/admin/customer-intelligence") return null;
   if (isDayBoardExactLiveRoute(location)) return null;
   return <PollingInstrumentation />;
 }
 
 function DayBoardSafeRuntimeWatchers() {
   const [location] = useLocation();
+  if (location === "/admin/customer-intelligence") return null;
   if (isDayBoardExactLiveRoute(location)) return null;
   return <LeadAssignmentWatcher />;
 }
