@@ -135,11 +135,15 @@ export function createInstinctService(options: InstinctServiceOptions): Instinct
     for (const item of Array.from(observed.values())) {
       const check = state.checks.get(item.ref.contextFingerprint);
       if (state.missing.has(observationKey(item.ref)) || item.originalText === null || ["missing", "malformed"].includes(item.availability)) unavailable++;
-      else if (check && check.revision === item.ref.contextFingerprint && check.coverage.unavailable > 0) unavailable++;
-      else if (check && check.revision === item.ref.contextFingerprint && !check.coverage.partial && check.coverage.analyzed === check.coverage.read) analyzed++;
+      else if (check && check.revision === item.ref.contextFingerprint && check.coverage.analyzed > 0
+        && check.coverage.analyzed === check.coverage.read - check.coverage.unavailable) analyzed++;
+      else if (check && check.revision === item.ref.contextFingerprint && check.coverage.read > 0 && check.coverage.unavailable === check.coverage.read) unavailable++;
       else unprocessed++;
     }
-    const limitations = unique([...exclusions, ...[...Array.from(observed.values())].flatMap(item => item.limitations)]);
+    const limitations = unique([...exclusions, ...[...Array.from(observed.values())].flatMap(item => {
+      const check = state.checks.get(item.ref.contextFingerprint);
+      return [...item.limitations, ...(check?.revision === item.ref.contextFingerprint ? check.coverage.exclusions : [])];
+    })]);
     return coverageReceiptSchema.parse({ receiptId: `coverage:${hash([scope, [...Array.from(observed.keys())], analyzed, unavailable, unprocessed, continuation, limitations, boundaries])}`,
       authorizedScope: scope.installationScope, sourceAccountKey: scope.sourceAccountKey, sourceKinds: kinds, boundaries,
       continuation, read: observed.size, analyzed, unavailable, unprocessed,
@@ -165,7 +169,19 @@ export function createInstinctService(options: InstinctServiceOptions): Instinct
       || result.inventory.authorizationVersion !== scope.authorizationVersion || result.inventory.inventoryId !== scan.boundary.inventoryId
       || JSON.stringify(result.inventory.sourceKinds) !== JSON.stringify(input.sourceKinds)) throw new InstinctServiceError("INVALID_SCOPE");
     scan.boundary = result.inventory;
+    const readyEvidence: StoredEvidence[] = [];
+    for (const ready of result.readyContexts ?? []) {
+      const anchors = result.items.filter(item => item.ref.contextFingerprint === ready.contextFingerprint).map(item => item.ref);
+      if (!anchors.length) throw new InstinctServiceError("INVALID_SOURCE_REFERENCE");
+      const context = sourceContextSchema.parse(await sources.readContext(scope, anchors, ready.contextFingerprint));
+      if (context.manifest.sourceAccountKey !== scope.sourceAccountKey || context.manifest.revision !== ready.contextFingerprint
+        || context.manifest.contextFingerprint !== ready.contextFingerprint
+        || [...anchors, ...ready.refs].some(ref => !context.evidence.some(item => sameEvidenceRef(item.ref, ref)))) throw new InstinctServiceError("STALE_CONTEXT");
+      readyEvidence.push(...context.evidence.filter(item => ready.refs.some(ref => sameEvidenceRef(item.ref, ref))));
+    }
+    await authorize(scope);
     register(scope, result.items);
+    register(scope, readyEvidence);
     for (const item of result.items) { const key = observationKey(item.ref); scan.seen.set(key, item); actor(scope).observed.set(key, item); actor(scope).missing.delete(key); }
     result.coverage.exclusions.forEach(value => scan.exclusions.add(value));
     let continuation: string | null = null;

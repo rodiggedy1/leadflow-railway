@@ -30,7 +30,7 @@ class FakeDb implements ReadDb {
     if (this.fail === table) throw Object.assign(new Error("raw credential-bearing error"), { code: "ER_BAD_FIELD_ERROR" });
     let rows = this.tables[table] ?? [];
     if (sql.includes("MAX(`id`)")) return [{ throughId: rows.reduce<string | null>((max, row) => !max || BigInt(String(row.id)) > BigInt(max) ? String(row.id) : max, null) }];
-    if (sql.includes("`id` > ?")) rows = rows.filter(row => BigInt(String(row.id)) > BigInt(String(params[0])) && BigInt(String(row.id)) <= BigInt(String(params[1]))).slice(0, Number(params[2]));
+    if (sql.includes("`id` > ?")) rows = rows.filter(row => BigInt(String(row.id)) > BigInt(String(params[0])) && BigInt(String(row.id)) <= BigInt(String(params[1]))).slice(0, Number(params.at(-1)));
     else if (sql.includes("REGEXP_REPLACE") || sql.includes("LOWER(TRIM")) {
       const digits = sql.includes("REGEXP_REPLACE") ? String(params[2]) : null, exactEmail = sql.includes("LOWER(TRIM") ? String(params.at(-1)) : null;
       rows = rows.filter(row => (digits && String(row.customerPhone ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "") === digits) || (exactEmail && String(row.customerEmail ?? "").trim().toLowerCase() === exactEmail));

@@ -31,15 +31,32 @@ class FakeDb implements ReadDb {
     const match = /^SELECT (.+) FROM `([a-z_]+)`(?: (.+))?$/.exec(sql);
     if (!match) throw new Error("Unexpected SELECT shape");
     const projection = match[1]; const tail = match[3] ?? "";
-    if (projection === "MAX(`id`) AS `throughId`") return [{ throughId: this.tables[table].reduce<string | null>((highest, item) => highest === null || BigInt(String(item.id)) > BigInt(highest) ? String(item.id) : highest, null) }];
-    expect(projection).toBe(SOURCE_COLUMNS[table].map(column => `\`${column}\``).join(", "));
     let result = [...this.tables[table]];
-    if (tail === "WHERE `id` > ? AND `id` <= ? ORDER BY `id` ASC LIMIT ?") {
+    const range = tail.startsWith("WHERE `id` > ? AND `id` <= ? AND (");
+    const linked = /^WHERE `(vapiCallId|threadId)` = \? AND \(/.exec(tail);
+    if (tail.includes(" >= ?")) {
+      const startIndex = range ? 2 : linked ? 1 : 0;
+      const instant = (value: unknown) => typeof value === "string" && /^\d{4}-\d\d-\d\d /.test(value) ? sourceInstant(value.replace(" ", "T") + "Z") : sourceInstant(value);
+      const start = instant(params[startIndex])!; const end = instant(params[startIndex + 1])!;
+      result = result.filter(item => {
+        let time: unknown;
+        if (table === "inbound_sms") time = item.receivedAt;
+        else if (table === "gmail_thread_meta") time = item.lastMessageAt ?? item.updatedAt ?? item.createdAt;
+        else if (table === "call_log" || table === "confirmation_calls") time = item.firedAt ?? item.updatedAt ?? item.createdAt;
+        else if (table === "openphone_call_recordings") time = item.callStartedAt ?? item.createdAt;
+        else if (table === "voice_calls") time = item.createdAt;
+        else if (table === "field_mgmt_calls") time = item.completedAt ?? item.createdAt;
+        else time = item.updatedAt ?? item.createdAt;
+        const at = instant(time); return at !== null && at >= start && at <= end;
+      });
+    }
+    if (projection === "MAX(`id`) AS `throughId`") return [{ throughId: result.reduce<string | null>((highest, item) => highest === null || BigInt(String(item.id)) > BigInt(highest) ? String(item.id) : highest, null) }];
+    expect(projection).toBe(SOURCE_COLUMNS[table].map(column => `\`${column}\``).join(", "));
+    if (range) {
       result = result.filter(item => BigInt(String(item.id)) > BigInt(String(params[0])) && BigInt(String(item.id)) <= BigInt(String(params[1])))
-        .sort((a, b) => BigInt(String(a.id)) < BigInt(String(b.id)) ? -1 : 1).slice(0, Number(params[2]));
+        .sort((a, b) => BigInt(String(a.id)) < BigInt(String(b.id)) ? -1 : 1).slice(0, Number(params.at(-1)));
     } else if (tail === "WHERE `id` = ?") result = result.filter(item => String(item.id) === params[0]);
-    else if (tail === "WHERE `vapiCallId` = ? ORDER BY `id` ASC") result = result.filter(item => item.vapiCallId === params[0]).sort((a, b) => Number(a.id) - Number(b.id));
-    else if (tail === "WHERE `threadId` = ? ORDER BY `id` ASC") result = result.filter(item => item.threadId === params[0]).sort((a, b) => Number(a.id) - Number(b.id));
+    else if (linked) result = result.filter(item => item[linked[1]] === params[0]).sort((a, b) => BigInt(String(a.id)) < BigInt(String(b.id)) ? -1 : 1);
     else throw new Error(`Unexpected synthetic SELECT clause: ${tail}`);
     return result;
   }
@@ -61,7 +78,7 @@ async function reconcile(source: ReturnType<typeof reader>, boundary: InventoryB
   return pages;
 }
 
-describe("complete stored inventory and original provenance", () => {
+describe("complete recent inventory and original provenance", () => {
   it("exceeds all old session/history/feed cutoffs and enumerates every original", async () => {
     const db = new FakeDb(); db.tables.conversation_sessions = Array.from({ length: 125 }, (_, index) => session(index + 1,
       Array.from({ length: 27 }, (_, message) => ({ role: message % 2 ? "assistant" : "user", content: `session ${index + 1} original ${message}`, ts: at, businessPhone: "+12025550999" }))));
@@ -87,13 +104,13 @@ describe("complete stored inventory and original provenance", () => {
     expect((await scan(source, ["sms"], boundary)).items.map(item => item.ref.sessionId)).toEqual(["1"]);
     const changed = await reconcile(source, boundary); expect(changed.flatMap(page => page.items).map(item => item.ref.sessionId)).toEqual(["2"]);
   });
-  it("detects old history edits even with unchanged updatedAt and rejects stale references", async () => {
+  it("detects eligible history edits even with unchanged updatedAt and rejects stale references", async () => {
     const db = new FakeDb(); db.tables.conversation_sessions = [session(1)]; const source = reader(db); const first = await scan(source, ["sms"]);
     db.tables.conversation_sessions[0] = session(1, [{ role: "user", content: "Changed to Friday", ts: at, businessPhone: "+12025550999" }]);
     expect((await reconcile(source, first.boundary)).flatMap(page => page.items)[0].originalText).toBe("Changed to Friday");
     await expect(source.readExact(scope, first.items[0].ref)).rejects.toMatchObject({ code: "STALE_CONTEXT" });
   });
-  it("fingerprints full history, participant metadata, status and timing inputs", async () => {
+  it("fingerprints recent history, participant metadata, status and timing inputs", async () => {
     const db = new FakeDb(); db.tables.conversation_sessions = [session(1)]; const source = reader(db); const original = (await scan(source, ["sms"])).items[0].ref;
     for (const patch of [{ leadName: "Changed display" }, { leadPhone: "+12025550444" }, { messageHistory: JSON.stringify([{ role: "user", content: "same", ts: at, metadata: { status: "delivered" } }]) }]) {
       db.tables.conversation_sessions[0] = { ...session(1), ...patch }; await expect(source.readExact(scope, original)).rejects.toMatchObject({ code: "STALE_CONTEXT" });
@@ -101,14 +118,15 @@ describe("complete stored inventory and original provenance", () => {
   });
   it("malformed history and invalid entries remain observed coverage, not empty success", async () => {
     const db = new FakeDb(); db.tables.conversation_sessions = [session(1, "broken{"), session(2, [null, { role: "user", content: { forged: "text" } }, { role: "user", content: "valid but time missing" }]), session(3, [])];
-    const result = await scan(reader(db), ["sms"]); expect(result.items).toHaveLength(5); expect(result.items.filter(item => item.availability === "malformed")).toHaveLength(3);
+    const result = await scan(reader(db), ["sms"]); expect(result.items).toHaveLength(3); expect(result.items.filter(item => item.availability === "malformed")).toHaveLength(1);
     expect(result.items.some(item => item.originalText === "[object Object]")).toBe(false);
-    expect(result.pages.reduce((sum, page) => sum + page.coverage.unavailable, 0)).toBe(4);
+    expect(result.items.every(item => item.originalText === null)).toBe(true);
+    expect(result.pages.reduce((sum, page) => sum + page.coverage.unavailable, 0)).toBe(3);
     expect(result.pages.some(page => page.limitations.some(value => value.includes("timestamp")))).toBe(true);
   });
   it("unknown line/time never uses session updatedAt or latest line metadata as authority", async () => {
     const db = new FakeDb(); db.tables.conversation_sessions = [{ ...session(1, [{ role: "user", content: "Please cancel" }]), lastInboundPhoneNumberId: "latest-line" }];
-    const item = (await scan(reader(db), ["sms"])).items[0]; expect(item.ref.occurredAtUtc).toBeNull(); expect(item.participants.businessLine).toBeNull(); expect(item.availability).toBe("partial");
+    const item = (await scan(reader(db), ["sms"])).items[0]; expect(item.ref.occurredAtUtc).toBeNull(); expect(item.participants.businessLine).toBeNull(); expect(item.availability).toBe("missing"); expect(item.originalText).toBeNull();
   });
   it("retains repeated provider-ID originals and labels contact/line conflict", async () => {
     const db = new FakeDb(); db.tables.conversation_sessions = [session(1, [{ role: "user", content: "a", ts: at, opMsgId: "OP1", fromPhone: "+12025550444", toPhone: "+12025550999", businessPhone: "+12025550888" }, { role: "user", content: "b", ts: at, openPhoneId: "OP1" }])];
@@ -215,12 +233,12 @@ describe("complete stored inventory and original provenance", () => {
     await expect(source.readExact(scope, { ...item.ref, sourceAccountKey: "other" })).rejects.toMatchObject({ code: "INVALID_SOURCE_REFERENCE" }); expect(db.statements).toHaveLength(before);
     for (const change of [{ sourceId: "session:2:message:0" }, { sourceId: "session:1:message:999" }, { providerId: "forged-provider" }, { sessionId: "2" }]) await expect(source.readExact(scope, { ...item.ref, ...change })).rejects.toMatchObject({ code: "STALE_CONTEXT" });
   });
-  it("captured-day scan includes complete conversations and unknown timestamps with truthful limitations", async () => {
+  it("captured-day scan keeps the complete recent conversation and withholds unknown-time bodies", async () => {
     const db = new FakeDb(); db.tables.conversation_sessions = [session(1, [{ role: "user", content: "Prior context", ts: "2026-11-12T15:00:00Z", businessPhone: "+12025550999" }, { role: "user", content: "Today correction", ts: at, businessPhone: "+12025550999" }]), session(2, [{ role: "user", content: "Unknown day" }]), session(3, [{ role: "user", content: "Other day", ts: "2026-11-11T15:00:00Z", businessPhone: "+12025550999" }])];
-    const result = await scan(reader(db), ["sms"], undefined, "2026-11-13"); expect(result.items.map(item => item.originalText)).toEqual(["Prior context", "Today correction", "Unknown day"]);
+    const result = await scan(reader(db), ["sms"], undefined, "2026-11-13"); expect(result.items.map(item => item.originalText)).toEqual(["Prior context", "Today correction", null]);
     expect(result.pages.flatMap(page => page.limitations).join(" ")).toContain("membership is unresolved");
   });
-  it("unchanged full reconciliation returns no new evidence or artificial cap", async () => {
+  it("unchanged recent reconciliation returns no new evidence or artificial cap", async () => {
     const db = new FakeDb(); db.tables.conversation_sessions = Array.from({ length: 110 }, (_, index) => session(index + 1)); const source = reader(db); const first = await scan(source, ["sms"]);
     const unchanged = await reconcile(source, first.boundary); expect(unchanged.flatMap(page => page.items)).toEqual([]); expect(unchanged.at(-1)?.continuation).toBeNull();
     expect(db.statements.filter(item => item.sql.includes("`id` > ?")).length).toBeGreaterThan(220);
@@ -246,10 +264,91 @@ describe("complete stored inventory and original provenance", () => {
     expect(recovered.items).toHaveLength(1);
   });
   it("does not trust a forged observedAt fallback when original row dates are absent", async () => {
-    const db = new FakeDb(); db.tables.conversation_sessions = [{ ...session(1), createdAt: null, updatedAt: null }];
-    const source = reader(db); const first = await scan(source, ["sms"]); const ref = first.items[0].ref;
+    const db = new FakeDb(); db.tables.openphone_call_recordings = [row(1, { createdAt: null, updatedAt: null, callStartedAt: new Date(at), transcript: JSON.stringify([{ content: "original" }]) })];
+    const source = reader(db); const first = await scan(source, ["phone_unverified"]); const ref = first.items[0].ref;
     expect((await source.readExact(scope, ref)).originalText).toBe(first.items[0].originalText);
     await expect(source.readExact(scope, { ...ref, observedAtUtc: "2026-11-14T15:00:00.000Z" })).rejects.toMatchObject({ code: "STALE_CONTEXT" });
+  });
+  it("uses inclusive actual ts/timestamp boundaries and never promotes a future or ancient entry", async () => {
+    const cutoff = Date.parse(at) - 48 * 60 * 60 * 1000;
+    const message = (content: string, ts: unknown) => ({ role: "user", content, ts, businessPhone: "+12025550999" });
+    const db = new FakeDb(); db.tables.conversation_sessions = [session(1, [message("before", cutoff - 1), message("boundary", cutoff),
+      { role: "assistant", content: "timestamp fallback", ts: "invalid", timestamp: new Date(cutoff + 1).toISOString(), businessPhone: "+12025550999" },
+      message("captured now", Date.parse(at)), message("future", Date.parse(at) + 1)])];
+    const source = reader(db); const result = await scan(source, ["sms"]);
+    expect(result.items.map(item => item.originalText)).toEqual(["boundary", "timestamp fallback", "captured now"]);
+    expect(result.items.map(item => item.ref.sourceId)).toEqual(["session:1:message:1", "session:1:message:2", "session:1:message:3"]);
+    expect(result.pages[0].readyContexts).toEqual([{ contextFingerprint: result.items[0].ref.contextFingerprint, refs: result.items.map(item => item.ref) }]);
+    const context = await source.readContext(scope, result.pages[0].readyContexts![0].refs, result.items[0].ref.contextFingerprint);
+    expect(context.evidence.map(item => item.originalText)).toEqual(result.items.map(item => item.originalText));
+  });
+  it("SQL excludes old inactive rows before history access and active ancient history is not normalized into analysis", async () => {
+    const db = new FakeDb(); const old = session(1); const oldDate = new Date("2020-01-01T00:00:00Z");
+    db.tables.conversation_sessions = [{ ...old, createdAt: oldDate, updatedAt: oldDate }];
+    Object.defineProperty(db.tables.conversation_sessions[0], "messageHistory", { get() { throw new Error("Inactive history must never be loaded"); } });
+    const oldEntry = { role: "user", content: "ANCIENT ORIGINAL", ts: oldDate.toISOString() };
+    db.tables.conversation_sessions.push(session(2, [...Array.from({ length: 1000 }, () => oldEntry),
+      { role: "user", content: "Recent request", ts: at, businessPhone: "+12025550999" },
+      ...Array.from({ length: 1000 }, () => ({ role: "user", content: "UNDATED OLD BODY" }))]));
+    const result = await scan(reader(db), ["sms"]);
+    expect(result.items.map(item => item.originalText)).toEqual(["Recent request", null]);
+    expect(JSON.stringify(result)).not.toContain("ANCIENT ORIGINAL"); expect(JSON.stringify(result)).not.toContain("UNDATED OLD BODY");
+    expect(result.items[1].limitations.join(" ")).toContain("1000");
+    expect(result.pages[0].readyContexts![0].refs).toHaveLength(2);
+    expect(db.statements.every(statement => statement.sql.includes(" >= ?"))).toBe(true);
+    const select = db.statements.find(statement => statement.sql.includes("`id` > ?"))!;
+    expect(select.params[2]).toBe("2026-11-11 15:00:00.000"); expect(select.params[3]).toBe("2026-11-13 15:00:00.000");
+  });
+  it("reconstructs the captured slice after clock advance and skips unchanged reconciliation", async () => {
+    const db = new FakeDb(); db.tables.conversation_sessions = [session(1)];
+    let current = new Date(at); const source = reader(db, { clock: { now: () => current } }); const first = await scan(source, ["sms"]);
+    current = new Date(Date.parse(at) + 24 * 60 * 60 * 1000);
+    expect((await reconcile(source, first.boundary)).flatMap(page => page.items)).toEqual([]);
+    const again = await scan(source, ["sms"]); expect(again.items[0].ref).toEqual(first.items[0].ref);
+    current = new Date(Date.parse(at) + 72 * 60 * 60 * 1000);
+    expect((await source.readContext(scope, [first.items[0].ref], first.items[0].ref.contextFingerprint)).evidence).toEqual(first.items);
+    expect((await scan(source, ["sms"])).items).toEqual([]);
+  });
+  it("window membership changes rekey the slice while edits to excluded ancient content do not", async () => {
+    const db = new FakeDb(); const cutoff = Date.parse(at) - 48 * 60 * 60 * 1000;
+    const entries = [{ role: "user", content: "Ancient", ts: "2020-01-01T00:00:00Z" }, { role: "user", content: "Boundary", ts: cutoff, businessPhone: "+12025550999" },
+      { role: "user", content: "Recent", ts: at, businessPhone: "+12025550999" }];
+    db.tables.conversation_sessions = [session(1, entries)]; let current = new Date(at); const source = reader(db, { clock: { now: () => current } });
+    const first = await scan(source, ["sms"]); entries[0].content = "Ancient edited"; db.tables.conversation_sessions[0] = session(1, entries);
+    expect((await source.readExact(scope, first.items[0].ref)).originalText).toBe("Boundary");
+    expect((await reconcile(source, first.boundary)).flatMap(page => page.items)).toEqual([]);
+    current = new Date(Date.parse(at) + 1);
+    const changed = (await reconcile(source, first.boundary)).flatMap(page => page.items);
+    expect(changed.map(item => item.originalText)).toEqual(["Recent"]); expect(changed[0].ref.contextFingerprint).not.toBe(first.items[0].ref.contextFingerprint);
+  });
+  it("related provider/thread queries cannot import older originals or freshly edited old known calls", async () => {
+    const db = new FakeDb(); const old = new Date("2020-01-01T00:00:00Z");
+    db.tables.call_log = [row(1, { vapiCallId: "same", firedAt: Date.parse(at), transcript: "Recent full request" }), row(2, { vapiCallId: "same", firedAt: old.getTime(), transcript: "Ancient updated call" })];
+    db.tables.voice_calls = [row(3, { vapiCallId: "same", createdAt: old, transcript: "Ancient same provider" }), row(4, { vapiCallId: "same", transcript: "Recent observation original" })];
+    db.tables.gmail_thread_meta = [row(1, { threadId: "same-thread", lastMessageAt: old.getTime(), snippet: "Ancient thread" })];
+    db.tables.madison_email_drafts = [row(1, { threadId: "same-thread", originalMessage: "Recent draft" }), row(2, { threadId: "same-thread", createdAt: old, updatedAt: old, originalMessage: "Ancient draft" })];
+    const source = reader(db); const calls = await scan(source, ["ai_call"]);
+    expect(calls.items).toHaveLength(1); const ready = calls.pages[0].readyContexts![0]; expect(ready.refs).toHaveLength(2);
+    expect((await source.readContext(scope, ready.refs, ready.contextFingerprint)).evidence.map(item => item.originalText)).toEqual(["Recent observation original", "Recent full request"]);
+    expect(calls.pages.filter(page => page.readyContexts?.length)).toHaveLength(1);
+    const email = await scan(source, ["email"]); expect(email.items.map(item => item.originalText)).toEqual(["Recent draft"]);
+    expect(db.statements.filter(statement => /WHERE `(vapiCallId|threadId)`/.test(statement.sql)).every(statement => statement.sql.includes(" >= ?"))).toBe(true);
+  });
+  it("known original call times win over recent observation while unknown calls keep honest observation-only evidence", async () => {
+    const db = new FakeDb(); db.tables.openphone_call_recordings = [row(1, { callStartedAt: new Date("2020-01-01T00:00:00Z"), transcript: JSON.stringify([{ content: "Ancient" }]) }),
+      row(2, { transcript: JSON.stringify([{ content: "Observed recently but occurrence unknown" }]) })];
+    const result = await scan(reader(db), ["phone_unverified"]); expect(result.items).toHaveLength(1);
+    expect(result.items[0].ref.occurredAtUtc).toBeNull(); expect(result.items[0].limitations.join(" ")).toContain("occurrence timestamp is missing");
+  });
+  it("ready context contract rejects conflicting fingerprints, refs, accounts, duplicates and absent page membership", async () => {
+    const db = new FakeDb(); db.tables.conversation_sessions = [session(1)]; const page = (await scan(reader(db), ["sms"])).pages[0];
+    const ready = page.readyContexts![0]; const ref = ready.refs[0];
+    const invalid = [[], [{ ...ready, contextFingerprint: "a".repeat(64) }], [{ ...ready, refs: [] }], [ready, ready],
+      [{ ...ready, refs: [ref, ref] }], [{ ...ready, refs: [{ ...ref, sourceAccountKey: "other" }] }],
+      [{ ...ready, refs: [{ ...ref, sourceRevision: "a".repeat(64) }] }], [{ ...ready, refs: [{ ...ref, contextFingerprint: "a".repeat(64) }] }]];
+    invalid.slice(1).forEach(readyContexts => expect(sourceInventorySchema.safeParse({ ...page, readyContexts }).success).toBe(false));
+    expect(sourceInventorySchema.safeParse({ ...page, items: [], readyContexts: [ready] }).success).toBe(false);
+    const { readyContexts: _ready, ...legacy } = page; expect(sourceInventorySchema.safeParse(legacy).success).toBe(true);
   });
 });
 

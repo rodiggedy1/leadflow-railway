@@ -38,7 +38,7 @@ export class ServiceFakeDb implements ReadDb {
     if (this.fail === table) throw Object.assign(new Error("mysql://raw:secret@private-db/raw-schema"), { code: "ER_BAD_FIELD_ERROR" });
     let rows = this.tables[table];
     if (sql.includes("MAX(`id`)")) return [{ throughId: rows.reduce<string | null>((max, row) => !max || BigInt(String(row.id)) > BigInt(max) ? String(row.id) : max, null) }];
-    if (sql.includes("`id` > ?")) rows = rows.filter(row => BigInt(String(row.id)) > BigInt(String(params[0])) && BigInt(String(row.id)) <= BigInt(String(params[1]))).slice(0, Number(params[2]));
+    if (sql.includes("`id` > ?")) rows = rows.filter(row => BigInt(String(row.id)) > BigInt(String(params[0])) && BigInt(String(row.id)) <= BigInt(String(params[1]))).slice(0, Number(params.at(-1)));
     else if (sql.includes("REGEXP_REPLACE") || sql.includes("LOWER(TRIM")) {
       const digits = sql.includes("REGEXP_REPLACE") ? String(params[2]) : null, email = sql.includes("LOWER(TRIM") ? String(params.at(-1)) : null;
       rows = rows.filter(row => (digits && String(row.customerPhone ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "") === digits) || (email && String(row.customerEmail ?? "").trim().toLowerCase() === email));
@@ -189,7 +189,7 @@ describe("actor, cursor and exact-source authority", () => {
     do { last = await h.service.sources(fixtureScope, { sourceKinds: ["sms", "email"], ...(cursor ? { cursor } : {}) }); cursor = last.continuation ?? undefined; } while (cursor);
     expect(last!.coverage.partial).toBe(true); expect(last!.coverage.exclusions.join(" ")).toContain("DB_SCHEMA"); expect(JSON.stringify(last)).not.toContain("secret"); expect(last!.coverage.read).toBe(1);
   });
-  it("missing native schema is record unavailable not false match or model failure", async () => { const h = serviceHarness(); h.db.fail = "bookings"; const { result } = await firstCheck(h); expect(result.analysis.status).toBe("complete"); expect(result.issues[0].outcome).toBe("record_unavailable"); expect(result.coverage.unavailable).toBe(1); expect(JSON.stringify(result)).not.toContain("secret"); });
+  it("missing native schema preserves analyzed originals with record unavailable, not false match or model failure", async () => { const h = serviceHarness(); h.db.fail = "bookings"; const { result } = await firstCheck(h); expect(result.analysis.status).toBe("complete"); expect(result.issues[0].outcome).toBe("record_unavailable"); expect(result.coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, unavailable: 0, partial: true }); expect((await h.service.feed(fixtureScope, { filter: "all" })).coverage).toMatchObject({ analyzed: 1, unprocessed: 0, unavailable: 0, partial: true }); expect(JSON.stringify(result)).not.toContain("secret"); });
   it("nonselected actor cannot retrieve issue or issue-selected chat before reads", async () => { const h = serviceHarness(), { result } = await firstCheck(h), before = h.db.calls.length, other = { ...fixtureScope, actor: { staffId: "2", role: "admin" as const } }; await expect(h.service.evidence(other, selected(result.issues[0]))).rejects.toThrow("STALE_ISSUE"); await expect(h.service.ask(other, { threadId: "thread", requestId: "request", question: "Why?", selectedIssueId: result.issues[0].issueId, selectedIssueRevision: result.issues[0].revision })).rejects.toThrow("STALE_ISSUE"); expect(h.db.calls).toHaveLength(before); });
   it("deleted old source retains finding but cannot leave analyzed/current proof or successful zero", async () => {
     const h = serviceHarness(); await firstCheck(h); h.db.tables.conversation_sessions = [];
@@ -271,5 +271,77 @@ describe("grounded chat seam and runtime scope", () => {
   it("read-only service source imports no operational dispatch and has no invented quotas or timers", () => {
     const source = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "service.ts"), "utf8"); expect(source).not.toMatch(/localStorage|setInterval|setTimeout|\.send\(|\.sync\(|maxTokens|max_tokens|\bLIMIT\b/);
     expect([...source.matchAll(/from\s+["']([^"']+)["']/g)].map(match => match[1])).not.toContain("../db");
+  });
+});
+
+describe("foreground completion and cumulative coverage", () => {
+  it("completed analysis with unresolved customer remains analyzed, review, and partially verified", async () => {
+    const h = serviceHarness(); h.db.tables.bookings.push({ ...fixtureBooking(), id: "2", customerEmail: "other@example.test" });
+    const { result } = await firstCheck(h); expect(result.analysis.status).toBe("complete"); expect(result.issues[0].identity.decision).toBe("ambiguous"); expect(result.issues[0].outcome).toBe("review");
+    const feed = await h.service.feed(fixtureScope, { filter: "all" }); expect(feed.coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, unavailable: 0, partial: true }); expect(feed.totals.verifiedCustomers).toBe(0); expect(feed.totals.outcomes.matches_current).toBe(0);
+  });
+  it("successful partial-source interpretation counts usable original and never claims No-action", async () => {
+    const h = serviceHarness({ model: fixtureModel(false) }); h.db.tables.gmail_thread_meta = [{ id: "1", threadId: "thread-1", snippet: "Thanks", createdAt: new Date(fixtureAt) }];
+    h.db.tables.madison_email_drafts = [{ id: "1", threadId: "thread-1", inboundMessageId: "mail-1", originalMessage: "Stored original body", fromEmail: "fixture@example.test", createdAt: new Date(fixtureAt) }];
+    let cursor: string | undefined; const items = [];
+    do { const page = await h.service.sources(fixtureScope, { sourceKinds: ["email"], ...(cursor ? { cursor } : {}) }); items.push(...page.items); cursor = page.continuation ?? undefined; } while (cursor);
+    for (const revision of new Set(items.map(item => item.ref.contextFingerprint))) {
+      const refs = items.filter(item => item.ref.contextFingerprint === revision).map(item => item.ref), result = await h.service.check(fixtureScope, { sourceRefs: refs, expectedContextRevision: revision });
+      expect(result.analysis).toMatchObject({ status: "partial", completedSegments: result.analysis.totalSegments, reductionComplete: true, failure: "PARTIAL_CONTEXT" }); expect(result.issues.every(issue => issue.outcome === "review")).toBe(true);
+    }
+    const feed = await h.service.feed(fixtureScope, { filter: "all" }); expect(feed.coverage).toMatchObject({ read: items.length, analyzed: items.length, unprocessed: 0, unavailable: 0, partial: true }); expect(feed.totals.outcomes.no_action).toBe(0);
+  });
+  it.each([
+    { status: "partial" as const, totalSegments: 2, completedSegments: 1, reductionComplete: false, failure: "PARTIAL_CONTEXT" as const },
+    { status: "partial" as const, totalSegments: 2, completedSegments: 2, reductionComplete: false, failure: "PARTIAL_CONTEXT" as const },
+    { status: "unavailable" as const, totalSegments: 2, completedSegments: 1, reductionComplete: false, failure: "MODEL_TIMEOUT" as const },
+  ])("segment/reduction failure remains unprocessed or unavailable: %j", async receipt => {
+    const interpreter = { interpret: vi.fn(async (_scope, request) => ({ ...receipt, contextRevision: request.context.manifest.revision, contextFingerprint: request.context.manifest.contextFingerprint, actions: [], limitations: ["Incomplete interpretation"] })) } satisfies NonNullable<InstinctServiceOptions["interpreter"]>;
+    const h = serviceHarness({ interpreter }), { result } = await firstCheck(h), failed = receipt.status === "unavailable";
+    expect(result.coverage).toMatchObject({ read: 1, analyzed: 0, unprocessed: failed ? 0 : 1, unavailable: failed ? 1 : 0, partial: true });
+    expect((await h.service.feed(fixtureScope, { filter: "all" })).coverage).toMatchObject({ analyzed: 0, unprocessed: failed ? 0 : 1, unavailable: failed ? 1 : 0, partial: true }); expect(h.model).not.toHaveBeenCalled();
+  });
+  it("feed completion can refresh during an in-flight inventory page without resetting cursor or accumulated counts", async () => {
+    const h = serviceHarness({ model: fixtureModel(false) }); h.db.tables.conversation_sessions.push(fixtureSession("8", "Thanks"));
+    const base = createStoredSourceReader({ scope: fixtureScope, db: h.db, clock: h.clock }), wait = deferred<void>(), entered = deferred<void>();
+    const sources: SourceReader = { ...base, inventory: async (...args) => { if (args[1].cursor) { entered.resolve(); await wait.promise; } return base.inventory(...args); } };
+    const service = createInstinctService({ ...h.options, sources }), first = await service.sources(fixtureScope, { sourceKinds: ["sms"] });
+    const continuing = service.sources(fixtureScope, { sourceKinds: ["sms"], cursor: first.continuation! }); await entered.promise;
+    await service.check(fixtureScope, { sourceRefs: first.items.map(item => item.ref), expectedContextRevision: first.items[0].ref.contextFingerprint });
+    expect((await service.feed(fixtureScope, { filter: "all" })).coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, continuation: first.continuation });
+    wait.resolve(); const second = await continuing; expect(second.coverage).toMatchObject({ read: 2, analyzed: 1, unprocessed: 1 });
+    const third = await service.sources(fixtureScope, { sourceKinds: ["sms"], cursor: second.continuation! }); expect(third.coverage).toMatchObject({ read: 2, analyzed: 1, unprocessed: 1 });
+    expect((await service.feed(fixtureScope, { filter: "all" })).coverage).toMatchObject({ read: 2, analyzed: 1, unprocessed: 1 }); expect(h.options.model).toHaveBeenCalledTimes(1);
+  });
+  it("ready work unit registers exact cross-family originals before pagination ends, without duplicate observations", async () => {
+    const h = serviceHarness({ model: fixtureModel(false) });
+    for (const table of ["voice_calls", "call_log"]) h.db.tables[table] = [{ id: "1", vapiCallId: "vapi-1", transcript: `Original ${table}`, calledPhone: fixturePhone, calledTarget: "client", firedAt: new Date(fixtureAt), createdAt: new Date(fixtureAt) }];
+    const base = createStoredSourceReader({ scope: fixtureScope, db: h.db, clock: h.clock });
+    const sources: SourceReader = { ...base, inventory: async (...args) => {
+      const result = await base.inventory(...args);
+      if (!result.items.length) return result;
+      const context = await base.readContext(args[0], result.items.map(item => item.ref), result.items[0].ref.contextFingerprint);
+      return { ...result, readyContexts: [{ contextFingerprint: context.manifest.contextFingerprint, refs: context.evidence.map(item => item.ref) }] };
+    } };
+    const service = createInstinctService({ ...h.options, sources }), page = await service.sources(fixtureScope, { sourceKinds: ["ai_call"] });
+    expect(page.continuation).not.toBeNull(); expect(page.items).toHaveLength(1); expect(page.readyContexts![0].refs).toHaveLength(2);
+    const ready = page.readyContexts![0], result = await service.check(fixtureScope, { sourceRefs: ready.refs, expectedContextRevision: ready.contextFingerprint });
+    expect(result.analysis.completedSegments).toBe(result.analysis.totalSegments); expect(result.coverage).toMatchObject({ read: 2, analyzed: 2, unprocessed: 0, unavailable: 0, partial: true });
+    expect((await service.feed(fixtureScope, { filter: "all" })).coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, unavailable: 0, partial: true });
+    await expect(service.check({ ...fixtureScope, actor: { staffId: "2", role: "admin" } }, { sourceRefs: ready.refs, expectedContextRevision: ready.contextFingerprint })).rejects.toThrow("INVALID_SOURCE_REFERENCE");
+    let cursor = page.continuation; while (cursor) { const next = await service.sources(fixtureScope, { sourceKinds: ["ai_call"], cursor }); cursor = next.continuation; }
+    expect((await service.feed(fixtureScope, { filter: "all" })).coverage).toMatchObject({ read: 1, analyzed: 1 }); expect(h.options.model).toHaveBeenCalledTimes(1);
+  });
+  it("same-account forged cross-context ready ref is never issued when absent from trusted reader context", async () => {
+    const h = serviceHarness(), base = createStoredSourceReader({ scope: fixtureScope, db: h.db, clock: h.clock });
+    let forged: SourceInventory["items"][number]["ref"] | undefined, revision = "";
+    const sources: SourceReader = { ...base, inventory: async (...args) => {
+      const result = await base.inventory(...args); revision = result.items[0].ref.contextFingerprint;
+      forged = { ...result.items[0].ref, sourceId: "session:999:message:0", sessionId: "999" };
+      return { ...result, readyContexts: [{ contextFingerprint: revision, refs: [result.items[0].ref, forged] }] };
+    } };
+    const service = createInstinctService({ ...h.options, sources });
+    await expect(service.sources(fixtureScope, { sourceKinds: ["sms"] })).rejects.toThrow("STALE_CONTEXT"); const before = h.db.calls.length;
+    await expect(service.check(fixtureScope, { sourceRefs: [forged!], expectedContextRevision: revision })).rejects.toThrow("INVALID_SOURCE_REFERENCE"); expect(h.db.calls).toHaveLength(before); expect((await service.feed(fixtureScope, { filter: "all" })).coverage.read).toBe(0); expect(h.options.model).not.toHaveBeenCalled();
   });
 });

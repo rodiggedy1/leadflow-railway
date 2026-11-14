@@ -74,15 +74,16 @@ export function InstinctPanels({ binding }: { binding: InstinctWorkspaceBinding 
   const groups = visibleGroups(state);
   const pending = state.work.filter(work => work.state === "queued" || work.state === "pending").length;
   const failures = state.work.filter(work => work.state === "error").length;
+  const processed = state.work.filter(work => work.state === "done").length;
   const disabled = state.paused || !state.foreground;
-  const status = state.paused ? "Page paused" : !state.foreground ? "Page hidden" : state.error ? "Updates unavailable" : state.loading ? "Loading stored sources…" : state.scanning ? "Reading stored history…" : pending ? `${pending} contexts pending` : failures ? `${failures} analysis unavailable` : state.coverage?.partial ? "Partial stored coverage" : "Stored read-only results";
+  const status = state.paused ? "Page paused" : !state.foreground ? "Page hidden" : state.error ? "Updates unavailable" : state.loading ? "Loading stored sources…" : pending ? `${pending} conversations pending` : state.scanning ? "Loading last two days…" : failures ? `${failures} analysis unavailable` : state.coverage?.partial ? "Partial stored coverage" : "Stored read-only results";
   const sourceFilters = [{ kind: "all" as const, label: "All sources" }, { kind: "sms" as const, label: "SMS" }, { kind: "email" as const, label: "EMAIL" }, { kind: "human_call" as const, label: "HUMAN CALL / unverified" }, { kind: "ai_call" as const, label: "AI CALL" }];
   return <div className="instinct-customer-intelligence" style={{ "--instinct-character": `url('${INSTINCT_CHARACTER}')` } as CSSProperties}>
     <div className="app"><header><div className="brand"><span className="spark">✦</span>Instinct <small>Customer Intelligence</small></div>
       <div className="header-status"><div className="demo" role="status">{status}</div><button type="button" className="reset" aria-pressed={state.paused} onClick={controller.togglePause}>{state.paused ? "Resume" : "Pause"}</button></div></header>
       <main className="shell"><section className="left"><div className="eyebrow">Your attention</div>
         <h1 className="heading"><em>{state.feed ? count : "—"}</em> things need your attention<span style={{ color: "#c5b2dc" }}>.</span></h1>
-        <div className="subtitle">Stored customer conversations compared with exact booking records. Counts describe loaded findings, not unchecked history.</div>
+        <div className="subtitle">Last two days only. Customer requests compared with exact booking records. Findings are grouped by verified customer.</div>
         <div className="tabs"><button type="button" className={`tab ${state.filter === "all" ? "active" : ""}`} aria-pressed={state.filter === "all"} onClick={() => controller.setFilter("all")}>All <span>{state.feed ? count : "—"}</span></button>
           <button type="button" className={`tab ${state.filter === "urgent" ? "active" : ""}`} aria-pressed={state.filter === "urgent"} onClick={() => controller.setFilter("urgent")}>Urgent <span>{state.feed ? urgent : "—"}</span></button>
           <button type="button" className={`tab ${state.filter === "reviewed" ? "active" : ""}`} aria-pressed={state.filter === "reviewed"} onClick={() => controller.setFilter("reviewed")} title="Durable review is unavailable in Stage 1.">Reviewed</button></div>
@@ -102,7 +103,7 @@ export function InstinctPanels({ binding }: { binding: InstinctWorkspaceBinding 
         })}
           {!groups.length && <div className="empty" role="status">{state.filter === "reviewed" ? "Durable reviewed acknowledgments are unavailable in Stage 1." : state.loading ? "Loading available stored conversations…" : state.error ? "Stored source updates unavailable." : "No loaded attention findings in this filter. Unchecked or unavailable sources are not all caught up."}</div>}
         </div>
-        <div className="foot">✦ Select any issue to investigate it with Instinct.<span className="coverage-detail">{coverageLabel(state.coverage)} · {state.feed?.totals.customerGroups ?? "—"} loaded customer groups · {pending} contexts pending · {failures} retryable checks</span>
+        <div className="foot">✦ Select any issue to investigate it with Instinct.<span className="coverage-detail">{processed} conversations checked · {pending} conversations pending · {failures} retryable checks · {state.feed?.totals.customerGroups ?? "—"} loaded customer groups</span><span className="coverage-detail">Recent stored entries: {coverageLabel(state.coverage)}</span>
           {state.coverage?.exclusions.length ? <span className="coverage-detail">{state.coverage.exclusions.join(" · ")}</span> : null}
           {state.error && <span className="coverage-detail" role="alert">{state.error}</span>}
           {(state.error || failures > 0) && <button type="button" className="btn" disabled={disabled} onClick={() => { controller.retryChecks(); controller.retryDay(); }}>Retry unavailable work</button>}</div>
