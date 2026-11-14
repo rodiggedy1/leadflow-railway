@@ -4,7 +4,7 @@ import {
   reverifyResultSchema, sourceInventorySchema, sameEvidenceRef,
   type ChatAnswer, type CoverageReceipt, type DayReviewInput, type EvidenceRef, type InstinctApi,
   type InstinctFeed, type InstinctIssue, type Investigation, type IssueGroup, type SourceKind,
-  type StoredEvidence,
+  type StoredEvidence, type CheckResult,
 } from "@shared/instinct";
 
 export const INSTINCT_ALL_SOURCES: SourceKind[] = ["sms", "email", "human_call", "ai_call", "phone_unverified"];
@@ -168,6 +168,28 @@ export class InstinctController {
     } else if (current) this.publish({ selected: current });
     this.publish({ feed, coverage: feed.coverage });
   }
+  private retainCheck(result: CheckResult) {
+    const prior = this.state.feed;
+    if (!prior) { this.publish({ coverage: result.coverage }); return; }
+    const returnedIds = new Set(result.issues.map(issue => issue.issueId));
+    const groups = prior.groups.map(group => ({ ...group, issues: group.issues.filter(issue =>
+      issue.analysis.contextFingerprint !== result.analysis.contextFingerprint && !returnedIds.has(issue.issueId)) })).filter(group => group.issues.length);
+    for (const issue of result.issues) {
+      if (issue.supersededBy !== null) continue;
+      const verified = issue.identity.decision === "verified";
+      const group = verified ? groups.find(value => value.verifiedCustomer &&
+        value.identity.installationScope === issue.identity.installationScope &&
+        value.identity.sourceAccountKey === issue.identity.sourceAccountKey &&
+        value.identity.fingerprint === issue.identity.fingerprint) : undefined;
+      if (group) group.issues.push(issue);
+      else groups.push({ groupId: `check:${issue.issueId}`, identity: issue.identity, issues: [issue],
+        requestCount: issue.action === null ? 0 : 1, verifiedCustomer: verified });
+    }
+    for (const group of groups) group.requestCount = group.issues.filter(issue => issue.action !== null && issue.supersededBy === null).length;
+    // This receipt describes all observed originals; each issue keeps its own
+    // conversation receipt. No read/model request is needed to retain a result.
+    this.acceptFeed(withGroups({ ...prior, coverage: result.coverage }, groups));
+  }
   private async refreshFeed() {
     if (!this.canRun()) return;
     if (this.feedBusy) { this.feedDirty = true; return; }
@@ -295,7 +317,11 @@ export class InstinctController {
       if (!this.workFresh(submitted) || result.contextRevision !== submitted.revision || result.binding.contextRevision !== submitted.revision) {
         submitted.state = "error"; this.requestRefresh();
       } else {
-        submitted.state = result.analysis.status === "unavailable" ? "error" : "done";
+        const analysis = result.analysis;
+        submitted.state = (analysis.status === "complete" || analysis.status === "partial") && analysis.totalSegments > 0
+          && analysis.completedSegments === analysis.totalSegments && analysis.reductionComplete
+          && (analysis.failure === null || analysis.failure === "PARTIAL_CONTEXT") ? "done" : "error";
+        this.retainCheck(result);
         // Publish the server's customer groups now; never restart the recent
         // inventory merely to show a completed interpretation.
         void this.refreshFeed();
@@ -321,7 +347,7 @@ export class InstinctController {
     if (!this.canRun()) return;
     if (!this.selectedMatches(issue)) {
       this.selectionEpoch++;
-      this.publish({ selected: issue, investigation: null, evidenceVisible: false, investigating: false, messages: [], asking: false });
+      this.publish({ selected: issue, investigation: null, evidenceVisible: true, investigating: false, messages: [], asking: false });
     }
     void this.investigate();
   };

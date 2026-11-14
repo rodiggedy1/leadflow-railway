@@ -112,7 +112,12 @@ function responseValue(response: InstinctInvokeResult): unknown {
   return JSON.parse(content);
 }
 function quoteKey(quote: Quote): string { return hash(quote); }
-function actionAnchorKey(action: ModelAction): string { return hash([action.action, action.anchorEvidenceIndex, action.citations.filter(quote => quote.evidenceIndex === action.anchorEvidenceIndex)]); }
+function preservesActionAnchor(output: ModelAction, input: ModelAction): boolean {
+  if (output.action !== input.action || output.anchorEvidenceIndex !== input.anchorEvidenceIndex) return false;
+  if ((input.action === "notes" || input.action === "access_notes") && output.expected.notesDestination !== input.expected.notesDestination) return false;
+  const kept = new Set(output.citations.filter(quote => quote.evidenceIndex === input.anchorEvidenceIndex).map(quoteKey));
+  return input.citations.filter(quote => quote.evidenceIndex === input.anchorEvidenceIndex).every(quote => kept.has(quoteKey(quote)));
+}
 function checkQuotes(quotes: readonly Quote[], request: AnalysisRequest, scope: AuthorizedScope, ranges: readonly OriginalRange[]): void {
   for (const citation of quotes) {
     const evidence = request.context.evidence[citation.evidenceIndex];
@@ -328,8 +333,27 @@ async function runInterpretation(scope: AuthorizedScope, request: AnalysisReques
       if (outputProof.some(quote => !proofKeys.has(quoteKey(quote)))) throw new InterpretationError("INVALID_CITATION");
       const kept = new Set(outputProof.map(quoteKey));
       if (children.some(child => child.contextFacts.some(fact => fact.citations.some(quote => !kept.has(quoteKey(quote)))))) throw new InterpretationError("INVALID_MODEL_RESPONSE");
-      const outputAnchors = new Set(output.actions.map(actionAnchorKey));
-      if (children.some(child => child.actions.some(action => !outputAnchors.has(actionAnchorKey(action))))) throw new InterpretationError("INVALID_MODEL_RESPONSE");
+      // Added supplied proof and citation order do not change an action's anchor.
+      // Only identical anchor-proof sets/destinations may share an output action.
+      const distinct = Array.from(new Map(children.flatMap(child => child.actions).map(action => [hash([
+        action.action, action.anchorEvidenceIndex,
+        action.action === "notes" || action.action === "access_notes" ? action.expected.notesDestination : null,
+        Array.from(new Set(action.citations.filter(quote => quote.evidenceIndex === action.anchorEvidenceIndex).map(quoteKey))).sort(),
+      ]), action])).values());
+      const matched = new Map<number, number>();
+      const match = (inputIndex: number, visited: Set<number>): boolean => {
+        for (let outputIndex = 0; outputIndex < output.actions.length; outputIndex++) {
+          if (visited.has(outputIndex) || !preservesActionAnchor(output.actions[outputIndex], distinct[inputIndex])) continue;
+          visited.add(outputIndex);
+          const previous = matched.get(outputIndex);
+          if (previous === undefined || match(previous, visited)) {
+            matched.set(outputIndex, inputIndex);
+            return true;
+          }
+        }
+        return false;
+      };
+      if (distinct.some((_, index) => !match(index, new Set()))) throw new InterpretationError("INVALID_MODEL_RESPONSE");
       if (children.some(child => child.actions.some(action => action.citations.some(quote => !kept.has(quoteKey(quote)))))) throw new InterpretationError("INVALID_MODEL_RESPONSE");
       const actions = checkActions({ actions: output.actions }, request, scope, suppliedRanges);
       output.contextFacts.forEach(fact => checkQuotes(fact.citations, request, scope, suppliedRanges));

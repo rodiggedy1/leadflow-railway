@@ -153,6 +153,87 @@ describe("complete adaptive original-range segmentation and reduction", () => {
       reduce: (children, segments) => { const actions = children.flatMap(child => child.actions), facts = children.flatMap(child => child.contextFacts); if (defect === "reducer context") throw new Error("MODEL_CONTEXT_CONSTRAINT"); if (defect === "new citation") actions[0] = { ...actions[0], citations: [quote("Move", 0)] }; return { actions: defect === "action omission" ? [] : actions, contextFacts: defect === "fact omission" ? [] : facts, accountedSegments: defect === "segment omission" ? segments.slice(1) : segments }; } });
     const result = await createRequestInterpreter({ model }).interpret(scope, request(context(items))); expect(result.status).toBe("unavailable"); expect(result.reductionComplete).toBe(false); expect(result.actions.every(a => a.ambiguous)).toBe(true); expect(result.failure).not.toBeNull();
   });
+  it("reducer may add supplied anchor facts without losing the original action or citations", async () => {
+    const text = `${evidence().originalText!}. Gate 2841`;
+    const model = adaptiveModel({
+      leaf: originals => ({
+        actions: originals.filter(item => item.evidenceIndex === 0).map(() => action()),
+        contextFacts: originals.filter(item => item.evidenceIndex === 0).map(() => ({ text: "Additional original anchor fact", citations: [quote("Gate 2841", 0, text.indexOf("Gate 2841"))] })),
+      }),
+      reduce: (children, segments) => ({
+        actions: children.flatMap(child => child.actions).map(value => ({ ...value, citations: [...value.citations, ...children.flatMap(child => child.contextFacts.flatMap(fact => fact.citations))] })),
+        contextFacts: [], accountedSegments: segments,
+      }),
+    });
+    const result = await createRequestInterpreter({ model }).interpret(scope, request(context([evidence(text), evidence("Thanks", 1)])));
+    expect(result.status).toBe("complete"); expect(result.failure).toBeNull(); expect(result.reductionComplete).toBe(true);
+    expect(result.actions).toHaveLength(1); expect(result.actions[0].citations.map(citation => citation.exactQuote)).toEqual([evidence().originalText, "Gate 2841"]);
+  });
+  it("reducer citation ordering does not invalidate unchanged action provenance", async () => {
+    const text = evidence().originalText!;
+    const citations = [quote("Move my appointment", 0), quote("2026-11-16 at 9 AM", 0, text.indexOf("2026-11-16"))];
+    const model = adaptiveModel({
+      leaf: originals => ({ actions: originals.filter(item => item.evidenceIndex === 0).map(() => action(text, 0, { citations })), contextFacts: [] }),
+      reduce: (children, segments) => ({ actions: children.flatMap(child => child.actions).map(value => ({ ...value, citations: [...value.citations].reverse() })), contextFacts: [], accountedSegments: segments }),
+    });
+    const result = await createRequestInterpreter({ model }).interpret(scope, request(context([evidence(), evidence("Thanks", 1)])));
+    expect(result.status).toBe("complete"); expect(result.reductionComplete).toBe(true); expect(result.actions[0].citations.map(value => value.exactQuote)).toEqual(citations.map(value => value.exactQuote).reverse());
+  });
+  it.each(["changed action", "anchor quotes moved to facts", "changed anchor"])("reducer still rejects %s even when all proof remains globally present", async defect => {
+    const model = adaptiveModel({
+      leaf: originals => ({ actions: originals.filter(item => item.evidenceIndex === 0).map(() => action()), contextFacts: originals.map(item => ({ text: "Supplied original proof", citations: [quote(item.originalText!, item.evidenceIndex)] })) }),
+      reduce: (children, segments) => {
+        const original = children.flatMap(child => child.actions)[0];
+        const changed = { ...original, ...(defect === "changed action" ? { action: "cancel" as const } : {}), ...(defect === "changed anchor" ? { anchorEvidenceIndex: 1 } : {}), citations: defect === "changed action" ? original.citations : [quote(evidence().originalText!, 1)] };
+        return { actions: [changed], contextFacts: children.flatMap(child => child.contextFacts), accountedSegments: segments };
+      },
+    });
+    const result = await createRequestInterpreter({ model }).interpret(scope, request(context([evidence(), evidence(undefined, 1)])));
+    expect(result.status).toBe("unavailable"); expect(result.failure).toBe("INVALID_MODEL_RESPONSE"); expect(result.reductionComplete).toBe(false);
+  });
+  it.each(["union drops request", "added reordered proofs", "augmenting path", "destination substitution", "identical proofs"] as const)("injective reducer matching: %s", async mode => {
+    const text = "Company notes Blue vase. Cleaner instructions Gate 2841. Extra fact";
+    const firstQuote = quote("Company notes Blue vase", 0);
+    const secondQuote = quote("Cleaner instructions Gate 2841", 0, text.indexOf("Cleaner"));
+    const extraQuote = quote("Extra fact", 0, text.indexOf("Extra fact"));
+    const first = action(text, 0, { action: "notes", citations: [firstQuote], expected: expected({ date: null, time: null, timeKind: "unspecified", scope: "unspecified", notes: "Blue vase", notesDestination: "company_notes" }) });
+    const second = action(text, 0, { action: "notes", citations: [secondQuote], expected: expected({ date: null, time: null, timeKind: "unspecified", scope: "unspecified", notes: "Gate 2841", notesDestination: "cleaner_instructions" }) });
+    const originals = mode === "augmenting path" ? [first, { ...first, citations: [firstQuote, secondQuote] }]
+      : mode === "identical proofs" ? [{ ...first, citations: [firstQuote, secondQuote] }, { ...first, citations: [secondQuote, firstQuote] }]
+      : mode === "destination substitution" ? [first, { ...first, expected: { ...first.expected, notesDestination: "cleaner_instructions" as const } }]
+      : [first, second];
+    const model = adaptiveModel({
+      leaf: values => ({ actions: values.some(value => value.evidenceIndex === 0) ? originals : [], contextFacts: values.filter(value => value.evidenceIndex === 0).map(() => ({ text: "Additional supplied proof", citations: [extraQuote] })) }),
+      reduce: (children, segments) => {
+        const inputs = children.flatMap(child => child.actions);
+        const union = Array.from(new Map(inputs.flatMap(value => value.citations).map(value => [JSON.stringify(value), value])).values()).concat(extraQuote).reverse();
+        const outputs = mode === "union drops request" || mode === "identical proofs" ? [{ ...inputs[0], citations: union }]
+          : mode === "augmenting path" ? [{ ...inputs[1], citations: union }, inputs[0]]
+          : mode === "destination substitution" ? [{ ...inputs[0], citations: union }, { ...inputs[0], citations: union, explanation: "Second output with the wrong destination." }]
+          : [...inputs].reverse().map(value => ({ ...value, citations: union }));
+        return { actions: outputs, contextFacts: [], accountedSegments: segments };
+      },
+    });
+    const result = await createRequestInterpreter({ model }).interpret(scope, request(context([evidence(text), evidence("Thanks", 1)])));
+    const rejected = mode === "union drops request" || mode === "destination substitution";
+    expect(result.status).toBe(rejected ? "unavailable" : "complete");
+    expect(result.reductionComplete).toBe(!rejected);
+    expect(result.failure).toBe(rejected ? "INVALID_MODEL_RESPONSE" : null);
+    expect(result.actions).toHaveLength(mode === "identical proofs" ? 1 : 2);
+    if (mode === "added reordered proofs") expect(result.actions.map(value => value.expected.notesDestination)).toEqual(["cleaner_instructions", "company_notes"]);
+    if (mode === "union drops request") {
+      const sameDestination = adaptiveModel({
+        leaf: values => ({ actions: values.some(value => value.evidenceIndex === 0) ? originals.map(value => ({ ...value, expected: { ...value.expected, notesDestination: "company_notes" as const } })) : [], contextFacts: [] }),
+        reduce: (children, segments) => {
+          const inputs = children.flatMap(child => child.actions);
+          return { actions: [{ ...inputs[0], citations: inputs.flatMap(value => value.citations) }], contextFacts: [], accountedSegments: segments };
+        },
+      });
+      const collapsed = await createRequestInterpreter({ model: sameDestination }).interpret(scope, request(context([evidence(text), evidence("Thanks", 1)])));
+      expect(collapsed).toMatchObject({ status: "unavailable", failure: "INVALID_MODEL_RESPONSE", reductionComplete: false });
+      expect(collapsed.actions).toHaveLength(2);
+    }
+  });
   it("fact-only dependency reduction is partial review, not complete No-action", async () => { const model = adaptiveModel({ leaf: originals => ({ actions: [], contextFacts: originals.map(item => ({ text: "Unresolved request dependence", citations: [quote(item.originalText!, item.evidenceIndex)] })) }) }); const result = await createRequestInterpreter({ model }).interpret(scope, request(context([evidence("That date"), evidence("Move it", 1)]))); expect(result.status).toBe("partial"); expect(result.failure).toBe("PARTIAL_CONTEXT"); expect(result.reductionComplete).toBe(true); });
   it("reducer transport failure retains successful actions with unavailable analysis, then explicit retry", async () => { const base = adaptiveModel({ leaf: originals => ({ actions: originals.map(item => action(item.originalText!, item.evidenceIndex)), contextFacts: [] }) }); let fail = true; const model = vi.fn<ModelCallable>(async params => { if (payload(params).orderedChildren && fail) { fail = false; throw new Error("offline reducer failed"); } return base(params); }); const interpreter = createRequestInterpreter({ model }); expect((await interpreter.interpret(scope, request(context([evidence(), evidence(undefined, 1)])))).status).toBe("unavailable"); const second = await interpreter.interpret(scope, request(context([evidence(), evidence(undefined, 1)]))); expect(second.status).toBe("complete"); });
   it("indivisible original context failure is honest unavailable without dropping source", async () => { const model = vi.fn<ModelCallable>(async () => { throw new Error("MODEL_CONTEXT_CONSTRAINT"); }); const result = await createRequestInterpreter({ model }).interpret(scope, request(context([evidence("X")]))); expect(result.status).toBe("unavailable"); expect(result.failure).toBe("MODEL_CONTEXT_CONSTRAINT"); expect(model).toHaveBeenCalledTimes(1); });

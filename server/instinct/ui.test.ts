@@ -184,6 +184,57 @@ describe("Instinct actual-source foreground and literal V6 UI", () => {
     expect(check).toHaveBeenCalledTimes(1); expect(work.snapshot().work.filter(task => task.state === "queued")).toHaveLength(2);
     work.controller.togglePause(); await work.settle(); expect(check).toHaveBeenCalledTimes(3); work.dispose();
   });
+  it("retains a submitted check's exact findings and completion coverage when it settles during Pause, without starting new work", async () => {
+    vi.useFakeTimers(); const pending = deferred<CheckResult>(); const a = issue(1);
+    const check = vi.fn((input: contract.CheckInput) => pending.promise);
+    const work = harness({ check }, { items: [evidence(1), evidence(2)] }); await work.settle();
+    const input = check.mock.calls[0][0]; const beforeFeed = vi.mocked(work.api.feed).mock.calls.length;
+    work.controller.togglePause();
+    pending.resolve(checked(input, { issues: [a], coverage: coverage(2, { analyzed: 1, unprocessed: 1, partial: true }) })); await work.settle();
+    expect(work.snapshot().paused).toBe(true); expect(check).toHaveBeenCalledTimes(1);
+    expect(work.snapshot().work.filter(task => task.state === "done")).toHaveLength(1);
+    expect(work.snapshot().work.filter(task => task.state === "queued")).toHaveLength(1);
+    expect(work.snapshot().feed?.groups.flatMap(group => group.issues).map(value => value.issueId)).toContain(a.issueId);
+    expect(work.snapshot().coverage).toMatchObject({ read: 2, analyzed: 1, unprocessed: 1 });
+    expect(vi.mocked(work.api.feed).mock.calls).toHaveLength(beforeFeed);
+    work.dispose();
+  });
+  it("replaces a stable issue ID from another context exactly once during Pause and invalidates its old investigation", async () => {
+    vi.useFakeTimers(); const pending = deferred<CheckResult>(); const prior = issue(1, { action: "notes" });
+    const replacement = issue(2, { issueId: prior.issueId, revision: "fresh-request-revision", action: "notes",
+      identity: { ...prior.identity, evidenceRefs: [ref(2)], sessionIds: ["2"] } });
+    const work = harness({ check: vi.fn(async input => input.expectedContextRevision === fingerprint(2) ? pending.promise : checked(input)) },
+      { items: [evidence(1), evidence(2)], issues: [prior] }); await work.settle();
+    work.controller.select(prior); await work.settle(); expect(work.snapshot().investigation).not.toBeNull();
+    work.controller.togglePause();
+    pending.resolve(checked({ sourceRefs: [ref(2)], expectedContextRevision: fingerprint(2) }, { issues: [replacement], coverage: coverage(2) }));
+    await work.settle(); const current = work.snapshot().feed!;
+    expect(contract.feedSchema.safeParse(current).success).toBe(true);
+    expect(current.groups.flatMap(group => group.issues).filter(value => value.issueId === prior.issueId)).toHaveLength(1);
+    expect(current.groups[0].issues[0].revision).toBe(replacement.revision);
+    expect(current.totals.requests).toBe(1); expect(work.snapshot().selected?.revision).toBe(replacement.revision);
+    expect(work.snapshot().investigation).toBeNull(); expect(work.api.check).toHaveBeenCalledTimes(2); work.dispose();
+  });
+  it.each(["pending", "partial"] as const)("does not report a %s unfinished interpretation as checked or automatically repeat it", async status => {
+    vi.useFakeTimers(); const work = harness({ check: vi.fn(async input => checked(input, {
+      analysis: { ...checked(input).analysis, status, completedSegments: 0, reductionComplete: false, failure: status === "partial" ? "PARTIAL_CONTEXT" : null },
+      coverage: coverage(1, { analyzed: 0, unprocessed: 1, partial: true }),
+    })) }, { items: [evidence(1)] }); await work.settle();
+    expect(work.snapshot().work[0].state).toBe("error");
+    await vi.advanceTimersByTimeAsync(10_120); await work.settle();
+    expect(work.api.check).toHaveBeenCalledTimes(1); work.dispose();
+  });
+  it("a finding click opens the exact cited SMS, preserving its full stored text without an extra evidence click", async () => {
+    vi.useFakeTimers(); const a = issue(1); const work = harness({}, { items: [evidence(1)], issues: [a] });
+    await work.settle(); work.controller.select(a); await work.settle();
+    expect(work.api.evidence).toHaveBeenCalledWith({ issueId: a.issueId, issueRevision: a.revision });
+    expect(work.snapshot().evidenceVisible).toBe(true);
+    const rendered = html(work.controller);
+    expect(rendered).toContain("Text message that prompted this finding");
+    expect(rendered).toContain("Synthetic request 1"); expect(rendered).toContain("<details open=\"\">");
+    expect(rendered).toContain("Fulfillment:"); expect(rendered).toContain("Customer notification:");
+    work.dispose();
+  });
   it("retains inventory continuation across pause rather than skipping the next page", async () => {
     vi.useFakeTimers(); const next = deferred<SourceInventory>(); const sources = vi.fn(async (input: contract.SourcesInput) => input.cursor ? next.promise : inventory([evidence(1)], "next-page"));
     const work = harness({ sources }); await work.settle(); work.controller.togglePause(); next.resolve(inventory([evidence(2)])); await work.settle();

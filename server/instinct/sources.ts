@@ -7,6 +7,7 @@ import {
   type SourcesInput, type StoredEvidence,
 } from "../../shared/instinct";
 import { createLazyReadDb, safeReadDbError, type InstallationReadScope, type ReadDb, type SelectPort, type SqlRow } from "./readDb";
+import { normalizePhone } from "../utils/phone";
 
 /** Verified projections from schema.ts and their source writers. No SELECT *,
  * inferred tenant FK, operational legacy link, provider detail or source write. */
@@ -121,6 +122,38 @@ interface Traversal {
 interface BoundState { scopeKey: string; inputKey: string; boundary: InventoryBoundary; localDay?: string; acceptedBoundaries: Set<string>; revisions: Map<string, string> }
 const emptyParticipants = () => ({ from: null as string | null, to: [] as string[], cc: [] as string[], replyTo: null as string | null, businessLine: null as string | null, mailbox: null as string | null });
 
+/** Same explicit identity checks as the working text monitor, with the existing
+ * phone equivalence policy. Missing headers are not contradictory headers. */
+function sessionMetadataConflict(entry: Record<string, unknown>, rowId: string, customerPhone: string | null, direction: StoredEvidence["direction"]): boolean {
+  const metadata = object(entry.metadata), records = metadata ? [entry, metadata] : [entry];
+  const phone = (value: unknown) => normalizePhone(text(value));
+  const agrees = (value: unknown, expected: string | null) => {
+    const values = Array.isArray(value) ? value : [value];
+    return values.length === 1 && phone(values[0]) !== null && (expected === null || phone(values[0]) === expected);
+  };
+  const explicitLines = records.flatMap(record => [record.businessPhone, record.businessLine]).filter(value => value != null).map(phone);
+  const businessPhone = explicitLines.find((value): value is string => value !== null) ?? null;
+  let conflict = entry.metadata != null && !metadata || explicitLines.some(value => value === null || value !== businessPhone) || businessPhone !== null && businessPhone === customerPhone;
+  for (const record of records) {
+    if (record.sessionId != null && id(record.sessionId) !== rowId) conflict = true;
+    if (record.customerPhone != null && !agrees(record.customerPhone, customerPhone)) conflict = true;
+    if (record.direction != null && record.direction !== direction && record.direction !== (direction === "inbound" ? "incoming" : direction === "outbound" ? "outgoing" : "unknown")) conflict = true;
+    if (record.cc != null && (!Array.isArray(record.cc) || record.cc.length)) conflict = true;
+    for (const name of ["from", "fromPhone", "to", "toPhone"] as const) {
+      if (record[name] == null) continue;
+      const customerEnd = direction === "inbound" ? name.startsWith("from") : name.startsWith("to");
+      if (!agrees(record[name], customerEnd ? customerPhone : businessPhone)) conflict = true;
+    }
+  }
+  for (const endpoint of ["from", "to"] as const) {
+    const values = records.flatMap(record => [record[endpoint], record[`${endpoint}Phone`]]).filter(value => value != null).map(value => phone(Array.isArray(value) ? value[0] : value));
+    if (new Set(values).size > 1) conflict = true;
+    const businessEnd = direction === "inbound" ? endpoint === "to" : endpoint === "from";
+    if (businessEnd && customerPhone !== null && values.includes(customerPhone)) conflict = true;
+  }
+  return conflict;
+}
+
 /** Parse only SQL-selected recent rows, normalize only timestamp-eligible SMS.
  * Unknown-time SMS bodies never enter analysis; one unavailable gap accounts
  * for them without importing an unbounded undated historical conversation. */
@@ -167,9 +200,8 @@ function normalizeRow(store: SourceStore, row: SqlRow, scope: AuthorizedScope, f
       const businessEndpoints = direction === "inbound" ? to : direction === "outbound" ? from : [];
       const businessLine = [...Array.from(new Set([...lines, ...businessEndpoints]))];
       if (!businessLine.length) limitations.push("Historical per-message business line is not stored");
-      if (businessLine.length > 1 || from.length > 1 || to.length > 1) limitations.push("Conflicting or grouped message endpoints");
-      const customerEndpoint = direction === "inbound" ? from : direction === "outbound" ? to : [];
-      if (customerEndpoint.some(value => value !== row.leadPhone) || envelopes.some(value => value.sessionId != null && id(value.sessionId) !== rowId)) limitations.push("Message customer/session binding conflicts with stored session");
+      if ([businessLine, from, to].some(values => new Set(values.map(normalizePhone)).size > 1)) limitations.push("Conflicting or grouped message endpoints");
+      if (entry && sessionMetadataConflict(entry, rowId, normalizePhone(text(row.leadPhone)), direction)) limitations.push("Message customer/session identity conflicts with stored session or explicit participants");
       const ids = entry ? entryIds(entry) : [];
       if (ids.length > 1 || ids.some(key => (providerCounts.get(key) ?? 0) > 1)) limitations.push("Conflicting or repeated provider message identity; all originals retained");
       const ref = common(`session:${rowId}:message:${index}`, "sms", ids[0] ?? null, rowId, null, at, at ? "history" : "unknown", null);

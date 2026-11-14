@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, type CSSProperties } from "react";
-import type { CoverageReceipt, Expectation, InstinctIssue, NativeRecord } from "@shared/instinct";
+import { sameEvidenceRef, type CoverageReceipt, type Expectation, type InstinctIssue, type NativeRecord } from "@shared/instinct";
 import { INSTINCT_CHARACTER } from "./character";
 import { sourceLabel, needsAttention, visibleGroups, type InstinctWorkspaceBinding } from "./useInstinct";
 import "./instinct.css";
@@ -57,7 +57,14 @@ function IssueInvestigation({ binding }: { binding: InstinctWorkspaceBinding }) 
     {state.evidenceVisible && investigation && <div>
       <div className="label" style={{ marginTop: 14 }}>Source evidence</div>
       {investigation.citations.map((citation, index) => <div className="proof" key={`${citation.ref.store}:${citation.ref.sourceId}:${index}`}><small className="source-meta">{sourceLabel(citation.ref.sourceKind)} · {citation.ref.store}:{citation.ref.sourceId} · {citation.ref.providerId ?? "Provider ID unavailable"} · {time(citation.ref.occurredAtUtc)} · {citation.ref.timeBasis} · revision {citation.ref.sourceRevision}</small>{citation.exactQuote}</div>)}
-      {investigation.evidence.map(evidence => <details key={`${evidence.ref.store}:${evidence.ref.sourceId}`}><summary className="source-meta">Full stored context · {sourceLabel(evidence.ref.sourceKind)} · {evidence.availability} · {evidence.contentBasis}</summary><div className="proof">{evidence.originalText ?? "Original body/transcript unavailable"}</div><div className="prose">{evidence.limitations.join(" · ")}</div></details>)}
+      {investigation.evidence.map(evidence => {
+        const prompted = investigation.citations.some(citation => sameEvidenceRef(citation.ref, evidence.ref));
+        return <details open={prompted} key={`${evidence.ref.store}:${evidence.ref.sourceId}`}>
+          <summary className="source-meta">{prompted ? evidence.ref.sourceKind === "sms" ? "Text message that prompted this finding" : "Original source that prompted this finding" : "Full stored context"} · {sourceLabel(evidence.ref.sourceKind)} · {time(evidence.ref.occurredAtUtc)} · {evidence.availability} · {evidence.contentBasis}</summary>
+          <div className="proof" style={{ whiteSpace: "pre-wrap" }}>{evidence.originalText ?? "Original body/transcript unavailable"}</div>
+          <div className="prose">{evidence.limitations.join(" · ")}</div>
+        </details>;
+      })}
       <div className="prose" style={{ marginTop: 12 }}><strong>Independent booking check:</strong> {investigation.snapshot ? `${time(investigation.snapshot.checkedAtUtc)} · ${investigation.snapshot.availability} · ${investigation.snapshot.fingerprint}` : "Unavailable"}</div>
       <div className="source-meta">Fulfillment: {issue.fulfillment} · Customer notification: {issue.notification} · Delivery: {issue.delivery}</div>
       <div className="coverage-detail">{coverageLabel(investigation.coverage)}{investigation.limitations.length ? ` · ${investigation.limitations.join(" · ")}` : ""}</div>

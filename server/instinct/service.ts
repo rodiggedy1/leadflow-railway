@@ -261,7 +261,7 @@ export function createInstinctService(options: InstinctServiceOptions): Instinct
     actor(scope).checks.set(context.manifest.contextFingerprint, { revision: context.manifest.revision, coverage });
     await updateCoverage(scope);
     return checkResultSchema.parse({ binding: { requestId: `check:${hash([scope, input])}`, contextRevision: context.manifest.revision, selectedIssueId: null, selectedIssueRevision: null },
-      coverage, capabilities: STAGE1_CAPABILITIES, limitations: unique([transientLimitation, ...coverage.exclusions, ...analysis.limitations]),
+      coverage: aggregate(scope, actor(scope)), capabilities: STAGE1_CAPABILITIES, limitations: unique([transientLimitation, ...coverage.exclusions, ...analysis.limitations]),
       analysis, issues, contextRevision: context.manifest.revision });
   };
   const check = async (scopeValue: AuthorizedScope, inputValue: CheckInput): Promise<CheckResult> => {

@@ -17,7 +17,7 @@ export interface IdentityAccountBindings {
   readonly businessLines: readonly string[];
   readonly mailboxes: readonly string[];
 }
-export interface IdentitySessionContact { readonly sessionId: string; readonly phone: string | null }
+export interface IdentitySessionContact { readonly sessionId: string; readonly phone: string | null; readonly displayName?: string | null }
 export interface IdentityResolverOptions {
   readonly getAccountBindings: (scope: AuthorizedScope) => IdentityAccountBindings | Promise<IdentityAccountBindings>;
   readonly readSessionContacts?: (scope: AuthorizedScope, sessionIds: readonly string[]) => Promise<readonly IdentitySessionContact[]>;
@@ -42,7 +42,7 @@ function emptyTarget(scope: TargetOccurrence["scope"] = "unspecified"): TargetOc
     scope, localDate: null, localTime: null, arrivalWindow: null, timeZone: null, occurredAtUtc: null };
 }
 function uncertain(identity: VerifiedIdentity, decision: "ambiguous" | "unavailable", reasons: readonly string[]): VerifiedIdentity {
-  return verifiedIdentitySchema.parse({ ...identity, decision, reasons: unique(reasons), fingerprint: null, displayName: null });
+  return verifiedIdentitySchema.parse({ ...identity, decision, reasons: unique(reasons), fingerprint: null });
 }
 
 /** Contact discovery for the initial SELECT, not yet a verified customer. Source
@@ -65,6 +65,18 @@ export async function resolveSourceIdentity(scopeValue: AuthorizedScope, context
   const mailboxes = unique(bindings.mailboxes.map(normalizeIdentityEmail).filter((value): value is string => value !== null));
   const phones: string[] = [], emails: string[] = [], sourceLines: string[] = [], sourceMailboxes: string[] = [], reasons: string[] = [];
   let ambiguous = false;
+  // Only a message owned by this exact session can use the existing contact
+  // authority. Calls, provider/body contacts and latest/sibling sessions cannot.
+  const ownedSessionId = (item: StoredEvidence) => item.ref.store === "conversation_sessions" && item.ref.sourceKind === "sms"
+    && item.ref.sessionId && item.ref.sourceId.startsWith(`session:${item.ref.sessionId}:message:`)
+    && /^session:[1-9]\d*:message:\d+$/.test(item.ref.sourceId) ? item.ref.sessionId : null;
+  const ownedIds = unique(context.evidence.flatMap(item => ownedSessionId(item) ? [ownedSessionId(item)!] : []));
+  let sessionContacts: readonly IdentitySessionContact[] = [];
+  if (ownedIds.length) {
+    if (!options.readSessionContacts) return uncertain(identity, "unavailable", ["SESSION_CONTACT_BINDING_UNAVAILABLE"]);
+    try { sessionContacts = await options.readSessionContacts(scope, ownedIds); } catch { return uncertain(identity, "unavailable", ["SESSION_CONTACT_BINDING_UNAVAILABLE"]); }
+    if (sessionContacts.some(contact => !ownedIds.includes(contact.sessionId)) || ownedIds.some(id => sessionContacts.filter(contact => contact.sessionId === id).length !== 1)) return uncertain(identity, "unavailable", ["SESSION_CONTACT_BINDING_UNAVAILABLE"]);
+  }
   for (const item of context.evidence) {
     const p = item.participants;
     if (item.ref.sourceKind === "email") {
@@ -81,6 +93,22 @@ export async function resolveSourceIdentity(scopeValue: AuthorizedScope, context
       else if (item.direction === "outbound" && from === mailbox && to && !mailboxes.includes(to)) emails.push(to);
       else { reasons.push("EMAIL_DIRECTION_OR_CONTACT_UNVERIFIED"); ambiguous = true; }
     } else {
+      const sessionId = ownedSessionId(item);
+      if (sessionId) {
+        const contact = sessionContacts.find(value => value.sessionId === sessionId)!;
+        const phone = normalizePhone(contact.phone);
+        if (!phone || lines.includes(phone)) { reasons.push("SESSION_CONTACT_BINDING_UNAVAILABLE"); continue; }
+        phones.push(phone);
+        if (ownedIds.length === 1) identity.displayName = contact.displayName ?? null;
+        const line = normalizePhone(p.businessLine);
+        if (line) sourceLines.push(line);
+        const customerEndpoints = item.direction === "inbound" ? [p.from].filter((value): value is string => value !== null) : p.to;
+        const businessEndpoints = item.direction === "inbound" ? p.to : [p.from].filter((value): value is string => value !== null);
+        if (p.cc.length || unique(p.to.map(normalizePhone)).length > 1 || customerEndpoints.some(value => normalizePhone(value) !== phone)
+          || businessEndpoints.some(value => !normalizePhone(value) || normalizePhone(value) === phone || line !== null && normalizePhone(value) !== line)
+          || p.businessLine !== null && !line) { reasons.push("PHONE_DIRECTION_OR_CONTACT_UNVERIFIED"); ambiguous = true; }
+        if (!["inbound", "outbound"].includes(item.direction)) reasons.push("PHONE_DIRECTION_OR_CONTACT_UNVERIFIED");
+      } else {
       const line = normalizePhone(p.businessLine);
       if (!line || !lines.includes(line)) { reasons.push("BUSINESS_LINE_UNVERIFIED"); continue; }
       sourceLines.push(line);
@@ -93,6 +121,7 @@ export async function resolveSourceIdentity(scopeValue: AuthorizedScope, context
       if (item.direction === "inbound" && to === line && from && !lines.includes(from)) phones.push(from);
       else if (item.direction === "outbound" && from === line && to && !lines.includes(to)) phones.push(to);
       else { reasons.push("PHONE_DIRECTION_OR_CONTACT_UNVERIFIED"); ambiguous = true; }
+      }
     }
     if (item.availability === "missing" || item.availability === "malformed" || item.originalText === null) reasons.push("ORIGINAL_SOURCE_UNAVAILABLE");
     // Stored adapters must retain provenance conflicts as limitations. Partial
@@ -273,7 +302,7 @@ export function createIdentityResolver(options: IdentityResolverOptions): Identi
       if (unique(contacts.map(record => record.customerPhone).filter(Boolean)).length > 1 || unique(contacts.map(record => record.customerEmail).filter(Boolean)).length > 1) return uncertain(identity, "ambiguous", ["NATIVE_CONTACT_CONFLICT"]);
       return verifiedIdentitySchema.parse({ ...identity, phone: corroboratedPhone, email: corroboratedEmail,
         decision: "verified", reasons: [], fingerprint: hash([scope.installationScope, scope.sourceAccountKey, corroboratedPhone, corroboratedEmail]),
-        displayName: contacts[0]?.customerName ?? null });
+        displayName: identity.displayName ?? contacts[0]?.customerName ?? null });
     },
     async occurrence(scope: AuthorizedScope, identity: VerifiedIdentity, expected: Expectation, records: NativeSnapshot) { return resolveOccurrence(scope, identity, expected, records); },
   });

@@ -75,10 +75,21 @@ describe("read-only actual dependency orchestration", () => {
     const h = serviceHarness(), { inventory, result } = await firstCheck(h);
     expect(sourceInventorySchema.safeParse(inventory).success).toBe(true); expect(checkResultSchema.safeParse(result).success).toBe(true);
     expect(result.issues[0].outcome).toBe("matches_current"); expect(result.issues[0].identity.decision).toBe("verified");
-    expect(result.issues[0].target.jobId).toBe("20"); expect(result.coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, unavailable: 0, partial: false });
+    expect(result.issues[0].target.jobId).toBe("20"); expect(result.issues[0].coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, unavailable: 0, partial: false });
+    expect(result.coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, unavailable: 0, partial: true, continuation: inventory.continuation });
     const feed = await h.service.feed(fixtureScope, { filter: "all" }); expect(feedSchema.safeParse(feed).success).toBe(true); expect(feed.totals.requests).toBe(1); expect(feed.coverage.analyzed).toBe(1);
     const evidence = await h.service.evidence(fixtureScope, selected(result.issues[0])); expect(evidence.citations[0].exactQuote).toBe(inventory.items[0].originalText); expect(evidence.snapshot?.records).toHaveLength(2);
     expect(h.db.calls.every(call => call.sql.startsWith("SELECT "))).toBe(true); expect(h.model).toHaveBeenCalledTimes(1);
+  });
+  it("check returns fresh global observed progress while each finding retains its exact conversation coverage", async () => {
+    const h = serviceHarness(); h.db.tables.conversation_sessions.push(fixtureSession("8", "Thank you"));
+    const first = await h.service.sources(fixtureScope, { sourceKinds: ["sms"] });
+    let cursor = first.continuation;
+    while (cursor) cursor = (await h.service.sources(fixtureScope, { sourceKinds: ["sms"], cursor })).continuation;
+    const result = await h.service.check(fixtureScope, { sourceRefs: first.items.map(item => item.ref), expectedContextRevision: first.items[0].ref.contextFingerprint });
+    expect(result.coverage).toMatchObject({ read: 2, analyzed: 1, unprocessed: 1, unavailable: 0 });
+    expect(result.issues[0].coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0 });
+    expect(h.model).toHaveBeenCalledTimes(1);
   });
   it("record 9 to 11 to 9 uses one interpretation, fresh snapshots and stable issue identity", async () => {
     const h = serviceHarness(), { result, input } = await firstCheck(h), original = result.issues[0], before = h.db.snapshots;
@@ -326,7 +337,8 @@ describe("foreground completion and cumulative coverage", () => {
     const service = createInstinctService({ ...h.options, sources }), page = await service.sources(fixtureScope, { sourceKinds: ["ai_call"] });
     expect(page.continuation).not.toBeNull(); expect(page.items).toHaveLength(1); expect(page.readyContexts![0].refs).toHaveLength(2);
     const ready = page.readyContexts![0], result = await service.check(fixtureScope, { sourceRefs: ready.refs, expectedContextRevision: ready.contextFingerprint });
-    expect(result.analysis.completedSegments).toBe(result.analysis.totalSegments); expect(result.coverage).toMatchObject({ read: 2, analyzed: 2, unprocessed: 0, unavailable: 0, partial: true });
+    expect(result.analysis.completedSegments).toBe(result.analysis.totalSegments); expect(result.issues[0].coverage).toMatchObject({ read: 2, analyzed: 2, unprocessed: 0, unavailable: 0, partial: true });
+    expect(result.coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, unavailable: 0, partial: true });
     expect((await service.feed(fixtureScope, { filter: "all" })).coverage).toMatchObject({ read: 1, analyzed: 1, unprocessed: 0, unavailable: 0, partial: true });
     await expect(service.check({ ...fixtureScope, actor: { staffId: "2", role: "admin" } }, { sourceRefs: ready.refs, expectedContextRevision: ready.contextFingerprint })).rejects.toThrow("INVALID_SOURCE_REFERENCE");
     let cursor = page.continuation; while (cursor) { const next = await service.sources(fixtureScope, { sourceKinds: ["ai_call"], cursor }); cursor = next.continuation; }
