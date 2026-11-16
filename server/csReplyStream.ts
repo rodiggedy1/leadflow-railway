@@ -357,6 +357,72 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}
 Write the exact SMS the agent should send for the scenario described.${fewShotExamples ? `\n\n${fewShotExamples}` : ""}`;
 }
 
+export interface CsReplyDraftInput {
+  conversationContext?: unknown;
+  customerName?: unknown;
+  jobContext?: unknown;
+  scenario?: unknown;
+  sessionId?: unknown;
+}
+
+export interface CsReplyPreparationDependencies {
+  analyzeConversationState?: typeof analyzeConversationState;
+  retrieveExamples?: typeof retrieveExamples;
+}
+
+export async function prepareCsReplyMessages(
+  input: CsReplyDraftInput,
+  dependencies: CsReplyPreparationDependencies = {},
+): Promise<[{ role: "system"; content: string }, { role: "user"; content: string }]> {
+  const { conversationContext, customerName, jobContext, scenario, sessionId: reqSessionId } = input;
+
+  const forgeApiUrl = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
+    : "https://forge.manus.im/v1/chat/completions";
+
+  const jobContextStr = typeof jobContext === "string" ? jobContext : "";
+  const conversationContextStr = typeof conversationContext === "string" ? conversationContext : "";
+  const sessionIdNum = typeof reqSessionId === "number" ? reqSessionId : undefined;
+
+  // ── State analysis + retrieval (fail-closed) ──────────────────────────────
+  let fewShotExamples = "";
+  let contextBlock = "";
+  try {
+    if (conversationContextStr) {
+      const state = await (dependencies.analyzeConversationState ?? analyzeConversationState)(conversationContextStr, jobContextStr, forgeApiUrl);
+      if (state) {
+        // State analysis succeeded — retrieve semantically relevant examples
+        const { examples } = await (dependencies.retrieveExamples ?? retrieveExamples)(state, sessionIdNum, forgeApiUrl);
+        fewShotExamples = formatFewShotExamples(examples);
+        contextBlock = buildContextBlock(state, jobContextStr);
+      } else {
+        // State analysis failed — fail closed: no retrieval, no state injection
+        console.warn(`[DRAFT_STATE] analyzeConversationState returned null for sessionId=${sessionIdNum ?? "?"} — falling back to raw context`);
+      }
+    }
+  } catch (err) {
+    console.warn("[DRAFT_STATE] state analysis/retrieval failed (non-fatal):", err);
+  }
+
+  const systemPrompt = buildSystemPrompt(fewShotExamples || undefined);
+  const firstName = customerName ? String(customerName).trim().split(/\s+/)[0] : "";
+  const userParts: string[] = [];
+  if (contextBlock) userParts.push(contextBlock);
+  if (firstName) userParts.push(`Customer's first name: ${firstName}`);
+  if (!contextBlock && jobContextStr) userParts.push(`Upcoming job details:\n${jobContextStr}`);
+  if (conversationContextStr) userParts.push(`Recent conversation with this customer:\n${conversationContextStr}`);
+  if (scenario) {
+    userParts.push(`Customer service scenario: ${scenario}`);
+  } else {
+    userParts.push("Based on the conversation above, write the best reply to send to the customer now.");
+  }
+
+  return [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userParts.join("\n\n") },
+  ];
+}
+
 export function registerCsReplyStreamRoute(app: Express) {
   app.post("/api/cs-reply-stream", async (req: Request, res: Response) => {
     const authorized = await isAuthorizedOpsUser(req);
@@ -371,29 +437,7 @@ export function registerCsReplyStreamRoute(app: Express) {
       ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
       : "https://forge.manus.im/v1/chat/completions";
 
-    const jobContextStr = typeof jobContext === "string" ? jobContext : "";
-    const conversationContextStr = typeof conversationContext === "string" ? conversationContext : "";
-    const sessionIdNum = typeof reqSessionId === "number" ? reqSessionId : undefined;
-
-    // ── State analysis + retrieval (fail-closed) ──────────────────────────────
-    let fewShotExamples = "";
-    let contextBlock = "";
-    try {
-      if (conversationContextStr) {
-        const state = await analyzeConversationState(conversationContextStr, jobContextStr, forgeApiUrl);
-        if (state) {
-          // State analysis succeeded — retrieve semantically relevant examples
-          const { examples } = await retrieveExamples(state, sessionIdNum, forgeApiUrl);
-          fewShotExamples = formatFewShotExamples(examples);
-          contextBlock = buildContextBlock(state, jobContextStr);
-        } else {
-          // State analysis failed — fail closed: no retrieval, no state injection
-          console.warn(`[DRAFT_STATE] analyzeConversationState returned null for sessionId=${sessionIdNum ?? "?"} — falling back to raw context`);
-        }
-      }
-    } catch (err) {
-      console.warn("[DRAFT_STATE] state analysis/retrieval failed (non-fatal):", err);
-    }
+    const messages = await prepareCsReplyMessages({ conversationContext, customerName, jobContext, scenario, sessionId: reqSessionId });
 
     // SSE headers
     res.setHeader("Content-Type", "text/event-stream");
@@ -402,26 +446,10 @@ export function registerCsReplyStreamRoute(app: Express) {
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
-    const systemPrompt = buildSystemPrompt(fewShotExamples || undefined);
-    const firstName = customerName ? String(customerName).trim().split(/\s+/)[0] : "";
-    const userParts: string[] = [];
-    if (contextBlock) userParts.push(contextBlock);
-    if (firstName) userParts.push(`Customer's first name: ${firstName}`);
-    if (!contextBlock && jobContextStr) userParts.push(`Upcoming job details:\n${jobContextStr}`);
-    if (conversationContextStr) userParts.push(`Recent conversation with this customer:\n${conversationContextStr}`);
-    if (scenario) {
-      userParts.push(`Customer service scenario: ${scenario}`);
-    } else {
-      userParts.push("Based on the conversation above, write the best reply to send to the customer now.");
-    }
-
     const payload = {
       model: "gemini-2.5-flash",
       stream: true,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userParts.join("\n\n") },
-      ],
+      messages,
       max_tokens: 1024,
     };
 

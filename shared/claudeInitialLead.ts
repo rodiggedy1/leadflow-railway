@@ -31,12 +31,21 @@ export const initialLeadJsonSchema: z.ZodType<InitialLeadJson> = z.lazy(() => z.
   z.null(), z.boolean(), z.number().finite(), z.string(), z.array(initialLeadJsonSchema), z.record(z.string(), initialLeadJsonSchema),
 ]));
 const sessionId = z.number().int().nonnegative().refine(Number.isSafeInteger);
+/** The same four fields sent by the existing CS draft button. They remain user
+ * context; the complete system instructions are assembled only on the server. */
+export const initialLeadDraftRequestSchema = z.object({
+  conversationContext: z.string(),
+  customerName: z.string(),
+  jobContext: z.string(),
+  scenario: z.string(),
+}).strict();
 export const claudeInitialLeadInputSchema = z.object({
   sessionId,
   customerPhone: z.string().min(1),
   requestId: z.uuid(),
   leadDetails: claudeInitialLeadFactsSchema,
   originalConversation: z.array(initialLeadJsonSchema),
+  draftRequest: initialLeadDraftRequestSchema.optional(),
 }).strict();
 export const claudeInitialLeadResultSchema = z.object({
   kind: z.literal("initial_lead"),

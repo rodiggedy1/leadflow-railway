@@ -7,7 +7,7 @@ import {
   ANTHROPIC_BETA, ANTHROPIC_VERSION, EXISTING_AGENT_ID,
   EXISTING_AGENT_VERSION, EXISTING_ENVIRONMENT_ID, ManagedAgentDemoError,
   runGeneralSmsDraft, type Backend, type ObservedEvent, type GeneralSmsDraftOptions,
-  type TraceEntry,
+  runInitialLeadDraft, type InitialLeadDraftOptions, type TraceEntry,
 } from "./claudeAgentClient";
 
 type Obj = Record<string, any>;
@@ -15,6 +15,8 @@ const SESSION_ID = "sesn_MockedSyntheticOnly01";
 const FAKE_KEY = "mocked-transport-key-not-a-credential";
 const SMS = "SIMULATED SMS ONLY: synthetic-customer requests next Thursday. No real SMS.";
 const NOW = "2026-11-15T22:00:00Z";
+const INITIAL_SYSTEM = "  Exact caller system\r\nPrivate first-lead instructions — café.\n\t";
+const INITIAL_USER = "\tExact caller user prompt\r\nSynthetic lead context only.\n  ";
 const toolDefinition = {
   name: "get_customer_context", description: "Read-only mocked context for the existing transport fixture.",
   input_schema: { type: "object", properties: { bookingId: { type: "string" } }, required: ["bookingId"], additionalProperties: false },
@@ -56,6 +58,7 @@ function json(value: unknown, status = 200): Response {
 }
 interface HttpCall { method: string; path: string; body?: Obj }
 interface HarnessOptions {
+  initialLead?: { systemPrompt: string; userPrompt: string };
   mutateBase?: (base: Obj) => void;
   mutateEnvironment?: (env: Obj) => void;
   mutateSession?: (session: Obj) => void;
@@ -75,11 +78,17 @@ interface Harness {
   raw: (text: string, byteSplit?: boolean) => void;
   close: () => void;
   run: (extra?: Partial<GeneralSmsDraftOptions>) => ReturnType<typeof runGeneralSmsDraft>;
+  runInitial: (extra?: Partial<InitialLeadDraftOptions>) => ReturnType<typeof runInitialLeadDraft>;
 }
 function harness(config: HarnessOptions = {}): Harness {
   const base = baseAgent(); config.mutateBase?.(base);
   const env = environment(); config.mutateEnvironment?.(env);
-  const session = sessionFor(base); config.mutateSession?.(session);
+  const session = sessionFor(base);
+  if (config.initialLead) {
+    session.agent.system = config.initialLead.systemPrompt;
+    session.agent.tools = [];
+  }
+  config.mutateSession?.(session);
   let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
   let streamOpened = false;
   let userSent = false;
@@ -100,6 +109,12 @@ function harness(config: HarnessOptions = {}): Harness {
     close() { stream!.close(); },
     async run(extra: Partial<GeneralSmsDraftOptions> = {}) {
       return runGeneralSmsDraft({ reviewOnly: true, backend, reviewPayload: SMS,
+        onEvent: received => { events.push(received); },
+        onTrace: entry => { traces.push(entry); }, ...extra });
+    },
+    async runInitial(extra: Partial<InitialLeadDraftOptions> = {}) {
+      return runInitialLeadDraft({ systemPrompt: INITIAL_SYSTEM, userPrompt: INITIAL_USER,
+        ...config.initialLead,
         onEvent: received => { events.push(received); },
         onTrace: entry => { traces.push(entry); }, ...extra });
     },
@@ -136,7 +151,7 @@ function harness(config: HarnessOptions = {}): Harness {
       const echo = { ...sent, id: `sevt_echo${++echoCounter}`, processed_at: NOW };
       if (sent.type === "user.message") {
         expect(userSent).toBe(false); userSent = true;
-        expect(sent).toEqual({ type: "user.message", content: [{ type: "text", text: SMS }] });
+        expect(sent).toEqual({ type: "user.message", content: [{ type: "text", text: config.initialLead?.userPrompt ?? SMS }] });
         config.onMessage?.(h);
       } else if (sent.type === "user.custom_tool_result") {
         expect(userSent).toBe(true);
@@ -158,6 +173,103 @@ const settle = () => new Promise<void>(resolve => setImmediate(resolve));
 
 beforeEach(() => { vi.stubEnv("ANTHROPIC_API_KEY", FAKE_KEY); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+describe("MOCKED TRANSPORT ONLY: exact first-lead instructions without tools", () => {
+  const initialHarness = (config: HarnessOptions = {}) => harness({
+    initialLead: { systemPrompt: INITIAL_SYSTEM, userPrompt: INITIAL_USER }, ...config,
+  });
+
+  it("replaces only the session system, sends the exact user string, preserves saved model and returns raw SMS", async () => {
+    const rawSms = "  Raw SMS — café\n\tNo transport trimming.  ";
+    const h = initialHarness({ onMessage: h => {
+      expect(h.traces.some(entry => entry.stage === "session_verified")).toBe(true);
+      h.push(event("user.message", "sevt_echo1", { content: [{ type: "text", text: INITIAL_USER }] }));
+      h.push(message(rawSms), true, "\r\n", true);
+      h.push(idle());
+    } });
+    const result = await h.runInitial();
+    expect(result).toEqual({ sessionId: SESSION_ID, agentId: EXISTING_AGENT_ID,
+      agentVersion: EXISTING_AGENT_VERSION, environmentId: EXISTING_ENVIRONMENT_ID,
+      agentMessages: [{ providerEventId: "sevt_sms1", text: rawSms }], finalSmsText: rawSms, toolCalls: [] });
+    expect(h.calls.find(call => call.path === "/v1/sessions")!.body).toEqual({
+      agent: { type: "agent_with_overrides", id: EXISTING_AGENT_ID, version: EXISTING_AGENT_VERSION,
+        system: INITIAL_SYSTEM, tools: [], mcp_servers: [], skills: [] },
+      environment_id: EXISTING_ENVIRONMENT_ID,
+    });
+    expect(h.calls.at(-1)?.body).toEqual({ events: [{ type: "user.message",
+      content: [{ type: "text", text: INITIAL_USER }] }] });
+    // Exact endpoint allowlist also excludes saved-agent creation/mutation and all business calls.
+    expect(h.calls.map(call => `${call.method} ${call.path}`)).toEqual([
+      `GET /v1/agents/${EXISTING_AGENT_ID}`, `GET /v1/environments/${EXISTING_ENVIRONMENT_ID}`,
+      "POST /v1/sessions", `GET /v1/sessions/${SESSION_ID}/events/stream`,
+      `POST /v1/sessions/${SESSION_ID}/events`,
+    ]);
+    expect(h.toolCalls).not.toHaveBeenCalled();
+    expect(JSON.stringify({ events: h.events, traces: h.traces })).not.toContain(INITIAL_SYSTEM);
+    expect(h.traces.at(-1)?.stage).toBe("completed");
+  });
+
+  it.each(["", "\n  \t", "exact replacement"])("uses the exact system string %j even when saved system is null", async systemPrompt => {
+    const h = initialHarness({ initialLead: { systemPrompt, userPrompt: INITIAL_USER },
+      mutateBase: base => { base.system = null; },
+      onMessage: h => { h.push(message()); h.push(idle()); } });
+    await h.runInitial();
+    expect(h.calls.find(call => call.path === "/v1/sessions")!.body!.agent.system).toBe(systemPrompt);
+  });
+
+  it("does not parse or wrap the returned agent text", async () => {
+    const rawText = '{"opaque":"agent text, not a transport output schema"}';
+    const h = initialHarness({ onMessage: h => { h.push(message(rawText)); h.push(idle()); } });
+    expect((await h.runInitial()).finalSmsText).toBe(rawText);
+  });
+
+  it.each([
+    ["inherited saved system", (s: Obj) => { s.agent.system = baseAgent().system; }],
+    ["appended saved system", (s: Obj) => { s.agent.system = baseAgent().system + INITIAL_SYSTEM; }],
+    ["trimmed caller system", (s: Obj) => { s.agent.system = INITIAL_SYSTEM.trim(); }],
+    ["missing system", (s: Obj) => { delete s.agent.system; }],
+    ["null system", (s: Obj) => { s.agent.system = null; }],
+    ["context tool", (s: Obj) => { s.agent.tools = [{ type: "custom", ...toolDefinition }]; }],
+    ["builtin tool", (s: Obj) => { s.agent.tools = [{ type: "agent_toolset_20260401" }]; }],
+    ["missing tool list", (s: Obj) => { delete s.agent.tools; }],
+    ["MCP server", (s: Obj) => { s.agent.mcp_servers = [{ name: "unsafe" }]; }],
+    ["skill", (s: Obj) => { s.agent.skills = [{ skill_id: "unsafe" }]; }],
+    ["changed saved model ID", (s: Obj) => { s.agent.model.id = "changed-model-fixture"; }],
+    ["changed saved model configuration", (s: Obj) => { s.agent.model.effort = "changed"; }],
+  ])("rejects resolved %s before stream or user-message send", async (_label, mutateSession) => {
+    const h = initialHarness({ mutateSession: mutateSession as (s: Obj) => void });
+    await stopped(h.runInitial(), "SESSION_MISMATCH");
+    expect(h.calls).toHaveLength(3);
+    expect(h.calls.some(call => call.path.includes("/events"))).toBe(false);
+    expect(h.toolCalls).not.toHaveBeenCalled();
+    expect(h.traces.some(entry => entry.stage === "session_verified")).toBe(false);
+  });
+
+  it.each(["agent.custom_tool_use", "agent.tool_use", "agent.mcp_tool_use", "agent.tool_result", "agent.mcp_tool_result"])("rejects unexpected %s without backend execution or tool result", async type => {
+    const h = initialHarness({ onMessage: h => h.push(event(type, "sevt_forbidden", { name: toolDefinition.name, input: {} })) });
+    await stopped(h.runInitial(), "UNSAFE_TOOL");
+    expect(h.toolCalls).not.toHaveBeenCalled();
+    expect(h.calls.filter(call => call.body?.events?.[0]?.type === "user.custom_tool_result")).toHaveLength(0);
+  });
+
+  it("rejects invalid prompts or cancellation before HTTP", async () => {
+    const h = initialHarness();
+    await stopped(h.runInitial({ userPrompt: "" }), "INVALID_PAYLOAD");
+    await stopped(h.runInitial({ systemPrompt: null as unknown as string }), "INVALID_PAYLOAD");
+    const controller = new AbortController(); controller.abort();
+    await stopped(h.runInitial({ signal: controller.signal }), "CANCELLED");
+    expect(h.fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves the existing general-draft inherited-system and one-context-tool defaults intact", async () => {
+    const h = harness({ onMessage: h => { h.push(message()); h.push(idle()); } });
+    await h.run();
+    const override = h.calls.find(call => call.path === "/v1/sessions")!.body!.agent;
+    expect(override).not.toHaveProperty("system");
+    expect(override).not.toHaveProperty("model");
+    expect(override.tools).toEqual([{ type: "custom", ...toolDefinition }]);
+  });
+});
 
 describe("MOCKED TRANSPORT ONLY: extracted existing-agent general SMS draft", () => {
   it("runs a complete HTTP/SSE lifecycle; tool result arrives before requires_action; final SMS is buffered text", async () => {
@@ -386,16 +498,30 @@ describe("general SMS draft read-only entry-point guards", () => {
 });
 
 describe("scoped source extraction preservation", () => {
-  it("keeps the exact protected private transport core and general wrapper", () => {
+  it("keeps the protected baseline transport and exact general wrapper except explicit first-lead extensions", () => {
     const source = readFileSync(new URL("./claudeAgentClient.ts", import.meta.url), "utf8");
     const digest = (value: string) => createHash("sha256").update(value).digest("hex");
     const coreStart = source.indexOf("/** Creates only a NEW session;");
     const wrapperStart = source.indexOf("export interface GeneralSmsDraftOptions");
+    const initialStart = source.indexOf("\nexport interface InitialLeadDraftOptions");
     expect(coreStart).toBeGreaterThan(0);
     expect(wrapperStart).toBeGreaterThan(coreStart);
+    expect(initialStart).toBeGreaterThan(wrapperStart);
     expect(source.match(/async function runManagedAgentSession\(/g)).toHaveLength(1);
-    expect(digest(source.slice(source.indexOf("export const EXISTING_AGENT_ID"), coreStart))).toBe("f093140f0dfdf4eb8b0ea75251fabe70d3d1feae110ab1c731a04efce18fb045");
-    expect(digest(source.slice(coreStart, wrapperStart))).toBe("c5c12cdbdf66633e1f6e6b4674e60ec414be3f119f8fff4a4f5cc587687eb575");
-    expect(digest(source.slice(wrapperStart))).toBe("109455bb2148cc2bb6286fa064698d723759f48c3e45c332305d096744346b86");
+    // Permit only these named additions; original hashes still protect everything else.
+    const prefix = source.slice(source.indexOf("export const EXISTING_AGENT_ID"), coreStart)
+      .replace("/** Private session overrides used only by the dedicated first-lead entrypoint. */\ninterface SessionRunOptions extends RunOptions {\n  systemOverride?: string;\n  allowEmptyTools?: true;\n}\n", "")
+      .replace("function customTools(backend: Backend, allowEmptyTools = false)", "function customTools(backend: Backend)")
+      .replace("(backend.tools.length === 0 && !allowEmptyTools)", "backend.tools.length === 0");
+    const core = source.slice(coreStart, wrapperStart)
+      .replace("options: SessionRunOptions", "options: RunOptions")
+      .replace("customTools(options.backend, options.allowEmptyTools === true)", "customTools(options.backend)")
+      .replace("version: EXISTING_AGENT_VERSION, tools, mcp_servers: [], skills: [],\n        ...(options.systemOverride === undefined ? {} : { system: options.systemOverride }) },",
+        "version: EXISTING_AGENT_VERSION, tools, mcp_servers: [], skills: [] },")
+      .replace("canonical(resolved.model) !== canonical(base.model) ||\n        resolved.system !== (options.systemOverride === undefined ? base.system : options.systemOverride) ||",
+        "canonical(resolved.model) !== canonical(base.model) || resolved.system !== base.system ||");
+    expect(digest(prefix)).toBe("f093140f0dfdf4eb8b0ea75251fabe70d3d1feae110ab1c731a04efce18fb045");
+    expect(digest(core)).toBe("c5c12cdbdf66633e1f6e6b4674e60ec414be3f119f8fff4a4f5cc587687eb575");
+    expect(digest(source.slice(wrapperStart, initialStart))).toBe("109455bb2148cc2bb6286fa064698d723759f48c3e45c332305d096744346b86");
   });
 });

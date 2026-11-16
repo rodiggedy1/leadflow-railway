@@ -395,6 +395,9 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       expect(work.generateInitial).toHaveBeenCalledTimes(1);
       const request = work.generateInitial.mock.calls[0][0];
       expect(request.leadDetails).toEqual(expectedFacts);
+      expect(request.draftRequest).toEqual(JSON.parse((work.fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body));
+      expect(request.draftRequest?.jobContext).toBe(draft!.jobContext);
+      expect(request.draftRequest?.scenario).toBe(draft!.scenario);
       expect(claudeInitialLeadInputSchema.safeParse(request).success).toBe(true);
       expect(buildThumbtackLeadDraftContext(request.leadDetails)).toBe(draft!.jobContext);
       expect(request.originalConversation).toEqual(sessionId === 0 ? [] : saved);
@@ -434,7 +437,8 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       click(get); click(get); click(get);
       expect(work.generateInitial).toHaveBeenCalledTimes(1); expect(work.generate).not.toHaveBeenCalled(); expect(work.uuid).toHaveBeenCalledTimes(1);
       const request = work.generateInitial.mock.calls[0][0];
-      expect(request).toEqual({ sessionId, customerPhone: clicked.phone, requestId: "00000000-0000-4000-8000-000000000001", leadDetails: leadFacts(), originalConversation: [] });
+      expect(request).toEqual({ sessionId, customerPhone: clicked.phone, requestId: "00000000-0000-4000-8000-000000000001", leadDetails: leadFacts(), originalConversation: [],
+        draftRequest: JSON.parse((work.fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body) });
       work.initialResponse.resolve(initialResult(request)); await work.settle();
       expect(work.html()).toContain("First lead reply"); expect(work.html()).not.toContain("Reply on");
       expect(textarea(work.render()).props.value).toBe("Human first response");
@@ -466,6 +470,9 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       const request = work.generateInitial.mock.calls[0][0];
       expect(request.leadDetails).toEqual(leadFacts({ name: "Clicked B", category: "Move out", description: "B notes", bedrooms: "2" }));
       expect(request.originalConversation).toEqual(saved); expect(request.originalConversation).toHaveLength(13);
+      expect(request.draftRequest).toEqual(JSON.parse((work.fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body));
+      expect(request.draftRequest?.conversationContext).toBe(saved.filter(turn => turn.content.trim()).slice(-5)
+        .map(turn => `${turn.role === "user" ? "Customer" : "Agent"}: ${turn.content}`).join("\n"));
       expect(work.generate).not.toHaveBeenCalled(); work.initialResponse.resolve(initialResult(request)); await work.settle(); work.dispose();
     }
   });

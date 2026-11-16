@@ -2441,7 +2441,8 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const claudeScopeKey = JSON.stringify([conversation.id, conversation.leadPhone, conversation.personType, leadCardPhone,
     detail?.sessionId, detail?.leadPhone, detail?.messageHistory, claudeReceivingPhoneNumberId,
     liveClaudeConversation.lastMessageTs, liveClaudeConversation.lastMsgTs, liveClaudeConversation.lastMessageText, liveClaudeConversation.lastSenderRole,
-    claudeInitialLeadMode, leadDraft, claudeInitialLeadMode ? leadCardSnapshot : null, claudeInitialLeadMode ? claudeLeadFacts : null]);
+    claudeInitialLeadMode, leadDraft, claudeInitialLeadMode ? leadCardSnapshot : null, claudeInitialLeadMode ? claudeLeadFacts : null,
+    claudeInitialLeadMode ? name : null]);
   // Invalidate synchronously, before effects, so a late response or old button
   // callback cannot use a draft after switching customer, line, or incoming turn.
   if (claudeDraftScopeRef.current.key !== claudeScopeKey) {
@@ -2561,7 +2562,9 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       || claudeDraftScopeRef.current !== claudeDraftScope) return;
     if (claudeInitialLeadMode) {
       const parsed = claudeInitialLeadInputSchema.safeParse({ sessionId: conversation.id, customerPhone: leadCardPhone,
-        requestId: crypto.randomUUID(), leadDetails: claudeLeadFacts, originalConversation: claudeOriginalConversation });
+        requestId: crypto.randomUUID(), leadDetails: claudeLeadFacts, originalConversation: claudeOriginalConversation,
+        draftRequest: { conversationContext: smsConversationContext, customerName: name,
+          jobContext: leadDraft?.jobContext ?? "", scenario: leadDraft?.scenario ?? "" } });
       if (!parsed.success) {
         setClaudeDraftError("Claude could not read this lead's details. Your reply is unchanged.");
         return;

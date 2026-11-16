@@ -56,6 +56,11 @@ export interface RunOptions {
   onEvent?: (event: ObservedEvent) => void | Promise<void>;
   onTrace?: (entry: TraceEntry) => void | Promise<void>;
 }
+/** Private session overrides used only by the dedicated first-lead entrypoint. */
+interface SessionRunOptions extends RunOptions {
+  systemOverride?: string;
+  allowEmptyTools?: true;
+}
 export interface ToolReceipt {
   providerEventId: string;
   name: string;
@@ -116,9 +121,9 @@ function jsonClone<T>(value: T): T {
 const RESERVED_NAMES = new Set([
   "bash", "read", "write", "edit", "glob", "grep", "web_fetch", "web_search",
 ]);
-function customTools(backend: Backend): Array<ToolDefinition & { type: "custom" }> {
+function customTools(backend: Backend, allowEmptyTools = false): Array<ToolDefinition & { type: "custom" }> {
   if (!backend || typeof backend.callTool !== "function" || !Array.isArray(backend.tools) ||
-      backend.tools.length === 0) throw new ManagedAgentDemoError("INVALID_BACKEND", undefined, undefined, "not_started");
+      (backend.tools.length === 0 && !allowEmptyTools)) throw new ManagedAgentDemoError("INVALID_BACKEND", undefined, undefined, "not_started");
   const names = new Set<string>();
   return backend.tools.map(tool => {
     if (!object(tool) || !nonempty(tool.name) || !/^[A-Za-z0-9_-]{1,128}$/.test(tool.name) ||
@@ -204,8 +209,8 @@ async function* frames(reader: ReadableStreamDefaultReader<Uint8Array>, signal: 
 }
 
 /** Creates only a NEW session; never accepts an existing session ID. No retries. */
-async function runManagedAgentSession(options: RunOptions): Promise<RunResult> {
-  const tools = customTools(options.backend);
+async function runManagedAgentSession(options: SessionRunOptions): Promise<RunResult> {
+  const tools = customTools(options.backend, options.allowEmptyTools === true);
   if (!nonempty(options.simulatedPayload)) {
     throw new ManagedAgentDemoError("INVALID_PAYLOAD", undefined, undefined, "not_started");
   }
@@ -313,7 +318,8 @@ async function runManagedAgentSession(options: RunOptions): Promise<RunResult> {
     await trace({ stage: "configuration_verified" });
     const session = await jsonRequest("POST", "/v1/sessions", {
       agent: { type: "agent_with_overrides", id: EXISTING_AGENT_ID,
-        version: EXISTING_AGENT_VERSION, tools, mcp_servers: [], skills: [] },
+        version: EXISTING_AGENT_VERSION, tools, mcp_servers: [], skills: [],
+        ...(options.systemOverride === undefined ? {} : { system: options.systemOverride }) },
       environment_id: EXISTING_ENVIRONMENT_ID,
     });
     if (nonempty(session.id) && /^sesn_[A-Za-z0-9]+$/.test(session.id)) sessionId = session.id;
@@ -326,7 +332,8 @@ async function runManagedAgentSession(options: RunOptions): Promise<RunResult> {
         (session.deployment_id !== undefined && session.deployment_id !== null) ||
         !object(resolved) || resolved.type !== "agent" || resolved.id !== EXISTING_AGENT_ID ||
         resolved.version !== EXISTING_AGENT_VERSION || resolved.multiagent !== null ||
-        canonical(resolved.model) !== canonical(base.model) || resolved.system !== base.system ||
+        canonical(resolved.model) !== canonical(base.model) ||
+        resolved.system !== (options.systemOverride === undefined ? base.system : options.systemOverride) ||
         !sameTools(resolved.tools, tools) || !emptyArray(resolved.mcp_servers) || !emptyArray(resolved.skills)) {
       throw new ManagedAgentDemoError("SESSION_MISMATCH", sessionId);
     }
@@ -506,5 +513,27 @@ export function runGeneralSmsDraft(options: GeneralSmsDraftOptions): Promise<Run
     },
   };
   return runManagedAgentSession({ backend, simulatedPayload: options.reviewPayload,
+    signal: options.signal, onEvent: options.onEvent, onTrace: options.onTrace });
+}
+
+export interface InitialLeadDraftOptions {
+  readonly systemPrompt: string;
+  readonly userPrompt: string;
+  readonly signal?: AbortSignal;
+  readonly onEvent?: RunOptions["onEvent"];
+  readonly onTrace?: RunOptions["onTrace"];
+}
+/** First-lead drafting with exact caller instructions and no tools or business
+ * operations. Replaces only the session system; never edits the saved agent. */
+export function runInitialLeadDraft(options: InitialLeadDraftOptions): Promise<RunResult> {
+  if (typeof options.systemPrompt !== "string") {
+    throw new ManagedAgentDemoError("INVALID_PAYLOAD", undefined, undefined, "not_started");
+  }
+  const backend: Backend = {
+    tools: [],
+    callTool() { throw new ManagedAgentDemoError("UNSAFE_TOOL"); },
+  };
+  return runManagedAgentSession({ backend, simulatedPayload: options.userPrompt,
+    systemOverride: options.systemPrompt, allowEmptyTools: true,
     signal: options.signal, onEvent: options.onEvent, onTrace: options.onTrace });
 }
