@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
-import { BOOKING_HOST, OLD_BOOKING_HOST, registerBookingDomainRedirect } from "./bookingDomainRedirect";
+import { BOOKING_HOST, OLD_BOOKING_HOST, WWW_BOOKING_HOST, registerBookingDomainRedirect } from "./bookingDomainRedirect";
 
 // A catch-all stands in for the SPA fallback (serveStatic) so pass-through is observable.
 function appWith(options?: { redirectOldDomain?: boolean }) {
@@ -53,6 +53,37 @@ describe("booking domain redirect — book.maidsinblack.com", () => {
 
   it.each(untouchedPaths)("never redirects %s", async path => {
     await request(appWith()).get(path).set("Host", BOOKING_HOST).expect(200, `fallthrough ${path}`);
+  });
+});
+
+describe("booking domain redirect — www.book.maidsinblack.com", () => {
+  it("301s / and /book straight to the canonical root with the query string, flag off", async () => {
+    vi.stubEnv("REDIRECT_OLD_BOOKING_DOMAIN", "");
+    const app = appWith();
+    await request(app).get("/").set("Host", WWW_BOOKING_HOST).expect(301).expect("Location", `https://${BOOKING_HOST}/`);
+    await request(app).get("/?gclid=abc&utm_source=x").set("Host", WWW_BOOKING_HOST).expect(301).expect("Location", `https://${BOOKING_HOST}/?gclid=abc&utm_source=x`);
+    await request(app).get("/book?x=1").set("Host", WWW_BOOKING_HOST).expect(301).expect("Location", `https://${BOOKING_HOST}/?x=1`);
+    await request(app).get("/book/").set("Host", WWW_BOOKING_HOST).expect(301).expect("Location", `https://${BOOKING_HOST}/`);
+  });
+
+  it("matches the host case-insensitively, ignores a port and redirects HEAD", async () => {
+    const app = appWith();
+    await request(app).get("/").set("Host", "WWW.Book.maidsinblack.com:443").expect(301).expect("Location", `https://${BOOKING_HOST}/`);
+    await request(app).head("/").set("Host", WWW_BOOKING_HOST).expect(301).expect("Location", `https://${BOOKING_HOST}/`);
+  });
+
+  it.each(untouchedPaths)("sends %s to the same path on the canonical host", async path => {
+    await request(appWith()).get(path).set("Host", WWW_BOOKING_HOST).expect(301).expect("Location", `https://${BOOKING_HOST}${path}`);
+  });
+
+  it("keeps the query string on other paths", async () => {
+    await request(appWith()).get("/book/QF-123?ref=sms").set("Host", WWW_BOOKING_HOST).expect(301).expect("Location", `https://${BOOKING_HOST}/book/QF-123?ref=sms`);
+  });
+
+  it("never redirects non-GET requests such as webhooks or API posts", async () => {
+    const app = appWith();
+    await request(app).post("/api/stripe/webhook").set("Host", WWW_BOOKING_HOST).expect(200, "fallthrough /api/stripe/webhook");
+    await request(app).post("/api/trpc/booking.prepare").set("Host", WWW_BOOKING_HOST).expect(200);
   });
 });
 
