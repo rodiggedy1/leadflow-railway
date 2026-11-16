@@ -45,6 +45,41 @@ function legacyDraftRequest(input: ClaudeInitialLeadInput) {
     scenario: `${THUMBTACK_FIRST_RESPONSE_PROMPT}\n\nThumbtack lead:\n${leadContext}` };
 }
 
+export type ClaudeInitialLeadContentOptions = Pick<ClaudeInitialLeadOptions, "prepareMessages" | "runner">;
+
+/** Shared generation body. Only the human wrapper supplies staff reauthorization;
+ * the application dispatcher must enforce its own durable first-response claim. */
+async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeInitialLeadContentOptions,
+  reauthorize: () => Promise<unknown>): Promise<ClaudeInitialLeadResult> {
+  const customerPhone = normalizePhone(input.customerPhone);
+  if (!customerPhone) return fail("INVALID_CUSTOMER_PHONE");
+  const request = input.draftRequest ?? legacyDraftRequest(input);
+  const messages = await (options.prepareMessages ?? prepareCsReplyMessages)(request);
+  if (messages.length !== 2 || messages[0].role !== "system" || messages[1].role !== "user"
+    || !messages[0].content.trim() || !messages[1].content.trim()) return fail("INVALID_PREPARED_MESSAGES");
+  const contextHash = createHash("sha256").update(canonical({ sessionId: input.sessionId, customerPhone,
+    leadDetails: input.leadDetails, originalConversation: input.originalConversation, request, messages })).digest("hex");
+  await reauthorize();
+  const output = await (options.runner ?? runInitialLeadDraft)({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
+  // The model returns exactly the plain SMS requested by the primary prompt.
+  // JSON is constructed locally for the unchanged non-sendable reply validator.
+  const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId]);
+  if (/\b(?:quote|pricing|message|SMS|text|link)\s+(?:has been|was|is)\s+(?:sent|texted|created|generated|processed)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
+  if (/\bquote\s+(?:id|code|number|reference)\s*[:#]/i.test(replyText)) return fail("UNSAFE_REPLY_PRESENTATION");
+  await reauthorize();
+  return claudeInitialLeadResultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
+    sessionId: input.sessionId, customerPhone, contextHash, replyText,
+    mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+}
+
+/** Internal content-only entrypoint, not an API or permission bypass. No staff
+ * identity is fabricated, no send is performed, and the result stays non-sendable.
+ * A trusted native dispatcher owns eligibility, source reads and send authority. */
+export async function generateClaudeInitialLeadContent(raw: unknown,
+  options: ClaudeInitialLeadContentOptions = {}): Promise<ClaudeInitialLeadResult> {
+  return generateContent(claudeInitialLeadInputSchema.parse(raw), options, async () => undefined);
+}
+
 /** Human-requested alternative only. Same primary instructions/context; no
  * Claude-specific business prompt, JSON-output framing, source writes or tools. */
 export function createClaudeInitialLeadService(options: ClaudeInitialLeadOptions) {
@@ -56,25 +91,7 @@ export function createClaudeInitialLeadService(options: ClaudeInitialLeadOptions
   }
   async function run(input: ClaudeInitialLeadInput, caller: OpsCaller): Promise<ClaudeInitialLeadResult> {
     await authorize(caller);
-    const customerPhone = normalizePhone(input.customerPhone);
-    if (!customerPhone) return fail("INVALID_CUSTOMER_PHONE");
-    const request = input.draftRequest ?? legacyDraftRequest(input);
-    const messages = await (options.prepareMessages ?? prepareCsReplyMessages)(request);
-    if (messages.length !== 2 || messages[0].role !== "system" || messages[1].role !== "user"
-      || !messages[0].content.trim() || !messages[1].content.trim()) return fail("INVALID_PREPARED_MESSAGES");
-    const contextHash = createHash("sha256").update(canonical({ sessionId: input.sessionId, customerPhone,
-      leadDetails: input.leadDetails, originalConversation: input.originalConversation, request, messages })).digest("hex");
-    await authorize(caller);
-    const output = await (options.runner ?? runInitialLeadDraft)({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
-    // The model returns exactly the plain SMS requested by the primary prompt.
-    // JSON is constructed locally for the unchanged non-sendable reply validator.
-    const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId]);
-    if (/\b(?:quote|pricing|message|SMS|text|link)\s+(?:has been|was|is)\s+(?:sent|texted|created|generated|processed)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
-    if (/\bquote\s+(?:id|code|number|reference)\s*[:#]/i.test(replyText)) return fail("UNSAFE_REPLY_PRESENTATION");
-    await authorize(caller);
-    return claudeInitialLeadResultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
-      sessionId: input.sessionId, customerPhone, contextHash, replyText,
-      mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+    return generateContent(input, options, () => authorize(caller));
   }
   return {
     async generate(raw: unknown, rawCaller: unknown): Promise<ClaudeInitialLeadResult> {

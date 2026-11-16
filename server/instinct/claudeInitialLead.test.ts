@@ -16,7 +16,7 @@ import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "../knowledgeBase";
 import { THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext,
   claudeInitialLeadFactsSchema, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema,
   type ClaudeInitialLeadInput, type ClaudeInitialLeadFacts } from "../../shared/claudeInitialLead";
-import { createClaudeInitialLeadService, type ClaudeInitialLeadOptions, type InitialLeadRunner } from "./claudeInitialLead";
+import { createClaudeInitialLeadService, generateClaudeInitialLeadContent, type ClaudeInitialLeadOptions, type InitialLeadRunner } from "./claudeInitialLead";
 import { validateClaudeReviewReply, type OpsCaller } from "./claudeSmsAlternative";
 const BASELINE = "0ef8260b3c4ac52cb68e4b84e6f420d0f46e2f6f";
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -175,6 +175,33 @@ describe("closed existing browser/result contract", () => {
   });
 });
 function context(user: TrpcContext["user"] = null): TrpcContext { return { user, req: { protocol: "https", headers: {} } as TrpcContext["req"], res: {} as TrpcContext["res"] }; }
+describe("content-only reuse for the trusted native first-response dispatcher", () => {
+  it("returns the identical text, context hash and model request as the staff button, with no fake staff or sending authority", async () => {
+    const h = harness(), before = copy(input);
+    const manual = await h.service.generate(input, staff);
+    const automaticContent = await generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner: h.runner });
+    expect(automaticContent).toEqual(manual);
+    expect(h.runner.mock.calls[0][0]).toEqual(h.runner.mock.calls[1][0]);
+    expect(automaticContent.replyText).toBe(reply);
+    expect(automaticContent.smsSent).toBe(false);
+    expect(automaticContent.actionsExecuted).toBe(false);
+    expect(input).toEqual(before);
+    expect(getDb).not.toHaveBeenCalled();
+  });
+  it("uses the same complete setup by default and adds no automatic-mode wording", async () => {
+    vi.mocked(runInitialLeadDraft).mockResolvedValue(output() as never);
+    expect((await generateClaudeInitialLeadContent(input)).replyText).toBe(reply);
+    expect(prepareCsReplyMessages).toHaveBeenCalledWith(draftRequest);
+    expect(runInitialLeadDraft).toHaveBeenCalledWith({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
+  });
+  it("preserves the same validation and refuses a blank or falsely completed action", async () => {
+    const h = harness();
+    await expect(generateClaudeInitialLeadContent({ ...input, requestId: "bad" }, h)).rejects.toThrow();
+    expect(h.runner).not.toHaveBeenCalled();
+    for (const text of ["", "I've scheduled your cleaning.", "Quote code: Q-88."])
+      await expect(generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner: async () => output(text) })).rejects.toThrow();
+  });
+});
 describe("actual existing human-authenticated Madison route", () => {
   it("rejects unauthenticated caller before prompt or provider preparation", async () => {
     await expect(madisonRouter.createCaller(context()).claudeAlternative.generateInitialLead(input)).rejects.toMatchObject({ code: "UNAUTHORIZED" });

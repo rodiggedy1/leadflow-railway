@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { handleNativeThumbTackLead, type ThumbTackNativePayload } from "./thumbtackWebhook";
+import { thumbtackFirstResponseConfig } from "./instinct/claudeThumbtackFirstResponse";
 
 export type ThumbTackWebhookCapture = {
   eventType: string | null;
@@ -215,11 +216,23 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
       }
 
       const rawPayload = JSON.stringify(req.body ?? {});
-      await db.execute(
+      const persisted = await db.execute(
         sql`INSERT INTO webhook_events (source, event_type, event_id, from_phone, to_phone, raw_payload, processed, created_at) VALUES (${"thumbtack"}, ${eventType}, ${eventId}, ${null}, ${null}, ${rawPayload}, 0, NOW())`
       );
       console.log("[ThumbTackCapture] persisted payload summary", JSON.stringify(summary));
       res.status(200).json({ received: true, summary, persisted: true });
+
+      if (thumbtackFirstResponseConfig()) {
+        // Active mode has one native owner; no legacy fallback after rejection/failure.
+        if (eventType === "NegotiationCreatedV4") {
+          const captureId = Number((persisted as any)[0]?.insertId);
+          if (!Number.isSafeInteger(captureId) || captureId <= 0) throw new Error("THUMBTACK_CAPTURE_ID_MISSING");
+          const { dispatchClaudeThumbtackFirstResponse } = await import("./instinct/claudeThumbtackFirstResponseApplication");
+          await dispatchClaudeThumbtackFirstResponse(captureId).catch(error => console.error("[ThumbTackCapture] native first response stopped", error));
+          await db.execute(sql`UPDATE webhook_events SET processed = 1, processed_at = NOW() WHERE id = ${captureId}`);
+        }
+        return;
+      }
 
       // Native Lead details are now the active Thumbtack trigger. Keep this
       // after the response so Thumbtack receives a fast acknowledgement, and

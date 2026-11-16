@@ -4,6 +4,7 @@ import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import { getAgentFromRequest } from "./agentAuth";
 import { getCleanerFromRequest } from "./cleanerAuth";
+import { z } from "zod";
 
 // ── lastSeenAt throttle ───────────────────────────────────────────────────────
 // Prevents a DB write on every opsChatProcedure call.
@@ -60,7 +61,51 @@ const timingMiddleware = t.middleware(async (opts) => {
   return result;
 });
 
-export const publicProcedure = t.procedure.use(timingMiddleware);
+// These are the unchanged existing manual-send input shapes, used ONLY to avoid
+// cancelling an automatic first reply on a request the original handler rejects.
+// They do not validate or limit Claude's generated response.
+const thumbtackManualSendInputs = {
+  "leads.sendMessage": z.object({
+    sessionId: z.number().int().positive(),
+    message: z.string().min(1).max(1600),
+    fromNumberId: z.string().optional(),
+    isVoiceCommand: z.boolean().optional(),
+    source: z.enum(["cs_inbox"]).optional(),
+  }),
+  "leads.sendWorkspaceMessage": z.object({
+    phone: z.string().min(7),
+    message: z.string().min(1).max(1600),
+    name: z.string().optional(),
+  }),
+};
+const thumbtackManualSendMiddleware = t.middleware(async opts => {
+  if (process.env.THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED !== "true" || opts.type !== "mutation"
+    || !(opts.path in thumbtackManualSendInputs)) return opts.next();
+  const schema = thumbtackManualSendInputs[opts.path as keyof typeof thumbtackManualSendInputs];
+  const parsed = schema.safeParse(await opts.getRawInput());
+  if (!parsed.success) return opts.next();
+  // Do not let an unauthenticated request cancel a pending native lead response.
+  let staff = Boolean(opts.ctx.user);
+  if (!staff) {
+    try { staff = Boolean(await getAgentFromRequest(opts.ctx.req)); }
+    catch { return opts.next(); }
+  }
+  if (!staff) return opts.next();
+  const input = parsed.data as { sessionId?: number; phone?: string };
+  try {
+    const { guardClaudeThumbtackManualSend } = await import("../instinct/claudeThumbtackFirstResponse");
+    await guardClaudeThumbtackManualSend({ sessionId: input.sessionId, phone: input.phone });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const pending = message === "AUTO_FIRST_RESPONSE_IN_FLIGHT" || message === "AUTO_FIRST_RESPONSE_REVIEW_REQUIRED";
+    throw new TRPCError({ code: pending ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
+      message: pending ? "This lead's first reply is already sending or needs its send result checked. No additional SMS was sent."
+        : "The lead's first-response status could not be checked. No SMS was sent." });
+  }
+  return opts.next();
+});
+
+export const publicProcedure = t.procedure.use(timingMiddleware).use(thumbtackManualSendMiddleware);
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
@@ -265,7 +310,24 @@ export const opsChatProcedure = t.procedure.use(
 
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }),
-);
+).use(async opts => {
+  if (opts.type !== "mutation" || !["opsChat.approveSmsDraft", "opsChat.dismissSmsDraft", "opsChat.retrySmsDraft"].includes(opts.path))
+    return opts.next();
+  const parsed = z.object({ draftId: z.number().int().positive() }).safeParse(await opts.getRawInput());
+  if (!parsed.success) return opts.next();
+  // Automatic send receipts stay protected even after the feature is disabled.
+  // Ordinary Madison rows and their existing actions are otherwise untouched.
+  try {
+    const { guardClaudeThumbtackLegacyDraftAction } = await import("../instinct/claudeThumbtackFirstResponse");
+    await guardClaudeThumbtackLegacyDraftAction(parsed.data.draftId);
+  } catch (error) {
+    const protectedRecord = error instanceof Error && error.message === "AUTO_FIRST_RESPONSE_PROTECTED";
+    throw new TRPCError({ code: protectedRecord ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
+      message: protectedRecord ? "This is an automatic first-response send record, not a review draft. Its send receipt cannot be dismissed, retried or sent again."
+        : "The draft's send-record status could not be checked. No draft action was performed." });
+  }
+  return opts.next();
+});
 
 /**
  * cleanerProcedure — validates the cleaner cookie session.
