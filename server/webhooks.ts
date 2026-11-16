@@ -53,7 +53,7 @@ import { ENV } from "./_core/env";
 import { enqueueScoring } from "./csStatusScorer";
 import { computeSessionSummary } from "./sessionSummary";
 import { getConfiguredCsPhoneNumberIds, getCsOutboundDeliveryRecipient, reconcileDeliveredCsOutbound } from "./quoOutboundReconciliation";
-import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPilotCustomerOverride } from "./instinct/claudeCustomerSms";
+import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride } from "./instinct/claudeCustomerSms";
 
 // Own only a fresh, real pilot message. Missing metadata, STOP and other phones
 // retain their original handling; this predicate never selects a session.
@@ -72,33 +72,41 @@ function isClaudeCustomerSmsPilotEvent(msg: any, phone: string, text: string): b
 async function dispatchPersistedClaudeCustomerSms(input: {
   sessionId: number; providerMessageId: unknown; fromPhone: string; receivingPhoneNumberId: unknown;
   inboundText: string; createdAt: unknown; receivedAt: number; isCleaner?: boolean; direction?: string;
-}) {
-  if (!isClaudeCustomerSmsPilotPhone(input.fromPhone) || input.direction !== "incoming"
+}): Promise<boolean> {
+  const config = claudeCustomerSmsConfig(), createdAt = customerSmsInstant(input.createdAt);
+  if (!config || !isClaudeCustomerSmsPhoneEligible(input.fromPhone) || input.direction !== "incoming"
     || !Number.isSafeInteger(input.sessionId) || input.sessionId <= 0
-    || typeof input.providerMessageId !== "string" || !input.providerMessageId.trim()
+    || typeof input.providerMessageId !== "string" || !input.providerMessageId.trim() || input.providerMessageId.startsWith("cs-fallback-")
     || typeof input.receivingPhoneNumberId !== "string" || !input.receivingPhoneNumberId.trim()
-    || !input.inboundText.trim()) return;
+    || !input.inboundText.trim() || /^\s*(stop|unsubscribe|quit|end|remove me|opt.?out)\s*$/i.test(input.inboundText)
+    || createdAt === null || !Number.isFinite(input.receivedAt) || createdAt < config.startAt
+    || input.receivedAt < config.startAt || createdAt > input.receivedAt) return false;
   const testCustomer = isClaudeCustomerSmsPilotCustomerOverride(input.fromPhone);
-  if (input.isCleaner === true && !testCustomer) return;
+  if (input.isCleaner === true && !testCustomer) return false;
+  let customerOwnsReply = false;
   try {
     let isCleaner = input.isCleaner === true;
     // The non-CS/Bark persistence path has no role read. Use only the permitted
     // staff directory, never operational job data or name-enrichment helpers.
     if (input.isCleaner === undefined && !testCustomer) {
       const db = await getDb();
-      if (!db) return;
+      if (!db) return false;
       const [profile] = await db.select({ name: cleanerProfiles.name }).from(cleanerProfiles)
         .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${input.fromPhone.replace(/[^0-9]/g, "").slice(-10)}`)
         .limit(1);
       isCleaner = !!profile;
     }
-    if (isCleaner && !testCustomer) return;
+    if (isCleaner && !testCustomer) return false;
+    customerOwnsReply = true;
     const { dispatchClaudeCustomerSms } = await import("./instinct/claudeCustomerSmsApplication");
-    await dispatchClaudeCustomerSms({ ...input, providerMessageId: input.providerMessageId,
+    const result = await dispatchClaudeCustomerSms({ ...input, providerMessageId: input.providerMessageId,
       receivingPhoneNumberId: input.receivingPhoneNumberId, isCleaner });
+    return result.outcome !== "disabled" && result.outcome !== "excluded";
   } catch {
-    // A new-capability failure must not suppress existing inbound/draft behavior.
+    // Preserve normal intake. Once this customer capability owns the response,
+    // an exception must not fall through to a competing native responder.
     console.warn("[ClaudeCustomerSMS] Additive dispatch stopped; existing inbound flow continues.");
+    return customerOwnsReply;
   }
 }
 
@@ -2413,6 +2421,7 @@ async function handleCsInboundMessage(msg: any) {
 
   let persistedCustomerSessionId: number | null = null;
   let persistedNonCustomer = isCleaner;
+  let claudeCustomerOwnsReply = false;
 
   // Find the most recent matching session for this phone.
   // For cleaners, match ALL session types for their phone — cs-inbound-cleaner, cs_initiated,
@@ -2576,7 +2585,7 @@ async function handleCsInboundMessage(msg: any) {
   }
 
   if (persistedCustomerSessionId !== null) {
-    await dispatchPersistedClaudeCustomerSms({ sessionId: persistedCustomerSessionId, providerMessageId: msg.id,
+    claudeCustomerOwnsReply = await dispatchPersistedClaudeCustomerSms({ sessionId: persistedCustomerSessionId, providerMessageId: msg.id,
       fromPhone: normalizePhone(fromPhone), receivingPhoneNumberId: msg.phoneNumberId,
       inboundText, createdAt: msg.createdAt, receivedAt: now, isCleaner: persistedNonCustomer, direction: msg.direction });
   }
@@ -2611,7 +2620,8 @@ async function handleCsInboundMessage(msg: any) {
     // Await the Madison SMS Draft Agent so its Shadow prediction is persisted before
     // this inbound processing path completes. Shadow is read-only and cannot change
     // Madison's reply, approval, or task behavior.
-    if (messageId && inboundText.trim() && !isClaudeCustomerSmsPilotEvent(msg, normalizePhone(fromPhone), inboundText)) {
+    if (messageId && inboundText.trim() && !claudeCustomerOwnsReply
+      && !isClaudeCustomerSmsPilotEvent(msg, normalizePhone(fromPhone), inboundText)) {
       try {
         const { triggerMadisonSmsDraft } = await import("./madisonSmsAgent");
         await triggerMadisonSmsDraft({

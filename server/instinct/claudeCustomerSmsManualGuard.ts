@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { CLAUDE_CUSTOMER_REPLY_CAPABILITY, CLAUDE_CUSTOMER_TASK_ACTION } from "../../shared/claudeCustomerTasks";
 import { normalizePhone } from "../utils/phone";
-import { claudeCustomerSmsConfig, isClaudeCustomerSmsPilotPhone } from "./claudeCustomerSms";
+import { claudeCustomerSmsConfig, isClaudeCustomerSmsPhoneEligible } from "./claudeCustomerSms";
 
 interface GuardDatabase { transaction<T>(fn: (tx: { execute(query: SQL): Promise<unknown> }) => Promise<T>): Promise<T>; execute(query: SQL): Promise<unknown> }
 const rows = (result: unknown): any[] => (result as any)[0];
@@ -23,7 +23,7 @@ export function createClaudeCustomerReplyGuards(options: CustomerReplyGuardOptio
     },
     async humanSend(input: { sessionId?: number; phone?: string }): Promise<void> {
       if (!claudeCustomerSmsConfig()) return;
-      if (input.phone !== undefined && !isClaudeCustomerSmsPilotPhone(input.phone)) return;
+      if (input.phone !== undefined && !isClaudeCustomerSmsPhoneEligible(input.phone)) return;
       if (input.sessionId === undefined && input.phone === undefined) return;
       const db = await getDatabase();
       if (!db) throw new Error("CUSTOMER_REPLY_STATUS_UNAVAILABLE");
@@ -31,11 +31,11 @@ export function createClaudeCustomerReplyGuards(options: CustomerReplyGuardOptio
         let phone = input.phone ? normalizePhone(input.phone) : null;
         if (input.sessionId !== undefined) {
           const sessions = rows(await tx.execute(sql`SELECT leadPhone FROM conversation_sessions WHERE id = ${input.sessionId}`));
-          if (sessions.length !== 1 || !isClaudeCustomerSmsPilotPhone(sessions[0]?.leadPhone)) return;
+          if (sessions.length !== 1 || !isClaudeCustomerSmsPhoneEligible(sessions[0]?.leadPhone)) return;
           const [session] = sessions;
           phone = normalizePhone(session?.leadPhone);
         }
-        if (!phone || !isClaudeCustomerSmsPilotPhone(phone)) return;
+        if (!phone || !isClaudeCustomerSmsPhoneEligible(phone)) return;
         // Destination arbitration is not customer identity resolution: do not
         // select or merge any other session. Both existing human send forms can
         // prevent a duplicate automatic reply to this exact destination.

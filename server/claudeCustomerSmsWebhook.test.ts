@@ -3,7 +3,7 @@ import vm from "node:vm";
 import ts from "typescript";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { normalizePhoneLegacy } from "./utils/phone";
-import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPilotCustomerOverride } from "./instinct/claudeCustomerSms";
+import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride } from "./instinct/claudeCustomerSms";
 
 const source = readFileSync(new URL("./webhooks.ts", import.meta.url), "utf8");
 const ast = ts.createSourceFile("webhooks.ts", source, ts.ScriptTarget.Latest, true);
@@ -42,11 +42,12 @@ function message(overrides: Record<string, unknown> = {}) {
     createdAt: originalCreatedAt, ...overrides };
 }
 type FixtureOptions = { existing?: Record<string, any> | null; hiring?: Record<string, any> | null;
-  cleaner?: boolean; failWrite?: boolean; insertId?: number | null; disabled?: boolean; dispatchThrows?: boolean; override?: boolean; missingAllowedPhone?: boolean };
+  cleaner?: boolean; failWrite?: boolean; insertId?: number | null; disabled?: boolean; dispatchThrows?: boolean; override?: boolean; missingAllowedPhone?: boolean;
+  allCustomers?: boolean; dispatchOutcome?: "accepted" | "excluded" | "disabled" | "failed" | "duplicate" | "suppressed" | "uncertain" };
 function fixture(options: FixtureOptions = {}, nonCs = false) {
   const existing = options.existing === undefined ? { id: 42, leadSource: nonCs ? "bark-sms" : "cs-inbound", leadName: "Maya", stage: "OPEN", messageHistory: "[]" } : options.existing;
   const operations: Array<{ operation: string; table?: string; payload?: any; target?: any }> = [];
-  const dispatch = vi.fn(async (input: unknown) => { operations.push({ operation: "dispatch", payload: input }); if (options.dispatchThrows) throw new Error("mock failure"); });
+  const dispatch = vi.fn(async (input: unknown) => { operations.push({ operation: "dispatch", payload: input }); if (options.dispatchThrows) throw new Error("mock failure"); return { outcome: options.dispatchOutcome ?? "accepted" }; });
   const madison = vi.fn(async (input: unknown) => { operations.push({ operation: "legacy-draft", payload: input }); });
   const broadcast = vi.fn();
   const selects: any[][] = nonCs ? [existing ? [existing] : [], ...(options.cleaner ? [[{ name: "Staff" }]] : [[]])] : [
@@ -82,11 +83,13 @@ function fixture(options: FixtureOptions = {}, nonCs = false) {
   });
   const env = options.disabled ? {} : { CLAUDE_CUSTOMER_SMS_ENABLED: "true", CLAUDE_CUSTOMER_SMS_START_AT: "2026-11-16T17:59:00Z",
     ...(!options.missingAllowedPhone ? { CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: "+12025550123" } : {}),
+    ...(options.allCustomers ? { CLAUDE_CUSTOMER_SMS_SCOPE: "all_customers" } : {}),
     ...(options.override ? { CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE: "true" } : {}) };
   const sandbox: Record<string, any> = {
     process: { env },
     claudeCustomerSmsConfig: () => claudeCustomerSmsConfig(env), customerSmsInstant,
     isClaudeCustomerSmsPilotPhone: (phone: string) => isClaudeCustomerSmsPilotPhone(phone, env),
+    isClaudeCustomerSmsPhoneEligible: (phone: string) => isClaudeCustomerSmsPhoneEligible(phone, env),
     isClaudeCustomerSmsPilotCustomerOverride: (phone: string) => isClaudeCustomerSmsPilotCustomerOverride(phone, env),
     Date: class extends Date { static now() { return receivedAt; } },
     console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() }, setTimeout: vi.fn(), setImmediate: vi.fn(),
@@ -113,7 +116,7 @@ function fixture(options: FixtureOptions = {}, nonCs = false) {
     }
   }
   vm.createContext(sandbox); vm.runInContext(executable, sandbox);
-  return { dispatch, madison, operations, db, testImport,
+  return { dispatch, madison, operations, db, testImport, sandbox,
     runCs: (msg: unknown) => sandbox.runCs(msg) as Promise<void>,
     runWebhook: (msg: unknown, type = "message.received") => sandbox.runWebhook({ body: { type, data: { object: msg } } }, { status: () => ({ json: vi.fn() }) }) as Promise<void> };
 }
@@ -231,5 +234,57 @@ describe("actual webhook additive customer dispatch provenance", () => {
 
   it.each(["message.delivered", "message.updated", "message.sent"])("delivery/system event %s never reaches the new hook", async type => {
     const h = fixture(); await h.runWebhook(message({ direction: "outgoing" }), type); expect(h.dispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("all-customer scope changes only existing response eligibility", () => {
+  const customer = "+12025559876";
+  it.each(["PN-cs", "PN-leads"])("opens the actual %s customer handoff and skips only the competing draft", async phoneNumberId => {
+    const h = fixture({ allCustomers: true }); await h.runWebhook(message({ from: customer, phoneNumberId }));
+    expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ fromPhone: customer, sessionId: 42, receivingPhoneNumberId: phoneNumberId }));
+    expect(h.madison).not.toHaveBeenCalled();
+    expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
+    expect(h.sandbox.enqueueScoring).toHaveBeenCalledWith(42, false);
+    expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledWith(customer, 42);
+  });
+  it("keeps the exact new inserted row as the all-customer dispatch identity", async () => {
+    const h = fixture({ allCustomers: true, existing: null }); await h.runCs(message({ from: customer }));
+    expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 77, fromPhone: customer })); expect(h.madison).not.toHaveBeenCalled();
+  });
+  it.each(["PN-cs", "PN-bark"])("keeps cleaner handling on %s out of the customer agent", async phoneNumberId => {
+    const h = fixture({ allCustomers: true, cleaner: true }, phoneNumberId === "PN-bark");
+    await h.runWebhook(message({ from: customer, phoneNumberId })); expect(h.dispatch).not.toHaveBeenCalled();
+    if (phoneNumberId === "PN-cs") {
+      expect(h.madison).toHaveBeenCalledOnce(); expect(h.sandbox.tryDetectCleanerRunningLate).toHaveBeenCalledOnce(); expect(h.sandbox.tryAdvanceGetEtaMission).toHaveBeenCalledOnce();
+    } else {
+      expect(h.sandbox.tryStoreJobSmsReply).toHaveBeenCalledOnce(); expect(h.sandbox.tryHandleCleanerRatingReply).toHaveBeenCalledOnce(); expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
+    }
+  });
+  it.each([{ csQueue: "Teams" }, { leadSource: "internal" }, { leadSource: "staff" }, { stage: "INTERVIEW_LINK_SENT" }, { stage: "SCHEDULE_CONFIRM_SENT" }])("preserves stored noncustomer handling %#", async flags => {
+    const h = fixture({ allCustomers: true, existing: { id: 42, leadSource: "cs-inbound", messageHistory: "[]", ...flags } });
+    await h.runCs(message({ from: customer })); expect(h.dispatch).not.toHaveBeenCalled(); expect(h.madison).toHaveBeenCalledOnce();
+  });
+  it("preserves the actual hiring intake row and its existing draft path", async () => {
+    const h = fixture({ allCustomers: true, existing: null, hiring: { id: 88, leadSource: "hiring_interview", messageHistory: "[]" } });
+    await h.runCs(message({ from: customer })); expect(h.dispatch).not.toHaveBeenCalled(); expect(h.madison).toHaveBeenCalledOnce();
+    expect(h.operations.find(op => op.operation === "update" && op.payload.messageHistory)?.target).toMatchObject({ value: 88 });
+  });
+  it.each([{ createdAt: "2026-11-15T18:00:00Z" }, { createdAt: undefined }, { createdAt: "2026-11-16T18:01:00Z" }, { id: "cs-fallback-untrusted" }, { text: "STOP" }, { direction: "outgoing" }])("does not claim an old, replayed, opt-out or malformed customer event %#", async patch => {
+    const h = fixture({ allCustomers: true }); await h.runCs(message({ from: customer, ...patch })); expect(h.dispatch).not.toHaveBeenCalled(); expect(h.madison).toHaveBeenCalledOnce();
+  });
+  it.each(["excluded", "disabled"] as const)("does not suppress the existing draft when the application returns %s", async dispatchOutcome => {
+    const h = fixture({ allCustomers: true, dispatchOutcome }); await h.runCs(message({ from: customer })); expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).toHaveBeenCalledOnce();
+  });
+  it.each(["accepted", "failed", "duplicate", "suppressed", "uncertain"] as const)("avoids a second responder for an owned %s result without retrying", async dispatchOutcome => {
+    const h = fixture({ allCustomers: true, dispatchOutcome }); await h.runCs(message({ from: customer })); expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).not.toHaveBeenCalled();
+  });
+  it("keeps the existing pilot no-competing-responder rule when the application fails after customer ownership", async () => {
+    const h = fixture({ allCustomers: true, dispatchThrows: true }); await h.runCs(message({ from: customer })); expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).not.toHaveBeenCalled();
+  });
+  it.each([false, true])("uses the exact existing/new Bark row, new=%s, without suppressing its customer operational handlers", async isNew => {
+    const h = fixture({ allCustomers: true, existing: isNew ? null : undefined }, true);
+    await h.runWebhook(message({ from: customer, phoneNumberId: "PN-bark" })); expect(h.dispatch).toHaveBeenCalledOnce();
+    expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ sessionId: isNew ? 77 : 42, receivingPhoneNumberId: "PN-bark", fromPhone: customer }));
+    expect(h.sandbox.tryStoreJobSmsReply).toHaveBeenCalledOnce(); expect(h.sandbox.tryHandleCleanerRatingReply).toHaveBeenCalledOnce(); expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
   });
 });

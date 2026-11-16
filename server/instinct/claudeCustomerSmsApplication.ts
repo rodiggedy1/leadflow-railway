@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { createClaudeCustomerSmsService, claudeCustomerSmsConfig, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPilotCustomerOverride, type CustomerSmsInput } from "./claudeCustomerSms";
+import { createClaudeCustomerSmsService, claudeCustomerSmsConfig, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride, type CustomerSmsInput } from "./claudeCustomerSms";
 
 /** Trusted, post-persistence event entrypoint. Never mounted as a public send
  * endpoint. Existing application and agents are imported only after explicit
  * configuration. Disabled means no DB/provider/model access by this feature. */
 export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
   if (!claudeCustomerSmsConfig()) return { outcome: "disabled" as const };
-  if (!isClaudeCustomerSmsPilotPhone(input.fromPhone)) return { outcome: "excluded" as const };
+  if (!isClaudeCustomerSmsPhoneEligible(input.fromPhone)) return { outcome: "excluded" as const };
   const { getDb } = await import("../db");
   const db = await getDb();
   if (!db) return { outcome: "failed" as const };

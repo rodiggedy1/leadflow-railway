@@ -8,7 +8,7 @@ export interface CustomerSmsInput {
   sessionId: number; providerMessageId: string; fromPhone: string; receivingPhoneNumberId: string;
   inboundText: string; createdAt: unknown; receivedAt: number; isCleaner: boolean; direction?: string;
 }
-export interface CustomerSmsConfig { startAt: number; allowedPhone: string; testCustomerOverride: boolean }
+export interface CustomerSmsConfig { startAt: number; allowedPhone: string; testCustomerOverride: boolean; scope?: "pilot" | "all_customers" }
 export function customerSmsInstant(value: unknown): number | null {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
   const date = Date.parse(value);
@@ -18,10 +18,12 @@ export function customerSmsInstant(value: unknown): number | null {
 export function claudeCustomerSmsConfig(env: NodeJS.ProcessEnv = process.env): CustomerSmsConfig | null {
   if (env.CLAUDE_CUSTOMER_SMS_ENABLED !== "true") return null;
   const startAt = customerSmsInstant(env.CLAUDE_CUSTOMER_SMS_START_AT);
+  const scope = env.CLAUDE_CUSTOMER_SMS_SCOPE ?? "pilot";
   const allowedPhone = env.CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE;
-  if (startAt === null || typeof allowedPhone !== "string" || !/^\+[1-9]\d{1,14}$/.test(allowedPhone)
+  if (!["pilot", "all_customers"].includes(scope) || startAt === null || typeof allowedPhone !== "string" || !/^\+[1-9]\d{1,14}$/.test(allowedPhone)
     || normalizePhone(allowedPhone) !== allowedPhone) return null;
-  return { startAt, allowedPhone, testCustomerOverride: env.CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE === "true" };
+  return { startAt, allowedPhone, testCustomerOverride: env.CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE === "true",
+    ...(scope === "all_customers" ? { scope } : {}) };
 }
 export function isClaudeCustomerSmsPilotPhone(phone: unknown, env: NodeJS.ProcessEnv = process.env): boolean {
   const config = claudeCustomerSmsConfig(env);
@@ -29,7 +31,20 @@ export function isClaudeCustomerSmsPilotPhone(phone: unknown, env: NodeJS.Proces
     && normalizePhone(phone) === config.allowedPhone;
 }
 export function isClaudeCustomerSmsPilotCustomerOverride(phone: unknown, env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE === "true" && isClaudeCustomerSmsPilotPhone(phone, env);
+  const config = claudeCustomerSmsConfig(env);
+  return !!config && config.testCustomerOverride && isClaudeCustomerSmsPilotPhone(phone, env)
+    && (config.scope !== "all_customers" || config.allowedPhone === "+13029816191");
+}
+function phoneEligible(phone: unknown, config: CustomerSmsConfig): boolean {
+  if (typeof phone !== "string" || !/^\+?[\d().\s-]+$/.test(phone)) return false;
+  const normalized = normalizePhone(phone);
+  return !!normalized && typeof config.allowedPhone === "string" && normalizePhone(config.allowedPhone) === config.allowedPhone
+    && (config.scope === "all_customers" || ((config.scope === undefined || config.scope === "pilot") && normalized === config.allowedPhone));
+}
+/** Recipient scope only; exact stored customer classification is still required. */
+export function isClaudeCustomerSmsPhoneEligible(phone: unknown, env: NodeJS.ProcessEnv = process.env): boolean {
+  const config = claudeCustomerSmsConfig(env);
+  return !!config && phoneEligible(phone, config);
 }
 export const customerHistoryHash = (history: unknown): string => createHash("sha256").update(typeof history === "string" ? history : JSON.stringify(history)).digest("hex");
 export interface CustomerSmsSession extends AlternativeSessionRow { leadSource?: unknown; smsOptOut?: unknown; csQueue?: unknown }
@@ -86,12 +101,13 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
     if (!initialConfig) return { outcome: "disabled" };
     const config = { ...initialConfig };
     const createdAt = customerSmsInstant(input.createdAt), phone = normalizePhone(input.fromPhone);
-    const testCustomerOverride = config.testCustomerOverride === true && phone === config.allowedPhone;
+    const testCustomerOverride = config.testCustomerOverride === true && phone === config.allowedPhone
+      && (config.scope !== "all_customers" || phone === "+13029816191");
     if (input.direction !== "incoming" || (input.isCleaner && !testCustomerOverride) || !Number.isSafeInteger(input.sessionId) || input.sessionId <= 0
       || typeof input.providerMessageId !== "string" || !input.providerMessageId.trim() || input.providerMessageId.startsWith("cs-fallback-")
       || typeof input.receivingPhoneNumberId !== "string" || !input.receivingPhoneNumberId.trim()
       || typeof input.inboundText !== "string" || !input.inboundText.trim() || !phone || phone !== input.fromPhone
-      || phone !== config.allowedPhone
+      || !phoneEligible(phone, config)
       || excludedSenders.has(phone) || stopped(input.inboundText) || createdAt === null || !Number.isFinite(input.receivedAt)
       || createdAt < config.startAt || input.receivedAt < config.startAt || createdAt > input.receivedAt) return { outcome: "excluded" };
     let claim: CustomerSmsClaim | null = null;
@@ -118,7 +134,7 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       const plan = await options.generate(binding, session);
       const currentConfig = options.config();
       if (!currentConfig || currentConfig.startAt !== config.startAt || currentConfig.allowedPhone !== config.allowedPhone
-        || currentConfig.testCustomerOverride !== config.testCustomerOverride) {
+        || currentConfig.testCustomerOverride !== config.testCustomerOverride || currentConfig.scope !== config.scope) {
         await options.store.suppress(claim, "CONFIG_CHANGED"); return { outcome: "suppressed" };
       }
       if (!await options.store.prepare(claim, plan)) return { outcome: "suppressed" };
@@ -126,7 +142,7 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       await refreshTask();
       const submissionConfig = options.config();
       if (!submissionConfig || submissionConfig.startAt !== config.startAt || submissionConfig.allowedPhone !== config.allowedPhone
-        || submissionConfig.testCustomerOverride !== config.testCustomerOverride) {
+        || submissionConfig.testCustomerOverride !== config.testCustomerOverride || submissionConfig.scope !== config.scope) {
         await options.store.suppressBeforeSubmission(claim, "CONFIG_CHANGED"); await refreshTask(); return { outcome: "suppressed" };
       }
       // Durable exact reply and actionable task already exist before submission.

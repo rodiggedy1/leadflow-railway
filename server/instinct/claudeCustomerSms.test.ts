@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claudeCustomerSmsConfig, createClaudeCustomerSmsService, customerHistoryHash, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPilotCustomerOverride, type CustomerSmsInput, type CustomerSmsSession } from "./claudeCustomerSms";
+import { claudeCustomerSmsConfig, createClaudeCustomerSmsService, customerHistoryHash, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride, type CustomerSmsInput, type CustomerSmsSession, type CustomerSmsConfig } from "./claudeCustomerSms";
 import { dispatchClaudeCustomerSms } from "./claudeCustomerSmsApplication";
 import type { CustomerSmsClaim } from "./claudeCustomerTasksStore";
 const database = vi.hoisted(() => ({ imported: vi.fn(), getDb: vi.fn(async () => null) }));
@@ -14,7 +14,7 @@ function fixture() {
   const store = { claim: vi.fn(async (binding: any) => { order.push("claim"); return { draftId: 5, binding } as CustomerSmsClaim; }),
     prepare: vi.fn(async () => { order.push("task-and-text-durable"); return true; }), recordAcceptance: vi.fn(async () => { order.push("acceptance"); return true; }),
     markUncertain: vi.fn(async () => undefined), suppress: vi.fn(async () => undefined), suppressBeforeSubmission: vi.fn(async () => undefined) };
-  const config = vi.fn(() => ({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }));
+  const config = vi.fn<() => CustomerSmsConfig | null>(() => ({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }));
   const readSession = vi.fn(async () => snapshot()), readReceivingLine = vi.fn(async () => "+12025550999");
   const generate = vi.fn(async () => { order.push("generate"); return { replyText: "Absolutely, Jane—we'll take care of this and confirm once the change is made.", task: { title: "Reschedule Jane's cleaning", items: [{ title: "Move cleaning to Monday at 9", evidenceQuote: input.inboundText }] } }; });
   const send = vi.fn(async () => { order.push("send"); return { success: true, messageId: "accepted-provider-id" }; });
@@ -128,5 +128,65 @@ describe("application entry is passive before database import", () => {
     vi.stubEnv("CLAUDE_CUSTOMER_SMS_ENABLED", "true"); vi.stubEnv("CLAUDE_CUSTOMER_SMS_START_AT", created); vi.stubEnv("CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE", undefined);
     expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "disabled" });
     expect(database.imported).not.toHaveBeenCalled(); expect(database.getDb).not.toHaveBeenCalled();
+  });
+});
+
+describe("explicit future-only all-customer recipient scope", () => {
+  const allEnv = { ...pilotEnv, CLAUDE_CUSTOMER_SMS_SCOPE: "all_customers", CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE: "true" };
+  const allConfig: CustomerSmsConfig = { startAt: at - 1000, allowedPhone: "+13029816191", testCustomerOverride: true, scope: "all_customers" };
+  it("requires explicit valid scope while retaining the exact default pilot config", () => {
+    expect(claudeCustomerSmsConfig(allEnv)).toEqual({ startAt: at, allowedPhone: "+13029816191", testCustomerOverride: true, scope: "all_customers" });
+    expect(claudeCustomerSmsConfig({ ...pilotEnv, CLAUDE_CUSTOMER_SMS_SCOPE: "pilot" })).toEqual(claudeCustomerSmsConfig(pilotEnv));
+    for (const scope of ["all", "*", "ALL_CUSTOMERS", "", " all_customers "]) {
+      expect(claudeCustomerSmsConfig({ ...allEnv, CLAUDE_CUSTOMER_SMS_SCOPE: scope })).toBeNull();
+      expect(isClaudeCustomerSmsPhoneEligible(input.fromPhone, { ...allEnv, CLAUDE_CUSTOMER_SMS_SCOPE: scope })).toBe(false);
+    }
+  });
+  it.each(["+12025550123", "202-555-0123", "+12025550124", "+17035551234"])("admits a valid nonpilot destination %s only in explicit all-customer mode", phone => {
+    expect(isClaudeCustomerSmsPhoneEligible(phone, allEnv)).toBe(true);
+    expect(isClaudeCustomerSmsPilotPhone(phone, allEnv)).toBe(false);
+    expect(isClaudeCustomerSmsPhoneEligible(phone, pilotEnv)).toBe(false);
+    expect(isClaudeCustomerSmsPilotCustomerOverride(phone, allEnv)).toBe(false);
+  });
+  it.each([undefined, null, "", "Jane +12025550123", "+12025550123,+13029816191", "*", "+447911123456"])("still rejects malformed or unsupported destination %j", phone => {
+    expect(isClaudeCustomerSmsPhoneEligible(phone, allEnv)).toBe(false);
+  });
+  it("retains the approved role exception only for the actual test number", () => {
+    expect(isClaudeCustomerSmsPilotCustomerOverride("302-981-6191", allEnv)).toBe(true);
+    expect(isClaudeCustomerSmsPilotCustomerOverride(input.fromPhone, { ...allEnv, CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: input.fromPhone })).toBe(false);
+  });
+  it("sends the same unmodified generated content through the exact receiving line for a nonpilot customer", async () => {
+    const f = fixture(); f.config.mockReturnValue(allConfig);
+    expect(await f.run(input)).toEqual({ outcome: "accepted" });
+    expect(f.order).toEqual(["claim", "generate", "task-and-text-durable", "send", "acceptance"]);
+    expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: (await f.generate.mock.results[0].value).replyText, fromNumberId: input.receivingPhoneNumberId });
+  });
+  it.each([{ isCleaner: true }, { direction: "outgoing" }, { inboundText: "STOP" }, { createdAt: "2026-11-15T18:00:00Z" }, { createdAt: "2026-11-16T18:01:00Z" }, { receivedAt: at - 2000 }, { providerMessageId: "cs-fallback-old" }, { fromPhone: "+16505164957" }, { fromPhone: "+17259009272" }])("retains all pre-read exclusion guards in all-customer scope %#", async patch => {
+    const f = fixture(); f.config.mockReturnValue(allConfig);
+    expect(await f.run({ ...input, ...patch })).toEqual({ outcome: "excluded" }); expect(f.readSession).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+  });
+  it.each([{ leadSource: "hiring" }, { leadSource: "cs-inbound-cleaner" }, { leadSource: "internal" }, { leadSource: "staff" }, { csQueue: "Teams" }, { smsOptOut: 1 }])("keeps exact saved noncustomer/opt-out flags protected %#", async patch => {
+    const f = fixture(); f.config.mockReturnValue(allConfig); f.readSession.mockResolvedValue({ ...snapshot(), ...patch });
+    expect(await f.run(input)).toEqual({ outcome: "excluded" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("does not permit all-customer scope to create another cleaner test exception", async () => {
+    const f = fixture(); f.config.mockReturnValue({ ...allConfig, allowedPhone: input.fromPhone });
+    expect(await f.run({ ...input, isCleaner: true })).toEqual({ outcome: "excluded" }); expect(f.send).not.toHaveBeenCalled();
+  });
+  it.each(["after-generation", "before-submission"])("suppresses a scope change %s without sending", async stage => {
+    const f = fixture(); f.config.mockReturnValueOnce(allConfig);
+    if (stage === "before-submission") f.config.mockReturnValueOnce(allConfig);
+    f.config.mockReturnValue({ ...allConfig, scope: "pilot" });
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.send).not.toHaveBeenCalled();
+    expect(stage === "after-generation" ? f.store.suppress : f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED");
+  });
+  it("rejects duplicate all-customer claims without regeneration, task creation or resend", async () => {
+    const f = fixture(); f.config.mockReturnValue(allConfig); f.store.claim.mockResolvedValue(null as never);
+    expect(await f.run(input)).toEqual({ outcome: "duplicate" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("opens the existing lazy application only for a valid explicit all-customer scope", async () => {
+    for (const [key, value] of Object.entries(allEnv)) vi.stubEnv(key, value);
+    database.getDb.mockClear();
+    expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "failed" }); expect(database.getDb).toHaveBeenCalledTimes(1);
   });
 });

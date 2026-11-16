@@ -102,4 +102,31 @@ describe("real one-phone manual arbitration", () => {
     await expect(f.guards.taskCard(101)).rejects.toThrow("CUSTOMER_TASK_CARD_PROTECTED");
     expect(f.getDatabase).toHaveBeenCalledTimes(2);
   });
+  it("lets a human win a pending nonpilot customer's receipt only in explicit all-customer mode", async () => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all_customers");
+    const f = await fixture([{ leadPhone: "+12025550124" }], [{ id: 9, status: "TOOLS_RUNNING" }]);
+    await f.guards.humanSend({ sessionId: 72 }); expect(f.execute).toHaveBeenCalledTimes(3);
+    const { MySqlDialect } = await import("drizzle-orm/mysql-core");
+    const read = new MySqlDialect().sqlToQuery(f.execute.mock.calls[1][0]);
+    expect(read.params).toContain("+12025550124"); expect(read.params).toContain("claude_customer_reply_v1");
+    const write = new MySqlDialect().sqlToQuery(f.execute.mock.calls[2][0]);
+    expect(write.params).toContain(9); expect(write.sql).toContain("HUMAN_REPLY_WON");
+  });
+  it("blocks only an in-flight automatic receipt for the exact all-customer destination", async () => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all_customers");
+    const f = await fixture([{ leadPhone: "+12025550124" }], [{ id: 9, status: "SENDING" }]);
+    await expect(f.guards.humanSend({ sessionId: 72 })).rejects.toThrow("CUSTOMER_REPLY_IN_FLIGHT_OR_UNCERTAIN");
+    expect(f.execute).toHaveBeenCalledTimes(2);
+  });
+  it("retains the original staff-approved send payload in all-customer mode", async () => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all_customers");
+    const input = { sessionId: 72, message: "Original human message", fromNumberId: "original-business-line" };
+    expect(await app.createCaller(ctx()).leads.sendMessage(input)).toEqual(input);
+    expect(guardClaudeCustomerManualSend).toHaveBeenCalledWith({ sessionId: 72, phone: undefined });
+  });
+  it("does not read receipts for malformed all-customer destinations or unknown scope", async () => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all_customers"); const f = await fixture();
+    await f.guards.humanSend({ phone: "Jane +12025550124" }); expect(f.getDatabase).not.toHaveBeenCalled();
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all"); await f.guards.humanSend({ sessionId: 72 }); expect(f.getDatabase).not.toHaveBeenCalled();
+  });
 });
