@@ -54,6 +54,39 @@ import { enqueueScoring } from "./csStatusScorer";
 import { computeSessionSummary } from "./sessionSummary";
 import { getConfiguredCsPhoneNumberIds, getCsOutboundDeliveryRecipient, reconcileDeliveredCsOutbound } from "./quoOutboundReconciliation";
 
+// Additive customer capability only. Disabled means no import, role lookup or I/O.
+// Callers provide the exact row whose inbound history write just succeeded.
+async function dispatchPersistedClaudeCustomerSms(input: {
+  sessionId: number; providerMessageId: unknown; fromPhone: string; receivingPhoneNumberId: unknown;
+  inboundText: string; createdAt: unknown; receivedAt: number; isCleaner?: boolean; direction?: string;
+}) {
+  if (process.env.CLAUDE_CUSTOMER_SMS_ENABLED !== "true" || input.direction !== "incoming"
+    || !Number.isSafeInteger(input.sessionId) || input.sessionId <= 0
+    || typeof input.providerMessageId !== "string" || !input.providerMessageId.trim()
+    || typeof input.receivingPhoneNumberId !== "string" || !input.receivingPhoneNumberId.trim()
+    || !input.inboundText.trim() || input.isCleaner === true) return;
+  try {
+    let isCleaner: boolean = false;
+    // The non-CS/Bark persistence path has no role read. Use only the permitted
+    // staff directory, never operational job data or name-enrichment helpers.
+    if (input.isCleaner === undefined) {
+      const db = await getDb();
+      if (!db) return;
+      const [profile] = await db.select({ name: cleanerProfiles.name }).from(cleanerProfiles)
+        .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${input.fromPhone.replace(/[^0-9]/g, "").slice(-10)}`)
+        .limit(1);
+      isCleaner = !!profile;
+    }
+    if (isCleaner) return;
+    const { dispatchClaudeCustomerSms } = await import("./instinct/claudeCustomerSmsApplication");
+    await dispatchClaudeCustomerSms({ ...input, providerMessageId: input.providerMessageId,
+      receivingPhoneNumberId: input.receivingPhoneNumberId, isCleaner });
+  } catch {
+    // A new-capability failure must not suppress existing inbound/draft behavior.
+    console.warn("[ClaudeCustomerSMS] Additive dispatch stopped; existing inbound flow continues.");
+  }
+}
+
 export function registerWebhookRoutes(app: Express) {
   // Bark.com lead integration (Zapier webhook)
   registerBarkWebhookRoute(app);
@@ -640,8 +673,9 @@ export function registerWebhookRoutes(app: Express) {
         // in the Leads list and the AI can engage it like any other inbound lead.
         console.log(`[Webhook] No session found for ${fromPhone} — creating new inbound-sms lead session.`);
         try {
+          const newInboundNow = Date.now();
           const newHistory = JSON.stringify([
-            { role: 'user', content: inboundText, ts: Date.now(), mediaUrls: mediaUrls.length ? mediaUrls : undefined },
+            { role: 'user', content: inboundText, ts: newInboundNow, opMsgId: msg.id, receivingPhoneNumberId: msg.phoneNumberId, mediaUrls: mediaUrls.length ? mediaUrls : undefined },
           ]);
           const [newIns] = await db.insert(conversationSessions).values({
             leadPhone: fromPhone,
@@ -650,8 +684,12 @@ export function registerWebhookRoutes(app: Express) {
             messageHistory: newHistory,
             leadSource: 'inbound-sms',
             aiMode: 1, // allow AI to engage
+            ...(getInboundPhoneNumberId(msg.phoneNumberId) ? { lastInboundPhoneNumberId: getInboundPhoneNumberId(msg.phoneNumberId) } : {}),
           } as any);
           const newSessionId = (newIns as any).insertId ?? null;
+          await dispatchPersistedClaudeCustomerSms({ sessionId: newSessionId, providerMessageId: msg.id, fromPhone,
+            receivingPhoneNumberId: msg.phoneNumberId, inboundText, createdAt: msg.createdAt,
+            receivedAt: newInboundNow, direction: msg.direction });
           console.log(`[Webhook] New inbound-sms session created — sessionId=${newSessionId}, phone=${fromPhone}`);
 
           // Create a quote_leads entry so this lead appears in the Lead Drawer immediately
@@ -813,7 +851,7 @@ export function registerWebhookRoutes(app: Express) {
       }
 
       // Append the lead's inbound message to history first (always stored)
-      history.push({ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
+      history.push({ role: "user", content: inboundText, ts: now, opMsgId: msg.id, receivingPhoneNumberId: msg.phoneNumberId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
       const inboundSummary = computeSessionSummary(history);
 
       // ── CRITICAL: Persist the user message to DB IMMEDIATELY ──────────────────────────────────
@@ -827,11 +865,17 @@ export function registerWebhookRoutes(app: Express) {
                 .set({
           messageHistory: JSON.stringify(history),
           lastCustomerReplyAt: now,
+          ...(getInboundPhoneNumberId(msg.phoneNumberId) ? { lastInboundPhoneNumberId: getInboundPhoneNumberId(msg.phoneNumberId) } : {}),
           ...inboundSummary,
           // Reopen DONE sessions: a customer texting back is no longer done
           ...(session.stage === "RESOLVED" ? { stage: "UNHANDLED" } : {}),
         } as any)
         .where(eq(conversationSessions.id, session.id));
+      await dispatchPersistedClaudeCustomerSms({ sessionId: session.id, providerMessageId: msg.id, fromPhone,
+        receivingPhoneNumberId: msg.phoneNumberId, inboundText, createdAt: msg.createdAt, receivedAt: now,
+        direction: msg.direction,
+        ...(session.csQueue === "Teams" || /cleaner|hiring|interview|internal|staff|schedule_confirm/i.test(session.leadSource ?? "")
+          || /^INTERVIEW_|^SCHEDULE_CONFIRM/.test(session.stage) ? { isCleaner: true } : {}) });
       if (session.stage === "RESOLVED") {
         console.log(`[Webhook] Reopened DONE session ${session.id} \u2192 UNHANDLED for inbound reply from ${fromPhone}`);
       }
@@ -2349,6 +2393,9 @@ async function handleCsInboundMessage(msg: any) {
 
   const sessionSource = isCleaner ? "cs-inbound-cleaner" : "cs-inbound";
 
+  let persistedCustomerSessionId: number | null = null;
+  let persistedNonCustomer = isCleaner;
+
   // Find the most recent matching session for this phone.
   // For cleaners, match ALL session types for their phone — cs-inbound-cleaner, cs_initiated,
   // AND cs-inbound. A cleaner's identity is authoritative: once isCleaner=true, any existing
@@ -2436,6 +2483,10 @@ async function handleCsInboundMessage(msg: any) {
       .set(updatePayload as any)
       .where(eq(conversationSessions.id, existingSession.id));
 
+    persistedCustomerSessionId = existingSession.id;
+    persistedNonCustomer = isCleaner || (existingSession as any).csQueue === "Teams"
+      || /cleaner|hiring|interview|internal|staff/i.test(existingSession.leadSource ?? "")
+      || /^INTERVIEW_|^SCHEDULE_CONFIRM/.test(existingSession.stage);
     console.log(`[CS] Appended to session ${existingSession.id} for ${fromPhone}${resolvedName && !existingSession.leadName ? ` (backfilled name: ${resolvedName})` : ""}`);
   } else {
     // Before creating a new cs-inbound session, check if there's an active hiring_interview
@@ -2483,10 +2534,12 @@ async function handleCsInboundMessage(msg: any) {
           ...(inboundPhoneNumberId ? { lastInboundPhoneNumberId: inboundPhoneNumberId } : {}),
         } as any)
         .where(eq(conversationSessions.id, hiringSession.id));
+      persistedCustomerSessionId = hiringSession.id;
+      persistedNonCustomer = true;
       console.log(`[CS→Hiring] Routed inbound from ${fromPhone} to hiring session ${hiringSession.id} instead of creating new cs-inbound`);
     } else {
       // No hiring session — create new cs-inbound session as before
-      const history = [{ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) }];
+      const history = [{ role: "user", content: inboundText, ts: now, opMsgId: messageId, receivingPhoneNumberId: msg.phoneNumberId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) }];
       const [result] = await db
         .insert(conversationSessions)
         .values({
@@ -2502,8 +2555,15 @@ async function handleCsInboundMessage(msg: any) {
         } as any);
       const sessionId = (result as any).insertId as number;
       persistedSessionId = sessionId;
+      persistedCustomerSessionId = sessionId;
       console.log(`[CS] Created new ${sessionSource} session ${sessionId} for ${fromPhone}${resolvedName ? ` (${resolvedName})` : ""}`);
     }
+  }
+
+  if (persistedCustomerSessionId !== null) {
+    await dispatchPersistedClaudeCustomerSms({ sessionId: persistedCustomerSessionId, providerMessageId: msg.id,
+      fromPhone: normalizePhone(fromPhone), receivingPhoneNumberId: msg.phoneNumberId,
+      inboundText, createdAt: msg.createdAt, receivedAt: now, isCleaner: persistedNonCustomer, direction: msg.direction });
   }
 
   // Broadcast SSE so CS inbox updates instantly

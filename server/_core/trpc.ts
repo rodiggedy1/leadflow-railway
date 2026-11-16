@@ -5,6 +5,7 @@ import type { TrpcContext } from "./context";
 import { getAgentFromRequest } from "./agentAuth";
 import { getCleanerFromRequest } from "./cleanerAuth";
 import { COMMAND_CHAT_INBOX_PATH, observeInboxProcedure, observeInboxHandler, inboxTimingStage, serializeInboxTiming } from "./commandChatInboxTiming";
+import { z } from "zod";
 
 // ── lastSeenAt throttle ───────────────────────────────────────────────────────
 // Prevents a DB write on every opsChatProcedure call.
@@ -64,7 +65,49 @@ const timingMiddleware = t.middleware(async (opts) => {
   return result;
 });
 
-export const publicProcedure = t.procedure.use(timingMiddleware);
+// Exact existing Preview manual-send shapes, used only to avoid cancelling a
+// pending automatic reply for a request the original handlers would reject.
+// These are not limits on Claude's generated reply.
+const customerManualSendInputs = {
+  "leads.sendMessage": z.object({
+    sessionId: z.number().int().positive(),
+    message: z.string().min(1).max(1600),
+    fromNumberId: z.string().optional(),
+    isVoiceCommand: z.boolean().optional(),
+    source: z.enum(["cs_inbox"]).optional(),
+  }),
+  "leads.sendWorkspaceMessage": z.object({
+    phone: z.string().min(7),
+    message: z.string().min(1).max(1600),
+    name: z.string().optional(),
+  }),
+};
+const customerReplyManualSendMiddleware = t.middleware(async opts => {
+  if (process.env.CLAUDE_CUSTOMER_SMS_ENABLED !== "true" || opts.type !== "mutation"
+    || !(opts.path in customerManualSendInputs)) return opts.next();
+  const schema = customerManualSendInputs[opts.path as keyof typeof customerManualSendInputs];
+  const parsed = schema.safeParse(await opts.getRawInput());
+  if (!parsed.success) return opts.next();
+  let staff = Boolean(opts.ctx.user);
+  if (!staff) {
+    try { staff = Boolean(await getAgentFromRequest(opts.ctx.req)); }
+    catch { return opts.next(); }
+  }
+  if (!staff) return opts.next();
+  const input = parsed.data as { sessionId?: number; phone?: string };
+  try {
+    const { guardClaudeCustomerManualSend } = await import("../instinct/claudeCustomerSmsManualGuard");
+    await guardClaudeCustomerManualSend({ sessionId: input.sessionId, phone: input.phone });
+  } catch (error) {
+    const uncertain = error instanceof Error && error.message === "CUSTOMER_REPLY_IN_FLIGHT_OR_UNCERTAIN";
+    throw new TRPCError({ code: uncertain ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
+      message: uncertain ? "The automatic customer reply is sending or its outcome needs review. No additional SMS was sent."
+        : "The automatic customer reply status could not be checked. No SMS was sent." });
+  }
+  return opts.next();
+});
+
+export const publicProcedure = t.procedure.use(timingMiddleware).use(customerReplyManualSendMiddleware);
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
@@ -273,7 +316,36 @@ export const opsChatProcedure = t.procedure.use(
 
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }),
-);
+).use(async opts => {
+  if (opts.type === "mutation" && opts.path === "opsChat.dismissSystemCard") {
+    const parsedCard = z.object({ messageId: z.number().int().positive() }).safeParse(await opts.getRawInput());
+    if (parsedCard.success) {
+      try {
+        const { guardClaudeCustomerTaskCardAction } = await import("../instinct/claudeCustomerSmsManualGuard");
+        await guardClaudeCustomerTaskCardAction(parsedCard.data.messageId);
+      } catch (error) {
+        const task = error instanceof Error && error.message === "CUSTOMER_TASK_CARD_PROTECTED";
+        throw new TRPCError({ code: task ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
+          message: task ? "Customer tasks cannot be dismissed as alerts. Claim the task and confirm completion in its task card."
+            : "The card's task status could not be checked. No card was dismissed." });
+      }
+    }
+  }
+  if (opts.type !== "mutation" || !["opsChat.approveSmsDraft", "opsChat.dismissSmsDraft", "opsChat.retrySmsDraft"].includes(opts.path))
+    return opts.next();
+  const parsed = z.object({ draftId: z.number().int().positive() }).safeParse(await opts.getRawInput());
+  if (!parsed.success) return opts.next();
+  try {
+    const { guardClaudeCustomerLegacyDraftAction } = await import("../instinct/claudeCustomerSmsManualGuard");
+    await guardClaudeCustomerLegacyDraftAction(parsed.data.draftId);
+  } catch (error) {
+    const protectedRecord = error instanceof Error && error.message === "CUSTOMER_REPLY_RECEIPT_PROTECTED";
+    throw new TRPCError({ code: protectedRecord ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
+      message: protectedRecord ? "This is an automatic customer reply receipt, not a review draft. It cannot be dismissed, retried or sent again."
+        : "The draft's send-record status could not be checked. No draft action was performed." });
+  }
+  return opts.next();
+});
 
 /**
  * cleanerProcedure — validates the cleaner cookie session.
