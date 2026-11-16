@@ -57,6 +57,7 @@ import AiConcierge from "@/components/AiConcierge";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, type ClaudeSmsAlternativeGenerateInput, type ClaudeSmsAlternativeResult } from "@shared/claudeSmsAlternative";
 import { THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, type ClaudeInitialLeadFacts, type ClaudeInitialLeadInput, type ClaudeInitialLeadResult } from "@shared/claudeInitialLead";
+import { claudeDraftSourceSchema, reviewedClaudeSmsProvenance, smsSenderLabel, smsSenderProvenanceSchema, type ClaudeDraftSource } from "@shared/smsSenderProvenance";
 import "./command-chat-crm-review.css";
 import "./command-chat-left-cohesion.css";
 import "./command-chat-lead-queue.css";
@@ -196,6 +197,7 @@ type SmsInboxMessage = {
   openPhoneMessageId?: string;
   providerMessageId?: string;
   metadata?: { opMsgId?: string; openPhoneId?: string; openPhoneMessageId?: string; providerMessageId?: string };
+  smsProvenance?: unknown;
 };
 
 type QuoteAssistantFields = {
@@ -2326,10 +2328,31 @@ function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; o
 }
 
 function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, leadDraft, leadCardSnapshot, lead, onNotice, onOpenLeadDetails, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; leadDraft?: { scenario: string; jobContext: string } | null; leadCardSnapshot?: CommandLead | null; lead: CommandLead | null; onNotice: (message: string) => void; onOpenLeadDetails: (lead: CommandLead) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
+  // Only explicit, verified Use reply selects assistance. No text/history inference.
+  function createSmsDraftAttributionController() {
+    let targetKey = "";
+    let source: ClaudeDraftSource | null = null;
+    return {
+      target(next: string) { if (next !== targetKey) { targetKey = next; source = null; } },
+      select(candidate: unknown, target: string) {
+        const parsed = claudeDraftSourceSchema.safeParse(candidate);
+        source = target === targetKey && parsed.success ? parsed.data : null;
+      },
+      clear() { source = null; },
+      edit(value: string) { if (!value.trim()) source = null; },
+      beforeReplace(value: string, start: number | null, end: number | null) {
+        if (value.length > 0 && start === 0 && end === value.length) source = null;
+      },
+      forSend(target: string): ClaudeDraftSource | null { return target === targetKey ? source : null; },
+    };
+  }
   const utils = trpc.useUtils();
   const isTeamConversation = conversation.personType === "team";
   const contextPhone = conversation.leadPhone || "0000000";
   const [draft, setDraft] = useState("");
+  const smsDraftAttributionRef = useRef<ReturnType<typeof createSmsDraftAttributionController> | null>(null);
+  if (!smsDraftAttributionRef.current) smsDraftAttributionRef.current = createSmsDraftAttributionController();
+  const smsDraftAttribution = smsDraftAttributionRef.current;
   const [smsAutoDraftLoading, setSmsAutoDraftLoading] = useState(false);
   const [smsAutoDraftReady, setSmsAutoDraftReady] = useState(false);
   const [smsAutoDraftText, setSmsAutoDraftText] = useState("");
@@ -2409,6 +2432,13 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const liveClaudeConversation = conversations.find((item) => item.id === conversation.id) ?? conversation;
   const claudeReceivingPhoneNumberId = liveClaudeConversation.lastInboundPhoneNumberId ?? conversation.lastInboundPhoneNumberId;
   const claudeSenderPhoneNumberId = getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations);
+  // This scope deliberately excludes incoming turns/history: edits to a selected
+  // draft remain assisted until the customer/phone/receiving line changes.
+  const smsDraftTargetKey = JSON.stringify([conversation.id, conversation.personType,
+    normalizedLeadPhone(conversation.leadPhone), normalizedLeadPhone(leadCardPhone ?? null),
+    normalizedLeadPhone(liveClaudeConversation.leadPhone), normalizedLeadPhone(detail?.leadPhone ?? conversation.leadPhone),
+    detail?.sessionId ?? conversation.id, claudeReceivingPhoneNumberId, claudeSenderPhoneNumberId]);
+  smsDraftAttribution.target(smsDraftTargetKey);
   const claudeInitialLeadMode = !isTeamConversation && conversation.id >= 0 && Boolean(leadCardPhone && leadCardSnapshot);
   const claudeLeadFacts: ClaudeInitialLeadFacts | null = leadCardSnapshot ? {
     name: leadCardSnapshot.name, serviceType: leadCardSnapshot.serviceType, category: leadCardSnapshot.category,
@@ -2552,9 +2582,10 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   }, [streamSmsAutoDraft]);
   const insertSmsAutoDraft = useCallback(() => {
     if (!smsAutoDraftText.trim()) return;
+    smsDraftAttribution.clear();
     setDraft(smsAutoDraftText);
     setSmsAutoDraftReady(false);
-  }, [smsAutoDraftText]);
+  }, [smsAutoDraftText, smsDraftAttribution]);
   const generateClaudeDraft = async () => {
     // The ref coalesces repeated clicks before React renders the busy state. It
     // keeps this deliberate request's UUID until completion; there is no retry.
@@ -2639,6 +2670,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       || claudeDraftScopeRef.current !== claudeDraftScope
       || (currentClaudeDraft.kind === "sms_reply"
         && currentClaudeDraft.receivingPhoneNumberId !== getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations))) return;
+    smsDraftAttribution.select({ requestId: currentClaudeDraft.requestId, kind: currentClaudeDraft.kind }, smsDraftTargetKey);
     setDraft(currentClaudeDraft.replyText);
     setClaudeDraft(null);
     smsComposerRef.current?.focus();
@@ -2667,6 +2699,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       const homeType = quoteHomeType(lead?.propertyType || null).toLowerCase();
       const serviceLabel = serviceType.toLowerCase().replace("move-in / move-out cleaning", "move-out cleaning");
       const quoteMessage = `Hey ${firstName(name)}! 👋 Madison from Maids in Black here. I put together your quote.\n\nHere’s what your ${serviceLabel} quote includes:\n\n🧼 Full ${serviceLabel}\n🏠 ${bedroomCount}-bedroom ${homeType}\n${extras}\n✅ Background-checked and insured team\n\nYour first-cleaning quote is $${(result.firstCleaningTotalCents / 100).toFixed(0)}. You can review the details and choose your time here:\n${quoteUrl}`;
+      smsDraftAttribution.clear();
       setDraft(quoteMessage);
       setQuoteAssistantOpen(false);
       setQuoteAssistantError("");
@@ -2685,6 +2718,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   useEffect(() => {
     smsAutoDraftSessionIdRef.current = conversation.id;
     autoDraftedForConversationRef.current = null;
+    smsDraftAttribution.clear();
     setDraft("");
     setSmsAutoDraftReady(false);
     setSmsAutoDraftText("");
@@ -2724,10 +2758,12 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   }, [conversation.id, detail, messages.length]);
   const sendReply = trpc.leads.sendMessage.useMutation({
     onSuccess: (result, variables) => {
+      smsDraftAttribution.clear();
       setDraft("");
       if (!result.duplicate) {
         scrollAfterSendRef.current = true;
-        setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, senderName: callerName, ts: Date.now() }]);
+        const smsProvenance = reviewedClaudeSmsProvenance(variables.claudeDraftSource, callerName);
+        setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, senderName: callerName, ts: Date.now(), ...(smsProvenance ? { smsProvenance } : {}) }]);
       }
       void utils.commandCenter.listCommandChatInbox.invalidate();
       void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
@@ -2735,9 +2771,11 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   });
   const sendWorkspaceMessage = trpc.leads.sendWorkspaceMessage.useMutation({
     onSuccess: (result, variables) => {
+      smsDraftAttribution.clear();
       setDraft("");
       scrollAfterSendRef.current = true;
-      setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, senderName: callerName, ts: Date.now() }]);
+      const smsProvenance = result.success ? reviewedClaudeSmsProvenance(variables.claudeDraftSource, callerName) : null;
+      setConfirmedOutgoing((current) => [...current, { role: "assistant", content: variables.message, senderName: callerName, ts: Date.now(), ...(smsProvenance ? { smsProvenance } : {}) }]);
       void utils.commandCenter.listCommandChatInbox.invalidate();
       void utils.leads.getCsConversation.invalidate({ sessionId: conversation.id });
       if (leadCardPhone && result.sessionId > 0) onSessionResolved(result.sessionId);
@@ -2748,8 +2786,9 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const submit = () => {
     const message = draft.trim();
     if (!message) return;
+    const claudeDraftSource = smsDraftAttribution.forSend(smsDraftTargetKey);
     if (leadCardPhone) {
-      sendWorkspaceMessage.mutate({ phone: leadCardPhone, message, name: conversation.leadName ?? undefined });
+      sendWorkspaceMessage.mutate({ phone: leadCardPhone, message, name: conversation.leadName ?? undefined, ...(claudeDraftSource ? { claudeDraftSource } : {}) });
       return;
     }
     sendReply.mutate({
@@ -2757,6 +2796,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       message,
       fromNumberId: getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations),
       source: "cs_inbox",
+      ...(claudeDraftSource ? { claudeDraftSource } : {}),
     });
   };
   return <div className="ccc-live-sms-backdrop" onMouseDown={onClose}><aside className="ccc-live-sms-drawer" onMouseDown={(event) => event.stopPropagation()}>
@@ -2768,8 +2808,12 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => {
       const outgoing = message.role !== "user";
       const senderName = message.senderName?.trim() || callerName;
-      const senderPhotoUrl = photoMap[senderName] ?? (senderName === callerName ? callerPhotoUrl : null);
-      return <article className={`ccc-live-sms-message ${outgoing ? "is-outgoing" : ""}`} key={`${message.ts ?? index}-${message.content}`}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={senderName} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{senderName}</span> : conversation.personType === "team" ? name : "Customer"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{renderMessageBody(message.content)}</p></article>;
+      const senderLabel = smsSenderLabel(message, callerName);
+      const parsedProvenance = smsSenderProvenanceSchema.safeParse(message.smsProvenance);
+      const automaticSender = message.role === "assistant" && parsedProvenance.success
+        && parsedProvenance.data.mode === "automatic" && message.opMsgId === parsedProvenance.data.providerMessageId;
+      const senderPhotoUrl = automaticSender ? null : photoMap[senderName] ?? (senderName === callerName ? callerPhotoUrl : null);
+      return <article className={`ccc-live-sms-message ${outgoing ? "is-outgoing" : ""}`} key={`${message.ts ?? index}-${message.content}`}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={automaticSender ? "Claude AI" : senderName} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{senderLabel}</span> : conversation.personType === "team" ? name : "Customer"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{renderMessageBody(message.content)}</p></article>;
     })}</div>
     <footer>
       {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
@@ -2780,7 +2824,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
         <div><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!claudeDraftEligible || smsAutoDraftLoading || smsAutoDraft.isPending || claudeDraftPending} onClick={() => void generateClaudeDraft()}>{claudeDraftPending ? <Loader2 className="animate-spin" /> : <Sparkles />}{claudeDraftPending ? "Getting Claude draft…" : "Get Claude draft"}</button>
           {currentClaudeDraft && <><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!allowClaudeUse} onClick={useClaudeReply}><Pencil />Use reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={() => setClaudeDraft(null)}>Discard</button></>}
         </div></article>}
-      <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onChange={(event) => setDraft(event.target.value)} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
+      <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onBeforeInput={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onPaste={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onCut={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onChange={(event) => { smsDraftAttribution.edit(event.target.value); setDraft(event.target.value); }} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } else if (event.key === "Backspace" || event.key === "Delete" || (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey)) { smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
     {quoteAssistantOpen && quoteAssistantFields && <QuoteAssistantModal
       customerName={name}

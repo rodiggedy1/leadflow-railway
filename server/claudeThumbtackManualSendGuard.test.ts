@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import * as ts from "typescript";
 
 vi.mock("./_core/agentAuth", () => ({ getAgentFromRequest: vi.fn(async () => null) }));
 vi.mock("./db", () => ({ getDb: vi.fn(async () => null) }));
@@ -103,9 +104,30 @@ describe("actual default-off manual-send arbitration", () => {
     await caller.leads.read({ sessionId: 71, message: "Text" });
     expect(guardClaudeThumbtackManualSend).not.toHaveBeenCalled(); expect(getAgentFromRequest).not.toHaveBeenCalled();
   });
-  it("copies only the existing two manual input shapes; the SMS procedure implementation stays byte-identical", () => {
+  it.each(["sendMessage", "sendWorkspaceMessage"] as const)("forwards explicit Claude draft provenance unchanged through the existing %s guard", async route => {
+    const claudeDraftSource = { requestId: "00112233-4455-4677-8899-aabbccddeeff", kind: "sms_reply" };
+    const input = route === "sendMessage" ? { sessionId: 71, message: "Reviewed reply", claudeDraftSource }
+      : { phone: "+12025550123", message: "Reviewed reply", claudeDraftSource };
+    expect(await testRouter.createCaller(context()).leads[route](input)).toEqual({ preserved: input });
+    expect(guardClaudeThumbtackManualSend).toHaveBeenCalledTimes(1);
+  });
+  it("keeps baseline manual guard schemas and all router bytes outside the two approved attribution seams", () => {
     const baseline = execFileSync("git", ["show", "fe1f39700bc537b72c34ec1742ed4bf4c20042ef:server/routers.ts"], { encoding: "utf8" });
-    expect(readFileSync("server/routers.ts", "utf8")).toBe(baseline);
+    let mounted = readFileSync("server/routers.ts", "utf8")
+      .replace('import { claudeCustomerTasksRouter } from "./claudeCustomerTasksRouter";\n', "")
+      .replace('  claudeCustomerTasks: claudeCustomerTasksRouter,\n', "")
+      .replace("import { claudeDraftSourceSchema, reviewedClaudeSmsProvenance, type SmsSenderProvenance } from '../shared/smsSenderProvenance';\n", "");
+    const procedure = (text: string, name: string) => {
+      const ast = ts.createSourceFile("routers.ts", text, ts.ScriptTarget.Latest, true);
+      const matches: string[] = [];
+      const visit = (node: ts.Node) => {
+        if (ts.isPropertyAssignment(node) && node.name.getText(ast) === name && node.initializer.getText(ast).startsWith("publicProcedure")) matches.push(node.getText(ast));
+        ts.forEachChild(node, visit);
+      };
+      visit(ast); expect(matches).toHaveLength(1); return matches[0];
+    };
+    for (const name of ["sendMessage", "sendWorkspaceMessage"]) mounted = mounted.replace(procedure(mounted, name), procedure(baseline, name));
+    expect(mounted).toBe(baseline);
     const middleware = readFileSync("server/_core/trpc.ts", "utf8");
     const compact = (text: string) => text.replace(/\/\/[^\n]*/g, "").replace(/\s/g, "");
     for (const name of ["sendMessage", "sendWorkspaceMessage"]) {

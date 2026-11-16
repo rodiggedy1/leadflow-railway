@@ -84,6 +84,7 @@ import { csMissionsRouter } from './csMissionsRouter';
 import { deactivateOpsSmsCard, deactivateOpsEmailCard } from './opsChatRouter';
 import { madisonSmsDrafts, madisonEmailDrafts } from '../drizzle/schema';
 import { normalizePhoneLegacy as normalizePhone, isValidUSPhone, extractUSDigits } from './utils/phone';
+import { claudeDraftSourceSchema, reviewedClaudeSmsProvenance, type SmsSenderProvenance } from '../shared/smsSenderProvenance';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -1361,6 +1362,7 @@ export const appRouter = router({
         fromNumberId: z.string().optional(), // Optional override for CS line replies
         isVoiceCommand: z.boolean().optional(), // Set true when triggered from voice command card
         source: z.enum(["cs_inbox"]).optional(), // Set by CsInbox2 to reactivate historical sessions
+        claudeDraftSource: claudeDraftSourceSchema.optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const agentSession = await getAgentSessionFromCtx(ctx);
@@ -1390,11 +1392,12 @@ export const appRouter = router({
         if (!session) throw new Error("Session not found");
 
         // Parse and update history
-        let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+        let history: Array<{ role: string; content: string; ts?: number; senderName?: string; smsProvenance?: SmsSenderProvenance }> = [];
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
 
         const now = Date.now();
-        history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName });
+        const smsProvenance = reviewedClaudeSmsProvenance(input.claudeDraftSource, agentSession.agentName);
+        history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName, ...(smsProvenance ? { smsProvenance } : {}) });
         const summary = computeSessionSummary(history);
 
         // Save to DB first, then send SMS.
@@ -6454,8 +6457,9 @@ Return JSON with exactly these fields:
         phone: z.string().min(7),
         message: z.string().min(1).max(1600),
         name: z.string().optional(),
+        claudeDraftSource: claudeDraftSourceSchema.optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
 
@@ -6514,10 +6518,19 @@ Return JSON with exactly these fields:
         }
 
         // Append to message history
-        let history: Array<{ role: string; content: string; ts: number }> = [];
+        let history: Array<{ role: string; content: string; ts: number; senderName?: string; smsProvenance?: SmsSenderProvenance }> = [];
         try { history = JSON.parse(canonicalSession?.messageHistory ?? '[]'); } catch { history = []; }
         const ts = Date.now();
-        history.push({ role: 'assistant', content: input.message, ts });
+        let smsProvenance: SmsSenderProvenance | null = null;
+        let senderName: string | undefined;
+        if (input.claudeDraftSource) {
+          try {
+            const agentSession = await getAgentSessionFromCtx(ctx);
+            smsProvenance = reviewedClaudeSmsProvenance(input.claudeDraftSource, agentSession.agentName);
+            if (smsProvenance) senderName = agentSession.agentName;
+          } catch { /* Optional attribution must not block the existing send. */ }
+        }
+        history.push({ role: 'assistant', content: input.message, ts, ...(smsProvenance ? { senderName, smsProvenance } : {}) });
 
         await db
           .update(conversationSessions)

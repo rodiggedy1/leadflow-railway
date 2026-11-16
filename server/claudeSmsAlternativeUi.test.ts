@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, type ClaudeSmsAlternativeGenerateInput, type ClaudeSmsAlternativeResult } from "../shared/claudeSmsAlternative";
 import { THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, type ClaudeInitialLeadFacts, type ClaudeInitialLeadInput, type ClaudeInitialLeadResult } from "../shared/claudeInitialLead";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "../shared/csInboxPhoneNumberRouting";
+import { claudeDraftSourceSchema, reviewedClaudeSmsProvenance, smsSenderLabel, smsSenderProvenanceSchema } from "../shared/smsSenderProvenance";
 
 // Local actual-source controller/render gate. No router, DB, authentication,
 // provider, model, network, or real customer data is imported or invoked.
@@ -173,6 +174,7 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
     ...Object.fromEntries(iconNames.map((name) => [name, icon])), Avatar: icon,
     claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, getCsInboxReplyPhoneNumberIdForSelectedConversation,
     claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, normalizedLeadPhone,
+    claudeDraftSourceSchema, reviewedClaudeSmsProvenance, smsSenderLabel, smsSenderProvenanceSchema,
     smsConversationName: (value: Conversation) => value.leadName ?? "Customer", customerPortraitFor: () => "/synthetic.png",
     displayLeadSource: () => "CS", renderMessageBody: (value: string) => value, formatTime: () => "10:00 AM",
     fetch: fetchMock, crypto: { randomUUID: uuid }, console: { warn: vi.fn() }, AbortController, TextDecoder,
@@ -204,12 +206,12 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
 }
 
 describe("optional Claude alternative actual SMS drawer", () => {
-  it("hash-binds the exact primary stream, fallback, on-open generation, manual mutations, and editable composer to b717f778", () => {
+  it("hash-binds the preserved primary stream/fallback/on-open generation and audited local provenance send/composer seams", () => {
     expect(hash(between("  const smsAutoDraft = trpc.opsChat.csReply.useMutation", "  const streamSmsAutoDraft ="))).toBe("6753f185565120b1277efae066473d385095f19f26715aeea6b147f07c4147af");
     expect(hash(between("  const streamSmsAutoDraft =", "  const regenerateSmsDraft ="))).toBe("40381e33976dbd16c581aae585c3a41675b33639df988e43b1bddc0b1a43fd63");
     expect(hash(between("  useEffect(() => {\n    if (conversation.id > 0 && !detail", "  useEffect(() => {\n    if (!detail || (initialBottomScrollDone"))).toBe("e923f10f91c8b832f97e974c7729289d88a4c69be176f8b82a059b7c80b73dee");
-    expect(hash(between("  const sendReply = trpc.leads.sendMessage.useMutation", '  return <div className="ccc-live-sms-backdrop"'))).toBe("b7f876f173d31c4d7a8e79e63ff3a88bb415f0bd44a193518d1fbab74474bcb5");
-    expect(hash(source.split(/(?<=\n)/).find((line) => line.includes('<div className="ccc-live-sms-composer"><textarea'))!)).toBe("448317cc6e5dc5b29936620f242b077656dff3306282637263e22eced7eec27e");
+    expect(hash(between("  const sendReply = trpc.leads.sendMessage.useMutation", '  return <div className="ccc-live-sms-backdrop"'))).toBe("489f0ebb858b6f609a900911679158d3b22202047fd1783293e3350e1848c3eb");
+    expect(hash(source.split(/(?<=\n)/).find((line) => line.includes('<div className="ccc-live-sms-composer"><textarea'))!)).toBe("9408525778f9b572916a792f7de5e48c3b0091fe204428473d3e8c2dc19b8c07");
     expect(between("  const regenerateSmsDraft =", "  const insertSmsAutoDraft =").replace("    if (claudeDraftBusyRef.current) return;\n", "")).toBe("  const regenerateSmsDraft = useCallback(() => {\n    autoDraftedForConversationRef.current = null;\n    void streamSmsAutoDraft();\n  }, [streamSmsAutoDraft]);\n");
   });
 
@@ -245,7 +247,8 @@ describe("optional Claude alternative actual SMS drawer", () => {
     expect(work.send).not.toHaveBeenCalled(); expect(work.workspaceSend).not.toHaveBeenCalled(); expect(work.html()).not.toContain("Use reply");
     work.edit("Reviewed and edited Claude text");
     click(elements(work.render()).find((node) => node.props["aria-label"] === "Send text reply"));
-    expect(work.send).toHaveBeenCalledWith({ sessionId: 42, message: "Reviewed and edited Claude text", fromNumberId: "PN_SYNTHETIC_LINE", source: "cs_inbox" });
+    expect(work.send).toHaveBeenCalledWith({ sessionId: 42, message: "Reviewed and edited Claude text", fromNumberId: "PN_SYNTHETIC_LINE", source: "cs_inbox",
+      claudeDraftSource: { requestId: request.requestId, kind: "sms_reply" } });
     expect(work.workspaceSend).not.toHaveBeenCalled(); work.dispose();
   });
 
@@ -357,7 +360,7 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       .toBe("4f156c33795eff623fb0124030a04ed0505825529196e76b98f62fc4c1fdebcd");
     expect(hash(between("  const openSmsDrawerFromLead =", "  const addPendingOutgoingMessage =").replace("    setSelectedLeadCardSnapshot(lead);\n", "")))
       .toBe("2d778c081dea57587a62e47d140ea7fb89581832a7702804c5e1bbba04f1c3bf");
-    expect(hash(between("  const prepareQuoteAssistant =", "  const resizeSmsComposer ="))).toBe("e7f83223340dda78f19130f60ce258990f8bde58f88c0f08075aefacbaa9a775");
+    expect(hash(between("  const prepareQuoteAssistant =", "  const resizeSmsComposer ="))).toBe("1b2512e0130449642679f7a74807105f30650510ac0aba0437b62b6bfb7db0cc");
     expect(hash(between("    {quoteAssistantOpen && quoteAssistantFields && <QuoteAssistantModal", "function QuoteAssistantModal")))
       .toBe("02adc581431e0792109bacff678dfc5633fc2057a528a84e8f28c96ce90901fd");
     const clicked = leadSnapshot();
@@ -446,7 +449,8 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       click(findButton(work.render(), "Use reply")); expect(textarea(work.render()).props.value).toBe("Synthetic Claude first lead reply.");
       expect(work.workspaceSend).not.toHaveBeenCalled(); expect(work.send).not.toHaveBeenCalled();
       work.edit("Reviewed first reply"); click(elements(work.render()).find((node) => node.props["aria-label"] === "Send text reply"));
-      expect(work.workspaceSend).toHaveBeenCalledWith({ phone: clicked.phone, message: "Reviewed first reply", name: "Synthetic customer" });
+      expect(work.workspaceSend).toHaveBeenCalledWith({ phone: clicked.phone, message: "Reviewed first reply", name: "Synthetic customer",
+        claudeDraftSource: { requestId: request.requestId, kind: "initial_lead" } });
       expect(work.send).not.toHaveBeenCalled(); work.dispose();
     }
     const clicked = leadSnapshot();

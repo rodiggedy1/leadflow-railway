@@ -3,6 +3,7 @@ import { getTableName } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { createClaudeThumbtackFirstResponseStore, guardClaudeThumbtackManualSendInStore, guardClaudeThumbtackLegacyDraftActionInStore } from "./claudeThumbtackFirstResponseStore";
 import { capturedThumbtackLead, createClaudeThumbtackFirstResponseService, thumbtackFirstResponseConfig } from "./claudeThumbtackFirstResponse";
+import { smsSenderLabel } from "../../shared/smsSenderProvenance";
 const cfg = thumbtackFirstResponseConfig({ THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED: "true", THUMBTACK_CLAUDE_FIRST_RESPONSE_START_AT: "2026-11-16T17:00:00Z", OPENPHONE_PHONE_NUMBER_ID: "PN-lead" })!;
 function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: string) {
   const raw = rawOverride ?? JSON.stringify({ event: { eventType: "NegotiationCreatedV4", triggeredAt: "2026-11-16T17:00:02Z" }, data: { negotiationID: "n1", createdAt,
@@ -181,6 +182,12 @@ describe("native first response real store offline transactions", () => {
     h.state().sessions[0].messageHistory = '[{"role":"user","content":"current activity"}]';
     await h.store.accepted(c, h.result, "provider-1"); const history = JSON.parse(h.state().sessions[0].messageHistory);
     expect(history).toHaveLength(2); expect(history[1]).toMatchObject({ content: h.result.replyText, opMsgId: "provider-1", fromNumberId: "PN-lead" });
+    expect(history[0]).toEqual({ role: "user", content: "current activity" });
+    expect(history[1].senderName).toBe("Madison");
+    expect(history[1].smsProvenance).toEqual({ version: 1, generator: "claude", mode: "automatic",
+      workflow: "thumbtack_first_response", receiptId: c.draftId, providerMessageId: "provider-1" });
+    expect(smsSenderLabel(history[1], "Rohan")).toBe("Claude AI · Automatic");
+    expect(smsSenderLabel({ ...history[1], opMsgId: "different-provider-message" }, "Rohan")).toBe("Madison");
     expect(h.state().drafts[0].status).toBe("SENT"); expect(h.state().drafts[0]).not.toHaveProperty("deliveredAt");
     const b = port(), d = (await b.store.claim(b.lead, cfg))!; await b.store.beginSend(d, b.result); b.fail("outboundOpenPhoneId =");
     await expect(b.store.accepted(d, b.result, "provider-2")).rejects.toThrow(); expect(b.state().drafts[0].status).toBe("SENDING"); expect(b.state().sessions[0].messageHistory).toBe("[]");

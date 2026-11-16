@@ -6,6 +6,7 @@ import { normalizePhone } from "../utils/phone";
 import { THUMBTACK_ACCOUNT, THUMBTACK_FIRST_RESPONSE_CAPABILITY as capability,
   type CapturedLead, type EligibleLead, type FirstResponseClaim, type FirstResponseConfig, type FirstResponseStore } from "./claudeThumbtackFirstResponse";
 import type { ClaudeInitialLeadResult } from "../../shared/claudeInitialLead";
+import { automaticClaudeSmsProvenance } from "../../shared/smsSenderProvenance";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -141,7 +142,8 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
         || draft.generatedDraft !== result.replyText || json(draft.capabilityResult)?.phase !== "submission_started") throw new Error("ACCEPTANCE_BINDING_CHANGED");
       // Atomic SQL append uses current history, never the generation-time snapshot.
       const appended = await tx.execute(sql`UPDATE conversation_sessions SET messageHistory = JSON_ARRAY_APPEND(messageHistory, '$', CAST(${JSON.stringify({ role: "assistant",
-        content: result.replyText, ts: Date.now(), senderName: "Madison", opMsgId: messageId, fromNumberId: claim.fromNumberId })} AS JSON)),
+        content: result.replyText, ts: Date.now(), senderName: "Madison", opMsgId: messageId, fromNumberId: claim.fromNumberId,
+        smsProvenance: automaticClaudeSmsProvenance(claim.draftId, messageId) })} AS JSON)),
         lastMessageText = ${result.replyText.slice(0, 255)}, lastMessageTs = ${Date.now()}, lastMessageRole = 'assistant',
         messageCount = messageCount + 1 WHERE id = ${claim.sessionId} AND leadPhone = ${claim.lead.phone} AND leadSource = 'thumbtack'`);
       if (header(appended).affectedRows !== 1) throw new Error("ACCEPTANCE_SESSION_SAVE_FAILED");
