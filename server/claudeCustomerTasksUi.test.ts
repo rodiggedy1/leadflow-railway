@@ -135,22 +135,59 @@ describe("Customer task compact queue and exact canonical identity", () => {
     const task = fixture({ reply: { text: "Synthetic acknowledgment", status, providerMessageId: status === "sent" ? "OM_SYNTHETIC_ACCEPTED" : null } });
     const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW });
     expect(rendered).toContain(ui.customerTaskReplyStatus(status));
-    if (status === "sent") { expect(rendered).toContain("provider accepted, delivery not verified"); expect(rendered).toContain("OM_SYNTHETIC_ACCEPTED"); }
+    if (status === "sent") { expect(rendered).toContain("provider accepted, delivery not verified"); expect(rendered).not.toContain("OM_SYNTHETIC_ACCEPTED"); }
     if (status === "prepared" || status === "suppressed") expect(rendered).toContain("not sent");
     if (status === "uncertain") { expect(rendered).toContain("sending not confirmed"); expect(rendered).not.toContain("Sent ·"); }
     expect(rendered).not.toContain("system-verified");
   });
 
-  it("keeps compact summary, exact source/customer/session/receiving-line and all proposed items in a closed expander", () => {
+  it("keeps exact customer text and acknowledgment, removes technical clutter, and preserves all inline item controls", () => {
     const task = fixture({ customerName: '<script>synthetic</script>' });
     const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW });
     expect(rendered).toContain("30m"); expect(rendered).toContain('class="cct-details"'); expect(rendered).not.toContain('class="cct-details" open');
-    for (const value of [task.customerPhone, String(task.sessionId), task.sourceMessageId, task.receivingPhoneNumber, task.receivingPhoneNumberId, "Handle Friday visit request", "Handle oven add-on request"]) expect(rendered).toContain(value);
+    for (const value of [task.customerPhone, "Handle Friday visit request", "Handle oven add-on request", task.reply.text]) expect(rendered).toContain(value);
+    for (const value of [task.sourceMessageId, task.receivingPhoneNumber, task.receivingPhoneNumberId, "Provider reference:", "cct-context", "Completion log", "Proposed staff request", "cct-checklist"]) expect(rendered).not.toContain(value);
     expect(rendered).toContain("Please move Friday&#x27;s visit and add the oven.\nPlease confirm once updated.");
     expect(rendered).toContain("&lt;script&gt;synthetic&lt;/script&gt;"); expect(rendered).not.toContain("<script>");
-    expect(rendered).toContain("Completion log");
+    expect(rendered).toContain("Task prepared");
     const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), now: NOW });
     expect(button(tree, "Claim")).toBeDefined(); expect(button(tree, "Mark done")).toBeUndefined();
+  });
+
+  it.each(["queue", "stream"] as const)("puts complete verbatim customer text first in %s details without clipping or rewriting either SMS", placement => {
+    const sourceText = 'Exact customer text\n<script>not HTML</script> ' + "full message ".repeat(120);
+    const replyText = 'Exact acknowledgment\nSecond line';
+    const task = fixture({ sourceText, reply: { text: replyText, status: "sent", providerMessageId: "PROVIDER_DO_NOT_RENDER" } });
+    const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), placement, now: NOW });
+    const body = elements(tree).find(node => node.props.className === "cct-details-body")!;
+    const sections = React.Children.toArray(body.props.children).filter(React.isValidElement) as Element[];
+    expect(sections[0].props.className).toBe("cct-source-message"); expect(text(sections[0])).toContain(sourceText);
+    const acknowledgment = elements(body).find(node => String(node.props.className).startsWith("cct-reply "))!;
+    expect(text(acknowledgment)).toContain(replyText);
+    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), placement, now: NOW });
+    expect(rendered).not.toContain("PROVIDER_DO_NOT_RENDER"); expect(rendered).toContain("&lt;script&gt;not HTML&lt;/script&gt;");
+    expect(rendered).not.toContain("<script>"); expect(task.sourceText).toBe(sourceText); expect(task.reply.text).toBe(replyText);
+    expect(css).not.toContain("line-clamp"); expect(css).toContain("white-space: pre-wrap");
+  });
+
+  it("keeps the actual Task prepared timestamp but omits verbose activity logs and internal item IDs", () => {
+    const preparedAt = NOW - 60000;
+    const task = fixture({ activity: [{ action: "created", actor: null, at: preparedAt, note: null }, { action: "item_completed", actor, at: NOW, note: "INTERNAL_ITEM_ID_DO_NOT_RENDER" }] });
+    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW });
+    expect(rendered).toContain(new Date(preparedAt).toISOString()); expect(rendered).not.toContain("INTERNAL_ITEM_ID_DO_NOT_RENDER");
+    expect(rendered).not.toContain('class="cct-log"'); expect(rendered).toContain("Task prepared");
+  });
+
+  it("preserves every button JSX and all non-presentation logic byte-for-byte against the released control", () => {
+    const buttons = (source: string) => {
+      const ast = ts.createSourceFile("card.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const result: string[] = [];
+      const visit = (node: ts.Node) => { if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button") result.push(node.getText(ast)); ts.forEachChild(node, visit); };
+      visit(ast); return result;
+    };
+    expect(hash(JSON.stringify(buttons(componentSource)))).toBe("a252f9ab6d7d4b78ca48c4d339a8e4c57eed7332b415730eaeb991efe5732411");
+    expect(hash(componentSource.slice(0, componentSource.indexOf('<details className="cct-details">')))).toBe("8007b9f26b2eaf46066de784b4d5f30055136a531c877baaab2e260593fe2b9f");
+    expect(hash(componentSource.slice(componentSource.indexOf('{error && !confirmOpen')))).toBe("2693e4f9f82fe9fb3659260f70de3baf74eb24e224b8bff31dda9237f5a78587");
   });
 
   it.each(["queue", "stream"] as const)("shows the canonical phone in the closed %s task header for every status", placement => {

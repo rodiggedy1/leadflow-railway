@@ -219,27 +219,22 @@ export function TaskCard({ task, callerId, pending = false, actions, placement =
       {editable && <button type="button" disabled={busy || !canComplete} title="Confirm all actions in this task are complete"
         onClick={() => { if (!canComplete || busy) return; setError(""); setNote(""); setConfirmOpen(true); }}>Mark done</button>}
     </div>
-    <details className="cct-details"><summary>Request &amp; acknowledgment <ChevronDown /></summary><div className="cct-details-body">
-      <dl className="cct-context"><dt>Customer</dt><dd>{task.customerName || "Name not recorded"} · {task.customerPhone}</dd>
-        <dt>Session</dt><dd>{task.sessionId}</dd><dt>Receiving line</dt><dd>{task.receivingPhoneNumber} · {task.receivingPhoneNumberId}</dd>
-        <dt>Source message</dt><dd>{task.sourceMessageId} · {taskTimestamp(task.receivedAt)}</dd></dl>
-      <section><h4>Original customer request</h4><p className="cct-verbatim">{task.sourceText}</p></section>
-      <section><h4>Proposed staff request</h4><p>{task.title}</p><ul className="cct-items">{task.items.map((item) => {
+    <details className="cct-details"><summary>Customer text &amp; acknowledgment <ChevronDown /></summary><div className="cct-details-body">
+      <section className="cct-source-message"><h4>Customer text</h4><p className="cct-verbatim">{task.sourceText}</p></section>
+      <section><ul className="cct-items">{task.items.map((item) => {
         const confirmed = item.completedBy !== null && item.completedAt !== null;
-        return <li key={item.id}><div><strong>{item.title}</strong><blockquote>{item.evidenceQuote}</blockquote>
+        return <li key={item.id}><div><strong>{item.title}</strong>
           {confirmed && <small>Human-confirmed by {item.completedBy!.name} · {taskTimestamp(item.completedAt!)}</small>}</div>
           {confirmed ? <Check aria-label="Item human-confirmed" /> : editable ? <button type="button" disabled={busy}
             aria-label={`Confirm completed item: ${item.title}`} onClick={() => void update(() => actions.completeItem(task.id, item.id))}>Confirm item</button> : <small>Not confirmed</small>}
         </li>;
       })}</ul></section>
       <section className={`cct-reply cct-reply-${task.reply.status}`}><h4>Acknowledgment</h4><strong>{customerTaskReplyStatus(task.reply.status)}</strong>
-        <p className="cct-verbatim">{task.reply.text}</p>{task.reply.providerMessageId && <small>Provider reference: {task.reply.providerMessageId}</small>}</section>
+        <p className="cct-verbatim">{task.reply.text}</p></section>
       {task.status === "done" && <section className="cct-completion"><h4>Staff confirmation</h4><p>Human-confirmed by {task.completedBy?.name || "Staff"}{task.completedAt !== null && ` · ${taskTimestamp(task.completedAt)}`} · not system-verified.</p>
         {task.completionNote && <p className="cct-verbatim">{task.completionNote}</p>}</section>}
-      <section><h4>Completion log</h4><ol className="cct-log">{task.activity.map((entry, index) => <li key={`${entry.at}-${entry.action}-${index}`}>
-        <span>{entry.action === "created" ? "Task prepared" : entry.action === "claimed" ? "Claimed" : entry.action === "item_completed" ? "Item human-confirmed" : "Task human-confirmed"}
-          {entry.actor && ` · ${entry.actor.name}`}</span><time dateTime={new Date(entry.at).toISOString()}>{taskTimestamp(entry.at)}</time>{entry.note && <p className="cct-verbatim">{entry.note}</p>}
-      </li>)}</ol></section>
+      <div className="cct-prepared"><span>Task prepared</span><time dateTime={new Date(task.activity.find((entry) => entry.action === "created")?.at ?? task.receivedAt).toISOString()}>
+        {taskTimestamp(task.activity.find((entry) => entry.action === "created")?.at ?? task.receivedAt)}</time></div>
     </div></details>
     {error && !confirmOpen && <p className="cct-feedback" role="alert">{error}</p>}
     <Dialog open={confirmOpen} onOpenChange={(open) => { if (!busy) setConfirmOpen(open); }}>
