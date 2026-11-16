@@ -60,6 +60,8 @@ import { useTabLeader } from "@/hooks/useTabLeader";
 import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AiConcierge from "@/components/AiConcierge";
+import { ClaudeCustomerTasksProvider, ClaudeCustomerTasksQueue, ClaudeCustomerTaskStreamCard, customerTaskIdFromMessage } from "@/components/ClaudeCustomerTasks";
+import { CLAUDE_CUSTOMER_TASK_ACTION } from "@shared/claudeCustomerTasks";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import "./command-chat-crm-review.css";
 import "./command-chat-left-cohesion.css";
@@ -797,6 +799,7 @@ function buildThumbtackLeadDraftContext(lead: CommandLead): string {
 }
 
 function isHiddenCommandNotification(message: ChannelMessage) {
+  if (message.quickAction === CLAUDE_CUSTOMER_TASK_ACTION) return false;
   if (HIDDEN_COMMAND_QUICK_ACTIONS.includes(message.quickAction as (typeof HIDDEN_COMMAND_QUICK_ACTIONS)[number])) return true;
   if (message.quickAction === "sync_watchdog") return true;
   if (message.role === "system" && /\bSync Alert\b/i.test(message.body)) return true;
@@ -804,6 +807,7 @@ function isHiddenCommandNotification(message: ChannelMessage) {
 }
 
 function isServiceAlert(message: ChannelMessage) {
+  if (message.quickAction === CLAUDE_CUSTOMER_TASK_ACTION) return false;
   if (message.role !== "system") return false;
   return message.quickAction === "post_start_overdue"
     || message.quickAction === "possible_noshow"
@@ -979,6 +983,7 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export default function CommandChatExactLive() {
+  const customerTaskUtils = trpc.useUtils();
   const { data: agentMe, isLoading: agentLoading, isError: agentError, refetch: refetchAgent } = trpc.agents.me.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
     retry: 2,
@@ -1065,6 +1070,7 @@ export default function CommandChatExactLive() {
   const [unreadMentionIds, setUnreadMentionIds] = useState<number[]>([]);
   const [modal, setModal] = useState<ModalKind>(null);
   const [threadId, setThreadId] = useState<number | null>(null);
+  const [rightPanelTab, setRightPanelTab] = useState<"leads" | "tasks">("leads");
   const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [threadDraft, setThreadDraft] = useState("");
   const [replyTarget, setReplyTarget] = useState<QuoteReplyTarget | null>(null);
@@ -1688,10 +1694,11 @@ export default function CommandChatExactLive() {
   }, [mentionMessages, mentionStorageKey]);
 
   useOpsStream({
-    onConnected: () => refreshScope.manager?.reconnect(),
+    onConnected: () => { refreshScope.manager?.reconnect(); void customerTaskUtils.claudeCustomerTasks.invalidate(); requestCommandRefresh(commandQueryKeys.messages); },
     onNewMessage: (updatedChannel) => {
       if (!updatedChannel || updatedChannel === channel) requestCommandRefresh(commandQueryKeys.messages);
       if (!updatedChannel || updatedChannel === "command") {
+        void customerTaskUtils.claudeCustomerTasks.invalidate();
         requestCommandRefresh(commandQueryKeys.bookings);
         if (selectedAgentPerformanceId !== null) void utils.commandCenter.getAgentPerformance.invalidate();
       }
@@ -1744,6 +1751,7 @@ export default function CommandChatExactLive() {
       requestCommandRefresh(commandQueryKeys.superAlerts);
       requestCommandRefresh(commandQueryKeys.superAlertIds);
     },
+    onTaskUpdate: () => { void customerTaskUtils.claudeCustomerTasks.invalidate(); requestCommandRefresh(commandQueryKeys.messages); },
   }, { enabled: isAuthenticated, label: "CommandChatExactLive" });
 
   // The exact Command Chat already owns the command-channel query, so use it for
@@ -1855,6 +1863,7 @@ export default function CommandChatExactLive() {
 
   return (
     <CommandChatApiDebugProvider controller={apiDebug}>
+    <ClaudeCustomerTasksProvider callerId={String(agentMe.id)}>
     <main className="ccc-app ccc-widget-app ccc-live" aria-label="MIB Command workspace">
       <CommandChatApiDebugPanel controller={apiDebug} waitingFor={{
         ...(!leftTeamSmsSessionIds.length ? { "commandCenter.listInboundTeamSmsEvents": "Waiting for inbox team IDs" } : {}),
@@ -1922,7 +1931,11 @@ export default function CommandChatExactLive() {
           </section>
 
           <aside className={`ccc-command-panel ccc-right-panel ${threadId !== null ? "ccc-right-panel-thread-open" : ""}`}>
-            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <><div className="ccc-lead-context-topline"><strong>Leads</strong><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} smsInbox={smsInbox} claimPending={claimCommandLead.isPending || unclaimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending || unbookLeadMutation.isPending} callPending={callLeadMutation.isPending} bridgePending={testBridgeMutation.isPending} onClaim={claimLeadFromQueue} onUnclaim={unclaimLeadFromQueue} onCall={callLeadFromQueue} onTestBridge={testBridgeFromQueue} onMarkBooked={requestLeadBooked} onUnbook={unbookLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /></>}
+            {threadId !== null ? <ThreadPanel thread={threadDetail} callerName={callerName} draft={threadDraft} pending={sendThreadMessage.isPending} photoMap={photoMap} onDraft={setThreadDraft} onSend={submitThreadReply} onClose={() => { setThreadId(null); setThreadDraft(""); }} /> : <>
+              <div className="ccc-lead-context-topline"><div className="cct-panel-tabs" role="group" aria-label="Right panel views"><button type="button" aria-pressed={rightPanelTab === "leads"} aria-controls="ccc-leads-panel" onClick={() => setRightPanelTab("leads")}>Leads</button><button type="button" aria-pressed={rightPanelTab === "tasks"} aria-controls="ccc-tasks-panel" onClick={() => setRightPanelTab("tasks")}>Tasks</button></div><div><ServiceAlertPanel alerts={serviceAlerts} /><a href="/admin/leads">Open CRM <ChevronRight /></a></div></div>
+              <div id="ccc-leads-panel" className="cct-panel-content" hidden={rightPanelTab !== "leads"}><LeadQueue title="All leads" description="Quote forms and Thumbtack · newest first" leads={allLeads} smsInbox={smsInbox} claimPending={claimCommandLead.isPending || unclaimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending || unbookLeadMutation.isPending} callPending={callLeadMutation.isPending} bridgePending={testBridgeMutation.isPending} onClaim={claimLeadFromQueue} onUnclaim={unclaimLeadFromQueue} onCall={callLeadFromQueue} onTestBridge={testBridgeFromQueue} onMarkBooked={requestLeadBooked} onUnbook={unbookLeadFromQueue} onOpenSms={openSmsDrawerFromLead} /></div>
+              <div id="ccc-tasks-panel" className="cct-panel-content" hidden={rightPanelTab !== "tasks"}><ClaudeCustomerTasksQueue /></div>
+            </>}
           </aside>
         </div>
       </section>
@@ -1997,6 +2010,7 @@ export default function CommandChatExactLive() {
       {notice && <div className="ccc-notice" role="status"><CircleDot />{notice}</div>}
       {showNewMessage && <LiveNewMessageModal close={() => setShowNewMessage(false)} refresh={() => { void reconcileCommandQuery(commandQueryKeys.inbox); }} />}
     </main>
+    </ClaudeCustomerTasksProvider>
     </CommandChatApiDebugProvider>
   );
 }
@@ -2082,6 +2096,7 @@ function LiveMessage({ message, callerName, photoUrl, voiceCallIdentityByVapiId,
     callerName: voiceCaller?.callerName || callHandoff.callerName,
     callerPhone: voiceCaller?.callerPhone || callHandoff.callerPhone,
   } : null;
+  if (message.quickAction === CLAUDE_CUSTOMER_TASK_ACTION) return <div id={`ccc-command-message-${message.id}`}><ClaudeCustomerTaskStreamCard taskId={customerTaskIdFromMessage(message)} /></div>;
   if (confirmationReply) return <ConfirmationReplyCard alert={confirmationReply} timestamp={message.ts} />;
   if (resolvedCallHandoff) return <IncomingCallHandoffCard handoff={resolvedCallHandoff} evidence={voiceEvidence} timestamp={message.ts} />;
   if (system) return <div className="ccc-message ccc-message-system"><span><Activity />{renderMessageBody(message.body)}<time>{formatTime(message.ts)}</time></span></div>;

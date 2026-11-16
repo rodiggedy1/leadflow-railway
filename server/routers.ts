@@ -45,6 +45,7 @@ import { schedulingRouter } from "./schedulingRouter";
 import { leadflowScheduleRouter } from "./leadflowScheduleRouter";
 import { leadflowScheduleCallsRouter } from "./leadflowScheduleCallsRouter";
 import { opsChatRouter } from "./opsChatRouter";
+import { claudeCustomerTasksRouter } from "./claudeCustomerTasksRouter";
 import { thumbtackLeadRouter } from "./thumbtackLeadRouter";
 import { madisonMovesRouter } from "./madisonsMovesRouter";
 import { madisonRouter } from "./madisonRouter";
@@ -7761,6 +7762,7 @@ Return JSON with exactly these fields:
   leadflowSchedule: leadflowScheduleRouter,
   leadflowScheduleCalls: leadflowScheduleCallsRouter,
   opsChat: opsChatRouter,
+  claudeCustomerTasks: claudeCustomerTasksRouter,
   madison: madisonRouter,
   aiActions: aiActionsRouter,
   followUps: followUpsRouter,
