@@ -330,6 +330,8 @@ export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCusto
     }),
     completeTask: (id, note, actor) => mutateTask(id, actor, (task, staff) => {
       requireOwner(task, staff);
+      const completionNote = typeof note === "string" ? note.trim() : "";
+      if (!completionNote) return fail("PRECONDITION_FAILED", "Add a completion note before marking this task done.");
       if (task.status === "done") return false;
       if (task.status !== "claimed") return fail("PRECONDITION_FAILED", "Claim the task before confirming it done.");
       const now = Date.now();
@@ -340,7 +342,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCusto
         task.activity.push({ action: "item_completed", actor: staff, at: now, note: item.id });
       }
       task.status = "done"; task.completedAt = now; task.completedBy = staff;
-      task.completionNote = note?.trim() || null;
+      task.completionNote = completionNote;
       task.activity.push({ action: "completed", actor: staff, at: now, note: task.completionNote }); return true;
     }),
   };

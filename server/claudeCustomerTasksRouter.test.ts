@@ -47,6 +47,27 @@ describe("customer task authenticated router — offline", () => {
     await h.router.createCaller(context(false)).claim({ id: 77 });
     expect(h.store.claimTask).toHaveBeenCalledWith(77, { id: "42", name: "Verified Owner" });
   });
+  it.each([{ agentId: 42, agentName: "Staff One", agentEmail: "staff-one@example.test" },
+    { agentId: 83, agentName: "Staff Two", agentEmail: "staff-two@example.test" }])("regular agent $agentId has full identity/read/claim/checklist/completion access without an admin flag", async staff => {
+    const h = harness(); vi.mocked(getAgentFromRequest).mockResolvedValue({ ...staff, isAdmin: false } as any);
+    const caller = h.router.createCaller(context(false));
+    const actor = { id: String(staff.agentId), name: staff.agentName };
+    expect(await caller.identity()).toEqual(actor);
+    expect(await caller.list({})).toEqual([task]); expect(await caller.get({ id: 77 })).toEqual(task);
+    expect(await caller.claim({ id: 77 })).toEqual(task);
+    expect(await caller.completeItem({ id: 77, itemId: "item-1" })).toEqual(task);
+    expect(await caller.complete({ id: 77, note: "Handled by staff" })).toEqual(task);
+    expect(h.store.claimTask).toHaveBeenCalledWith(77, actor);
+    expect(h.store.completeItem).toHaveBeenCalledWith(77, "item-1", actor);
+    expect(h.store.completeTask).toHaveBeenCalledWith(77, "Handled by staff", actor);
+    expect(h.broadcast).toHaveBeenCalledTimes(3);
+  });
+  it.each(["identity", "list", "get", "claim", "completeItem", "complete"] as const)("anonymous %s access remains rejected before task-store access", async route => {
+    const h = harness(), guest = h.router.createCaller(context(false));
+    const input = route === "identity" ? undefined : route === "list" ? {} : route === "completeItem" ? { id: 77, itemId: "item-1" } : { id: 77 };
+    await expect((guest[route] as any)(input)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(h.getStore).not.toHaveBeenCalled(); expect(h.broadcast).not.toHaveBeenCalled();
+  });
   it("unauthenticated reads and writes never acquire store or execute task mutations", async () => {
     const h = harness(), guest = h.router.createCaller(context(false));
     await expect(guest.list({})).rejects.toMatchObject({ code: "UNAUTHORIZED" });
@@ -58,6 +79,15 @@ describe("customer task authenticated router — offline", () => {
     await expect((h.caller as any)[route](input)).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(h.getStore).not.toHaveBeenCalled(); expect(h.broadcast).not.toHaveBeenCalled();
   });
+  it.each([undefined, "", " \t\n "])("rejects a missing or blank completion note before any task write: %s", async note => {
+    const h = harness();
+    await expect((h.caller.complete as any)({ id: 77, ...(note === undefined ? {} : { note }) })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(h.getStore).not.toHaveBeenCalled(); expect(h.broadcast).not.toHaveBeenCalled();
+  });
+  it("trims and persists the required completion note without inventing staff identity", async () => {
+    const h = harness(); await h.caller.complete({ id: 77, note: "  Added the requested access instructions.  " });
+    expect(h.store.completeTask).toHaveBeenCalledWith(77, "Added the requested access instructions.", { id: "owner-verified", name: "Verified Owner" });
+  });
   it.each(["CONFLICT", "FORBIDDEN", "NOT_FOUND", "PRECONDITION_FAILED"] as const)("maps %s task errors without broadcasting a failed write", async code => {
     const h = harness(); vi.mocked(h.store.claimTask).mockRejectedValue(new CustomerTaskStoreError(code, "Precise task error"));
     await expect(h.caller.claim({ id: 77 })).rejects.toMatchObject({ code, message: "Precise task error" });
@@ -65,11 +95,11 @@ describe("customer task authenticated router — offline", () => {
   });
   it("broadcast failure cannot make a committed task action look failed", async () => {
     const h = harness(); h.broadcast.mockImplementation(() => { throw new Error("listener unavailable"); });
-    expect(await h.caller.complete({ id: 77 })).toEqual(task); expect(h.store.completeTask).toHaveBeenCalledTimes(1);
+    expect(await h.caller.complete({ id: 77, note: "Requested work completed." })).toEqual(task); expect(h.store.completeTask).toHaveBeenCalledTimes(1);
   });
   it("unknown store failure is safely mapped and never broadcasts", async () => {
     const h = harness(); vi.mocked(h.store.completeTask).mockRejectedValue(new Error("secret database detail"));
-    await expect(h.caller.complete({ id: 77 })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: "Customer task could not be saved or loaded." });
+    await expect(h.caller.complete({ id: 77, note: "Requested work completed." })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: "Customer task could not be saved or loaded." });
     expect(h.broadcast).not.toHaveBeenCalled();
   });
   it("lazy application adapter reports unavailable DB on call only", async () => {

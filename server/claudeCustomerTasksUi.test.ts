@@ -37,7 +37,7 @@ const div = (props: { children?: React.ReactNode }) => React.createElement("div"
 type Ui = {
   customerTaskIdFromMessage: (message: { quickAction: string | null; metadata: string | null }) => number | null;
   customerTaskIsMine: (task: CustomerTask, callerId: string) => boolean;
-  customerTaskQueues: (tasks: CustomerTask[], callerId: string) => Record<"unclaimed" | "mine" | "done", CustomerTask[]>;
+  customerTaskQueues: (tasks: CustomerTask[], callerId: string) => Record<"open" | "mine" | "done", CustomerTask[]>;
   customerTaskReplyStatus: (status: CustomerTask["reply"]["status"]) => string;
   TaskCard: React.ComponentType<any>;
   CustomerTaskQueue: React.ComponentType<any>;
@@ -100,19 +100,19 @@ describe("Customer task compact queue and exact canonical identity", () => {
     expect(ui.customerTaskIdFromMessage({ quickAction: "new_lead", metadata: '{"taskId":101}' })).toBeNull();
   });
 
-  it("counts Unclaimed/Mine/Done without caps and matches owner id, never owner name", () => {
+  it("counts Open/Mine/Done without caps and matches owner id, never owner name", () => {
     const tasks = [fixture(), fixture({ id: 102, status: "claimed", owner: actor }), fixture({ id: 103, status: "claimed", owner: { id: "18", name: actor.name } }), fixture({ id: 104, status: "done", owner: actor })];
     const queues = ui.customerTaskQueues(tasks, "17");
-    expect(queues.unclaimed.map((task) => task.id)).toEqual([101]);
+    expect(queues.open.map((task) => task.id)).toEqual([103, 102, 101]);
     expect(queues.mine.map((task) => task.id)).toEqual([102]);
     expect(queues.done.map((task) => task.id)).toEqual([104]);
     expect(ui.customerTaskIsMine(tasks[2], "17")).toBe(false);
     expect(ui.customerTaskIsMine(tasks[1], "")).toBe(false);
     const many = Array.from({ length: 250 }, (_, index) => fixture({ id: index + 1 }));
-    expect(ui.customerTaskQueues(many, "17").unclaimed).toHaveLength(250);
+    expect(ui.customerTaskQueues(many, "17").open).toHaveLength(250);
     const rendered = html(ui.CustomerTaskQueue, { tasks: many, callerId: "17", actions: actions(), onRefresh: vi.fn() });
     expect([...rendered.matchAll(/data-task-id=/g)]).toHaveLength(250);
-    expect(rendered).toContain("Unclaimed<b>250</b>");
+    expect(rendered).toContain("Open<b>250</b>");
     expect(tasks[0].id).toBe(101);
   });
 
@@ -121,13 +121,14 @@ describe("Customer task compact queue and exact canonical identity", () => {
     const harness = stateHarness();
     const props = { tasks, callerId: "17", actions: actions(), onRefresh: vi.fn() };
     let tree = harness.render("CustomerTaskQueue", props);
-    expect(text(tree)).toContain("Claimed by teammates 1");
+    expect(elements(tree).filter((node) => node.type === harness.ui.TaskCard).map((node) => node.props.task.id)).toEqual([103, 102, 101]);
+    expect(elements(tree).some((node) => node.type === "details" && node.props.className === "cct-other-claimed")).toBe(false);
     button(tree, "Mine1").props.onClick(); tree = harness.render("CustomerTaskQueue", props);
     const cards = elements(tree).filter((node) => node.type === harness.ui.TaskCard);
     expect(cards.map((node) => node.props.task.id)).toEqual([102]);
     button(tree, "Done1").props.onClick(); tree = harness.render("CustomerTaskQueue", props);
     expect(elements(tree).filter((node) => node.type === harness.ui.TaskCard).map((node) => node.props.task.id)).toEqual([104]);
-    expect(html(ui.CustomerTaskQueue, { ...props, tasks: [], failed: true })).not.toContain("No unclaimed tasks");
+    expect(html(ui.CustomerTaskQueue, { ...props, tasks: [], failed: true })).not.toContain("No open tasks");
   });
 
   it.each(["prepared", "sent", "uncertain", "suppressed"] as const)("shows actual acknowledgment status %s, never delivery or operational verification", (status) => {
@@ -189,7 +190,9 @@ describe("Customer task human completion and authoritative updates", () => {
     const claim = button(harness.render("TaskCard", props), "Claim"); claim.props.onClick(); claim.props.onClick();
     expect(a.claim).toHaveBeenCalledTimes(1); expect(a.claim).toHaveBeenCalledWith(101);
     expect(task.owner).toBeNull(); expect(task.status).toBe("unclaimed");
+    const saving = button(harness.render("TaskCard", props), "Claiming…"); expect(saving).toBeDefined(); expect(saving.props.disabled).toBe(true);
     resolve(); await flush();
+    expect(button(harness.render("TaskCard", props), "Claim").props.disabled).toBe(false);
   });
 
   it("permits the whole-task popup before checking each item and completes only after explicit confirmation", async () => {
@@ -205,6 +208,8 @@ describe("Customer task human completion and authoritative updates", () => {
     expect(prompt).toContain("I completed all the actions in this task.");
     expect(prompt).toContain("human confirmation"); expect(prompt).toContain("not system verification");
     expect(prompt).toContain("No booking change, customer text, or conversation closure");
+    expect(prompt).toContain("(required)");
+    confirm.props.onConfirm(); await flush(); expect(a.complete).not.toHaveBeenCalled();
     confirm.props.onNote("  Synthetic staff completion note  "); tree = harness.render("TaskCard", props);
     elements(tree).find((node) => node.type === harness.ui.TaskCompletionConfirm)!.props.onConfirm(); await flush();
     expect(a.complete).toHaveBeenCalledWith(101, "Synthetic staff completion note"); expect(a.completeItem).not.toHaveBeenCalled();
@@ -249,7 +254,7 @@ describe("Customer task human completion and authoritative updates", () => {
     const claim = vi.fn((_input: unknown) => new Promise<CustomerTask>((resolve) => { resolveClaim = resolve; }));
     const completeItem = vi.fn(async () => fixture({ status: "claimed", owner: actor }));
     const complete = vi.fn(async () => fixture({ status: "done", owner: actor, completedBy: actor, completedAt: NOW }));
-    const api = { useUtils: () => ({ claudeCustomerTasks: { invalidate, get: { setData: getSet }, list: { setData: listSet } } }),
+    const api = { useUtils: () => ({ claudeCustomerTasks: { invalidate, get: { setData: getSet, cancel: vi.fn(async () => {}) }, list: { setData: listSet, cancel: vi.fn(async () => {}) } } }),
       claudeCustomerTasks: {
         identity: { useQuery: () => ({ data: actor, isLoading: false, isError: false }) },
         list: { useQuery: () => ({ data: rows, isLoading: false, isError: false }) },

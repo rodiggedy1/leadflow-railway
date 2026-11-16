@@ -5,11 +5,11 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import "./claude-customer-tasks.css";
 
-export type CustomerTaskView = "unclaimed" | "mine" | "done";
+export type CustomerTaskView = "open" | "mine" | "done";
 export type CustomerTaskActions = {
   claim: (id: number) => Promise<void>;
   completeItem: (id: number, itemId: string) => Promise<void>;
-  complete: (id: number, note?: string) => Promise<void>;
+  complete: (id: number, note: string) => Promise<void>;
 };
 type TaskContextValue = {
   callerId: string;
@@ -39,7 +39,7 @@ export function customerTaskIsMine(task: CustomerTask, callerId: string): boolea
 export function customerTaskQueues(tasks: readonly CustomerTask[], callerId: string): Record<CustomerTaskView, CustomerTask[]> {
   const sorted = [...tasks].sort((left, right) => right.receivedAt - left.receivedAt || right.id - left.id);
   return {
-    unclaimed: sorted.filter((task) => task.status === "unclaimed"),
+    open: sorted.filter((task) => task.status !== "done"),
     mine: sorted.filter((task) => task.status === "claimed" && customerTaskIsMine(task, callerId)),
     done: sorted.filter((task) => task.status === "done"),
   };
@@ -82,17 +82,27 @@ export function ClaudeCustomerTasksProvider({ callerId, children }: { callerId: 
   const applyRecord = (record: CustomerTask) => {
     utils.claudeCustomerTasks.get.setData({ id: record.id }, record);
     utils.claudeCustomerTasks.list.setData({}, (current) => current
-      ? current.map((task) => task.id === record.id ? record : task)
+      ? current.some((task) => task.id === record.id)
+        ? current.map((task) => task.id === record.id ? record : task)
+        : [...current, record]
       : undefined);
   };
+  const cancelReads = (id: number) => Promise.all([
+    utils.claudeCustomerTasks.list.cancel({}), utils.claudeCustomerTasks.get.cancel({ id }),
+  ]);
   const run = async (id: number, request: () => Promise<CustomerTask>) => {
     if (inFlight.current.has(id)) throw new Error("This task update is already saving. Please wait.");
     inFlight.current.add(id);
     setPendingIds(new Set(inFlight.current));
-    try { applyRecord(await request()); }
+    try {
+      await cancelReads(id);
+      const record = await request();
+      await cancelReads(id);
+      applyRecord(record);
+    }
     finally {
       // A conflict must refresh the canonical owner/status too; never claim locally.
-      refresh();
+      try { await utils.claudeCustomerTasks.invalidate(); } catch { /* Keep a saved canonical record if refresh fails. */ }
       inFlight.current.delete(id);
       setPendingIds(new Set(inFlight.current));
     }
@@ -100,7 +110,7 @@ export function ClaudeCustomerTasksProvider({ callerId, children }: { callerId: 
   const actions: CustomerTaskActions = {
     claim: (id) => run(id, () => claim.mutateAsync({ id })),
     completeItem: (id, itemId) => run(id, () => completeItem.mutateAsync({ id, itemId })),
-    complete: (id, note) => run(id, () => complete.mutateAsync({ id, ...(note?.trim() ? { note: note.trim() } : {}) })),
+    complete: (id, note) => run(id, () => complete.mutateAsync({ id, note: note.trim() })),
   };
   return <TaskContext.Provider value={{ callerId: effectiveCallerId, tasks: query.data ?? [], loading: query.isLoading || identity.isLoading,
     failed: query.isError || identity.isError, pendingIds, actions, refresh }}>{children}</TaskContext.Provider>;
@@ -123,15 +133,14 @@ export function CustomerTaskQueue({ tasks, callerId, loading = false, failed = f
   tasks: CustomerTask[]; callerId: string; loading?: boolean; failed?: boolean; pendingIds?: ReadonlySet<number>;
   actions: CustomerTaskActions; onRefresh: () => void;
 }) {
-  const [view, setView] = useState<CustomerTaskView>("unclaimed");
+  const [view, setView] = useState<CustomerTaskView>("open");
   const queues = customerTaskQueues(tasks, callerId);
-  const otherClaimed = tasks.filter((task) => task.status === "claimed" && !customerTaskIsMine(task, callerId));
   return <section className="cct-queue" aria-label="Customer tasks">
     <div className="cct-queue-controls">
       <div className="cct-views" role="group" aria-label="Task queue view">
-        {(["unclaimed", "mine", "done"] as const).map((option) => <button type="button" key={option}
+        {(["open", "mine", "done"] as const).map((option) => <button type="button" key={option}
           aria-pressed={view === option} onClick={() => setView(option)}>
-          {option === "unclaimed" ? "Unclaimed" : option === "mine" ? "Mine" : "Done"}<b>{queues[option].length}</b>
+          {option === "open" ? "Open" : option === "mine" ? "Mine" : "Done"}<b>{queues[option].length}</b>
         </button>)}
       </div>
       <button type="button" className="cct-refresh" title="Refresh tasks" aria-label="Refresh tasks" onClick={onRefresh}><RefreshCw /></button>
@@ -140,12 +149,7 @@ export function CustomerTaskQueue({ tasks, callerId, loading = false, failed = f
     {loading ? <p className="cct-feedback" role="status"><Loader2 />Loading tasks…</p> : <>
       <div className="cct-task-list">{queues[view].map((task) => <TaskCard key={task.id} task={task} callerId={callerId}
         pending={pendingIds.has(task.id)} actions={actions} />)}</div>
-      {!queues[view].length && !failed && <p className="cct-feedback">{view === "unclaimed" ? "No unclaimed tasks." : view === "mine" ? "No tasks claimed by you." : "No staff-confirmed tasks yet."}</p>}
-      {view === "unclaimed" && otherClaimed.length > 0 && <details className="cct-other-claimed">
-        <summary>Claimed by teammates <b>{otherClaimed.length}</b></summary>
-        <div className="cct-task-list">{otherClaimed.map((task) => <TaskCard key={task.id} task={task} callerId={callerId}
-          pending={pendingIds.has(task.id)} actions={actions} />)}</div>
-      </details>}
+      {!queues[view].length && !failed && <p className="cct-feedback">{view === "open" ? "No open tasks." : view === "mine" ? "No tasks claimed by you." : "No staff-confirmed tasks yet."}</p>}
     </>}
   </section>;
 }
@@ -174,11 +178,11 @@ export function TaskCompletionConfirm({ task, note, pending, error, allowed, onN
     <p>I completed all the actions in this task.</p>
     <p>This records your human confirmation of the entire request and checklist, not system verification.</p>
     <p className="cct-confirm-boundary">No booking change, customer text, or conversation closure is performed.</p>
-    <label>Completion note <span>(optional)</span><textarea value={note} onChange={(event) => onNote(event.target.value)} placeholder="What did you complete?" rows={2} /></label>
+    <label>Completion note <span>(required)</span><textarea value={note} onChange={(event) => onNote(event.target.value)} placeholder="What did you complete?" rows={2} required /></label>
     {!allowed && <p className="cct-feedback" role="alert">Only the current task owner can mark this done.</p>}
     {error && <p className="cct-feedback" role="alert">{error}</p>}
     <footer><button type="button" disabled={pending} onClick={onCancel}>Cancel</button><button type="button" className="cct-primary"
-      disabled={pending || !allowed} onClick={onConfirm}>{pending ? <Loader2 /> : <Check />}{pending ? "Saving…" : "Confirm done"}</button></footer>
+      disabled={pending || !allowed || !note.trim()} onClick={onConfirm}>{pending ? <Loader2 /> : <Check />}{pending ? "Saving…" : "Confirm done"}</button></footer>
   </div>;
 }
 
@@ -190,27 +194,30 @@ export function TaskCard({ task, callerId, pending = false, actions, placement =
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const busyRef = useRef(false);
+  const busy = pending || saving;
   const mine = customerTaskIsMine(task, callerId);
   const editable = task.status === "claimed" && mine;
   const canComplete = editable;
   const update = async (request: () => Promise<void>) => {
-    if (pending || busyRef.current) return;
+    if (busy || busyRef.current) return;
     busyRef.current = true;
+    setSaving(true);
     setError("");
     try { await request(); }
     catch { setError("Task update failed. The latest owner and status are being refreshed; retry after reviewing them."); }
-    finally { busyRef.current = false; }
+    finally { busyRef.current = false; setSaving(false); }
   };
   return <article className={`cct-card cct-card-${placement}`} data-task-id={task.id} data-task-status={task.status} aria-label={`Task: ${task.title}`}>
     <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">Customer task</span><strong>{task.title}</strong>
       <small className="cct-customer-identity"><span>{task.customerName || "Customer"}</span><span className="cct-customer-phone">{task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
     <div className="cct-card-status">
       <span>{task.status === "done" ? "Done · human-confirmed" : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
-      {task.status === "unclaimed" && <button type="button" className="cct-primary" disabled={pending || !callerId}
-        onClick={() => void update(() => actions.claim(task.id))}>Claim</button>}
-      {editable && <button type="button" disabled={pending || !canComplete} title="Confirm all actions in this task are complete"
-        onClick={() => { if (!canComplete || pending) return; setError(""); setNote(""); setConfirmOpen(true); }}>Mark done</button>}
+      {task.status === "unclaimed" && <button type="button" className="cct-primary" disabled={busy || !callerId}
+        onClick={() => void update(() => actions.claim(task.id))}>{busy ? <><Loader2 aria-hidden="true" />Claiming…</> : "Claim"}</button>}
+      {editable && <button type="button" disabled={busy || !canComplete} title="Confirm all actions in this task are complete"
+        onClick={() => { if (!canComplete || busy) return; setError(""); setNote(""); setConfirmOpen(true); }}>Mark done</button>}
     </div>
     <details className="cct-details"><summary>Request &amp; acknowledgment <ChevronDown /></summary><div className="cct-details-body">
       <dl className="cct-context"><dt>Customer</dt><dd>{task.customerName || "Name not recorded"} · {task.customerPhone}</dd>
@@ -221,7 +228,7 @@ export function TaskCard({ task, callerId, pending = false, actions, placement =
         const confirmed = item.completedBy !== null && item.completedAt !== null;
         return <li key={item.id}><div><strong>{item.title}</strong><blockquote>{item.evidenceQuote}</blockquote>
           {confirmed && <small>Human-confirmed by {item.completedBy!.name} · {taskTimestamp(item.completedAt!)}</small>}</div>
-          {confirmed ? <Check aria-label="Item human-confirmed" /> : editable ? <button type="button" disabled={pending}
+          {confirmed ? <Check aria-label="Item human-confirmed" /> : editable ? <button type="button" disabled={busy}
             aria-label={`Confirm completed item: ${item.title}`} onClick={() => void update(() => actions.completeItem(task.id, item.id))}>Confirm item</button> : <small>Not confirmed</small>}
         </li>;
       })}</ul></section>
@@ -235,13 +242,13 @@ export function TaskCard({ task, callerId, pending = false, actions, placement =
       </li>)}</ol></section>
     </div></details>
     {error && !confirmOpen && <p className="cct-feedback" role="alert">{error}</p>}
-    <Dialog open={confirmOpen} onOpenChange={(open) => { if (!pending) setConfirmOpen(open); }}>
+    <Dialog open={confirmOpen} onOpenChange={(open) => { if (!busy) setConfirmOpen(open); }}>
       <DialogContent className="cct-confirm-dialog"><DialogTitle>Mark task done?</DialogTitle>
         <DialogDescription>Staff confirmation only</DialogDescription>
-        <TaskCompletionConfirm task={task} note={note} pending={pending} error={error} allowed={canComplete}
+        <TaskCompletionConfirm task={task} note={note} pending={busy} error={error} allowed={canComplete}
           onNote={setNote} onCancel={() => setConfirmOpen(false)} onConfirm={() => {
-            if (!canComplete || pending) return;
-            void update(async () => { await actions.complete(task.id, note.trim() || undefined); setConfirmOpen(false); });
+            if (!canComplete || busy || !note.trim()) return;
+            void update(async () => { await actions.complete(task.id, note.trim()); setConfirmOpen(false); });
           }} />
       </DialogContent>
     </Dialog>

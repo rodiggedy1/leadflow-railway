@@ -219,6 +219,25 @@ describe("customer task store — offline transactional SQL port", () => {
     expect(h.state().sessions[0]).not.toHaveProperty("assignedAgentName");
     expect(h.queries.filter(q => q.sql.includes("FROM ops_chat_messages WHERE id") && q.sql.includes("FOR UPDATE")).length).toBeGreaterThan(1);
   });
+  it("claim and item confirmation keep the same task claimed and listed until explicit whole-task completion", async () => {
+    const h = port(); await h.prepared(); const id = h.task().id;
+    const claimed = await h.store.claimTask(id, owner);
+    expect(claimed).toMatchObject({ id, status: "claimed", completedAt: null, completionNote: null });
+    expect(await h.store.list()).toEqual([claimed]);
+    await h.store.completeItem(id, "item-1", owner); await h.store.completeItem(id, "item-2", owner);
+    const stillOpen = await h.store.get(id);
+    expect(stillOpen).toMatchObject({ id, status: "claimed", completedAt: null, completionNote: null });
+    expect(await h.store.list()).toEqual([stillOpen]); expect(h.state().cards).toHaveLength(1);
+    const done = await h.store.completeTask(id, "Both requested changes were completed manually.", owner);
+    expect(done).toMatchObject({ id, status: "done", completionNote: "Both requested changes were completed manually." });
+    expect(await h.store.list()).toEqual([done]); expect(h.state().cards).toHaveLength(1);
+  });
+  it.each([undefined, "", " \t\n "])("requires a nonempty completion note without changing the claimed task: %s", async note => {
+    const h = port(); await h.prepared(); const id = h.task().id; await h.store.claimTask(id, owner);
+    const before = structuredClone(h.state());
+    await expect(h.store.completeTask(id, note, owner)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(h.state()).toEqual(before); expect((await h.store.get(id))?.status).toBe("claimed");
+  });
   it("only authenticated owner confirms items/task; final confirmation marks remaining items and is idempotent, no send or business writes", async () => {
     const h = port(); await h.prepared(); const id = h.task().id;
     await expect(h.store.completeTask(id, "done", owner)).rejects.toMatchObject({ code: "FORBIDDEN" });

@@ -40,7 +40,7 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
       .mutation(({ input, ctx }) => write(store => store.claimTask(input.id, actor(ctx.opsCaller)))),
     completeItem: opsChatProcedure.input(z.object({ id, itemId: z.string().min(1) }).strict()).output(customerTaskSchema)
       .mutation(({ input, ctx }) => write(store => store.completeItem(input.id, input.itemId, actor(ctx.opsCaller)))),
-    complete: opsChatProcedure.input(z.object({ id, note: z.string().optional() }).strict()).output(customerTaskSchema)
+    complete: opsChatProcedure.input(z.object({ id, note: z.string().trim().min(1, "Add a completion note before marking this task done.") }).strict()).output(customerTaskSchema)
       .mutation(({ input, ctx }) => write(store => store.completeTask(input.id, input.note, actor(ctx.opsCaller)))),
   });
 }
