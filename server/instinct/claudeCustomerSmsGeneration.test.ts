@@ -6,7 +6,7 @@ import type { InitialLeadDraftOptions } from "./claudeAgentClient";
 import { buildSystemPrompt } from "../csReplyStream";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "../knowledgeBase";
 import {
-  CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS, createClaudeCustomerSmsGenerator,
+  CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS, CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS, createClaudeCustomerSmsGenerator,
   type ClaudeCustomerSmsGenerationBinding, type ClaudeCustomerSmsGenerationOptions,
 } from "./claudeCustomerSmsGeneration";
 import type { AlternativeSessionRow } from "./claudeSmsAlternativeSessionRead";
@@ -82,6 +82,33 @@ describe("content-only Claude customer SMS plan", () => {
     expect(CLAUDE_SMS_DRAFT_INSTRUCTIONS).toContain("This is human review only");
     expect(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS).not.toContain("This is human review only");
     expect(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS).toContain("durably save the task before submitting");
+  });
+
+  it("appends only the reversible replyText style before the full original writing prompt", async () => {
+    const f = fixture(), h = harness();
+    await h.generate(f.binding, f.session);
+    const prompt = h.runner.mock.calls[0][0].systemPrompt;
+    expect(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS.endsWith("\n\n" + CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toBe(true);
+    expect(prompt.split(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toHaveLength(2);
+    expect(prompt.indexOf(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toBeLessThan(prompt.indexOf(buildSystemPrompt()));
+    expect(prompt.endsWith(buildSystemPrompt())).toBe(true);
+    for (const instruction of ["not friendliness", "Do not impose a character limit", "light, relevant emoji", "rather than adding emojis to every reply", "Avoid playful emojis for complaints or sensitive issues", "Do not use em dashes (U+2014), en dashes (U+2013)", "dash-separated phrases or dash bullet lists", "Do not change task titles, checklist content or evidence quotes"]) {
+      expect(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS).toContain(instruction);
+    }
+    expect(CLAUDE_SMS_DRAFT_INSTRUCTIONS).not.toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);
+    const log = readFileSync(new URL("../../docs/instinct/customer-sms-prompt-history.md", import.meta.url), "utf8");
+    expect(log).toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);
+    expect(log).toContain("SMS-STYLE-001");
+    expect(log).toContain("Rollback of this adjustment only");
+  });
+
+  it.each([
+    "Hi Maya! We'll review the Friday change and oven request, then confirm once updated 🙂",
+    "Hi Maya, we'll take care of your request and confirm once it's updated.",
+    "Hi Maya! We'll review your request and confirm once updated. Our number is 202-555-0199.",
+  ])("preserves the exact generated friendly text and every task item without postprocessing: %s", async replyText => {
+    const f = fixture(), plan = { replyText, task };
+    expect(await harness(plan).generate(f.binding, f.session)).toEqual(plan);
   });
 
   it("accepts a grounded ordinary reply with no human task", async () => {
