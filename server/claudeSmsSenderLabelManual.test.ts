@@ -359,6 +359,10 @@ describe("source-level scope proof", () => {
       restored = restored.slice(0, node.getStart(currentAst)) + control + restored.slice(node.end);
     }
     restored = restored.replace("import { claudeDraftSourceSchema, reviewedClaudeSmsProvenance, type SmsSenderProvenance } from '../shared/smsSenderProvenance';\n", "");
+    // The pilot adds only this authenticated namespace; existing send bodies
+    // are still independently compared against the exact attribution control.
+    restored = restored.replace('import { claudeCustomerTasksRouter } from "./claudeCustomerTasksRouter";\n', "")
+      .replace('  claudeCustomerTasks: claudeCustomerTasksRouter,\n', "");
     expect(restored).toBe(baselineSource);
   });
   it("preserves the actual identity helper byte-for-byte and every provider call", () => {

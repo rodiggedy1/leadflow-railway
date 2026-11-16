@@ -8,6 +8,8 @@ vi.mock("./_core/agentAuth", () => ({ getAgentFromRequest: vi.fn(async () => nul
 vi.mock("./db", () => ({ getDb: vi.fn(async () => null) }));
 vi.mock("./instinct/claudeThumbtackFirstResponse", () => ({ guardClaudeThumbtackManualSend: vi.fn(async () => undefined),
   guardClaudeThumbtackLegacyDraftAction: vi.fn(async () => undefined) }));
+vi.mock("./instinct/claudeCustomerSmsManualGuard", () => ({ guardClaudeCustomerManualSend: vi.fn(async () => undefined),
+  guardClaudeCustomerLegacyDraftAction: vi.fn(async () => undefined) }));
 import { router, publicProcedure, opsChatProcedure } from "./_core/trpc";
 import { getAgentFromRequest } from "./_core/agentAuth";
 import { guardClaudeThumbtackManualSend, guardClaudeThumbtackLegacyDraftAction } from "./instinct/claudeThumbtackFirstResponse";

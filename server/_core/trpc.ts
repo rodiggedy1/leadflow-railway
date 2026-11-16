@@ -105,7 +105,32 @@ const thumbtackManualSendMiddleware = t.middleware(async opts => {
   return opts.next();
 });
 
-export const publicProcedure = t.procedure.use(timingMiddleware).use(thumbtackManualSendMiddleware);
+const customerReplyManualSendMiddleware = t.middleware(async opts => {
+  if (process.env.CLAUDE_CUSTOMER_SMS_ENABLED !== "true" || opts.type !== "mutation"
+    || !(opts.path in thumbtackManualSendInputs)) return opts.next();
+  const schema = thumbtackManualSendInputs[opts.path as keyof typeof thumbtackManualSendInputs];
+  const parsed = schema.safeParse(await opts.getRawInput());
+  if (!parsed.success) return opts.next();
+  let staff = Boolean(opts.ctx.user);
+  if (!staff) {
+    try { staff = Boolean(await getAgentFromRequest(opts.ctx.req)); }
+    catch { return opts.next(); }
+  }
+  if (!staff) return opts.next();
+  const input = parsed.data as { sessionId?: number; phone?: string };
+  try {
+    const { guardClaudeCustomerManualSend } = await import("../instinct/claudeCustomerSmsManualGuard");
+    await guardClaudeCustomerManualSend({ sessionId: input.sessionId, phone: input.phone });
+  } catch (error) {
+    const uncertain = error instanceof Error && error.message === "CUSTOMER_REPLY_IN_FLIGHT_OR_UNCERTAIN";
+    throw new TRPCError({ code: uncertain ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
+      message: uncertain ? "The automatic customer reply is sending or its outcome needs review. No additional SMS was sent."
+        : "The automatic customer reply status could not be checked. No SMS was sent." });
+  }
+  return opts.next();
+});
+
+export const publicProcedure = t.procedure.use(timingMiddleware).use(thumbtackManualSendMiddleware).use(customerReplyManualSendMiddleware);
 
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
@@ -311,6 +336,20 @@ export const opsChatProcedure = t.procedure.use(
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }),
 ).use(async opts => {
+  if (opts.type === "mutation" && opts.path === "opsChat.dismissSystemCard") {
+    const parsedCard = z.object({ messageId: z.number().int().positive() }).safeParse(await opts.getRawInput());
+    if (parsedCard.success) {
+      try {
+        const { guardClaudeCustomerTaskCardAction } = await import("../instinct/claudeCustomerSmsManualGuard");
+        await guardClaudeCustomerTaskCardAction(parsedCard.data.messageId);
+      } catch (error) {
+        const task = error instanceof Error && error.message === "CUSTOMER_TASK_CARD_PROTECTED";
+        throw new TRPCError({ code: task ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
+          message: task ? "Customer tasks cannot be dismissed as alerts. Claim the task and confirm completion in its task card."
+            : "The card's task status could not be checked. No card was dismissed." });
+      }
+    }
+  }
   if (opts.type !== "mutation" || !["opsChat.approveSmsDraft", "opsChat.dismissSmsDraft", "opsChat.retrySmsDraft"].includes(opts.path))
     return opts.next();
   const parsed = z.object({ draftId: z.number().int().positive() }).safeParse(await opts.getRawInput());
@@ -320,7 +359,12 @@ export const opsChatProcedure = t.procedure.use(
   try {
     const { guardClaudeThumbtackLegacyDraftAction } = await import("../instinct/claudeThumbtackFirstResponse");
     await guardClaudeThumbtackLegacyDraftAction(parsed.data.draftId);
+    const { guardClaudeCustomerLegacyDraftAction } = await import("../instinct/claudeCustomerSmsManualGuard");
+    await guardClaudeCustomerLegacyDraftAction(parsed.data.draftId);
   } catch (error) {
+    if (error instanceof Error && error.message === "CUSTOMER_REPLY_RECEIPT_PROTECTED") {
+      throw new TRPCError({ code: "CONFLICT", message: "This is an automatic customer reply receipt, not a review draft. It cannot be dismissed, retried or sent again." });
+    }
     const protectedRecord = error instanceof Error && error.message === "AUTO_FIRST_RESPONSE_PROTECTED";
     throw new TRPCError({ code: protectedRecord ? "CONFLICT" : "INTERNAL_SERVER_ERROR",
       message: protectedRecord ? "This is an automatic first-response send record, not a review draft. Its send receipt cannot be dismissed, retried or sent again."
