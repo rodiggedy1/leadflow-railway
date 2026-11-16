@@ -55,6 +55,7 @@ import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AiConcierge from "@/components/AiConcierge";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
+import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, type ClaudeSmsAlternativeGenerateInput, type ClaudeSmsAlternativeResult } from "@shared/claudeSmsAlternative";
 import "./command-chat-crm-review.css";
 import "./command-chat-left-cohesion.css";
 import "./command-chat-lead-queue.css";
@@ -189,6 +190,11 @@ type SmsInboxMessage = {
   content: string;
   ts?: number;
   senderName?: string;
+  opMsgId?: string;
+  openPhoneId?: string;
+  openPhoneMessageId?: string;
+  providerMessageId?: string;
+  metadata?: { opMsgId?: string; openPhoneId?: string; openPhoneMessageId?: string; providerMessageId?: string };
 };
 
 type QuoteAssistantFields = {
@@ -2402,6 +2408,12 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const smsAutoDraftAbortRef = useRef<AbortController | null>(null);
   const autoDraftedForConversationRef = useRef<number | null>(null);
   const smsAutoDraftSessionIdRef = useRef<number | null>(conversation.id);
+  const [claudeDraftPending, setClaudeDraftPending] = useState(false);
+  const [claudeDraft, setClaudeDraft] = useState<{ result: ClaudeSmsAlternativeResult; scopeKey: string; epoch: number } | null>(null);
+  const [claudeDraftError, setClaudeDraftError] = useState("");
+  const claudeDraftBusyRef = useRef<ClaudeSmsAlternativeGenerateInput | null>(null);
+  const claudeDraftScopeRef = useRef({ key: "", epoch: 0 });
+  const claudeDraftMountedRef = useRef(true);
   const { data: detail } = trpc.leads.getCsConversation.useQuery(
     { sessionId: conversation.id },
     { enabled: conversation.id > 0, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
@@ -2441,6 +2453,53 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const smsConversationContext = useMemo(() => messages.slice(-5)
     .map((message) => `${message.role === "user" ? "Customer" : "Agent"}: ${message.content}`)
     .join("\n"), [messages]);
+  // Only original saved turns may identify the request; never the sorted display
+  // messages, optimistic outgoing messages, or an ID synthesized from a timestamp.
+  const claudeInbound = useMemo(() => {
+    try {
+      const history: unknown = JSON.parse(detail?.messageHistory ?? "[]");
+      if (!Array.isArray(history)) return null;
+      const latest = [...history as SmsInboxMessage[]].reverse().find((message) => message && message.role === "user");
+      if (!latest) return null;
+      const ids = Array.from(new Set([latest, latest.metadata].flatMap((message) => message
+        ? [message.opMsgId, message.openPhoneId, message.openPhoneMessageId, message.providerMessageId] : [])
+        .filter((id): id is string => typeof id === "string" && Boolean(id.trim()))));
+      return ids.length === 1 ? { providerMessageId: ids[0], ts: latest.ts, content: latest.content } : null;
+    } catch { return null; }
+  }, [detail?.messageHistory]);
+  const liveClaudeConversation = conversations.find((item) => item.id === conversation.id) ?? conversation;
+  const claudeReceivingPhoneNumberId = liveClaudeConversation.lastInboundPhoneNumberId ?? conversation.lastInboundPhoneNumberId;
+  const claudeSenderPhoneNumberId = getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations);
+  const claudeDraftVisible = !isTeamConversation && conversation.id > 0 && !leadCardPhone;
+  const claudeDraftEligible = claudeDraftVisible && detail?.sessionId === conversation.id
+    && detail?.leadPhone === conversation.leadPhone && Boolean(claudeInbound)
+    && typeof claudeReceivingPhoneNumberId === "string" && Boolean(claudeReceivingPhoneNumberId.trim())
+    && claudeReceivingPhoneNumberId === claudeSenderPhoneNumberId
+    && !(liveClaudeConversation.lastSenderRole === "user" && (
+      (liveClaudeConversation.lastMessageTs != null && claudeInbound?.ts != null && liveClaudeConversation.lastMessageTs > claudeInbound.ts)
+      || (liveClaudeConversation.lastMessageText != null && liveClaudeConversation.lastMessageText !== claudeInbound?.content?.slice(0, 255))));
+  const claudeScopeKey = JSON.stringify([conversation.id, conversation.leadPhone, conversation.personType, leadCardPhone,
+    detail?.sessionId, detail?.leadPhone, detail?.messageHistory, claudeReceivingPhoneNumberId,
+    liveClaudeConversation.lastMessageTs, liveClaudeConversation.lastMsgTs, liveClaudeConversation.lastMessageText, liveClaudeConversation.lastSenderRole]);
+  // Invalidate synchronously, before effects, so a late response or old button
+  // callback cannot use a draft after switching customer, line, or incoming turn.
+  if (claudeDraftScopeRef.current.key !== claudeScopeKey) {
+    claudeDraftScopeRef.current = { key: claudeScopeKey, epoch: claudeDraftScopeRef.current.epoch + 1 };
+  }
+  const claudeDraftScope = claudeDraftScopeRef.current;
+  const claudeAlternative = trpc.madison.claudeAlternative.generate.useMutation();
+  useEffect(() => {
+    setClaudeDraft(null);
+    setClaudeDraftError("");
+  }, [claudeScopeKey]);
+  useEffect(() => {
+    claudeDraftMountedRef.current = true;
+    return () => {
+      claudeDraftMountedRef.current = false;
+      claudeDraftScopeRef.current = { key: "", epoch: claudeDraftScopeRef.current.epoch + 1 };
+      claudeDraftBusyRef.current = null;
+    };
+  }, []);
   const smsAutoDraft = trpc.opsChat.csReply.useMutation({
     onSuccess: (data) => {
       if (smsAutoDraftSessionIdRef.current !== conversation.id) return;
@@ -2524,6 +2583,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     }
   }, [conversation.id, leadDraft?.jobContext, leadDraft?.scenario, name, smsAutoDraft, smsConversationContext]);
   const regenerateSmsDraft = useCallback(() => {
+    if (claudeDraftBusyRef.current) return;
     autoDraftedForConversationRef.current = null;
     void streamSmsAutoDraft();
   }, [streamSmsAutoDraft]);
@@ -2532,6 +2592,55 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     setDraft(smsAutoDraftText);
     setSmsAutoDraftReady(false);
   }, [smsAutoDraftText]);
+  const generateClaudeDraft = async () => {
+    // The ref coalesces repeated clicks before React renders the busy state. It
+    // keeps this deliberate request's UUID until completion; there is no retry.
+    if (claudeDraftBusyRef.current || smsAutoDraftLoading || smsAutoDraft.isPending || !claudeDraftEligible
+      || claudeDraftScopeRef.current !== claudeDraftScope) return;
+    const parsed = claudeSmsAlternativeGenerateInputSchema.safeParse({ sessionId: conversation.id,
+      providerMessageId: claudeInbound?.providerMessageId, receivingPhoneNumberId: claudeReceivingPhoneNumberId,
+      requestId: crypto.randomUUID() });
+    if (!parsed.success) return;
+    const request = parsed.data;
+    const isCurrent = () => claudeDraftMountedRef.current && claudeDraftScopeRef.current === claudeDraftScope
+      && claudeDraftBusyRef.current === request;
+    claudeDraftBusyRef.current = request;
+    setClaudeDraftPending(true);
+    setClaudeDraft(null);
+    setClaudeDraftError("");
+    try {
+      const response = claudeSmsAlternativeResultSchema.safeParse(await claudeAlternative.mutateAsync(request));
+      if (!isCurrent()) return;
+      if (!response.success || response.data.requestId !== request.requestId || response.data.sessionId !== request.sessionId
+        || response.data.providerMessageId !== request.providerMessageId || response.data.receivingPhoneNumberId !== request.receivingPhoneNumberId
+        || !response.data.replyText.trim()) {
+        setClaudeDraftError("Claude draft could not be verified. Your reply is unchanged.");
+        return;
+      }
+      setClaudeDraft({ result: response.data, scopeKey: claudeDraftScope.key, epoch: claudeDraftScope.epoch });
+    } catch {
+      if (isCurrent()) setClaudeDraftError("Claude draft is unavailable. You can continue with your reply.");
+    } finally {
+      if (claudeDraftBusyRef.current === request) {
+        claudeDraftBusyRef.current = null;
+        if (claudeDraftMountedRef.current) setClaudeDraftPending(false);
+      }
+    }
+  };
+  const currentClaudeDraft = claudeDraft && claudeDraft.scopeKey === claudeScopeKey
+    && claudeDraft.epoch === claudeDraftScope.epoch ? claudeDraft.result : null;
+  const allowClaudeUse = Boolean(currentClaudeDraft && claudeDraftEligible && !claudeDraftPending
+    && currentClaudeDraft.sessionId === conversation.id && currentClaudeDraft.providerMessageId === claudeInbound?.providerMessageId
+    && currentClaudeDraft.receivingPhoneNumberId === claudeReceivingPhoneNumberId
+    && currentClaudeDraft.receivingPhoneNumberId === claudeSenderPhoneNumberId);
+  const useClaudeReply = () => {
+    if (!allowClaudeUse || !currentClaudeDraft || claudeDraftBusyRef.current
+      || claudeDraftScopeRef.current !== claudeDraftScope
+      || currentClaudeDraft.receivingPhoneNumberId !== getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)) return;
+    setDraft(currentClaudeDraft.replyText);
+    setClaudeDraft(null);
+    smsComposerRef.current?.focus();
+  };
   const prepareQuoteAssistant = trpc.commandCenter.prepareQuoteAssistant.useMutation({
     onSuccess: (result) => {
       setQuoteAssistantFields({ ...result.quoteInputs, condition: result.quoteInputs.condition ?? 5 });
@@ -2662,7 +2771,13 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     })}</div>
     <footer>
       {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
-      {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className={`ccc-live-sms-ai-draft-card ${smsAutoDraftMinimized ? "is-minimized" : ""}`}><header><span><Sparkles />World-class draft</span><small>Review before sending</small><button type="button" className="ccc-live-sms-ai-draft-toggle" aria-label={smsAutoDraftMinimized ? "Expand world-class draft" : "Minimize world-class draft"} aria-expanded={!smsAutoDraftMinimized} title={smsAutoDraftMinimized ? "Expand draft" : "Minimize draft"} onClick={() => setSmsAutoDraftMinimized((value) => !value)}><ChevronDown /></button></header>{!smsAutoDraftMinimized && <><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></>}</article>}
+      {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className={`ccc-live-sms-ai-draft-card ${smsAutoDraftMinimized ? "is-minimized" : ""}`}><header><span><Sparkles />World-class draft</span><small>Review before sending</small><button type="button" className="ccc-live-sms-ai-draft-toggle" aria-label={smsAutoDraftMinimized ? "Expand world-class draft" : "Minimize world-class draft"} aria-expanded={!smsAutoDraftMinimized} title={smsAutoDraftMinimized ? "Expand draft" : "Minimize draft"} onClick={() => setSmsAutoDraftMinimized((value) => !value)}><ChevronDown /></button></header>{!smsAutoDraftMinimized && <><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" disabled={claudeDraftPending} onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></>}</article>}
+      {claudeDraftVisible && <article className="ccc-live-sms-ai-draft-card" aria-label="Optional Claude draft"><header><span><Sparkles />Claude alternative</span><small>Optional · review only</small></header>
+        {currentClaudeDraft && <><small>Reply on {currentClaudeDraft.receivingPhoneNumber}</small><p>{currentClaudeDraft.replyText}</p></>}
+        {claudeDraftError && <p role="status">{claudeDraftError}</p>}
+        <div><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!claudeDraftEligible || smsAutoDraftLoading || smsAutoDraft.isPending || claudeDraftPending} onClick={() => void generateClaudeDraft()}>{claudeDraftPending ? <Loader2 className="animate-spin" /> : <Sparkles />}{claudeDraftPending ? "Getting Claude draft…" : "Get Claude draft"}</button>
+          {currentClaudeDraft && <><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!allowClaudeUse} onClick={useClaudeReply}><Pencil />Use reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={() => setClaudeDraft(null)}>Discard</button></>}
+        </div></article>}
       <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onChange={(event) => setDraft(event.target.value)} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
     {quoteAssistantOpen && quoteAssistantFields && <QuoteAssistantModal
