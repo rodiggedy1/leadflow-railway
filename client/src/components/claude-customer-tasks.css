@@ -13,17 +13,21 @@
 .cct-refresh { flex: 0 0 27px; padding: 4px; }
 .cct-queue svg, .cct-card svg, .cct-confirm-body svg, .cct-feedback svg { width: 13px; height: 13px; flex-shrink: 0; }
 .cct-task-list { display: grid; gap: 8px; min-width: 0; }
-.cct-card { min-width: 0; padding: 10px; border: 1px solid #3b3b43; border-radius: 9px; background: #242428; color: #dddde3; font-size: 11px; line-height: 1.45; }
+.cct-card { min-width: 0; padding: 12px; border: 1px solid #62517f; border-left: 3px solid #ad8bf2; border-radius: 9px; background: linear-gradient(110deg, #30283f, #25232d 80%); box-shadow: 0 3px 12px #0000001f; color: #e3dfee; font-size: 11px; line-height: 1.45; }
 .cct-card-stream { align-self: flex-start; width: min(100%, 540px); }
-.cct-card-heading { display: flex; align-items: flex-start; gap: 7px; }
-.cct-task-icon { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px; border: 1px solid #4b4b56; border-radius: 6px; background: #303039; color: #bdbdce; }
+.cct-card-heading { display: flex; align-items: flex-start; gap: 9px; }
+.cct-task-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; border: 1px solid #7c61a6; border-radius: 7px; background: #49345f; color: #e0caff; }
 .cct-card-heading > div { flex: 1; min-width: 0; }
-.cct-card-heading strong { display: block; color: #eeeef2; font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
+.cct-task-label { display: block; margin-bottom: 3px; color: #d2b5ff; font-size: 8px; line-height: 1.2; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.cct-card-heading strong { display: block; color: #f5f0ff; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
 .cct-card-heading small { display: block; margin-top: 2px; color: #b0b0bb; font-size: 10px; overflow-wrap: anywhere; }
+.cct-card-heading .cct-customer-identity { display: flex; flex-wrap: wrap; align-items: center; column-gap: 9px; row-gap: 2px; margin-top: 4px; color: #c6becf; }
+.cct-customer-phone { color: #e3d7f4; font-variant-numeric: tabular-nums; }
 .cct-card-heading time { flex-shrink: 0; color: #9696a3; font-size: 9px; }
 .cct-card-status { display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-top: 8px; min-height: 27px; }
-.cct-card-status > span { color: #aaaab6; font-size: 10px; overflow-wrap: anywhere; }
-.cct-card[data-task-status="done"] .cct-card-status > span { color: #a7cebd; }
+.cct-card-status > span { padding: 3px 7px; border: 1px solid #6a5187; border-radius: 5px; background: #49345c; color: #e4cef9; font-size: 10px; overflow-wrap: anywhere; }
+.cct-card[data-task-status="claimed"] .cct-card-status > span { border-color: #675a88; background: #37304b; color: #d6c9f5; }
+.cct-card[data-task-status="done"] .cct-card-status > span { border-color: #496c5d; background: #273e33; color: #b9e6cd; }
 .cct-card .cct-primary, .cct-confirm-body .cct-primary { border-color: #576b60; background: #304238; color: #e2eee7; }
 .cct-card button:hover:not(:disabled), .cct-views button:hover, .cct-refresh:hover, .cct-confirm-body button:hover:not(:disabled), .cct-feedback button:hover { border-color: #777782; color: #fff; }
 .cct-card button:disabled, .cct-confirm-body button:disabled { opacity: .5; cursor: not-allowed; }

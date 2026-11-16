@@ -151,6 +151,33 @@ describe("Customer task compact queue and exact canonical identity", () => {
     const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), now: NOW });
     expect(button(tree, "Claim")).toBeDefined(); expect(button(tree, "Mark done")).toBeUndefined();
   });
+
+  it.each(["queue", "stream"] as const)("shows the canonical phone in the closed %s task header for every status", placement => {
+    for (const status of ["unclaimed", "claimed", "done"] as const) {
+      const task = fixture({ status, owner: status === "unclaimed" ? null : actor });
+      const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), placement, now: NOW });
+      const heading = elements(tree).find(node => node.type === "header" && node.props.className === "cct-card-heading")!;
+      expect(text(heading)).toContain("Customer task");
+      expect(text(heading)).toContain(task.customerName);
+      expect(text(heading)).toContain(task.customerPhone);
+      const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), placement, now: NOW });
+      expect(rendered).not.toContain('class="cct-details" open');
+      expect(rendered).not.toContain("tel:");
+      expect(Boolean(button(tree, "Claim"))).toBe(status === "unclaimed");
+      expect(Boolean(button(tree, "Mark done"))).toBe(status === "claimed");
+    }
+  });
+
+  it("keeps missing customer names and special characters safe in the visible header", () => {
+    const task = fixture({ customerName: null });
+    const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), now: NOW });
+    const heading = elements(tree).find(node => node.type === "header")!;
+    expect(text(heading)).toContain("Customer");
+    expect(text(heading)).toContain(task.customerPhone);
+    const rendered = html(ui.TaskCard, { task: fixture({ customerName: '<script>synthetic</script>' }), callerId: "17", actions: actions(), now: NOW });
+    expect(rendered).toContain("&lt;script&gt;synthetic&lt;/script&gt;");
+    expect(rendered).not.toContain("<script>");
+  });
 });
 
 describe("Customer task human completion and authoritative updates", () => {
