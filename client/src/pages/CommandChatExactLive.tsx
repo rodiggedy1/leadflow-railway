@@ -2414,9 +2414,9 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     name: leadCardSnapshot.name, serviceType: leadCardSnapshot.serviceType, category: leadCardSnapshot.category,
     address: leadCardSnapshot.address, location: leadCardSnapshot.location, requestedDates: leadCardSnapshot.requestedDates,
     bedrooms: leadCardSnapshot.bedrooms, bathrooms: leadCardSnapshot.bathrooms, homeSize: leadCardSnapshot.homeSize,
-    rooms: leadCardSnapshot.rooms, propertyType: leadCardSnapshot.propertyType, frequency: leadCardSnapshot.frequency,
+    rooms: leadCardSnapshot.rooms ?? null, propertyType: leadCardSnapshot.propertyType ?? null, frequency: leadCardSnapshot.frequency,
     extras: leadCardSnapshot.extras, pets: leadCardSnapshot.pets, description: leadCardSnapshot.description,
-    summary: leadCardSnapshot.summary, travelPreferences: leadCardSnapshot.travelPreferences,
+    summary: leadCardSnapshot.summary ?? null, travelPreferences: leadCardSnapshot.travelPreferences,
     proposedTimes: leadCardSnapshot.proposedTimes, nativeDetails: leadCardSnapshot.nativeDetails,
   } : null;
   const claudeOriginalConversation = useMemo(() => {
@@ -2562,7 +2562,10 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     if (claudeInitialLeadMode) {
       const parsed = claudeInitialLeadInputSchema.safeParse({ sessionId: conversation.id, customerPhone: leadCardPhone,
         requestId: crypto.randomUUID(), leadDetails: claudeLeadFacts, originalConversation: claudeOriginalConversation });
-      if (!parsed.success) return;
+      if (!parsed.success) {
+        setClaudeDraftError("Claude could not read this lead's details. Your reply is unchanged.");
+        return;
+      }
       const request = parsed.data;
       const isCurrent = () => claudeDraftMountedRef.current && claudeDraftScopeRef.current === claudeDraftScope
         && claudeDraftBusyRef.current === request;

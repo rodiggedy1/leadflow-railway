@@ -374,6 +374,55 @@ describe("optional Claude first lead draft in the existing workspace", () => {
     work.dispose();
   });
 
+  it("accepts the actual native Thumbtack card shape without rooms, propertyType or summary, with exactly the existing prompt context", async () => {
+    const { rooms, propertyType, summary, ...native } = leadSnapshot();
+    const clicked = native as LeadSnapshot;
+    expect(Object.prototype.hasOwnProperty.call(clicked, "rooms")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(clicked, "propertyType")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(clicked, "summary")).toBe(false);
+    const { draft, snapshot } = clickedLeadDraft(clicked);
+    expect(snapshot).toBe(clicked);
+    const expectedFacts = leadFacts({ rooms: null, propertyType: null, summary: null });
+    expect(buildThumbtackLeadDraftContext(clicked)).toBe(buildThumbtackLeadDraftContext(expectedFacts));
+    const saved = [{ role: "user", content: "Original lead request", metadata: { retained: [null, "detail"] } },
+      { role: "assistant", content: "Original outgoing message" }];
+    for (const sessionId of [0, 42]) {
+      const work = workspace({ selected: { id: sessionId, lastInboundPhoneNumberId: null }, snapshot: clicked,
+        leadCardPhone: clicked.phone, leadDraft: draft, history: JSON.stringify(saved), noDetail: sessionId === 0 });
+      await work.settle(); work.edit("Human reply stays here");
+      expect(findButton(work.render(), "Get Claude draft")!.props.disabled).toBe(false);
+      click(findButton(work.render(), "Get Claude draft"));
+      expect(work.generateInitial).toHaveBeenCalledTimes(1);
+      const request = work.generateInitial.mock.calls[0][0];
+      expect(request.leadDetails).toEqual(expectedFacts);
+      expect(claudeInitialLeadInputSchema.safeParse(request).success).toBe(true);
+      expect(buildThumbtackLeadDraftContext(request.leadDetails)).toBe(draft!.jobContext);
+      expect(request.originalConversation).toEqual(sessionId === 0 ? [] : saved);
+      expect(work.generate).not.toHaveBeenCalled();
+      expect(textarea(work.render()).props.value).toBe("Human reply stays here");
+      work.initialResponse.resolve(initialResult(request)); await work.settle();
+      expect(work.html()).toContain("Synthetic Claude first lead reply.");
+      expect(work.html()).toContain("Use reply");
+      expect(work.send).not.toHaveBeenCalled(); expect(work.workspaceSend).not.toHaveBeenCalled();
+      work.dispose();
+    }
+  });
+
+  it("shows an input failure instead of silently ignoring the initial Claude click, without changing the reply or calling either sender", async () => {
+    const clicked = leadSnapshot({ pets: 5 as unknown as string });
+    const work = workspace({ selected: { id: 42, lastInboundPhoneNumberId: null }, snapshot: clicked,
+      leadCardPhone: clicked.phone, leadDraft: clickedLeadDraft(clicked).draft, history: "[]" });
+    await work.settle(); work.edit("Human reply stays here");
+    click(findButton(work.render(), "Get Claude draft")); await work.settle();
+    expect(work.html()).toContain("Claude could not read this lead&#x27;s details. Your reply is unchanged.");
+    expect(work.html()).toContain("World-class draft");
+    expect(work.generateInitial).not.toHaveBeenCalled(); expect(work.generate).not.toHaveBeenCalled();
+    expect(textarea(work.render()).props.value).toBe("Human reply stays here");
+    expect(findButton(work.render(), "Get Claude draft")!.props.disabled).toBe(false);
+    expect(work.send).not.toHaveBeenCalled(); expect(work.workspaceSend).not.toHaveBeenCalled();
+    work.dispose();
+  });
+
   it("drafts for session 0 and positive sessions with no incoming metadata, copies only, and uses the unchanged manual workspace sender", async () => {
     for (const sessionId of [0, 42]) {
       const clicked = leadSnapshot();
