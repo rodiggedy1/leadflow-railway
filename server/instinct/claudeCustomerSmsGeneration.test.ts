@@ -92,13 +92,15 @@ describe("content-only Claude customer SMS plan", () => {
     expect(prompt.split(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toHaveLength(2);
     expect(prompt.indexOf(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toBeLessThan(prompt.indexOf(buildSystemPrompt()));
     expect(prompt.endsWith(buildSystemPrompt())).toBe(true);
-    for (const instruction of ["not friendliness", "Do not impose a character limit", "light, relevant emoji", "rather than adding emojis to every reply", "Avoid playful emojis for complaints or sensitive issues", "Do not use em dashes (U+2014), en dashes (U+2013)", "dash-separated phrases or dash bullet lists", "Do not change task titles, checklist content or evidence quotes"]) {
+    for (const instruction of ["not friendliness", "Do not impose a character limit", "Use emojis naturally wherever they fit", "Vary them to suit the actual message and cleaning context", "rather than defaulting to the same smiley face", "There is no fixed emoji count", "use multiple emojis", "or none when they do not fit", "Avoid playful emojis for complaints or sensitive issues", "Do not use em dashes (U+2014), en dashes (U+2013)", "dash-separated phrases or dash bullet lists", "Do not change task titles, checklist content or evidence quotes"]) {
       expect(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS).toContain(instruction);
     }
+    expect(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS).not.toContain("stacking several");
     expect(CLAUDE_SMS_DRAFT_INSTRUCTIONS).not.toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);
     const log = readFileSync(new URL("../../docs/instinct/customer-sms-prompt-history.md", import.meta.url), "utf8");
     expect(log).toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);
     expect(log).toContain("SMS-STYLE-001");
+    expect(log).toContain("SMS-STYLE-002");
     expect(log).toContain("Rollback of this adjustment only");
   });
 
@@ -106,6 +108,8 @@ describe("content-only Claude customer SMS plan", () => {
     "Hi Maya! We'll review the Friday change and oven request, then confirm once updated 🙂",
     "Hi Maya, we'll take care of your request and confirm once it's updated.",
     "Hi Maya! We'll review your request and confirm once updated. Our number is 202-555-0199.",
+    "Hi Maya! We'll review your Friday change and oven request, then confirm once updated 🧹✨",
+    "Thanks, Maya! We'll take care of your request and confirm once it's updated 🙌",
   ])("preserves the exact generated friendly text and every task item without postprocessing: %s", async replyText => {
     const f = fixture(), plan = { replyText, task };
     expect(await harness(plan).generate(f.binding, f.session)).toEqual(plan);

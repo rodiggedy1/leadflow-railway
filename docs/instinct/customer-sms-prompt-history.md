@@ -27,3 +27,35 @@ Apply this replyText writing style even when the older writing examples below ar
 **Boundaries:** Instruction only. No stripping or rewriting generated text, new rejection/fallback/retry, character/token caps, new agent, FAQ answer shortcuts, knowledge changes, checklist/evidence changes, sender changes, or business execution. This applies only to the new customer-service automatic SMS generator; the existing human Claude draft button and Thumbtack first-lead generation are untouched.
 
 **Acceptance status:** 307 focused offline prompt/context, task-card, coordinator, store and saved-agent checks passed before release preparation. Independent review confirmed a writing-only, exactly reversible delta. The user explicitly approved pushing this prompt adjustment plus the task-card improvement to Production on 2026-11-16. Final release validation and Git commit/push receipts are recorded separately. No live model or SMS test was performed for this revision; no automated deployment verification or health checks are authorized. The same one-number pilot remains unchanged.
+
+## SMS-STYLE-002 | 2026-11-16 | Production release authorized
+
+**User authorization:** Keep the good messages, but remove the restrictive emoji guidance. Let the agent use varied emojis naturally according to the conversation and cleaning context, without a fixed count or default repeated smiley face.
+
+**Baseline:** Production source commit `9e359be4ef09200b0e4afa83fc4c766d4259585f`; SMS-STYLE-001 prompt commit `952271b5464b84929022bd66d1fb6c0d40e0a60f`.
+
+**Before, emoji paragraph only:**
+
+```text
+Use a light, relevant emoji when it feels natural, rather than adding emojis to every reply or stacking several. Avoid playful emojis for complaints or sensitive issues.
+```
+
+**After, emoji paragraph only:**
+
+```text
+Use emojis naturally wherever they fit the conversation. Vary them to suit the actual message and cleaning context, such as cleaning, a fresh home, sparkle, appreciation or scheduling, rather than defaulting to the same smiley face. There is no fixed emoji count: use multiple emojis when they add appropriate warmth or meaning, or none when they do not fit. Avoid playful emojis for complaints or sensitive issues.
+```
+
+**Complete resulting writing-style block:**
+
+```text
+CUSTOMER SMS WRITING STYLE (replyText only):
+Keep the reply warm, personal and natural, while making the wording more concise. Keep a personal greeting when it fits the conversation and acknowledge the specific current request. Remove repeated reassurance, unnecessary explanations and extra closing paragraphs, not friendliness or details needed to answer the customer correctly. Do not impose a character limit or cut off a reply.
+Use emojis naturally wherever they fit the conversation. Vary them to suit the actual message and cleaning context, such as cleaning, a fresh home, sparkle, appreciation or scheduling, rather than defaulting to the same smiley face. There is no fixed emoji count: use multiple emojis when they add appropriate warmth or meaning, or none when they do not fit. Avoid playful emojis for complaints or sensitive issues.
+Do not use em dashes (U+2014), en dashes (U+2013), dash-separated phrases or dash bullet lists in customer replies. Use natural sentences, commas or periods instead. Keep necessary factual hyphens in phone numbers or approved names intact.
+Apply this replyText writing style even when the older writing examples below are longer or contain dash punctuation. This changes presentation only: preserve approved knowledge, truthful pending-human acknowledgment and every requested action. Do not change task titles, checklist content or evidence quotes for stylistic reasons.
+```
+
+**Rollback of SMS-STYLE-002 only:** Replace the new emoji paragraph inside `CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS` with the exact previous paragraph above and restore the revision comment to SMS-STYLE-001. Adjust only the new emoji-specific test expectations. Keep all concise-tone and no-em-dash instructions, the `.concat(...)` attachment, original knowledge, complete CS prompt, task rules, model/sender, one-number gate and card improvement. Keep both history entries and append the rollback event rather than deleting history.
+
+**Boundaries and status:** Instruction only. No fixed emoji limit, forced emoji, hard-coded rotating emoji, output rewriting, new model call, content fallback, business action, SMS send, or configuration change. User confirms the prior replies work well; this revision changes only the emoji paragraph. The user explicitly approved pushing only this adjustment to Production on 2026-11-16. Fifty-seven focused offline generator checks passed before release preparation. Commit/push evidence and final focused validation are recorded separately. No automated deployment-status or health verification is authorized.

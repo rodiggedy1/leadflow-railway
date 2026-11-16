@@ -26,11 +26,11 @@ export interface ClaudeCustomerSmsGenerationOptions {
   runner?: (options: InitialLeadDraftOptions) => Promise<{ finalSmsText: string }>;
 }
 
-// Writing-only revision SMS-STYLE-001. Exact delta and rollback are recorded in
+// Writing-only revisions SMS-STYLE-001 and SMS-STYLE-002. Exact deltas and rollback are recorded in
 // docs/instinct/customer-sms-prompt-history.md; no response rewriting or limits.
 export const CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS = `CUSTOMER SMS WRITING STYLE (replyText only):
 Keep the reply warm, personal and natural, while making the wording more concise. Keep a personal greeting when it fits the conversation and acknowledge the specific current request. Remove repeated reassurance, unnecessary explanations and extra closing paragraphs, not friendliness or details needed to answer the customer correctly. Do not impose a character limit or cut off a reply.
-Use a light, relevant emoji when it feels natural, rather than adding emojis to every reply or stacking several. Avoid playful emojis for complaints or sensitive issues.
+Use emojis naturally wherever they fit the conversation. Vary them to suit the actual message and cleaning context, such as cleaning, a fresh home, sparkle, appreciation or scheduling, rather than defaulting to the same smiley face. There is no fixed emoji count: use multiple emojis when they add appropriate warmth or meaning, or none when they do not fit. Avoid playful emojis for complaints or sensitive issues.
 Do not use em dashes (U+2014), en dashes (U+2013), dash-separated phrases or dash bullet lists in customer replies. Use natural sentences, commas or periods instead. Keep necessary factual hyphens in phone numbers or approved names intact.
 Apply this replyText writing style even when the older writing examples below are longer or contain dash punctuation. This changes presentation only: preserve approved knowledge, truthful pending-human acknowledgment and every requested action. Do not change task titles, checklist content or evidence quotes for stylistic reasons.`;
 
