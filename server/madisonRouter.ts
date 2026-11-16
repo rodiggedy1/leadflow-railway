@@ -16,6 +16,7 @@ import { madisonGoldenCaseReviews, madisonGoldenReviewRatings, madisonLiveGolden
 import { classifyMadisonMessageShadow } from "./madisonMessageUnderstanding";
 import { generateCommandChatReply } from "./commandChatReply";
 import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, generateClaudeSmsAlternative } from "./instinct/claudeSmsAlternative";
+import { claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, generateClaudeInitialLead } from "./instinct/claudeInitialLead";
 
 function loadGoldenDataset(): GoldenDataset {
   return JSON.parse(readFileSync(resolve(process.cwd(), "golden-dataset/candidates.json"), "utf8")) as GoldenDataset;
@@ -304,6 +305,8 @@ export const madisonRouter = router({
   claudeAlternative: router({
     generate: opsChatProcedure.input(claudeSmsAlternativeGenerateInputSchema).output(claudeSmsAlternativeResultSchema)
       .mutation(({ input, ctx }) => generateClaudeSmsAlternative(input, ctx.opsCaller)),
+    generateInitialLead: opsChatProcedure.input(claudeInitialLeadInputSchema).output(claudeInitialLeadResultSchema)
+      .mutation(({ input, ctx }) => generateClaudeInitialLead(input, ctx.opsCaller)),
   }),
   getActiveSmsQueue: opsChatProcedure.query(async () => {
     const db = await getDb();

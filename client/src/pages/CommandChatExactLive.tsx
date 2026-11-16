@@ -56,6 +56,7 @@ import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AiConcierge from "@/components/AiConcierge";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, type ClaudeSmsAlternativeGenerateInput, type ClaudeSmsAlternativeResult } from "@shared/claudeSmsAlternative";
+import { THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, type ClaudeInitialLeadFacts, type ClaudeInitialLeadInput, type ClaudeInitialLeadResult } from "@shared/claudeInitialLead";
 import "./command-chat-crm-review.css";
 import "./command-chat-left-cohesion.css";
 import "./command-chat-lead-queue.css";
@@ -721,71 +722,6 @@ function nativeLeadToCommandLead(native: NativeThumbtackLead): CommandLead {
   };
 }
 
-const THUMBTACK_FIRST_RESPONSE_PROMPT = `You write first-response texts for inbound cleaning leads (Thumbtack and similar) for Maids in Black, a house cleaning business serving the DMV. I will paste a lead. Reply with ONLY the copy-paste message, with no notes, commentary, or explanations before or after it.
-
-Voice: warm, upbeat, friendly. Sign as Madison from Maids in Black. No em dashes.
-
-Structure:
-
-1. Greeting: "Hey [first name]! 👋 Madison from Maids in Black here. Happy to help [get/keep] your [X]bd/[X]ba [home type] [fresh/fully refreshed/spotless]!" Match the line to the cleaning type (move out: spotless for your move out; move in: spotless before you move in; post-construction: fresh after the construction; recurring: keep fresh).
-2. Middle paragraph, in this order:
-   - Name the cleaning type and list ONLY the extras they selected (fridge, oven, interior windows, baseboards, cabinets, laundry, basement).
-   - Address anything specific in their message (skipped rooms, special requests, organizing, builder restrictions). If something is unusual or unclear, say we'll confirm it when we send pricing.
-   - If the frequency is recurring: "[Weekly/Every 2 weeks/Monthly] is a great routine for keeping the home consistently fresh, and recurring clients get our best rate."
-   - "We've cleaned hundreds of homes in [city], and our whole team is background checked and insured, so you can feel completely comfortable having us in your space."
-   - If pets: "Pets are no problem at all."
-3. Close: ask them to send their phone number so we can text a quote and time options (Thumbtack's routing number can be unreliable). Otherwise ask: "Want me to check our team's availability [for their dates] and text you a couple of time options, or send pricing first?"
-
-Rules:
-
-- Never offer to call the customer. No one is available to call.
-- If their dates are today or this week, acknowledge the timing ("Since you're looking at this week..."). If they have a deadline, say we'll do our best to get them on the schedule before it.
-- We price by the home, not by the hour. Say so if they ask about hourly rates.
-- Never include time estimates or how long the clean will take.
-- If their form details conflict with their message (for example, different bedroom counts), ask them to confirm instead of guessing.
-- Keep it short: a greeting, a concise middle section, and a one-line close.
-- Look through the customer's notes, request details, home information, and selected extras for opportunities to make the message clearer with a short emoji-bullet list. Prefer emoji bullets whenever there is a natural opportunity to clearly present two or more concrete details, requested tasks, special requests, or included services, such as 2 bedrooms and 2 bathrooms, inside cabinets, fridge and oven cleaning, laundry, interior windows, baseboards, skipped rooms, organizing, or builder restrictions. You may combine related home facts and requested services in one concise list when that makes the lead easier to scan. Do not force bullets into every message, do not create an awkward list, and do not invent requests the customer did not make. If bullets would not improve clarity, write the information naturally in the paragraph.
-- When a bullet list is appropriate, put each concrete detail or task on its own line and use a specific, relevant emoji such as 🛏️ for bedrooms, 🛁 for bathrooms, 🍳 for fridge/oven, 🧺 for laundry, 🪟 for windows, ✨ for baseboards or cabinets, and 🧹 for cleaning tasks. Keep the bullets together as one clean list, then follow them with the personalized details and reassurance paragraph. Do not compress a multi-item request into a comma-separated sentence.
-
-Example target style:
-
-Hey Peter! 👋 Madison from Maids in Black here. Happy to help get your new 5bd/4ba Frederick home spotless before the furniture comes in!
-
-Here’s what your move in deep clean would include:
-
-🗄️ Cabinets and drawers, inside and out
-🍳 Fridge, oven, dishwasher, and microwave
-🪟 Window sills and tracks
-✨ Baseboards and light fixtures
-🧹 Vacuuming and mopping on all three levels
-
-We price by the home instead of by the hour, so you get one clear total, and we’ll size the team to your 4,300 sq ft. Our whole team is background checked and insured, and we’ve cleaned hundreds of homes in Frederick.
-
-Could you send over your phone number? We’ll text you a quote and availability for Oct 30 or 31 right away.`;
-
-function buildThumbtackLeadDraftContext(lead: CommandLead): string {
-  const details = lead.nativeDetails
-    .map((detail) => `${detail.question ?? "Request detail"}: ${detail.answer ?? ""}`)
-    .filter((detail) => !detail.endsWith(": "))
-    .join("\n");
-  return [
-    `Lead name: ${lead.name}`,
-    `Cleaning type: ${lead.serviceType ?? lead.category ?? "House cleaning"}`,
-    `Location: ${lead.address ?? lead.location ?? "Not provided"}`,
-    `Requested dates/times: ${lead.requestedDates ?? "Not provided"}`,
-    `Bedrooms: ${lead.bedrooms ?? "Not provided"}`,
-    `Bathrooms: ${lead.bathrooms ?? "Not provided"}`,
-    `Home information: ${lead.homeSize ?? lead.rooms ?? lead.propertyType ?? "Not provided"}`,
-    `Frequency: ${lead.frequency ?? "Not provided"}`,
-    `Selected extras: ${lead.extras.length ? lead.extras.join(", ") : "None listed"}`,
-    `Pets: ${lead.pets ?? "Not provided"}`,
-    `Customer request/description: ${lead.description ?? lead.summary ?? "Not provided"}`,
-    `Travel preferences: ${lead.travelPreferences.length ? lead.travelPreferences.join(", ") : "None listed"}`,
-    `Proposed times: ${lead.proposedTimes.length ? JSON.stringify(lead.proposedTimes) : "None listed"}`,
-    details ? `All retained Thumbtack request fields:\n${details}` : "",
-  ].filter(Boolean).join("\n");
-}
-
 function isHiddenCommandNotification(message: ChannelMessage) {
   if (HIDDEN_COMMAND_QUICK_ACTIONS.includes(message.quickAction as (typeof HIDDEN_COMMAND_QUICK_ACTIONS)[number])) return true;
   if (message.quickAction === "sync_watchdog") return true;
@@ -1000,6 +936,7 @@ export default function CommandChatExactLive() {
   const [selectedLeadDetail, setSelectedLeadDetail] = useState<CommandLead | null>(null);
   const [selectedLeadCardPhone, setSelectedLeadCardPhone] = useState<string | null>(null);
   const [selectedLeadCardDraft, setSelectedLeadCardDraft] = useState<{ scenario: string; jobContext: string } | null>(null);
+  const [selectedLeadCardSnapshot, setSelectedLeadCardSnapshot] = useState<CommandLead | null>(null);
   const [optimisticClaimedBy, setOptimisticClaimedBy] = useState<Record<number, string | null>>({});
   const [optimisticBookedBySession, setOptimisticBookedBySession] = useState<Record<number, string>>({});
   const [optimisticUnbookedSessions, setOptimisticUnbookedSessions] = useState<Record<number, boolean>>({});
@@ -1036,6 +973,7 @@ export default function CommandChatExactLive() {
       setSelectedSmsConversation(null);
       setSelectedLeadCardPhone(null);
       setSelectedLeadCardDraft(null);
+      setSelectedLeadCardSnapshot(null);
     }
   }, [selectedEmailThreadId]);
 
@@ -1493,6 +1431,7 @@ export default function CommandChatExactLive() {
       return;
     }
     setSelectedLeadCardPhone(lead.phone);
+    setSelectedLeadCardSnapshot(lead);
     setSelectedLeadCardDraft(lead.sourceLabel === "Thumbtack" ? {
       scenario: `${THUMBTACK_FIRST_RESPONSE_PROMPT}\n\nThumbtack lead:\n${buildThumbtackLeadDraftContext(lead)}`,
       jobContext: buildThumbtackLeadDraftContext(lead),
@@ -1734,7 +1673,7 @@ export default function CommandChatExactLive() {
                   {visibleEmailInbox.map((thread) => <EmailInboxRow thread={thread} key={thread.threadId} onOpen={() => setSelectedEmailThreadId(thread.threadId)} />)}
                   {!visibleEmailInbox.length && <p className="ccc-live-card-empty">{emailInboxLoading ? "Loading email conversations…" : smsSearch ? "No email threads match your search." : "No active email conversations."}</p>}
                 </div> : <div className="ccc-conversation-list ccc-inbox-list ccc-live-sms-list" aria-label="Text message conversations">
-                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />)}
+                  {visibleSmsInbox.map((conversation) => <SmsInboxRow conversation={conversation} key={conversation.id} onOpen={() => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadCardSnapshot(null); setSelectedSmsConversation(conversation); }} />)}
                   {!visibleSmsInbox.length && <p className="ccc-live-card-empty">{smsInboxLoading ? "Loading text conversations…" : smsSearch ? "No conversations match your search." : "No active text conversations."}</p>}
                 </div>}
               </div>
@@ -1753,7 +1692,7 @@ export default function CommandChatExactLive() {
               {activePin && <div className="ccc-pin"><Pin /><div><strong>Pinned by {activePin.authorName}</strong><span>{activePin.body}</span></div><button type="button" aria-label="Remove pinned note" disabled={dismissPin.isPending} onClick={() => dismissPin.mutate({ channel })}><X /></button></div>}
               <div className="ccc-day-divider"><span>Live channel · {dateLabel(Date.now())}</span></div>
               <div className="ccc-message-stream" ref={messageStreamRef} onScroll={trackCommandFeedScroll}>
-                <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} voiceCallEvidenceByVapiId={voiceCallEvidenceByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation(conversation); }} />
+                <CommandTimelineFeed messagesLoading={messagesLoading} timeline={commandTimeline} callerName={callerName} photoMap={photoMap} voiceCallIdentityByVapiId={voiceCallIdentityByVapiId} voiceCallEvidenceByVapiId={voiceCallEvidenceByVapiId} mentionPattern={mentionPattern} superAlertMessageIdSet={superAlertMessageIdSet} reactionsByMessage={reactionsByMessage} onOpenPhoto={setLightboxUrl} onOpenThread={setThreadId} onReply={startQuotedReply} onReaction={handleReaction} onOpenSmsConversation={(conversation) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadCardSnapshot(null); setSelectedSmsConversation(conversation); }} />
               </div>
               {incomingCommandMessage && <button type="button" className="ccc-live-new-command-message" onClick={dismissIncomingCommandMessage}><ChevronDown />New message from {incomingCommandMessage.from}</button>}
               <div className="ccc-quick-actions"><AwayStatusControl status={(agentMe?.awayStatus ?? null) as AwayStatus} pending={setAwayStatusMutation.isPending} onSetStatus={setAwayStatus} /><button type="button" onClick={() => setShowNewMessage(true)}><Plus />Start new SMS</button><button type="button" onClick={() => setModal("issue")}><AlertTriangle />Open issue</button><button type="button" onClick={() => setModal("reminder")}><CalendarClock />Set reminder</button><button type="button" onClick={() => setModal("pin")}><Pin />Pin a note</button><button type="button" onClick={() => setModal("booking")}><Sparkles />Announce booking</button><button type="button" onClick={() => showNotice("Use the dedicated SMS workspace for customer broadcasts.")}><Megaphone />Broadcast</button></div>
@@ -1775,7 +1714,7 @@ export default function CommandChatExactLive() {
           </aside>
         </div>
       </section>
-      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} lead={selectedConversationLead} onNotice={showNotice} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadDetail(null); }} />}
+      {selectedSmsConversation && <SmsConversationDrawer conversation={selectedSmsConversation} conversations={smsInbox} callerName={callerName} callerPhotoUrl={profile?.photoUrl ?? null} photoMap={photoMap} businessDate={todayDateStr} leadCardPhone={selectedLeadCardPhone} leadDraft={selectedLeadCardDraft} leadCardSnapshot={selectedLeadCardSnapshot} lead={selectedConversationLead} onNotice={showNotice} onOpenLeadDetails={setSelectedLeadDetail} onSessionResolved={(sessionId) => { setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadCardSnapshot(null); setSelectedSmsConversation((current) => current ? { ...current, id: sessionId } : current); }} onClose={() => { setSelectedSmsConversation(null); setSelectedLeadCardPhone(null); setSelectedLeadCardDraft(null); setSelectedLeadCardSnapshot(null); setSelectedLeadDetail(null); }} />}
       {selectedLeadDetail && <LeadDetailPanel lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} onClaim={claimLeadFromQueue} onUnclaim={unclaimLeadFromQueue} claimPending={claimCommandLead.isPending || unclaimCommandLead.isPending} bookingPending={markLeadBookedMutation.isPending || unbookLeadMutation.isPending} onMarkBooked={requestLeadBooked} onUnbook={unbookLeadFromQueue} onOpenSms={openSmsDrawerFromLead} onTestBridge={testBridgeFromQueue} bridgePending={testBridgeMutation.isPending} onCopyPhone={(phone) => { void navigator.clipboard?.writeText(phone); }} />}
       {selectedEmailThreadId && <ExactEmailWorkspaceOverlay threadId={selectedEmailThreadId} onClose={() => setSelectedEmailThreadId(null)} />}
       <AllThreadsPanel open={allThreadsOpen} onClose={() => setAllThreadsOpen(false)} onOpenThread={(parentId) => { setAllThreadsOpen(false); setThreadId(parentId); }} />
@@ -2386,7 +2325,7 @@ function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; o
   </div>;
 }
 
-function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, leadDraft, lead, onNotice, onOpenLeadDetails, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; leadDraft?: { scenario: string; jobContext: string } | null; lead: CommandLead | null; onNotice: (message: string) => void; onOpenLeadDetails: (lead: CommandLead) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
+function SmsConversationDrawer({ conversation, conversations, callerName, callerPhotoUrl, photoMap, businessDate, leadCardPhone, leadDraft, leadCardSnapshot, lead, onNotice, onOpenLeadDetails, onSessionResolved, onClose }: { conversation: SmsInboxConversation; conversations: SmsInboxConversation[]; callerName: string; callerPhotoUrl: string | null; photoMap: Record<string, string | null>; businessDate: string; leadCardPhone?: string | null; leadDraft?: { scenario: string; jobContext: string } | null; leadCardSnapshot?: CommandLead | null; lead: CommandLead | null; onNotice: (message: string) => void; onOpenLeadDetails: (lead: CommandLead) => void; onSessionResolved: (sessionId: number) => void; onClose: () => void }) {
   const utils = trpc.useUtils();
   const isTeamConversation = conversation.personType === "team";
   const contextPhone = conversation.leadPhone || "0000000";
@@ -2409,9 +2348,9 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const autoDraftedForConversationRef = useRef<number | null>(null);
   const smsAutoDraftSessionIdRef = useRef<number | null>(conversation.id);
   const [claudeDraftPending, setClaudeDraftPending] = useState(false);
-  const [claudeDraft, setClaudeDraft] = useState<{ result: ClaudeSmsAlternativeResult; scopeKey: string; epoch: number } | null>(null);
+  const [claudeDraft, setClaudeDraft] = useState<{ result: (ClaudeSmsAlternativeResult & { kind: "sms_reply" }) | ClaudeInitialLeadResult; scopeKey: string; epoch: number } | null>(null);
   const [claudeDraftError, setClaudeDraftError] = useState("");
-  const claudeDraftBusyRef = useRef<ClaudeSmsAlternativeGenerateInput | null>(null);
+  const claudeDraftBusyRef = useRef<ClaudeSmsAlternativeGenerateInput | ClaudeInitialLeadInput | null>(null);
   const claudeDraftScopeRef = useRef({ key: "", epoch: 0 });
   const claudeDraftMountedRef = useRef(true);
   const { data: detail } = trpc.leads.getCsConversation.useQuery(
@@ -2470,17 +2409,39 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const liveClaudeConversation = conversations.find((item) => item.id === conversation.id) ?? conversation;
   const claudeReceivingPhoneNumberId = liveClaudeConversation.lastInboundPhoneNumberId ?? conversation.lastInboundPhoneNumberId;
   const claudeSenderPhoneNumberId = getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations);
-  const claudeDraftVisible = !isTeamConversation && conversation.id > 0 && !leadCardPhone;
-  const claudeDraftEligible = claudeDraftVisible && detail?.sessionId === conversation.id
+  const claudeInitialLeadMode = !isTeamConversation && conversation.id >= 0 && Boolean(leadCardPhone && leadCardSnapshot);
+  const claudeLeadFacts: ClaudeInitialLeadFacts | null = leadCardSnapshot ? {
+    name: leadCardSnapshot.name, serviceType: leadCardSnapshot.serviceType, category: leadCardSnapshot.category,
+    address: leadCardSnapshot.address, location: leadCardSnapshot.location, requestedDates: leadCardSnapshot.requestedDates,
+    bedrooms: leadCardSnapshot.bedrooms, bathrooms: leadCardSnapshot.bathrooms, homeSize: leadCardSnapshot.homeSize,
+    rooms: leadCardSnapshot.rooms, propertyType: leadCardSnapshot.propertyType, frequency: leadCardSnapshot.frequency,
+    extras: leadCardSnapshot.extras, pets: leadCardSnapshot.pets, description: leadCardSnapshot.description,
+    summary: leadCardSnapshot.summary, travelPreferences: leadCardSnapshot.travelPreferences,
+    proposedTimes: leadCardSnapshot.proposedTimes, nativeDetails: leadCardSnapshot.nativeDetails,
+  } : null;
+  const claudeOriginalConversation = useMemo(() => {
+    try {
+      const saved: unknown = JSON.parse(detail?.messageHistory ?? "[]");
+      return Array.isArray(saved) ? saved : null;
+    } catch { return null; }
+  }, [detail?.messageHistory]);
+  const claudeOrdinaryDraftVisible = !isTeamConversation && conversation.id > 0 && !leadCardPhone;
+  const claudeOrdinaryDraftEligible = claudeOrdinaryDraftVisible && detail?.sessionId === conversation.id
     && detail?.leadPhone === conversation.leadPhone && Boolean(claudeInbound)
     && typeof claudeReceivingPhoneNumberId === "string" && Boolean(claudeReceivingPhoneNumberId.trim())
     && claudeReceivingPhoneNumberId === claudeSenderPhoneNumberId
     && !(liveClaudeConversation.lastSenderRole === "user" && (
       (liveClaudeConversation.lastMessageTs != null && claudeInbound?.ts != null && liveClaudeConversation.lastMessageTs > claudeInbound.ts)
       || (liveClaudeConversation.lastMessageText != null && liveClaudeConversation.lastMessageText !== claudeInbound?.content?.slice(0, 255))));
+  const claudeDraftVisible = claudeInitialLeadMode || claudeOrdinaryDraftVisible;
+  const claudeDraftEligible = claudeInitialLeadMode ? Boolean(claudeLeadFacts && claudeOriginalConversation
+    && (conversation.id === 0 || detail)
+    && (!detail || (detail.sessionId === conversation.id && normalizedLeadPhone(detail.leadPhone) === normalizedLeadPhone(leadCardPhone ?? null))))
+    : claudeOrdinaryDraftEligible;
   const claudeScopeKey = JSON.stringify([conversation.id, conversation.leadPhone, conversation.personType, leadCardPhone,
     detail?.sessionId, detail?.leadPhone, detail?.messageHistory, claudeReceivingPhoneNumberId,
-    liveClaudeConversation.lastMessageTs, liveClaudeConversation.lastMsgTs, liveClaudeConversation.lastMessageText, liveClaudeConversation.lastSenderRole]);
+    liveClaudeConversation.lastMessageTs, liveClaudeConversation.lastMsgTs, liveClaudeConversation.lastMessageText, liveClaudeConversation.lastSenderRole,
+    claudeInitialLeadMode, leadDraft, claudeInitialLeadMode ? leadCardSnapshot : null, claudeInitialLeadMode ? claudeLeadFacts : null]);
   // Invalidate synchronously, before effects, so a late response or old button
   // callback cannot use a draft after switching customer, line, or incoming turn.
   if (claudeDraftScopeRef.current.key !== claudeScopeKey) {
@@ -2488,6 +2449,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   }
   const claudeDraftScope = claudeDraftScopeRef.current;
   const claudeAlternative = trpc.madison.claudeAlternative.generate.useMutation();
+  const claudeInitialLeadAlternative = trpc.madison.claudeAlternative.generateInitialLead.useMutation();
   useEffect(() => {
     setClaudeDraft(null);
     setClaudeDraftError("");
@@ -2597,6 +2559,37 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     // keeps this deliberate request's UUID until completion; there is no retry.
     if (claudeDraftBusyRef.current || smsAutoDraftLoading || smsAutoDraft.isPending || !claudeDraftEligible
       || claudeDraftScopeRef.current !== claudeDraftScope) return;
+    if (claudeInitialLeadMode) {
+      const parsed = claudeInitialLeadInputSchema.safeParse({ sessionId: conversation.id, customerPhone: leadCardPhone,
+        requestId: crypto.randomUUID(), leadDetails: claudeLeadFacts, originalConversation: claudeOriginalConversation });
+      if (!parsed.success) return;
+      const request = parsed.data;
+      const isCurrent = () => claudeDraftMountedRef.current && claudeDraftScopeRef.current === claudeDraftScope
+        && claudeDraftBusyRef.current === request;
+      claudeDraftBusyRef.current = request;
+      setClaudeDraftPending(true);
+      setClaudeDraft(null);
+      setClaudeDraftError("");
+      try {
+        const response = claudeInitialLeadResultSchema.safeParse(await claudeInitialLeadAlternative.mutateAsync(request));
+        if (!isCurrent()) return;
+        if (!response.success || response.data.requestId !== request.requestId || response.data.sessionId !== request.sessionId
+          || normalizedLeadPhone(response.data.customerPhone) !== normalizedLeadPhone(request.customerPhone)
+          || !response.data.replyText.trim()) {
+          setClaudeDraftError("Claude draft could not be verified. Your reply is unchanged.");
+          return;
+        }
+        setClaudeDraft({ result: response.data, scopeKey: claudeDraftScope.key, epoch: claudeDraftScope.epoch });
+      } catch {
+        if (isCurrent()) setClaudeDraftError("Claude draft is unavailable. You can continue with your reply.");
+      } finally {
+        if (claudeDraftBusyRef.current === request) {
+          claudeDraftBusyRef.current = null;
+          if (claudeDraftMountedRef.current) setClaudeDraftPending(false);
+        }
+      }
+      return;
+    }
     const parsed = claudeSmsAlternativeGenerateInputSchema.safeParse({ sessionId: conversation.id,
       providerMessageId: claudeInbound?.providerMessageId, receivingPhoneNumberId: claudeReceivingPhoneNumberId,
       requestId: crypto.randomUUID() });
@@ -2617,7 +2610,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
         setClaudeDraftError("Claude draft could not be verified. Your reply is unchanged.");
         return;
       }
-      setClaudeDraft({ result: response.data, scopeKey: claudeDraftScope.key, epoch: claudeDraftScope.epoch });
+      setClaudeDraft({ result: { ...response.data, kind: "sms_reply" }, scopeKey: claudeDraftScope.key, epoch: claudeDraftScope.epoch });
     } catch {
       if (isCurrent()) setClaudeDraftError("Claude draft is unavailable. You can continue with your reply.");
     } finally {
@@ -2630,13 +2623,16 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const currentClaudeDraft = claudeDraft && claudeDraft.scopeKey === claudeScopeKey
     && claudeDraft.epoch === claudeDraftScope.epoch ? claudeDraft.result : null;
   const allowClaudeUse = Boolean(currentClaudeDraft && claudeDraftEligible && !claudeDraftPending
-    && currentClaudeDraft.sessionId === conversation.id && currentClaudeDraft.providerMessageId === claudeInbound?.providerMessageId
+    && currentClaudeDraft.sessionId === conversation.id && (currentClaudeDraft.kind === "initial_lead"
+    ? claudeInitialLeadMode && normalizedLeadPhone(currentClaudeDraft.customerPhone) === normalizedLeadPhone(leadCardPhone ?? null)
+    : !claudeInitialLeadMode && currentClaudeDraft.providerMessageId === claudeInbound?.providerMessageId
     && currentClaudeDraft.receivingPhoneNumberId === claudeReceivingPhoneNumberId
-    && currentClaudeDraft.receivingPhoneNumberId === claudeSenderPhoneNumberId);
+    && currentClaudeDraft.receivingPhoneNumberId === claudeSenderPhoneNumberId));
   const useClaudeReply = () => {
     if (!allowClaudeUse || !currentClaudeDraft || claudeDraftBusyRef.current
       || claudeDraftScopeRef.current !== claudeDraftScope
-      || currentClaudeDraft.receivingPhoneNumberId !== getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations)) return;
+      || (currentClaudeDraft.kind === "sms_reply"
+        && currentClaudeDraft.receivingPhoneNumberId !== getCsInboxReplyPhoneNumberIdForSelectedConversation(conversation, conversations))) return;
     setDraft(currentClaudeDraft.replyText);
     setClaudeDraft(null);
     smsComposerRef.current?.focus();
@@ -2773,7 +2769,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
       {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className={`ccc-live-sms-ai-draft-card ${smsAutoDraftMinimized ? "is-minimized" : ""}`}><header><span><Sparkles />World-class draft</span><small>Review before sending</small><button type="button" className="ccc-live-sms-ai-draft-toggle" aria-label={smsAutoDraftMinimized ? "Expand world-class draft" : "Minimize world-class draft"} aria-expanded={!smsAutoDraftMinimized} title={smsAutoDraftMinimized ? "Expand draft" : "Minimize draft"} onClick={() => setSmsAutoDraftMinimized((value) => !value)}><ChevronDown /></button></header>{!smsAutoDraftMinimized && <><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" disabled={claudeDraftPending} onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></>}</article>}
       {claudeDraftVisible && <article className="ccc-live-sms-ai-draft-card" aria-label="Optional Claude draft"><header><span><Sparkles />Claude alternative</span><small>Optional · review only</small></header>
-        {currentClaudeDraft && <><small>Reply on {currentClaudeDraft.receivingPhoneNumber}</small><p>{currentClaudeDraft.replyText}</p></>}
+        {currentClaudeDraft && <><small>{currentClaudeDraft.kind === "initial_lead" ? `First lead reply · ${currentClaudeDraft.customerPhone}` : `Reply on ${currentClaudeDraft.receivingPhoneNumber}`}</small><p>{currentClaudeDraft.replyText}</p></>}
         {claudeDraftError && <p role="status">{claudeDraftError}</p>}
         <div><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!claudeDraftEligible || smsAutoDraftLoading || smsAutoDraft.isPending || claudeDraftPending} onClick={() => void generateClaudeDraft()}>{claudeDraftPending ? <Loader2 className="animate-spin" /> : <Sparkles />}{claudeDraftPending ? "Getting Claude draft…" : "Get Claude draft"}</button>
           {currentClaudeDraft && <><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!allowClaudeUse} onClick={useClaudeReply}><Pencil />Use reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={() => setClaudeDraft(null)}>Discard</button></>}
