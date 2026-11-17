@@ -32,6 +32,7 @@ type LiveEmailMessage = {
   bodyText?: string | null;
   snippet?: string | null;
   date?: number | null;
+  sentBy?: { name: string; photoUrl: string | null } | null;
 };
 type LiveEmailDetail = {
   from?: string | null;
@@ -293,12 +294,13 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
       {showClose && popupPrimaryMessage && <>
         <div className="em2-msg-body em2-msg-body-scroll-owner">{popupThreadMessages.map((message, index) => {
           const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
+          const outboundName = message.sentBy?.name?.trim() || "You";
           const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";
           const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) : null;
           return <section className={`em2-thread-entry${outbound ? " outgoing" : ""}${index === 0 ? " is-primary" : ""}`} key={message.id}>
             <header className="em2-thread-entry-head">
               <div className={`em2-thread-entry-meta${outbound ? " is-sent" : " is-received"}`}><span className="em2-thread-direction">{outbound ? "↗ Sent" : "✉ Received"}</span></div>
-              <div className="em2-thread-entry-identity"><div className={`em2-small-avatar${outbound ? " out" : ""}`}>{outbound ? "Y" : messageInitials}</div><div className="em2-thread-entry-who"><span className="em2-msg-name">{outbound ? "You" : (message.from || senderName)}</span><span className="em2-thread-entry-route">to: {outbound ? senderName : (inboxEmail || "inbox")}</span></div><time className="em2-msg-time">{ago(message.date)}</time></div>
+              <div className="em2-thread-entry-identity"><div className={`em2-small-avatar${outbound ? " out" : ""}`}>{outbound ? initialsFor(outboundName) : messageInitials}</div><div className="em2-thread-entry-who"><span className="em2-msg-name">{outbound ? outboundName : (message.from || senderName)}</span><span className="em2-thread-entry-route">to: {outbound ? senderName : (inboxEmail || "inbox")}</span></div><time className="em2-msg-time">{ago(message.date)}</time></div>
             </header>
             <div className="em2-thread-entry-body">{sanitizedHtml ? <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="em2-text-email-body">{message.bodyText || message.snippet || "(no content)"}</div>}</div>
           </section>;
@@ -306,11 +308,12 @@ function DetailMain({ detail, threadId, detailError, isDetailLoading, onRetry, r
       </>}
       {!showClose && messages.map((message, index) => {
         const outbound = Boolean(inboxEmail) && message.fromEmail?.toLowerCase() === inboxEmail;
+        const outboundName = message.sentBy?.name?.trim() || "You";
         const isPrimaryReceived = index === latestInboundMessageIndex;
         const messageInitials = (message.from ?? message.fromEmail ?? "?").replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((word: string) => word[0]?.toUpperCase()).join("") || "?";
         const sanitizedHtml = message.bodyHtml ? DOMPurify.sanitize(message.bodyHtml, { USE_PROFILES: { html: true } }) : null;
         return <article key={message.id} className={`em2-email-message${outbound ? " outgoing" : ""}${isPrimaryReceived ? " is-primary-received" : ""}`}>
-          <header className="em2-msg-head"><div className="em2-msg-who"><div className={`em2-small-avatar${outbound ? " out" : ""}`}>{outbound ? "Y" : messageInitials}</div><div><span className="em2-msg-name">{outbound ? "You" : (message.from || senderName)}</span><span className="em2-msg-email">{message.fromEmail ? `<${message.fromEmail}>` : ""}</span></div></div><div className="em2-msg-time">{ago(message.date)}</div></header>
+          <header className="em2-msg-head"><div className="em2-msg-who"><div className={`em2-small-avatar${outbound ? " out" : ""}`}>{outbound ? initialsFor(outboundName) : messageInitials}</div><div><span className="em2-msg-name">{outbound ? outboundName : (message.from || senderName)}</span><span className="em2-msg-email">{message.fromEmail ? `<${message.fromEmail}>` : ""}</span></div></div><div className="em2-msg-time">{ago(message.date)}</div></header>
           <div className={`em2-msg-body${isPrimaryReceived ? " em2-msg-body-scroll-owner" : ""}`}>{sanitizedHtml ? <div className="em2-html-email-body" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} /> : <div className="em2-text-email-body">{message.bodyText || message.snippet || "(no content)"}</div>}</div>
         </article>;
       })}

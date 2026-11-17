@@ -122,9 +122,10 @@ function route(inbox: Record<string, unknown>[] = [], input = page) {
   const setSelectedSmsConversation = vi.fn((value: unknown) => { state.selectedSmsConversation = value; });
   const detail = vi.fn(({ initialThreadId, detailOnly }: any) => React.createElement("div", { "data-existing-email-detail": initialThreadId, "data-detail-only": detailOnly }));
   const exported = compile(helper.getText(parsed) + "\nconst " + callback!.getText(parsed) + ";\n" + overlay.getText(parsed)
-    + `\nexports.open = openSmsDrawerFromTask; exports.overlay = (selectedEmailThreadId) => selectedEmailThreadId && (${gate!.getText(parsed)});`,
+    + `\nexports.open = openSmsDrawerFromTask; exports.overlay = (selectedEmailThreadId) => selectedEmailThreadId && (${gate!.getText(parsed)}); exports.child = (threadId) => ExactEmailWorkspaceOverlay({threadId,onClose:()=>{}}).props.children.props.children;`,
     { React, smsInbox: inbox, ...setters, setSelectedEmailThreadId, setSelectedSmsConversation, useCallback: (fn: unknown) => fn, CommandChatEmailDetail: detail });
   return { open: exported.open as (task: CustomerTask) => void, state, setters: { ...setters, setSelectedEmailThreadId, setSelectedSmsConversation }, detail,
+    child: exported.child as (threadId: string) => React.ReactElement,
     html: () => renderToStaticMarkup(exported.overlay(state.selectedEmailThreadId)) };
 }
 function rig(task: CustomerTask, input = source, inbox: Record<string, unknown>[] = [], routeInput = page) {
@@ -152,6 +153,28 @@ function rig(task: CustomerTask, input = source, inbox: Record<string, unknown>[
 }
 
 describe("Email task in the existing queue and canonical command stream (offline)", () => {
+  it.each(["queue", "stream"] as const)("shows the actual EMAIL/SMS source on every %s card without altering task actions", placement => {
+    for (const status of ["unclaimed", "claimed", "done"] as const) for (const task of [
+      email({ status, owner: status === "unclaimed" ? null : actor, completedBy: status === "done" ? confirmer : null }),
+      sms({ status, owner: status === "unclaimed" ? null : actor, completedBy: status === "done" ? confirmer : null }),
+    ]) {
+      const work = rig(task); const tree = work.render(placement);
+      const label = nodes(tree).find(node => node.props.className === "cct-task-label")!;
+      expect(text(label)).toBe(`Customer task · ${"email" in task ? "EMAIL" : "SMS"}`);
+      for (const mutation of Object.values(work.a)) expect(mutation).not.toHaveBeenCalled();
+    }
+  });
+
+  it("mounts the existing full Email component by exact thread key when switching between task cards", () => {
+    const work = route();
+    const first = work.child("exact-first-thread"); const second = work.child("exact-second-thread");
+    expect(first.type).toBe(work.detail); expect(second.type).toBe(work.detail);
+    expect(first.key).toBe("exact-first-thread"); expect(second.key).toBe("exact-second-thread");
+    expect(first.props).toMatchObject({ initialThreadId: "exact-first-thread", detailOnly: true });
+    expect(second.props).toMatchObject({ initialThreadId: "exact-second-thread", detailOnly: true });
+    expect(Object.keys(first.props as object)).not.toContain("key");
+  });
+
   it.each(["queue", "stream"] as const)("renders real fromEmail in the closed %s identity, exact source text first, and no invented phone or raw internal email IDs", placement => {
     const task = email(); const work = rig(task); const tree = work.render(placement);
     const heading = nodes(tree).find(node => node.type === "header")!;
@@ -266,13 +289,27 @@ describe("Email task in the existing queue and canonical command stream (offline
 });
 
 describe("Exact offline SMS control and protected source bytes", () => {
+  it("restores no email dot logic, provider polling or backend edits", () => {
+    const rollback = "c56e87bc2e6bde342d832db8415c2152a2033345";
+    const restored = (path: string) => execFileSync("git", ["show", `${rollback}:${path}`], { encoding: "utf8" });
+    expect(page.replace('<CommandChatEmailDetail key={threadId} initialThreadId={threadId}', '<CommandChatEmailDetail initialThreadId={threadId}')).toBe(restored(pagePath));
+    expect(source.replace('Customer task · {"email" in task ? "EMAIL" : "SMS"}', 'Customer task')).toBe(restored(componentPath));
+    for (const path of ["server/gmailService.ts", "server/opsChatRouter.ts", "server/gmailRouter.ts", "server/gmailGlanceWorker.ts",
+      "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailStore.ts",
+      "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeAgentClient.ts"]) {
+      expect(readFileSync(path, "utf8")).toBe(restored(path));
+    }
+    expect(readFileSync("server/gmailService.ts", "utf8")).not.toContain("getEmailInboxUnansweredStatuses");
+    expect(readFileSync("server/opsChatRouter.ts", "utf8")).not.toContain("getEmailInboxUnansweredStatuses");
+  });
+
   it.each(["queue", "stream"] as const)("renders SMS %s byte-identically to the authorized baseline and clicks the identical exact-session drawer path", placement => {
     for (const status of ["unclaimed", "claimed", "done"] as const) for (const pending of [false, true]) {
       const task = sms({ status, owner: status === "unclaimed" ? null : actor, completedBy: status === "done" ? confirmer : null, completedAt: status === "done" ? NOW : null, completionNote: status === "done" ? "Original completion note" : null });
       const sibling = { id: 999, leadName: task.customerName, leadPhone: task.customerPhone, lastInboundPhoneNumberId: "WRONG_LINE" };
       const exact = { ...sibling, id: task.sessionId, lastInboundPhoneNumberId: "EXACT_LINE" };
       const candidate = rig(task, source, [sibling, exact]); const control = rig(task, controlSource, [sibling, exact], controlPage);
-      expect(candidate.html(placement, pending)).toBe(control.html(placement, pending));
+      expect(candidate.html(placement, pending).replace("Customer task · SMS", "Customer task")).toBe(control.html(placement, pending));
       button(candidate.render(placement, pending), "Open full conversation").props.onClick();
       button(control.render(placement, pending), "Open full conversation").props.onClick();
       for (const name of Object.keys(candidate.open.setters)) expect(candidate.open.setters[name].mock.calls).toEqual(control.open.setters[name].mock.calls);
@@ -284,13 +321,21 @@ describe("Exact offline SMS control and protected source bytes", () => {
   it("limits page changes to the type annotation and leading email callback branch; preserves the entire SMS resolver body, drawer and email overlay", () => {
     const branch = '    if ("email" in task) {\n      if (!task.email.threadId) { showNotice("This task\'s linked conversation is unavailable."); return; }\n      setSelectedLeadCardPhone(null);\n      setSelectedLeadCardDraft(null);\n      setSelectedLeadCardSnapshot(null);\n      setSelectedLeadDetail(null);\n      setSelectedSmsConversation(null);\n      setSelectedEmailThreadId(task.email.threadId);\n      return;\n    }\n';
     expect(page).toContain(branch);
-    const normalized = page.replace(branch, "").replace('function taskConversation(task: Extract<CustomerTask, { sessionId: number }>,', 'function taskConversation(task: CustomerTask,');
+    const normalized = page.replace(branch, "").replace('function taskConversation(task: Extract<CustomerTask, { sessionId: number }>,', 'function taskConversation(task: CustomerTask,')
+      .replace('<CommandChatEmailDetail key={threadId} initialThreadId={threadId}', '<CommandChatEmailDetail initialThreadId={threadId}');
     expect(normalized).toBe(controlPage);
-    for (const path of ["client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css", "client/src/components/claude-customer-tasks.css"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));
+    let detail = readFileSync("client/src/pages/CommandChatEmailDetail.tsx", "utf8")
+      .replace('  sentBy?: { name: string; photoUrl: string | null } | null;\n', '')
+      .replaceAll('          const outboundName = message.sentBy?.name?.trim() || "You";\n', '')
+      .replaceAll('        const outboundName = message.sentBy?.name?.trim() || "You";\n', '')
+      .replaceAll('initialsFor(outboundName)', '"Y"').replaceAll('outbound ? outboundName :', 'outbound ? "You" :');
+    expect(detail).toBe(baseline("client/src/pages/CommandChatEmailDetail.tsx"));
+    for (const path of ["client/src/pages/command-chat-email-detail.css", "client/src/components/claude-customer-tasks.css"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));
   });
 
   it("limits compact task changes to approved identity/copy/conversation slots, preserving all original authentication, mutation, state, pending and button blocks", () => {
     const approved = [
+      ['Customer task · {"email" in task ? "EMAIL" : "SMS"}', 'Customer task'],
       ['{task.customerName || ("email" in task ? task.email.fromEmail : task.customerPhone)}', '{task.customerName || task.customerPhone}'],
       ['{"email" in task ? "No booking change, customer email, or conversation closure is performed." : "No booking change, customer text, or conversation closure is performed."}', 'No booking change, customer text, or conversation closure is performed.'],
       ['{"email" in task ? task.email.fromEmail : task.customerPhone}', '{task.customerPhone}'],

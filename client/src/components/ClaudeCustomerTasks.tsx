@@ -212,7 +212,7 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
     finally { busyRef.current = false; setSaving(false); }
   };
   return <article className={`cct-card cct-card-${placement}`} data-task-id={task.id} data-task-status={task.status} aria-label={`Task: ${task.title}`}>
-    <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">Customer task</span><strong>{task.title}</strong>
+    <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">Customer task · {"email" in task ? "EMAIL" : "SMS"}</span><strong>{task.title}</strong>
       <small className="cct-customer-identity"><span>{task.customerName || "Customer"}</span><span className="cct-customer-phone">{"email" in task ? task.email.fromEmail : task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
     <div className="cct-card-status">
       <span>{task.status === "done" ? `Confirmed by ${task.completedBy?.name || "Staff"}` : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
