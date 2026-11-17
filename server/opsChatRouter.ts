@@ -6301,6 +6301,16 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           lastMessageAt: gmailThreadMeta.lastMessageAt,
           messageCount: gmailThreadMeta.messageCount,
           isUnread: gmailThreadMeta.isUnread,
+          aiHistoryId: gmailThreadMeta.aiHistoryId,
+          // Read-only receipt identity invalidates cached status immediately after app acceptance.
+          // Explicit outer qualifier avoids Drizzle's single-table SELECT dequalification.
+          latestAcceptedMessageId: sql<string | null>`(
+            SELECT gsl.messageId FROM gmail_sent_log gsl
+            WHERE gsl.threadId = gmail_thread_meta.threadId
+              AND CHAR_LENGTH(TRIM(gsl.messageId)) > 0
+            ORDER BY gsl.sentAt DESC, gsl.id DESC
+            LIMIT 1
+          )`,
         })
         .from(gmailThreadMeta)
         .where(
@@ -6314,8 +6324,11 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
         )
         .orderBy(desc(gmailThreadMeta.lastMessageAt));
       const latestRows = keepLatestEmailThreadPerSender(rows);
+      const hasUnanswered = await import("./gmailService")
+        .then(({ getEmailInboxUnansweredStatuses }) => getEmailInboxUnansweredStatuses(latestRows, inboxEmail))
+        .catch(() => latestRows.map(() => true));
       return {
-        threads: latestRows.map(r => ({
+        threads: latestRows.map((r, index) => ({
           threadId: r.threadId,
           senderName: r.senderName ?? null,
           senderEmail: r.senderEmail ?? null,
@@ -6324,6 +6337,7 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
           lastMessageAt: r.lastMessageAt ?? 0,
           messageCount: r.messageCount ?? 0,
           isUnread: r.isUnread === 1,
+          hasUnanswered: hasUnanswered[index] !== false,
         })),
         inboxEmail,
       };

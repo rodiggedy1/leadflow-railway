@@ -1,0 +1,118 @@
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
+import { ExactEmailWorkspaceOverlay } from "navigation-actual-overlay";
+
+export const audit = { queries: [] as { name: string; input: any }[], mutations: [] as any[], outbound: [] as string[], errors: [] as string[] };
+const A = "19_NAVIGATION_EXACT_A_001";
+const B = "19_NAVIGATION_EXACT_B_002";
+const inbox = "office@example.test";
+const NOW = 1_800_000_000_000;
+function fixture(id: string, letter: string) {
+  return {
+    threadId: id, from: `Synthetic Customer ${letter}`, fromEmail: `${letter.toLowerCase()}@example.test`, inboxEmail: inbox, subject: `Exact subject ${letter}`,
+    messages: [
+      { id: `${letter}-html`, from: `Synthetic Customer ${letter}`, fromEmail: `${letter.toLowerCase()}@example.test`, date: NOW - 120000,
+        bodyHtml: `<div style="color:black" color="black" bgcolor="black"><p>${letter} HTML START <strong>Exact bold original</strong></p>${Array.from({length: 90}, (_, i) => `<p>${letter} HTML paragraph ${i} — complete retained original text.</p>`).join("")}<p>${letter} HTML END</p><script>window.__xss=1</script><img src="data:image/png;base64,AAAA" onerror="window.__xss=2"></div>` },
+      { id: `${letter}-old-outbound`, from: "Office", fromEmail: inbox, date: NOW - 90000, sentBy: { name: "Synthetic Colleague", photoUrl: null }, bodyText: `${letter} EARLIER SENT START\n${Array.from({length: 30}, (_, i) => `${letter} sent line ${i}`).join("\n")}\n${letter} EARLIER SENT END` },
+      { id: `${letter}-plain`, from: `Synthetic Customer ${letter}`, fromEmail: `${letter.toLowerCase()}@example.test`, date: NOW - 60000, bodyText: `  ${letter} PLAIN START\n\n<literal-not-html>\n${Array.from({length: 45}, (_, i) => `${letter} plain line ${i}`).join("\n")}\n  ${letter} PLAIN END  ` },
+      { id: `${letter}-last-reply`, from: "Office", fromEmail: inbox, date: NOW - 10000, sentBy: { name: "Synthetic Colleague", photoUrl: null }, bodyText: `${letter} LAST REPLY START\n${Array.from({length: 40}, (_, i) => `${letter} final reply line ${i}`).join("\n")}\n${letter} LAST REPLY END` },
+    ],
+  };
+}
+const details = { [A]: fixture(A, "A"), [B]: fixture(B, "B") };
+const drafts = { [A]: { id: 101, generatedDraft: "Synthetic Madison draft A", intentSummary: "Offline A only" }, [B]: { id: 102, generatedDraft: "Synthetic Madison draft B", intentSummary: "Offline B only" } };
+function query(name: string, get: (input: any) => any) {
+  return { useQuery(input: any, options: any) { audit.queries.push({ name, input }); return { data: options?.enabled === false ? undefined : get(input), isLoading: false, error: null, refetch: async () => ({ data: get(input) }) }; } };
+}
+function mutation(name: string) {
+  const reject = (input: any) => { audit.mutations.push({ name, input }); throw new Error(`Forbidden offline mutation: ${name}`); };
+  return { useMutation: () => ({ isPending: false, mutate: reject, mutateAsync: async (input: any) => reject(input) }) };
+}
+function invalidate(name: string) { return () => { audit.mutations.push({ name }); throw new Error(`Unexpected navigation invalidation: ${name}`); }; }
+export const trpc = {
+  useUtils: () => ({ opsChat: { listEmailInboxThreads: { invalidate: invalidate("inbox.invalidate") } }, gmail: { getThread: { invalidate: invalidate("thread.invalidate") } } }),
+  opsChat: {
+    listEmailInboxThreads: query("listEmailInboxThreads", () => ({ inboxEmail: inbox, threads: Object.values(details).map(detail => ({ threadId: detail.threadId, senderName: detail.from, senderEmail: detail.fromEmail, subject: detail.subject, snippet: "DELIBERATELY TRUNCATED INBOX PREVIEW", lastMessageAt: NOW, messageCount: detail.messages.length, isUnread: false })) })),
+    getEmailDraftByThreadId: query("getEmailDraftByThreadId", input => drafts[input.threadId as keyof typeof drafts]),
+    dismissEmailDraft: mutation("dismissEmailDraft"),
+  },
+  gmail: {
+    getThread: query("getThread", input => { if (!(input.threadId in details)) throw new Error(`Unexpected exact thread ID ${input.threadId}`); return details[input.threadId]; }),
+    getBookingContext: query("getBookingContext", () => ({ booking: null })),
+    sendReply: mutation("sendReply"), completeThread: mutation("completeThread"),
+  },
+};
+function block(name: string) { return (..._args: any[]) => { audit.outbound.push(name); throw new Error(`Forbidden outbound: ${name}`); }; }
+window.fetch = block("fetch") as any;
+window.XMLHttpRequest = block("XMLHttpRequest") as any;
+window.WebSocket = block("WebSocket") as any;
+window.EventSource = block("EventSource") as any;
+navigator.sendBeacon = block("sendBeacon") as any;
+(window as any).__xss = 0;
+window.addEventListener("error", event => audit.errors.push(String(event.error || event.message)));
+const root = createRoot(document.getElementById("root")!);
+let closeCount = 0;
+const close = () => { closeCount++; };
+const render = (threadId: string) => flushSync(() => root.render(<ExactEmailWorkspaceOverlay threadId={threadId} onClose={close} />));
+const one = (selector: string) => document.querySelector<HTMLElement>(selector)!;
+const wait = () => new Promise(resolve => setTimeout(resolve, 25));
+const rect = (node: HTMLElement) => { const r = node.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height }; };
+function layout(letter: string) {
+  const popup = one(".ccc-live-email-workspace-modal");
+  const thread = one(".em2-thread");
+  const owner = one(".em2-msg-body-scroll-owner");
+  const composer = one(".em2-composer");
+  const header = one(".em2-main-head");
+  const rail = one(".email-popup-context");
+  const before = { popup: rect(popup), composer: rect(composer), header: rect(header), rail: rect(rail) };
+  owner.scrollTop = 0;
+  owner.scrollTop = owner.scrollHeight;
+  const after = { popup: rect(popup), composer: rect(composer), header: rect(header), rail: rect(rail) };
+  const entries = Array.from(owner.querySelectorAll<HTMLElement>(".em2-thread-entry"));
+  const markers = ["HTML START", "HTML END", "EARLIER SENT START", "EARLIER SENT END", "PLAIN START", "PLAIN END", "LAST REPLY START", "LAST REPLY END"].map(marker => `${letter} ${marker}`);
+  const lastText = Array.from(owner.querySelectorAll<HTMLElement>(".em2-text-email-body")).find(node => node.textContent?.includes(`${letter} LAST REPLY START`));
+  const finalRange = document.createRange();
+  if (lastText?.firstChild) { const text = lastText.firstChild; const start = (text.textContent || "").indexOf(`${letter} LAST REPLY END`); if (start >= 0) { finalRange.setStart(text, start); finalRange.setEnd(text, start + `${letter} LAST REPLY END`.length); } }
+  const finalRect = finalRange.getBoundingClientRect();
+  const ownerRect = owner.getBoundingClientRect();
+  const all = [popup, ...Array.from(popup.querySelectorAll<HTMLElement>("*"))];
+  const scrollOwners = all.filter(node => getComputedStyle(node).display !== "none" && /^(auto|scroll)$/.test(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight + 1).map(node => node.className);
+  const light = getComputedStyle(one(".em2-html-email-body strong")).color;
+  const plainText = Array.from(owner.querySelectorAll<HTMLElement>(".em2-text-email-body")).find(node => node.textContent?.includes(`${letter} PLAIN START`));
+  return {
+    viewport: { width: innerWidth, height: innerHeight }, popup: rect(popup), composer: rect(composer), ownerHeight: owner.clientHeight, ownerScrollHeight: owner.scrollHeight, scrollTop: owner.scrollTop,
+    threadOverflow: getComputedStyle(thread).overflowY, ownerOverflow: getComputedStyle(owner).overflowY,
+    entries: entries.length, outsideEntries: document.querySelectorAll(".em2-thread-entry").length - entries.length,
+    cards: document.querySelectorAll(".em2-email-message").length, tabs: document.querySelectorAll(".em2-main-tabs").length,
+    fullMarkers: markers.every(marker => owner.textContent?.includes(marker)), htmlParagraphs: owner.querySelectorAll(".em2-html-email-body p").length,
+    exactPlain: plainText?.textContent === details[letter === "A" ? A : B].messages[2].bodyText,
+    fullLastReply: lastText?.textContent === details[letter === "A" ? A : B].messages[3].bodyText,
+    lastReplyEndVisible: finalRect.height > 0 && finalRect.top >= ownerRect.top - 1 && finalRect.bottom <= ownerRect.bottom + 1,
+    fixedOnBodyScroll: JSON.stringify(before) === JSON.stringify(after), scrollOwners, light,
+    sanitized: !owner.querySelector("[style], [color], [bgcolor], script, [onerror]"), xss: (window as any).__xss,
+    popupHasOuterScroll: popup.scrollHeight > popup.clientHeight + 1 || popup.scrollWidth > popup.clientWidth + 1,
+    threadHasOuterScroll: thread.scrollHeight > thread.clientHeight + 1,
+    documentHasOuterScroll: document.documentElement.scrollHeight > innerHeight + 1 || document.documentElement.scrollWidth > innerWidth + 1,
+  };
+}
+(window as any).navigationRun = async () => {
+  render(A); await wait();
+  const a = layout("A");
+  const popup = one(".ccc-live-email-workspace-modal");
+  const owner = one(".em2-msg-body-scroll-owner");
+  const textarea = one("textarea.em2-compose-textarea") as HTMLTextAreaElement;
+  const unsent = "Offline unsent local UI state; NEVER send";
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+  setter.call(textarea, unsent); textarea.dispatchEvent(new Event("input", { bubbles: true })); await wait();
+  one('[aria-label="Dismiss draft"]').click(); await wait();
+  owner.scrollTop = 180;
+  const beforeSameScrollTop = owner.scrollTop;
+  render(A); await wait();
+  const same = { popupIdentity: one(".ccc-live-email-workspace-modal") === popup, ownerIdentity: one(".em2-msg-body-scroll-owner") === owner, textareaIdentity: one("textarea.em2-compose-textarea") === textarea, reply: (one("textarea.em2-compose-textarea") as HTMLTextAreaElement).value, draftDismissed: !document.querySelector(".em2-ai-draft"), scrollTop: one(".em2-msg-body-scroll-owner").scrollTop, beforeSameScrollTop };
+  const navigationStart = audit.queries.length;
+  render(B); await wait();
+  const b = layout("B");
+  const navigation = { popupIdentity: one(".ccc-live-email-workspace-modal") === popup, detailRemounted: one("textarea.em2-compose-textarea") !== textarea, subject: one(".em2-subject").textContent, sender: one(".em2-sender-name").textContent, hasOldA: one(".em2-msg-body-scroll-owner").textContent?.includes("A HTML START"), reply: (one("textarea.em2-compose-textarea") as HTMLTextAreaElement).value, draft: one(".em2-composer").textContent, queries: audit.queries.slice(navigationStart) };
+  return { a, same, b, navigation, audit, closeCount };
+};

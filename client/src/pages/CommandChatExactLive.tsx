@@ -245,6 +245,7 @@ type EmailInboxThread = {
   lastMessageAt: number;
   messageCount: number;
   isUnread: boolean;
+  hasUnanswered: boolean;
 };
 
 
@@ -2054,7 +2055,7 @@ function EmailInboxRow({ thread, onOpen }: { thread: EmailInboxThread; onOpen: (
   return <button type="button" className="ccc-live-sms-row ccc-live-email-row" onClick={onOpen}>
     <img src={customerPortraitFor(name)} alt={`Client portrait illustration for ${name}`} />
     <span className="ccc-live-sms-row-copy"><strong>{name}</strong><small>{preview}</small></span>
-    <span className="ccc-live-sms-row-meta"><time>{time}</time><i className={thread.isUnread ? "is-unread" : ""} /></span>
+    <span className="ccc-live-sms-row-meta"><time>{time}</time><i className={thread.hasUnanswered !== false ? "is-unread" : ""} aria-label={thread.hasUnanswered === false ? "Email replied to" : "Email awaiting reply"} /></span>
   </button>;
 }
 
@@ -2371,7 +2372,7 @@ const CommandComposer = memo(function CommandComposer({
 function ExactEmailWorkspaceOverlay({ threadId, onClose }: { threadId: string; onClose: () => void }) {
   return <div className="ccc-live-email-workspace-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="ccc-live-email-workspace-modal" role="dialog" aria-modal="true" aria-label="Email conversation" onMouseDown={(event) => event.stopPropagation()}>
-      <CommandChatEmailDetail initialThreadId={threadId} onCloseDetail={onClose} detailOnly />
+      <CommandChatEmailDetail key={threadId} initialThreadId={threadId} onCloseDetail={onClose} detailOnly />
     </section>
   </div>;
 }
