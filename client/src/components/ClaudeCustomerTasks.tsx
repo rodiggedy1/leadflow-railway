@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import DOMPurify from "dompurify";
 import { Check, ChevronDown, ClipboardList, Loader2, RefreshCw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -175,10 +176,10 @@ export function TaskCompletionConfirm({ task, note, pending, error, allowed, onN
   onNote: (note: string) => void; onCancel: () => void; onConfirm: () => void;
 }) {
   return <div className="cct-confirm-body">
-    <p className="cct-confirm-task">{task.title}<small>{task.customerName || task.customerPhone}</small></p>
+    <p className="cct-confirm-task">{task.title}<small>{task.customerName || ("email" in task ? task.email.fromEmail : task.customerPhone)}</small></p>
     <p>I completed all the actions in this task.</p>
     <p>This records your human confirmation of the entire request and checklist, not system verification.</p>
-    <p className="cct-confirm-boundary">No booking change, customer text, or conversation closure is performed.</p>
+    <p className="cct-confirm-boundary">{"email" in task ? "No booking change, customer email, or conversation closure is performed." : "No booking change, customer text, or conversation closure is performed."}</p>
     <label>Completion note <span>(required)</span><textarea value={note} onChange={(event) => onNote(event.target.value)} placeholder="What did you complete?" rows={2} required /></label>
     {!allowed && <p className="cct-feedback" role="alert">Only the current task owner can mark this done.</p>}
     {error && <p className="cct-feedback" role="alert">{error}</p>}
@@ -212,7 +213,7 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
   };
   return <article className={`cct-card cct-card-${placement}`} data-task-id={task.id} data-task-status={task.status} aria-label={`Task: ${task.title}`}>
     <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">Customer task</span><strong>{task.title}</strong>
-      <small className="cct-customer-identity"><span>{task.customerName || "Customer"}</span><span className="cct-customer-phone">{task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
+      <small className="cct-customer-identity"><span>{task.customerName || "Customer"}</span><span className="cct-customer-phone">{"email" in task ? task.email.fromEmail : task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
     <div className="cct-card-status">
       <span>{task.status === "done" ? `Confirmed by ${task.completedBy?.name || "Staff"}` : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
       {task.status === "unclaimed" && <button type="button" className="cct-primary" disabled={busy || !callerId}
@@ -220,13 +221,16 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
       {editable && <button type="button" disabled={busy || !canComplete} title="Confirm all actions in this task are complete"
         onClick={() => { if (!canComplete || busy) return; setError(""); setNote(""); setConfirmOpen(true); }}>Mark done</button>}
     </div>
-    <button type="button" className="cct-conversation-link" disabled={!onOpenConversation || !Number.isSafeInteger(task.sessionId) || task.sessionId <= 0}
-      onClick={() => { if (onOpenConversation && Number.isSafeInteger(task.sessionId) && task.sessionId > 0) onOpenConversation(task); }}>Open full conversation</button>
-    <details className="cct-details"><summary>Customer text &amp; acknowledgment <ChevronDown /></summary><div className="cct-details-body">
-      <section className="cct-source-message"><h4>Customer text</h4><p className="cct-verbatim">{task.sourceText}</p></section>
+    <button type="button" className="cct-conversation-link" disabled={!onOpenConversation || !("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)}
+      onClick={() => { if (onOpenConversation && ("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)) onOpenConversation(task); }}>Open full conversation</button>
+    <details className="cct-details"><summary>{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment <ChevronDown /></summary><div className="cct-details-body">
+      <section className="cct-source-message"><h4>{"email" in task ? "Customer email" : "Customer text"}</h4>{"email" in task && task.email.bodyFormat === "html"
+        ? <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.sourceText, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />
+        : <p className="cct-verbatim">{task.sourceText}</p>}</section>
       <section><ul className="cct-items">{task.items.map((item) => {
         const confirmed = item.completedBy !== null && item.completedAt !== null;
         return <li key={item.id}><div><strong>{item.title}</strong>
+          {"email" in task && task.email.bodyFormat === "html" && <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.evidenceQuote, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />}
           {confirmed && <small>Human-confirmed by {item.completedBy!.name} · {taskTimestamp(item.completedAt!)}</small>}</div>
           {confirmed ? <Check aria-label="Item human-confirmed" /> : editable ? <button type="button" disabled={busy}
             aria-label={`Confirm completed item: ${item.title}`} onClick={() => void update(() => actions.completeItem(task.id, item.id))}>Confirm item</button> : <small>Not confirmed</small>}

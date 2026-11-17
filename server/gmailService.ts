@@ -180,6 +180,8 @@ export interface GmailThread {
   messages: GmailMessage[];
   /** The authenticated inbox email address — used by clients to identify outbound messages */
   inboxEmail: string | null;
+  /** Opt-in original Gmail source for the automatic email adapter, never a snippet. */
+  sourceSnapshot?: unknown;
 }
 
 function decodeBase64(data: string): string {
@@ -288,7 +290,7 @@ export async function listInboxThreads(opts: {
   return { threads: sorted, nextPageToken };
 }
 
-export async function getThreadDetail(threadId: string, parent = "unknown"): Promise<GmailThread> {
+export async function getThreadDetail(threadId: string, parent = "unknown", includeSourceSnapshot = false): Promise<GmailThread> {
   const gmail = await getGmailClient();
   const _gid2 = Math.random().toString(36).slice(2, 10);
   const _gt2 = Date.now();
@@ -329,17 +331,20 @@ export async function getThreadDetail(threadId: string, parent = "unknown"): Pro
     messageCount: messages.length,
     messages,
     inboxEmail,
+    ...(includeSourceSnapshot ? { sourceSnapshot: res.data } : {}),
   };
 }
 
 export async function sendGmailReply(opts: {
   threadId: string; to: string; subject: string; bodyHtml: string; inReplyToMessageId?: string;
+  automaticReply?: boolean;
 }): Promise<{ messageId: string; threadId: string }> {
   const gmail = await getGmailClient();
   const subject = opts.subject.startsWith("Re:") ? opts.subject : `Re: ${opts.subject}`;
   const headers = [
     `To: ${opts.to}`, `Subject: ${subject}`,
     `Content-Type: text/html; charset=utf-8`, `MIME-Version: 1.0`,
+    ...(opts.automaticReply ? ["Auto-Submitted: auto-replied"] : []),
     ...(opts.inReplyToMessageId
       ? [`In-Reply-To: ${opts.inReplyToMessageId}`, `References: ${opts.inReplyToMessageId}`]
       : []),

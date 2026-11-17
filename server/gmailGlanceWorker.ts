@@ -26,6 +26,7 @@ import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { google } from "googleapis";
 import { gmailState } from "../drizzle/schema";
+import { readCustomerEmailConfig } from "./instinct/claudeCustomerEmail";
 
 // ── Category definitions ──────────────────────────────────────────────────────
 export type GlanceCategory =
@@ -149,15 +150,28 @@ function _logMinuteSummary() {
 
 // ── Enqueue with source tagging ───────────────────────────────────────────────
 export type EnqueueSource = "pubsub" | "backfill" | "manual";
+export interface CustomerEmailInboundAnchor { inboundMessageId: string; receivedAt: number }
+const _emailAnchors = new Map<string, Map<string, CustomerEmailInboundAnchor>>();
+const _emailProcessing = new Set<string>();
 
 // Track which threadId is currently being processed by the worker loop
 let _currentlyProcessing: string | null = null;
 
-export function enqueueThread(threadId: string, source: EnqueueSource = "manual") {
+export function enqueueThread(threadId: string, source: EnqueueSource = "manual", anchor?: CustomerEmailInboundAnchor) {
   _enqueueTotal++;
   if (source === "pubsub") _enqueueFromPubSub++;
   else if (source === "backfill") _enqueueFromBackfill++;
   else _enqueueFromManual++;
+
+  if (source === "pubsub" && anchor?.inboundMessageId?.trim() && Number.isSafeInteger(anchor.receivedAt)
+    && anchor.receivedAt > 0 && readCustomerEmailConfig().enabled) {
+    let pending = _emailAnchors.get(threadId);
+    if (!pending) { pending = new Map(); _emailAnchors.set(threadId, pending); }
+    if (!pending.has(anchor.inboundMessageId)) pending.set(anchor.inboundMessageId, { ...anchor });
+    // Unlike the legacy dedup, retain a real new inbound received during the
+    // entire run. Its single re-enqueue happens in processThread's finally.
+    if (_currentlyProcessing === threadId || _emailProcessing.has(threadId)) return;
+  }
 
   // Determine skip reason before mutating the set
   if (_currentlyProcessing === threadId) {
@@ -202,7 +216,10 @@ async function getGmailClient() {
 }
 
 // ── Core: process a single thread ─────────────────────────────────────────────
-export async function processThread(threadId: string): Promise<void> {
+export async function processThread(threadId: string, emailAnchors: readonly CustomerEmailInboundAnchor[] = []): Promise<void> {
+  const emailRun = readCustomerEmailConfig().enabled;
+  const captureRun = emailAnchors.length > 0 && emailRun;
+  if (emailRun) _emailProcessing.add(threadId);
   try {
     const db = await getDb();
     if (!db) return;
@@ -220,7 +237,7 @@ export async function processThread(threadId: string): Promise<void> {
     console.log(`[GmailAPI] id=${_gid_w1} method=users.threads.get caller=processThread threadId=${threadId}`);
     console.log(`[GlanceWorker][API] threads.get threadId=${threadId} queueSize=${_queue.size}`);
 
-    let res: Awaited<ReturnType<typeof gmail.users.threads.get>>;
+    let res: { data: import("googleapis").gmail_v1.Schema$Thread };
     try {
       res = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
       console.log(`[GmailAPI] id=${_gid_w1} SUCCESS duration=${Date.now() - _gt_w1}ms`);
@@ -376,6 +393,19 @@ export async function processThread(threadId: string): Promise<void> {
     const { broadcastOpsUpdate } = await import("./sseBroadcast");
     broadcastOpsUpdate("gmail_new_messages");
 
+    let customerEmailOwned = false;
+    if (captureRun && readCustomerEmailConfig().enabled) {
+      try {
+        const { dispatchCapturedClaudeCustomerEmail } = await import("./instinct/claudeCustomerEmailApplication");
+        for (const anchor of emailAnchors) {
+          const owned = await dispatchCapturedClaudeCustomerEmail({ ...anchor, rawThread: res.data });
+          if (owned && anchor.inboundMessageId === latestMsg?.id) customerEmailOwned = true;
+        }
+      } catch (error) {
+        console.error("[GlanceWorker] Customer email capture failed:", error);
+      }
+    }
+
     // ── Phase 2: AI enrichment (best-effort — inbox already written) ──────────
     // If AI fails for any reason, thread stays in inbox with aiStatus='retry'.
     // isActionable/actionableReason are also resolved here (not in Phase 1).
@@ -508,11 +538,14 @@ Return ONLY valid JSON. No markdown, no explanation.`,
       // ── Madison Email Draft Agent ─────────────────────────────────────────────
       // Fire-and-forget: only on new messages (historyChanged) from actionable senders.
       // Never blocks the worker loop — errors are caught inside triggerMadisonEmailDraft.
-      if (historyChanged && isActionable === 1) {
+      if (historyChanged && isActionable === 1 && !customerEmailOwned) {
         const latestMsgForAgent = messages[messages.length - 1];
         const latestBodyForAgent = latestMsgForAgent ? findTextBody(latestMsgForAgent.payload) : "";
         const latestMsgIdForAgent = latestMsgForAgent?.id ?? "";
         if (latestBodyForAgent.trim() && latestMsgIdForAgent) {
+          const { skipLegacyCustomerEmailDraft } = await import("./instinct/claudeCustomerEmailGuards");
+          const owned = await skipLegacyCustomerEmailDraft(db, { threadId, fromEmail: senderEmail, createdAt: lastMessageAt });
+          if (!owned) {
           const { triggerMadisonEmailDraft } = await import("./madisonEmailAgent");
           triggerMadisonEmailDraft({
             threadId,
@@ -522,6 +555,7 @@ Return ONLY valid JSON. No markdown, no explanation.`,
             subject,
             inboundText: latestBodyForAgent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 2000),
           }).catch((e) => console.error("[GlanceWorker] MadisonEmailAgent error:", e));
+          }
         }
       }
     } catch (aiErr: any) {
@@ -542,6 +576,12 @@ Return ONLY valid JSON. No markdown, no explanation.`,
   } catch (err) {
     // Never let errors bubble — purely additive
     console.error(`[GlanceWorker] Error processing ${threadId}:`, err);
+  } finally {
+    if (emailRun) _emailProcessing.delete(threadId);
+    if (_emailAnchors.has(threadId)) {
+      if (readCustomerEmailConfig().enabled) { _queue.add(threadId); _snapshotQueueMax(); }
+      else _emailAnchors.delete(threadId);
+    }
   }
 }
 
@@ -576,7 +616,9 @@ function startWorkerLoop() {
     const threadId = _queue.values().next().value as string;
     _queue.delete(threadId);
     _currentlyProcessing = threadId;
-    await processThread(threadId);
+    const emailAnchors = Array.from(_emailAnchors.get(threadId)?.values() ?? []);
+    _emailAnchors.delete(threadId);
+    await processThread(threadId, emailAnchors);
     _currentlyProcessing = null;
   }, 600);
 }

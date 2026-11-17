@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { CLAUDE_CUSTOMER_REPLY_CAPABILITY, CLAUDE_CUSTOMER_TASK_ACTION } from "../../shared/claudeCustomerTasks";
+import { CUSTOMER_EMAIL_RECEIPT_ACTION } from "./claudeCustomerEmail";
 import { normalizePhone } from "../utils/phone";
 import { claudeCustomerSmsConfig, isClaudeCustomerSmsPhoneEligible } from "./claudeCustomerSms";
 
@@ -13,7 +14,7 @@ export function createClaudeCustomerReplyGuards(options: CustomerReplyGuardOptio
       const db = await getDatabase();
       if (!db) throw new Error("CUSTOMER_REPLY_STATUS_UNAVAILABLE");
       const [record] = rows(await db.execute(sql`SELECT quickAction FROM ops_chat_messages WHERE id = ${messageId}`));
-      if (record?.quickAction === CLAUDE_CUSTOMER_TASK_ACTION) throw new Error("CUSTOMER_TASK_CARD_PROTECTED");
+      if (record?.quickAction === CLAUDE_CUSTOMER_TASK_ACTION || record?.quickAction === CUSTOMER_EMAIL_RECEIPT_ACTION) throw new Error("CUSTOMER_TASK_CARD_PROTECTED");
     },
     async legacyDraft(draftId: number): Promise<void> {
       const db = await getDatabase();

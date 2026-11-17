@@ -26,6 +26,7 @@ import {
   getConversationsUnreadCount,
 } from "./gmailService";
 import { ENV } from "./_core/env";
+import { arbitrateCustomerEmailHumanReply, skipLegacyCustomerEmailDraft } from "./instinct/claudeCustomerEmailGuards";
 
 async function requireGmailConnected() {
   const db = await getDb();
@@ -205,9 +206,12 @@ export const gmailRouter = router({
         db.select({ threadId: madisonEmailDrafts.threadId })
           .from(madisonEmailDrafts)
           .where(inArray(madisonEmailDrafts.threadId, threadIds))
-          .then((existingDrafts) => {
+          .then(async (existingDrafts) => {
             const draftedSet = new Set(existingDrafts.map((d) => d.threadId));
-            const undrafted = pageRows.filter((r) => !draftedSet.has(r.threadId) && r.senderEmail && r.snippet);
+            const undrafted: typeof pageRows = [];
+            for (const row of pageRows.filter((r) => !draftedSet.has(r.threadId) && r.senderEmail && r.snippet)) {
+              if (!await skipLegacyCustomerEmailDraft(db, { threadId: row.threadId, fromEmail: row.senderEmail, createdAt: row.lastMessageAt })) undrafted.push(row);
+            }
             console.log(`[listThreads] existingDrafts=${existingDrafts.length} undrafted=${undrafted.length}`);
             if (undrafted.length === 0) return;
             import("./madisonEmailAgent").then(({ triggerMadisonEmailDraft }) => {
@@ -291,6 +295,7 @@ export const gmailRouter = router({
             (m: any) => !inboxEmailLower || (m.fromEmail ?? "").toLowerCase() !== inboxEmailLower
           ) as any;
           if (!latestInbound) return;
+          if (await skipLegacyCustomerEmailDraft(db, { threadId: input.threadId, fromEmail: latestInbound.fromEmail, createdAt: latestInbound.date })) return;
           const bodyText = latestInbound.bodyText || latestInbound.snippet || "";
           if (!bodyText.trim()) return;
           const { triggerMadisonEmailDraft } = await import("./madisonEmailAgent");
@@ -404,6 +409,7 @@ export const gmailRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = await requireGmailConnected();
+      await arbitrateCustomerEmailHumanReply(input.threadId);
       // Use multipart/mixed when attachments are present, plain HTML otherwise
       const result = (input.attachments && input.attachments.length > 0)
         ? await sendGmailReplyWithAttachments({

@@ -12,7 +12,7 @@ export const customerReplyPlanSchema = z.object({
   replyText: z.string().trim().min(1), task: proposedCustomerTaskSchema.nullable(),
 }).strict();
 export type CustomerReplyPlan = z.infer<typeof customerReplyPlanSchema>;
-export const customerTaskSchema = z.object({
+export const customerSmsTaskSchema = z.object({
   id: z.number().int().positive(), version: z.literal(1), kind: z.literal(CLAUDE_CUSTOMER_TASK_ACTION),
   sessionId: z.number().int().positive(), customerName: z.string().nullable(), customerPhone: z.string().min(1),
   sourceMessageId: z.string().min(1), sourceText: z.string().min(1), receivedAt: z.number().finite(),
@@ -25,5 +25,15 @@ export const customerTaskSchema = z.object({
   reply: z.object({ text: z.string().min(1), status: z.enum(["prepared", "sent", "uncertain", "suppressed"]), providerMessageId: z.string().nullable() }).strict(),
   activity: z.array(z.object({ action: z.enum(["created", "claimed", "item_completed", "completed"]), actor: taskActorSchema.nullable(), at: z.number().finite(), note: z.string().nullable() }).strict()),
 }).strict();
+export const customerEmailTaskSchema = customerSmsTaskSchema.extend({
+  sessionId: z.null(), customerPhone: z.null(), receivingPhoneNumberId: z.null(), receivingPhoneNumber: z.null(),
+  email: z.object({
+    mailboxEmail: z.string().email(), threadId: z.string().min(1), fromEmail: z.string().email(),
+    replyToEmail: z.string().email().nullable(), recipientEmail: z.string().email(),
+    subject: z.string(), rfcMessageId: z.string().min(1),
+    bodyFormat: z.enum(["html", "text"]).optional(),
+  }).strict(),
+}).strict();
+export const customerTaskSchema = z.union([customerSmsTaskSchema, customerEmailTaskSchema]);
 export type CustomerTask = z.infer<typeof customerTaskSchema>;
 export type ProposedCustomerTask = z.infer<typeof proposedCustomerTaskSchema>;

@@ -80,6 +80,7 @@ export function registerGmailRoutes(app: Express) {
 
   // ── Pub/Sub webhook — receives push notifications from Google ────────────────
   app.post("/api/gmail/webhook", async (req, res) => {
+    const receivedAt = Date.now();
     try {
       // Google sends base64-encoded JSON in req.body.message.data
       const message = req.body?.message;
@@ -130,7 +131,9 @@ export function registerGmailRoutes(app: Express) {
         const affectedThreadIds = Array.from(new Set(events.newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
         for (const tid of affectedThreadIds) {
           console.log(`[Webhook] threadId=${tid} enqueueing`);
-          enqueueThread(tid, "pubsub" as EnqueueSource);
+          for (const message of events.newMessages.filter(message => message.threadId === tid)) {
+            enqueueThread(tid, "pubsub" as EnqueueSource, { inboundMessageId: message.id, receivedAt });
+          }
           // Optimistic isUnread=1 — UPDATE only (never INSERT to avoid partial rows)
           // Worker will correct if wrong when it processes the thread
           db.update(gmailThreadMeta)

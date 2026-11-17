@@ -70,14 +70,14 @@ export interface ClaudeCustomerTasksStore {
   completeTask(id: number, note: string | undefined, actor: TaskActor): Promise<CustomerTask>;
 }
 
-/** Passive factory: no application DB fetch, network, model, sender, or booking action. */
-export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCustomer?: (phone: string) => boolean } = {}): ClaudeCustomerTasksStore {
+/** Internal shared persistence only; task ownership/completion remain in the canonical store. */
+export function createClaudeCustomerTaskPersistence() {
   function parseTask(row: Record<string, any>): CustomerTask {
     try {
       const envelope = envelopeSchema.parse(decode(row.metadata));
       const task = envelope.task;
       if (row.quickAction !== action || row.channel !== "command" || envelope.taskId !== Number(row.id)
-        || task.id !== Number(row.id) || task.sessionId !== Number(row.sessionId)
+        || task.id !== Number(row.id) || (task.sessionId === null ? row.sessionId !== null : task.sessionId !== Number(row.sessionId))
         || (task.status === "unclaimed" && (task.owner !== null || task.claimedAt !== null))
         || (task.status !== "unclaimed" && (!task.owner || task.claimedAt === null))
         || (task.status === "done" && (!task.completedBy || task.completedAt === null
@@ -97,6 +97,30 @@ export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCusto
       lastActivityAt = ${Date.now()} WHERE id = ${task.id} AND quickAction = ${action}`));
     if (changed.affectedRows !== 1) fail("CONFLICT", "Customer task could not be saved.");
   }
+  async function createTask(tx: Tx, identity: Pick<CustomerTask, "sessionId" | "customerName" | "customerPhone" | "sourceMessageId" | "sourceText" | "receivedAt" | "receivingPhoneNumberId" | "receivingPhoneNumber"> & { email?: Extract<CustomerTask, { sessionId: null }>['email'] }, plan: CustomerReplyPlan, activeDedupKey: string): Promise<number | null> {
+    if (!plan.task) return null;
+    const id = Number(header(await tx.insert(opsChatMessages).values({
+      channel: "command", authorName: "Instinct", authorRole: "system", body: plan.task.title,
+      quickAction: action, sessionId: identity.sessionId, cardStatus: "active",
+      activeDedupKey, lastActivityAt: Date.now(),
+    })).insertId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error("CUSTOMER_TASK_INSERT_ID_MISSING");
+    const now = Date.now();
+    const task = customerTaskSchema.parse({ id, version: 1, kind: action, ...identity, title: plan.task.title,
+      items: plan.task.items.map((item, index) => ({ ...item, id: `item-${index + 1}`, completedBy: null, completedAt: null })),
+      status: "unclaimed", owner: null, claimedAt: null, completedAt: null, completedBy: null, completionNote: null,
+      reply: { text: plan.replyText, status: "prepared", providerMessageId: null },
+      activity: [{ action: "created", actor: null, at: now, note: null }],
+    });
+    await saveTask(tx, task);
+    return id;
+  }
+  return { parseTask, taskRow, saveTask, createTask };
+}
+
+/** Passive factory: no application DB fetch, network, model, sender, or booking action. */
+export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCustomer?: (phone: string) => boolean } = {}): ClaudeCustomerTasksStore {
+  const { parseTask, taskRow, saveTask, createTask } = createClaudeCustomerTaskPersistence();
   function validateReceipt(draft: Record<string, any> | undefined, claim: CustomerSmsClaim): Record<string, any> {
     const binding = bindingSchema.parse(claim.binding);
     if (!draft || !Number.isSafeInteger(claim.draftId) || claim.draftId <= 0 || claim.key !== keyFor(binding)
@@ -207,27 +231,12 @@ export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCusto
       if (plan.task?.items.some(item => !claim.binding.inboundText.includes(item.evidenceQuote))) {
         return fail("PRECONDITION_FAILED", "The checklist is not grounded in the incoming customer message.");
       }
-      let id: number | null = null;
-      if (plan.task) {
-        id = Number(header(await tx.insert(opsChatMessages).values({
-          channel: "command", authorName: "Instinct", authorRole: "system", body: plan.task.title,
-          quickAction: action, sessionId: claim.binding.sessionId, cardStatus: "active",
-          activeDedupKey: taskKeyFor(claim.binding), lastActivityAt: Date.now(),
-        })).insertId);
-        if (!Number.isSafeInteger(id) || id <= 0) throw new Error("CUSTOMER_TASK_INSERT_ID_MISSING");
-        const now = Date.now();
-        const task = customerTaskSchema.parse({ id, version: 1, kind: action, sessionId: claim.binding.sessionId,
-          customerName: claim.binding.customerName, customerPhone: claim.binding.fromPhone,
-          sourceMessageId: claim.binding.providerMessageId, sourceText: claim.binding.inboundText,
-          receivedAt: claim.binding.receivedAt, receivingPhoneNumberId: claim.binding.receivingPhoneNumberId,
-          receivingPhoneNumber: claim.binding.receivingPhoneNumber, title: plan.task.title,
-          items: plan.task.items.map((item, index) => ({ ...item, id: `item-${index + 1}`, completedBy: null, completedAt: null })),
-          status: "unclaimed", owner: null, claimedAt: null, completedAt: null, completedBy: null, completionNote: null,
-          reply: { text: plan.replyText, status: "prepared", providerMessageId: null },
-          activity: [{ action: "created", actor: null, at: now, note: null }],
-        });
-        await saveTask(tx, task);
-      }
+      const id = await createTask(tx, {
+        sessionId: claim.binding.sessionId, customerName: claim.binding.customerName, customerPhone: claim.binding.fromPhone,
+        sourceMessageId: claim.binding.providerMessageId, sourceText: claim.binding.inboundText,
+        receivedAt: claim.binding.receivedAt, receivingPhoneNumberId: claim.binding.receivingPhoneNumberId,
+        receivingPhoneNumber: claim.binding.receivingPhoneNumber,
+      }, plan, taskKeyFor(claim.binding));
       const changed = header(await tx.execute(sql`UPDATE madison_sms_drafts SET status = 'SENDING', generatedDraft = ${plan.replyText},
         approvedText = ${plan.replyText}, capabilityResult = ${JSON.stringify({ phase: "submission_started", taskId: id })},
         updatedAt = NOW(3) WHERE id = ${claim.draftId} AND capability = ${capability} AND status = 'TOOLS_RUNNING'`));

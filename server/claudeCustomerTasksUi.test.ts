@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
+import DOMPurify from "dompurify";
 import * as existingIcons from "lucide-react";
 import * as contract from "../shared/claudeCustomerTasks";
 import type { CustomerTask } from "../shared/claudeCustomerTasks";
@@ -55,6 +56,7 @@ function load(react = React, trpc: unknown = {}): Ui {
     module, exports: module.exports, Date, Intl, Map, Set, Error, Number,
     require: (id: string) => {
       if (id === "react") return react;
+      if (id === "dompurify") return DOMPurify;
       if (id === "lucide-react") return icons;
       if (id === "@/lib/trpc") return { trpc };
       if (id === "@shared/claudeCustomerTasks") return contract;
@@ -397,6 +399,10 @@ describe("Customer task additive integration and style contract", () => {
       ['            <div className="ccc-reference-chat-header">', "            <>", "613c833add37ecee6d01744c826ab289b0cce2f467215e6d21d71d454f9e0b3e"],
     ];
     for (const [start, end, expected] of hashes) expect(hash(between(start, end))).toBe(expected);
+    // Only the resolver's SMS-specific type annotation and the leading email
+    // callback branch are approved; retain all original exact-session SMS bytes.
+    expect(hash(between("  if (!Number.isSafeInteger(task.sessionId)", "\nfunction formatPhoneDisplay"))).toBe("8d54784afdd35a587350b6865566dabfb8f99696e9dc522c1950e461744856eb");
+    expect(hash(between("    const conversation = taskConversation(task, smsInbox);", "  const openSmsDrawerFromLead ="))).toBe("3d664359801c758309fba76c44ef28709c3a34c0eb5704ed2380cc70293305e6");
     expect(pageSource).toContain('useState<"leads" | "tasks">("leads")');
     expect(pageSource).toContain('hidden={rightPanelTab !== "leads"}><LeadQueue title="All leads"');
     expect(pageSource).toContain("leads={allLeads}");
@@ -409,7 +415,9 @@ describe("Customer task additive integration and style contract", () => {
     expect(pageSource).toContain("onConnected: () => { void utils.claudeCustomerTasks.invalidate(); void utils.opsChat.listChannelMessages.invalidate({ channel }); }");
     expect(pageSource).toContain("message.quickAction === CLAUDE_CUSTOMER_TASK_ACTION");
     expect(pageSource).toContain("taskId={customerTaskIdFromMessage(message)}");
-    for (const forbidden of ["EventSource", "useOpsStream", "setInterval", "setTimeout", "getClientProfile", "customerProfile", "newest", "cleaner_jobs", "cleanerJobs", "sendMessage", "sendWorkspaceMessage", "bookingFunnel", "dangerouslySetInnerHTML", ".slice(0,"]) expect(componentSource).not.toContain(forbidden);
+    for (const forbidden of ["EventSource", "useOpsStream", "setInterval", "setTimeout", "getClientProfile", "customerProfile", "newest", "cleaner_jobs", "cleanerJobs", "sendMessage", "sendWorkspaceMessage", "bookingFunnel", ".slice(0,"]) expect(componentSource).not.toContain(forbidden);
+    expect(componentSource.match(/dangerouslySetInnerHTML=/g)).toHaveLength(2);
+    for (const value of ["task.sourceText", "item.evidenceQuote"]) expect(componentSource).toContain(`dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(${value}, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }}`);
     expect(componentSource).not.toMatch(/\bfetch\(/);
     expect(componentSource).toContain("claim.mutateAsync({ id })");
     expect(componentSource).toContain("completeItem.mutateAsync({ id, itemId })");

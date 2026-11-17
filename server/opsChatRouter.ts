@@ -6162,6 +6162,12 @@ Valid action values: "send_payment_links", "notify_customers", "open_readiness",
       const db = await getDb();
       if (!db) return { ok: false, reason: "no_db" };
 
+      const [replyCandidate] = await db.select({ threadId: madisonEmailDrafts.threadId, status: madisonEmailDrafts.status })
+        .from(madisonEmailDrafts).where(eq(madisonEmailDrafts.id, input.draftId)).limit(1);
+      if (replyCandidate?.status === "DRAFT_READY") {
+        const { arbitrateCustomerEmailHumanReply } = await import("./instinct/claudeCustomerEmailGuards");
+        await arbitrateCustomerEmailHumanReply(replyCandidate.threadId);
+      }
       // Atomic transition: only succeed if status is still DRAFT_READY
       const [updateResult] = await db
         .update(madisonEmailDrafts)

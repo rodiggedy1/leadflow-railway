@@ -2020,7 +2020,7 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
   /** Quick action tag if this message was sent via a quick-action button */
   quickAction: varchar("quickAction", { length: 64 }),
   /** JSON metadata for structured cards (e.g. lead claim state, sessionId) */
-  metadata: text("metadata"),
+  metadata: longtext("metadata"),
   /** Quote-reply: the ID of the message being replied to */
   replyToId: int("replyToId"),
   /** Quote-reply: snapshot of the replied-to message body (truncated) */

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
+import DOMPurify from "dompurify";
 import * as icons from "lucide-react";
 import * as contract from "../shared/claudeCustomerTasks";
 import type { CustomerTask } from "../shared/claudeCustomerTasks";
@@ -64,6 +65,7 @@ function load(react: typeof React, trpc: unknown): Ui {
     module, exports: module.exports, Date, Intl, Map, Set, Error, Number,
     require(id: string) {
       if (id === "react") return react;
+      if (id === "dompurify") return DOMPurify;
       if (id === "lucide-react") return icons;
       if (id === "@/lib/trpc") return { trpc };
       if (id === "@shared/claudeCustomerTasks") return contract;

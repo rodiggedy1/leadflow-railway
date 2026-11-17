@@ -331,7 +331,7 @@ function formatRelative(value: number) {
   return dateLabel(value);
 }
 
-function taskConversation(task: CustomerTask, inbox: readonly SmsInboxConversation[]): SmsInboxConversation | null {
+function taskConversation(task: Extract<CustomerTask, { sessionId: number }>, inbox: readonly SmsInboxConversation[]): SmsInboxConversation | null {
   if (!Number.isSafeInteger(task.sessionId) || task.sessionId <= 0) return null;
   const exact = inbox.find((conversation) => conversation.id === task.sessionId);
   if (exact) return exact;
@@ -1442,6 +1442,16 @@ export default function CommandChatExactLive() {
   }, [showNotice, testBridgeMutation]);
 
   const openSmsDrawerFromTask = useCallback((task: CustomerTask) => {
+    if ("email" in task) {
+      if (!task.email.threadId) { showNotice("This task's linked conversation is unavailable."); return; }
+      setSelectedLeadCardPhone(null);
+      setSelectedLeadCardDraft(null);
+      setSelectedLeadCardSnapshot(null);
+      setSelectedLeadDetail(null);
+      setSelectedSmsConversation(null);
+      setSelectedEmailThreadId(task.email.threadId);
+      return;
+    }
     const conversation = taskConversation(task, smsInbox);
     if (!conversation) { showNotice("This task's linked conversation is unavailable."); return; }
     setSelectedLeadCardPhone(null);

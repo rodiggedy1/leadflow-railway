@@ -6,7 +6,7 @@ import type { InitialLeadDraftOptions } from "./claudeAgentClient";
 import { buildSystemPrompt } from "../csReplyStream";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "../knowledgeBase";
 import {
-  CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS, CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS, createClaudeCustomerSmsGenerator,
+  CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS, CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS, createClaudeCustomerSmsGenerator, createClaudeCustomerReplyGenerator,
   type ClaudeCustomerSmsGenerationBinding, type ClaudeCustomerSmsGenerationOptions,
 } from "./claudeCustomerSmsGeneration";
 import type { AlternativeSessionRow } from "./claudeSmsAlternativeSessionRead";
@@ -37,6 +37,32 @@ function harness(result: unknown = { replyText: pendingReply, task }, options: C
 }
 
 describe("content-only Claude customer SMS plan", () => {
+  it("shares the exact original complete system and byte-identical SMS payload with the passive reply factory", async () => {
+    const f = fixture(), sms = harness(), shared = harness();
+    await sms.generate(f.binding, f.session);
+    const context = { binding: f.binding, contact: f.session.contact, originalConversation: JSON.parse(f.session.messageHistory as string),
+      receivingPhoneNumberId: f.binding.receivingPhoneNumberId, receivingPhoneNumber: f.binding.receivingPhoneNumber, bookingContext: null };
+    await createClaudeCustomerReplyGenerator({ readKnowledge: shared.readKnowledge, runner: shared.runner })({
+      incomingMessage: f.binding.inboundText, context, protectedIds: [f.binding.providerMessageId, f.binding.receivingPhoneNumberId],
+    });
+    expect(shared.runner.mock.calls[0][0]).toEqual(sms.runner.mock.calls[0][0]);
+    expect(sms.runner.mock.calls[0][0].systemPrompt).toBe(`=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${buildSystemPrompt()}`);
+  });
+
+  it("accepts full actual email context without a new agent/prompt, clipping or evidence source", async () => {
+    const h = harness(), context = { binding: { inboundMessageId: "gmail-id", rfcMessageId: "<actual@example.net>" },
+      originalConversation: [{ text: "Prior full email ".repeat(10000), headers: { From: "Maya <maya@example.net>" } }], bookingContext: null };
+    expect(await createClaudeCustomerReplyGenerator({ readKnowledge: h.readKnowledge, runner: h.runner })({
+      incomingMessage: inboundText, context, protectedIds: ["gmail-id", "<actual@example.net>"],
+    })).toEqual({ replyText: pendingReply, task });
+    expect(h.runner).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt).context).toEqual({ ...context, knowledgeBase: await h.readKnowledge.mock.results[0].value });
+    await expect(createClaudeCustomerReplyGenerator({ readKnowledge: h.readKnowledge,
+      runner: async () => ({ finalSmsText: JSON.stringify({ replyText: "Thanks, gmail-id", task: null }) }) })({
+      incomingMessage: inboundText, context, protectedIds: ["gmail-id"],
+    })).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
+  });
+
   it("uses one content-only saved-agent turn with complete approved knowledge and the exact complete session", async () => {
     const { binding, session } = fixture(), h = harness();
     const original = JSON.stringify(session);

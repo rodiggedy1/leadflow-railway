@@ -26,6 +26,12 @@ export interface ClaudeCustomerSmsGenerationOptions {
   runner?: (options: InitialLeadDraftOptions) => Promise<{ finalSmsText: string }>;
 }
 
+export interface ClaudeCustomerReplyInput {
+  incomingMessage: string;
+  context: Record<string, unknown>;
+  protectedIds: string[];
+}
+
 // Writing-only revisions SMS-STYLE-001 and SMS-STYLE-002. Exact deltas and rollback are recorded in
 // docs/instinct/customer-sms-prompt-history.md; no response rewriting or limits.
 export const CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS = `CUSTOMER SMS WRITING STYLE (replyText only):
@@ -94,28 +100,34 @@ function exactConversation(binding: ClaudeCustomerSmsGenerationBinding, session:
 /** Passive content factory. Exactly one saved-agent turn, session-local system
  * instructions, no tools, no extra classifier/reranker, no truncation or writes.
  * Eligibility, durable intent, freshness and SMS authority remain in dispatch. */
-export function createClaudeCustomerSmsGenerator(options: ClaudeCustomerSmsGenerationOptions = {}) {
-  return async function generateClaudeCustomerSmsPlan(binding: ClaudeCustomerSmsGenerationBinding,
-    sessionSnapshot: AlternativeSessionRow): Promise<CustomerReplyPlan> {
-    const originalConversation = exactConversation(binding, sessionSnapshot);
-    const knowledgeBase = await (options.readKnowledge ?? retrieveKnowledge)(binding.inboundText);
+export function createClaudeCustomerReplyGenerator(options: ClaudeCustomerSmsGenerationOptions = {}) {
+  return async function generateClaudeCustomerReplyPlan({ incomingMessage, context, protectedIds }: ClaudeCustomerReplyInput): Promise<CustomerReplyPlan> {
+    const knowledgeBase = await (options.readKnowledge ?? retrieveKnowledge)(incomingMessage);
     if (typeof knowledgeBase !== "string" || !knowledgeBase.trim()) return fail("KNOWLEDGE_UNAVAILABLE");
     const output = await (options.runner ?? runInitialLeadDraft)({
       systemPrompt: `=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${buildSystemPrompt()}`,
-      userPrompt: JSON.stringify({ incomingMessage: binding.inboundText,
-        context: { binding, contact: sessionSnapshot.contact, originalConversation,
-          receivingPhoneNumberId: binding.receivingPhoneNumberId, receivingPhoneNumber: binding.receivingPhoneNumber,
-          bookingContext: null, knowledgeBase } }),
+      userPrompt: JSON.stringify({ incomingMessage, context: { ...context, knowledgeBase } }),
     });
     const plan = customerReplyPlanSchema.parse(JSON.parse(output.finalSmsText));
-    const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: plan.replyText }),
-      [binding.providerMessageId, binding.receivingPhoneNumberId]);
+    const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: plan.replyText }), protectedIds);
     // Additional capability-specific failures, not synthetic rewrites. Current
     // CS tone examples include completed actions; none occurred in generation.
     if (/\b(?:notes? (?:are|is) in|(?:crew|team|staff) (?:has been|have been|was|were|is|are) briefed|(?:request|change|update|refund|cancellation|reschedule|booking|appointment) (?:is|was|has been) (?:done|complete|completed|confirmed|handled|processed)|(?:I|we)(?:['’]ve| have) (?:taken care of|handled|completed|processed)|(?:your|the) (?:slot|appointment|booking|cleaning) (?:is|has been) (?:available|guaranteed|confirmed)|(?:I|we) (?:can|will|guarantee) (?:fit you in|guarantee availability)|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|tomorrow) (?:is|will be) available)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
-    if (plan.task?.items.some(item => !binding.inboundText.includes(item.evidenceQuote))) return fail("TASK_EVIDENCE_NOT_CURRENT_INBOUND");
+    if (plan.task?.items.some(item => !incomingMessage.includes(item.evidenceQuote))) return fail("TASK_EVIDENCE_NOT_CURRENT_INBOUND");
     if (plan.task === null && /\b(?:I|we)(?:['’]ll| will)\s+(?:take care of|handle|review)\s+(?:this|that|it|your (?:request|change)|the (?:request|change))\b/i.test(replyText)) return fail("ACKNOWLEDGMENT_REQUIRES_TASK");
     return { replyText, task: plan.task };
+  };
+}
+
+export function createClaudeCustomerSmsGenerator(options: ClaudeCustomerSmsGenerationOptions = {}) {
+  const generateReply = createClaudeCustomerReplyGenerator(options);
+  return async function generateClaudeCustomerSmsPlan(binding: ClaudeCustomerSmsGenerationBinding,
+    sessionSnapshot: AlternativeSessionRow): Promise<CustomerReplyPlan> {
+    const originalConversation = exactConversation(binding, sessionSnapshot);
+    return generateReply({ incomingMessage: binding.inboundText,
+      context: { binding, contact: sessionSnapshot.contact, originalConversation,
+        receivingPhoneNumberId: binding.receivingPhoneNumberId, receivingPhoneNumber: binding.receivingPhoneNumber,
+        bookingContext: null }, protectedIds: [binding.providerMessageId, binding.receivingPhoneNumberId] });
   };
 }
 
