@@ -19,6 +19,8 @@ const componentPath = "client/src/components/ClaudeCustomerTasks.tsx";
 const pagePath = "client/src/pages/CommandChatExactLive.tsx";
 const source = readFileSync(componentPath, "utf8");
 const page = readFileSync(pagePath, "utf8");
+const taskQueueInsets = "\n/* Match the working Leads queue's side insets; keep the grid and Leads untouched. */\n.ccc-live #ccc-tasks-panel .cct-queue {\n  margin: 0 10px 12px;\n  padding: 12px;\n  border: 1px solid transparent;\n}\n";
+const unchangedTaskCss = (value: string) => value.replace(taskQueueInsets, "");
 const baseline = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
 const controlSource = baseline(componentPath);
 const controlPage = baseline(pagePath);
@@ -330,7 +332,7 @@ describe("Exact offline SMS control and protected source bytes", () => {
       .replaceAll('        const outboundName = message.sentBy?.name?.trim() || "You";\n', '')
       .replaceAll('initialsFor(outboundName)', '"Y"').replaceAll('outbound ? outboundName :', 'outbound ? "You" :');
     expect(detail).toBe(baseline("client/src/pages/CommandChatEmailDetail.tsx"));
-    for (const path of ["client/src/pages/command-chat-email-detail.css", "client/src/components/claude-customer-tasks.css"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));
+    for (const path of ["client/src/pages/command-chat-email-detail.css", "client/src/components/claude-customer-tasks.css"]) expect(unchangedTaskCss(readFileSync(path, "utf8"))).toBe(baseline(path));
   });
 
   it("limits compact task changes to approved identity/copy/conversation slots, preserving all original authentication, mutation, state, pending and button blocks", () => {
@@ -446,7 +448,7 @@ describe("Command Chat right-rail clipping regression (offline actual CSS and ta
   it("changes only three layout declarations and preserves the complete component, handlers, task styles, columns and navigation", () => {
     expect(liveCss.replace(correction, "")).toBe(originalCss);
     for (const path of [componentPath, pagePath, "client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-reference-composition.css", "client/src/pages/command-chat-crm-review.css", "client/src/components/ReviewWorkspaceNav.tsx", "client/src/components/review-workspace-nav.css"]) {
-      expect(readFileSync(path, "utf8")).toBe(execFileSync("git", ["show", `${layoutBaseline}:${path}`], { encoding: "utf8" }));
+      expect(unchangedTaskCss(readFileSync(path, "utf8"))).toBe(execFileSync("git", ["show", `${layoutBaseline}:${path}`], { encoding: "utf8" }));
     }
   });
   it("reproduces the untouched control's 70px right-rail clipping, not a task-card intrinsic-width overflow", () => {
@@ -472,5 +474,43 @@ describe("Command Chat right-rail clipping regression (offline actual CSS and ta
         }
       }
     }
+  }, 30_000);
+
+  it("matches unchanged Leads dimensions and keeps task controls initially visible without scrolling", () => {
+    const helpers = ["LeadQueue", "leadCardStatus", "leadCardConversation", "normalizedLeadPhone", "firstName", "customerPortraitFor", "formatPhoneDisplay", "formatRelative", "dateLabel"];
+    const parsed = ast(page);
+    const fragments = helpers.map(name => parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name)?.getText(parsed)).filter(Boolean).join("\n");
+    const leadUi = compile(fragments + "\nexports.LeadQueue=LeadQueue;", { React, useState: React.useState, useEffect: React.useEffect, Math, CUSTOMER_PORTRAITS: ["data:image/gif;base64,R0lGODlhAQABAAAAACw="], ...icons });
+    const noop = () => {};
+    const leadHtml = renderToStaticMarkup(React.createElement(leadUi.LeadQueue, { title: "All leads", description: "Synthetic comparison", leads: [{ id: "synthetic", name: "Synthetic customer", phone: "+12025550123", sessionId: 42, ts: Date.now(), queue: "thumbtack", sourceLabel: "Thumbtack", detail: "Deep cleaning", claimedBy: null, isBooked: false }], smsInbox: [], onClaim: noop, onUnclaim: noop, onMarkBooked: noop, onUnbook: noop, onCall: noop, onTestBridge: noop, onOpenSms: noop }));
+    const directory = mkdtempSync(join(tmpdir(), "task-lead-insets-test-"));
+    try {
+      const compare = (taskCss: string) => {
+        writeFileSync(join(directory, "compare.html"), `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles(liveCss).replace(readFileSync("client/src/components/claude-customer-tasks.css", "utf8"), taskCss)}html,body{margin:0}*,::before,::after{box-sizing:border-box}</style><div class="review-nav-host"><aside class="review-workspace-nav"></aside><main class="ccc-app ccc-widget-app ccc-live"><section class="ccc-workspace"><div class="ccc-command-grid"><aside class="ccc-command-panel ccc-left-panel"></aside><section class="ccc-command-panel ccc-center-panel"></section><aside class="ccc-command-panel ccc-right-panel"><div id="ccc-tasks-panel"><section class="cct-queue"><div class="cct-task-list">${cards}</div></section></div><div id="ccc-leads-panel" hidden>${leadHtml}</div></aside></div></section></main></div><script>
+        const rect=el=>{const r=el.getBoundingClientRect();return {x:r.x,right:r.right,width:r.width}};
+        const task=document.querySelector('.cct-card');const taskBox=rect(task);const controls=[...task.querySelectorAll('.cct-card-status>button,summary>svg')].map(rect);
+        const scrollLeft=document.querySelector('.ccc-workspace').scrollLeft;
+        const rail=document.querySelector('.ccc-right-panel');const taskPanel={x:rail.getBoundingClientRect().x,client:rail.clientWidth};
+        document.querySelector('#ccc-tasks-panel').hidden=true;document.querySelector('#ccc-leads-panel').hidden=false;
+        const leadBox=rect(document.querySelector('.ccc-live-lead-primary'));const leadPanel={x:rail.getBoundingClientRect().x,client:rail.clientWidth};
+        const out=document.createElement('pre');out.id='comparison';out.textContent=btoa(JSON.stringify({taskBox,leadBox,taskPanel,leadPanel,controls,scrollLeft,viewport:innerWidth}));document.body.append(out);
+        </script>`);
+        const dom = execFileSync("chromium", ["--headless", "--no-sandbox", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--no-first-run", "--host-resolver-rules=MAP * ~NOTFOUND", `--user-data-dir=${join(directory, "profile")}`, "--window-size=1144,950", "--virtual-time-budget=200", "--dump-dom", `file://${join(directory, "compare.html")}`], { encoding: "utf8", timeout: 20_000, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 2_000_000 });
+        const encoded = dom.match(/<pre id="comparison">([A-Za-z0-9+/=]+)<\/pre>/)?.[1]; expect(encoded).toBeDefined();
+        return JSON.parse(Buffer.from(encoded!, "base64").toString("utf8"));
+      };
+      const taskCss = readFileSync("client/src/components/claude-customer-tasks.css", "utf8");
+      expect(taskCss).toContain(taskQueueInsets);
+      const control = compare(unchangedTaskCss(taskCss));
+      expect(control.scrollLeft).toBe(0);
+      expect(control.leadBox.right).toBeLessThan(control.viewport);
+      expect(control.controls.every((c: any) => c.right > control.viewport)).toBe(true);
+      const candidate = compare(taskCss);
+      expect(candidate.scrollLeft).toBe(0);
+      expect(candidate.taskBox.x).toBe(candidate.leadBox.x);
+      // The longer Tasks list may have a vertical scrollbar; compare available-content insets.
+      expect(candidate.taskPanel.client - (candidate.taskBox.right - candidate.taskPanel.x)).toBe(candidate.leadPanel.client - (candidate.leadBox.right - candidate.leadPanel.x));
+      expect(candidate.controls.every((c: any) => c.right <= candidate.viewport)).toBe(true);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   }, 30_000);
 });

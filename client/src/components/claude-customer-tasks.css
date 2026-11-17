@@ -92,3 +92,10 @@
   .cct-context { grid-template-columns: 66px minmax(0, 1fr); }
   .cct-confirm-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 16px; }
 }
+
+/* Match the working Leads queue's side insets; keep the grid and Leads untouched. */
+.ccc-live #ccc-tasks-panel .cct-queue {
+  margin: 0 10px 12px;
+  padding: 12px;
+  border: 1px solid transparent;
+}
