@@ -143,7 +143,10 @@ describe("preserved human authorization, review-only guards and request lifecycl
     "We will contact the team.", "Your request was escalated.", "We let the team know.", "Your quote was sent.", "Your quote has been created."])("retains no-operation claim denial: %s", async text => {
     await expect(harness({ runner: async () => output(text) }).service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
   });
-  it.each(["Quote ID: Q-88.", "Quote code: Q-88.", "Tomorrow at 10 AM Eastern.", "Booking code: LF-88.", `Request ${input.requestId}.`])("retains technical identifier/presentation denial: %s", async text => {
+  it.each(["5pm", "5pm Eastern", "Puedes reservar cuando estés lista."])("does not suppress first-lead content for timezone wording: %s", async text => {
+    expect((await harness({ runner: async () => output(text) }).service.generate(input, staff)).replyText).toBe(text);
+  });
+  it.each(["Quote ID: Q-88.", "Quote code: Q-88.", "Booking code: LF-88.", `Request ${input.requestId}.`])("retains technical identifier/presentation denial: %s", async text => {
     await expect(harness({ runner: async () => output(text) }).service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
   });
   it.each(["", "   "])("rejects empty plain SMS %s", async text => {

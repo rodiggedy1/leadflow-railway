@@ -187,7 +187,21 @@ describe("content-only Claude customer SMS plan", () => {
     await expect(harness({ replyText, task }).generate(f.binding, f.session)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
   });
 
-  it.each(["Confirmed at 10 EST.", "Booking code: 123.", "Your message msg-current is noted.", "PN-actual is the line."])("rejects unsafe presentation: %s", async replyText => {
+  it("accepts the exact Spanish reply previously rejected for EST inside estés", async () => {
+    const incomingMessage = "Estoy emocionada por la limpieza. ¿Me puedes enviar el enlace para hacer la reserva, por favor?";
+    const replyText = "¡Qué alegría que estés emocionada! 😊 Puedes reservar en maidsinblack.com, donde verás tu precio exacto al instante según tus habitaciones y baños, y recibirás confirmación inmediata. No pedimos depósito y solo se cobra a tu tarjeta después de la limpieza. Si prefieres reservar por teléfono, llámanos al 202-888-5362. ¡Tu casa va a quedar lista y fresquita! 🏡🧹";
+    const runner = vi.fn(async () => ({ finalSmsText: JSON.stringify({ replyText, task: null }) }));
+    const generate = createClaudeCustomerReplyGenerator({ readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE, runner });
+    expect(await generate({ incomingMessage, context: { originalConversation: [{ role: "user", content: incomingMessage }] }, protectedIds: ["msg-current", "PN-actual"] })).toEqual({ replyText, task: null });
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["5pm", "5pm Eastern", "5pm EST", "Cuando estés lista, aquí tienes el enlace."])("does not fail generation solely for timezone presentation: %s", async replyText => {
+    const f = fixture();
+    expect(await harness({ replyText, task: null }).generate(f.binding, f.session)).toEqual({ replyText, task: null });
+  });
+
+  it.each(["Booking code: 123.", "Your message msg-current is noted.", "PN-actual is the line."])("rejects unsafe presentation: %s", async replyText => {
     const f = fixture();
     await expect(harness({ replyText, task }).generate(f.binding, f.session)).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
   });

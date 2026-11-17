@@ -174,7 +174,19 @@ describe("stateless optional Claude SMS generation", () => {
       const h = harness({ runner: async () => output(reply) });
       await expect(h.service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
     });
-  it.each(["Tomorrow at 10 AM Eastern.", "Booking code: LF-88.", `For ${input.providerMessageId}.`, `From ${input.receivingPhoneNumberId}.`])
+  it.each([
+    "¡Qué alegría que estés emocionada! 😊 Puedes reservar en maidsinblack.com.",
+    "Puedes consultar nuestras opciones cuando estés lista.",
+    "Éste es nuestro enlace para reservar.",
+    "5pm", "5pm Eastern", "5pm ET", "5pm EST", "5pm EDT", "5pm UTC", "5pm GMT", "America/New_York",
+  ])("does not discard a reply for a timezone wording preference: %s", async reply => {
+    const h = harness({ runner: async () => output(reply) });
+    expect((await h.service.generate(input, staff)).replyText).toBe(reply);
+  });
+  it("keeps omitted timezone labels as writing guidance, not a delivery gate", () => {
+    expect(CLAUDE_SMS_DRAFT_INSTRUCTIONS).toContain("time-zone labels (Eastern, ET, EST, EDT, UTC, IANA)");
+  });
+  it.each(["Booking code: LF-88.", `For ${input.providerMessageId}.`, `From ${input.receivingPhoneNumberId}.`])
     ("rejects unsafe presentation: %s", async reply => {
       const h = harness({ runner: async () => output(reply) });
       await expect(h.service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
