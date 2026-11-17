@@ -805,7 +805,7 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
     },
     voice: {
       provider: "11labs",
-      voiceId: "6aDn1KB0hjpdcocrUkmq",
+      voiceId: "6u6JbqKdaQy89ENzLSju",
       stability: 0.5,
       similarityBoost: 0.75,
       style: 0.3,

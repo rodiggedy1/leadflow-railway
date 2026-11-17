@@ -27,11 +27,13 @@ describe("call recording auth and read-only boundaries", () => {
   it("returns missing recordings without inventing a playable link", async () => { const h = port(); h.readCallRecordingUrl.mockResolvedValue(null as any); expect(await h.router.createCaller(context()).recording({ id: 77 })).toEqual({ url: null }); });
   it("revoked staff cannot obtain the previous signed link", async () => { const h = port(); vi.mocked(getAgentFromRequest).mockResolvedValue({ agentId: 17, agentName: "Staff", isAdmin: false } as any); await h.router.createCaller(context(false)).recording({ id: 77 }); vi.mocked(getAgentFromRequest).mockResolvedValue(null); await expect(h.router.createCaller(context(false)).recording({ id: 77 })).rejects.toMatchObject({ code: "UNAUTHORIZED" }); expect(h.readCallRecordingUrl).toHaveBeenCalledTimes(1); });
 });
-describe("explicitly approved one-sentence greeting exception and source boundaries", () => {
-  it("changes only the opening string, preserving every model, voice, tool, routing, lookup, bootstrap and post-call line", () => {
+describe("explicitly approved greeting and voice-ID exceptions and source boundaries", () => {
+  it("changes only the opening and voice ID, preserving every other model, voice setting, tool, routing, lookup, bootstrap and post-call line", () => {
     const original = 'Hi, thank you for calling Maids in Black! This is Madison. How can I help you today?';
     const opening = 'Hi, thank you for calling Maids in Black! I’m Madison, your AI customer-service assistant. I can help with quotes, booking requests, and cleaning questions. How can I help you today?';
-    const current = readFileSync("server/vapiService.ts", "utf8"); expect(current.split(opening)).toHaveLength(2); expect(current.replace(opening, original)).toBe(baseline("server/vapiService.ts"));
+    const oldVoice = 'voiceId: "6aDn1KB0hjpdcocrUkmq"';
+    const newVoice = 'voiceId: "6u6JbqKdaQy89ENzLSju"';
+    const current = readFileSync("server/vapiService.ts", "utf8"); expect(current.split(opening)).toHaveLength(2); expect(current.split(newVoice)).toHaveLength(2); expect(current).not.toContain(oldVoice); expect(current.replace(opening, original).replace(newVoice, oldVoice)).toBe(baseline("server/vapiService.ts"));
   });
   it("preserves all existing SMS/email prompts, providers, send paths, schema, crons and booking/payment UI", () => {
     for (const path of ["server/webhooks.ts", "server/cronSync.ts", "server/routers.ts", "server/gmailService.ts", "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsApplication.ts", "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeSmsAlternative.ts", "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailStore.ts", "server/instinct/claudeAgentClient.ts", "drizzle/schema.ts", "server/_core/index.ts", "client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-exact-live.css", "client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));
