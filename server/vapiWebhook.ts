@@ -32,7 +32,7 @@ import { getDb } from "./db";
 import { fieldMgmtCalls, callLog } from "../drizzle/schema";
 import { eq, or } from "drizzle-orm";
 import { ENV } from "./_core/env";
-import { verifyCallBookingQuoteServerToken } from "./instinct/callBookingQuote";
+import { parseCallBookingQuoteToolArguments, verifyCallBookingQuoteServerToken } from "./instinct/callBookingQuote";
 
 const OWNER_ALERT_NUMBER = "+13029816191";
 
@@ -141,9 +141,13 @@ export function registerVapiWebhookRoute(app: Express): void {
                 break;
               }
               const { executeCallBookingQuoteTool } = await import("./instinct/callBookingQuoteApplication");
+              const quoteArgs = parseCallBookingQuoteToolArguments(
+                "name" in rawTc && "parameters" in rawTc ? rawTc.parameters
+                  : "function" in rawTc ? rawTc.function.arguments : args,
+              );
               result = await executeCallBookingQuoteTool({
                 callId: typeof callObj?.id === "string" ? callObj.id : "",
-                toolCallId: id, name, args,
+                toolCallId: id, name, args: quoteArgs,
               });
               break;
             }

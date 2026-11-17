@@ -116,6 +116,16 @@ function valueAtPath(raw: unknown, path: readonly PropertyKey[]): unknown {
     value !== null && typeof value === "object" ? Reflect.get(value, key) : undefined, raw);
 }
 
+/** Decode only the quote tools' transport envelope; strict schemas still validate every value. */
+export function parseCallBookingQuoteToolArguments(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
 /** Pure validation and the same authoritative engine used by customer booking links. */
 export function previewCallBookingQuote(raw: unknown): CallBookingQuotePreview {
   const parsed = callBookingQuoteInputSchema.safeParse(raw);
@@ -197,6 +207,10 @@ export function buildCallBookingQuoteToolDefinitions(webhookUrl: string, authori
   // Input-side conversion retains canonical defaults/bounds through the validation pipes.
   const pricingJson = z.toJSONSchema(callBookingQuotePricingSchema, { io: "input" });
   const extraJson = z.toJSONSchema(callBookingExtraSchema, { io: "input" });
+  pricingJson.properties!.condition = {
+    ...schemaObject(pricingJson.properties!.condition),
+    description: "Existing home cleaning workload scale: 1 = already clean; 5 = light / normal; 10 = severe buildup / needs a serious reset. Higher scores mean more cleaning work, not a cleaner home.",
+  };
   // Pipes validate public IDs after canonical string validation; expose that same enum to the model.
   extraJson.properties!.id = { ...schemaObject(extraJson.properties!.id), enum: publicExtraIds };
   const canonicalExtrasJson = z.toJSONSchema(customerBookingLinkPricingSchema.shape.extras, { io: "input" });
@@ -249,7 +263,7 @@ const callQuoteInstructions = [
   "",
   "## Booking qualification flow",
   '1. Collect the caller\'s name conversationally. Ask "Could you spell that out for me so I get it right?" Read the spelling back and ask "is that correct?" Wait for confirmation.',
-  "2. Collect the actual home bedroom and bathroom counts, service (standard/deep/moveout), homeType (House/Apartment/Townhome/Condo), condition (1–10) and pricingMode (home/hourly). For a home quote, use the existing Command Chat structural values maidCount: 1 and hourCount: 1; they are ignored by home pricing and are not customer facts or staffing promises. Ask for maidCount and hourCount only for hourly pricing. Never guess the actual price-affecting customer facts.",
+  "2. Collect the actual home bedroom and bathroom counts, service (standard/deep/moveout), homeType (House/Apartment/Townhome/Condo), condition (1–10: 1 = already clean; 5 = light / normal; 10 = severe buildup / needs a serious reset) and pricingMode (home/hourly). Explain that higher condition scores mean more cleaning work, not a cleaner home. For a home quote, use the existing Command Chat structural values maidCount: 1 and hourCount: 1; they are ignored by home pricing and are not customer facts or staffing promises. Ask for maidCount and hourCount only for hourly pricing. Never guess the actual price-affecting customer facts.",
   `3. Ask about extras conversationally before quoting. Only these public extras are supported: ${Object.entries(PUBLIC_BOOKING_PRICED_EXTRAS).map(([id, extra]) => `${id} (${extra.label}${extra.quantityUnit ? `; quantity in ${extra.quantityUnit}s` : ""})`).join(", ")}. Collect the explicit quantity for each selected extra. Confirm the complete extras selection; use extras: [] only after the caller confirms none, and extrasConfirmed: true only after confirmation. No guessed pets/green-product fees or legacy add-on keys.`,
   "4. Ask their recurrence preference (one-time, weekly, biweekly or monthly). Do not assume one-time or a recurring frequency. Call getBookingQuote with {pricing, extrasConfirmed: true}; if it reports missing/invalid fields, ask the caller for those exact facts. Do not state a complete quote while extras are unconfirmed. Re-run getBookingQuote if any pricing fact changes before stating the revised price.",
   "5. If the caller requests a NEW cleaning quote by text, collect their preferred local calendar date AND time and service address before texting. Resolve spoken relative dates from the latest getBookingQuote currentLocalDate/currentLocalTime and confirm ambiguity with the caller, not the assistant boot-time date/callback morning. Ask if date or time is missing; no arbitrary tomorrow or 12pm. These are requested preferences, not confirmed availability. The workflow validates against the current time; do not reject a same-day future preference just because it is today.",

@@ -14,6 +14,7 @@ import {
   callBookingQuotePricingSchema,
   callBookingQuoteSendInputSchema,
   callBookingQuoteServerToken,
+  parseCallBookingQuoteToolArguments,
   previewCallBookingQuote,
   verifyCallBookingQuoteServerToken,
   withCallBookingQuoteInstructions,
@@ -400,5 +401,57 @@ describe("documented native Vapi DTO and unchanged strict backend validation", (
     expect(callBookingQuoteSendInputSchema.safeParse({ ...send, smsNumberConfirmed: false }).success).toBe(false);
     expect(callBookingQuoteSendInputSchema.safeParse({ ...send, unexpected: "override" }).success).toBe(false);
     expect(callBookingQuotePricingSchema.safeParse({ ...pricing, condition: 11 }).success).toBe(false);
+  });
+});
+
+describe("call-only quote transport and cleanliness-scale repair", () => {
+  it("preserves object arguments without mutating or inventing fields", () => {
+    const before = structuredClone(quote);
+    expect(parseCallBookingQuoteToolArguments(quote)).toBe(quote);
+    expect(quote).toEqual(before);
+    expect(parseCallBookingQuoteToolArguments({})).toEqual({});
+    expect(previewCallBookingQuote(parseCallBookingQuoteToolArguments({}))).toMatchObject({ success: false, missing: ["pricing", "extrasConfirmed"] });
+  });
+  it("decodes JSON strings to the same strictly validated no-extras quote", () => {
+    const decoded = parseCallBookingQuoteToolArguments(JSON.stringify(quote));
+    expect(decoded).toEqual(quote);
+    expect(previewCallBookingQuote(decoded)).toEqual(previewCallBookingQuote(quote));
+  });
+  it.each(["not JSON", "{", "null", "[]", "true", "123", null, [], false, 123])("does not turn malformed or non-object input %s into a valid quote", input => {
+    expect(previewCallBookingQuote(parseCallBookingQuoteToolArguments(input))).toMatchObject({ success: false, code: "INVALID_QUOTE" });
+  });
+  it.each([
+    { ...quote, extrasConfirmed: "true" },
+    { ...quote, pricing: { ...pricing, bedrooms: "2" } },
+    { ...quote, pricing: { ...pricing, extras: "[]" } },
+    { ...quote, pricing: { ...pricing, customPriceCents: 1 } },
+    { ...quote, price: 1 },
+  ])("retains strict rejection of invalid values/overrides in either transport form", input => {
+    for (const raw of [input, JSON.stringify(input)]) {
+      expect(previewCallBookingQuote(parseCallBookingQuoteToolArguments(raw))).toMatchObject({ success: false, code: "INVALID_QUOTE" });
+    }
+  });
+  it("defines low-to-high cleaning workload in both native tools without changing pricing fields", () => {
+    for (const tool of buildCallBookingQuoteToolDefinitions("https://offline.invalid", "token")) {
+      const condition = objectSchema(objectSchema(tool.function.parameters.properties!.pricing).properties!.condition);
+      expect(condition.type).toBe("integer");
+      expect(condition.description).toContain("1 = already clean");
+      expect(condition.description).toContain("5 = light / normal");
+      expect(condition.description).toContain("10 = severe buildup / needs a serious reset");
+      expect(condition.description).toContain("more cleaning work, not a cleaner home");
+    }
+    const low = previewCallBookingQuote({ ...quote, pricing: { ...pricing, condition: 1 } });
+    const normal = previewCallBookingQuote({ ...quote, pricing: { ...pricing, condition: 5 } });
+    const high = previewCallBookingQuote({ ...quote, pricing: { ...pricing, condition: 10 } });
+    if (!low.success || !normal.success || !high.success) throw new Error("Valid workload score rejected");
+    expect(low.firstCleaningTotalCents).toBe(normal.firstCleaningTotalCents);
+    expect(high.firstCleaningTotalCents).toBeGreaterThan(normal.firstCleaningTotalCents);
+  });
+  it("explains the same correct scale in the spoken qualification instructions", () => {
+    const prompt = withCallBookingQuoteInstructions(synthetic);
+    expect(prompt).toContain("1 = already clean; 5 = light / normal; 10 = severe buildup / needs a serious reset");
+    expect(prompt).toContain("higher condition scores mean more cleaning work, not a cleaner home");
+    expect(prompt).not.toContain("10 being the cleanest");
+    expect(prompt.slice(prompt.indexOf("## Important rules"))).toBe(syntheticSuffix);
   });
 });
