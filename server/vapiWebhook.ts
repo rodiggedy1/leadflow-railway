@@ -269,8 +269,14 @@ export function registerVapiWebhookRoute(app: Express): void {
         // Log for debugging
         console.log("[Vapi] end-of-call-report received:", JSON.stringify(body).slice(0, 1000));
         // Process asynchronously — don't block the 200 response
-        processEndOfCallReport(body as unknown as VapiEndOfCallReport).catch((err) => {
+        const createCallTask = () => import("./instinct/claudeCustomerCallsApplication")
+          .then(({ handleClaudeCustomerCallReport }) => handleClaudeCustomerCallReport(body))
+          .catch((err) => console.error("[Vapi] Customer call task processing failed:", err));
+        processEndOfCallReport(body as unknown as VapiEndOfCallReport).then(createCallTask).catch((err) => {
           console.error("[Vapi] processEndOfCallReport error:", err);
+          // A repeated completed-call report can encounter the existing unique
+          // voice-call row. The call-task receipt, not a second callback, dedups it.
+          if (err?.code === "ER_DUP_ENTRY") void createCallTask();
         });
 
         // Also update fieldMgmtCalls if this vapiCallId matches a field mgmt call

@@ -34,6 +34,16 @@ export const customerEmailTaskSchema = customerSmsTaskSchema.extend({
     bodyFormat: z.enum(["html", "text"]).optional(),
   }).strict(),
 }).strict();
-export const customerTaskSchema = z.union([customerSmsTaskSchema, customerEmailTaskSchema]);
+export const customerCallTaskSchema = customerSmsTaskSchema.extend({
+  sessionId: z.number().int().positive().nullable(), customerPhone: z.string().nullable(),
+  receivingPhoneNumberId: z.null(), receivingPhoneNumber: z.null(),
+  call: z.object({
+    provider: z.literal("vapi"), providerCallId: z.string().min(1), voiceCallId: z.number().int().positive(),
+    transcript: z.string().min(1), recordingUrl: z.string().url().nullable(),
+    callbackTaskIds: z.array(z.number().int().positive()),
+  }).strict(),
+  reply: z.object({ text: z.literal(""), status: z.literal("not_applicable"), providerMessageId: z.null() }).strict(),
+}).strict();
+export const customerTaskSchema = z.union([customerSmsTaskSchema, customerEmailTaskSchema, customerCallTaskSchema]);
 export type CustomerTask = z.infer<typeof customerTaskSchema>;
 export type ProposedCustomerTask = z.infer<typeof proposedCustomerTaskSchema>;

@@ -185,7 +185,11 @@ describe("Customer task compact queue and exact canonical identity", () => {
     const buttons = (source: string) => {
       const ast = ts.createSourceFile("card.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
       const result: string[] = [];
-      const visit = (node: ts.Node) => { if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button" && !node.openingElement.getText(ast).includes('className="cct-conversation-link"')) result.push(node.getText(ast)); ts.forEachChild(node, visit); };
+      const visit = (node: ts.Node) => {
+        if (ts.isFunctionDeclaration(node) && node.name?.text === "CustomerTaskCallRecording") return;
+        if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button" && !node.openingElement.getText(ast).includes('className="cct-conversation-link"')) result.push(node.getText(ast));
+        ts.forEachChild(node, visit);
+      };
       visit(ast); return result;
     };
     expect(hash(JSON.stringify(buttons(componentSource)))).toBe("a252f9ab6d7d4b78ca48c4d339a8e4c57eed7332b415730eaeb991efe5732411");

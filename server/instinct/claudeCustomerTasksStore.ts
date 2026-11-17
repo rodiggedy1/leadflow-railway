@@ -97,7 +97,7 @@ export function createClaudeCustomerTaskPersistence() {
       lastActivityAt = ${Date.now()} WHERE id = ${task.id} AND quickAction = ${action}`));
     if (changed.affectedRows !== 1) fail("CONFLICT", "Customer task could not be saved.");
   }
-  async function createTask(tx: Tx, identity: Pick<CustomerTask, "sessionId" | "customerName" | "customerPhone" | "sourceMessageId" | "sourceText" | "receivedAt" | "receivingPhoneNumberId" | "receivingPhoneNumber"> & { email?: Extract<CustomerTask, { sessionId: null }>['email'] }, plan: CustomerReplyPlan, activeDedupKey: string): Promise<number | null> {
+  async function createTask(tx: Tx, identity: Pick<CustomerTask, "sessionId" | "customerName" | "customerPhone" | "sourceMessageId" | "sourceText" | "receivedAt" | "receivingPhoneNumberId" | "receivingPhoneNumber"> & { email?: Extract<CustomerTask, { sessionId: null }>['email']; call?: Extract<CustomerTask, { call: unknown }>['call'] }, plan: CustomerReplyPlan, activeDedupKey: string): Promise<number | null> {
     if (!plan.task) return null;
     const id = Number(header(await tx.insert(opsChatMessages).values({
       channel: "command", authorName: "Instinct", authorRole: "system", body: plan.task.title,
@@ -109,7 +109,8 @@ export function createClaudeCustomerTaskPersistence() {
     const task = customerTaskSchema.parse({ id, version: 1, kind: action, ...identity, title: plan.task.title,
       items: plan.task.items.map((item, index) => ({ ...item, id: `item-${index + 1}`, completedBy: null, completedAt: null })),
       status: "unclaimed", owner: null, claimedAt: null, completedAt: null, completedBy: null, completionNote: null,
-      reply: { text: plan.replyText, status: "prepared", providerMessageId: null },
+      reply: identity.call ? { text: "", status: "not_applicable", providerMessageId: null }
+        : { text: plan.replyText, status: "prepared", providerMessageId: null },
       activity: [{ action: "created", actor: null, at: now, note: null }],
     });
     await saveTask(tx, task);

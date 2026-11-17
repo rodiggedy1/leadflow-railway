@@ -2,7 +2,7 @@ import React, { createContext, useContext, useRef, useState, type ReactNode } fr
 import DOMPurify from "dompurify";
 import { Check, ChevronDown, ClipboardList, Loader2, RefreshCw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import "./claude-customer-tasks.css";
 
@@ -53,6 +53,7 @@ export function customerTaskReplyStatus(status: CustomerTask["reply"]["status"])
     case "sent": return "Sent · provider accepted, delivery not verified";
     case "uncertain": return "Uncertain · sending not confirmed";
     case "suppressed": return "Suppressed · not sent";
+    case "not_applicable": return "Not applicable · AI call";
   }
 }
 
@@ -171,6 +172,32 @@ export function ClaudeCustomerTaskStreamCard({ taskId }: { taskId: number | null
     actions={context.actions} onOpenConversation={context.onOpenConversation} placement="stream" />;
 }
 
+/** Canonical call evidence needs no SMS session or conversation lookup. */
+export function CustomerTaskCallRecording({ taskId }: { taskId: number }) {
+  const recording = trpc.claudeCustomerTasks.recording.useQuery({ id: taskId }, { retry: false, staleTime: 0, refetchOnWindowFocus: false });
+  if (recording.isLoading) return <p role="status">Loading call recording…</p>;
+  if (recording.isError) return <p role="alert">Call recording unavailable. <button type="button" onClick={() => void recording.refetch()}>Retry</button></p>;
+  if (!recording.data?.url) return <p>Call recording unavailable.</p>;
+  return <section aria-label="Call recording"><h4>Call recording</h4>
+    <audio controls preload="none" className="w-full" aria-label="Call recording" src={recording.data.url} />
+    <a href={recording.data.url} target="_blank" rel="noopener noreferrer">Open call recording</a>
+  </section>;
+}
+export function CustomerTaskCallEvidence({ task }: { task: Extract<CustomerTask, { call: unknown }> }) {
+  const [open, setOpen] = useState(false);
+  return <Dialog open={open} onOpenChange={setOpen}>
+    <DialogTrigger asChild><button type="button" className="cct-conversation-link">Open full call</button></DialogTrigger>
+    <DialogContent className="cct-confirm-dialog">
+      <DialogTitle>Full AI call</DialogTitle>
+      <DialogDescription>{task.customerName || "Customer"}{task.customerPhone && ` · ${task.customerPhone}`}</DialogDescription>
+      <div className="cct-confirm-body">
+        <section aria-label="Full call transcript"><h4>Full call transcript</h4><p className="cct-verbatim">{task.call.transcript}</p></section>
+        {open && task.call.recordingUrl && <CustomerTaskCallRecording taskId={task.id} />}
+      </div>
+    </DialogContent>
+  </Dialog>;
+}
+
 export function TaskCompletionConfirm({ task, note, pending, error, allowed, onNote, onCancel, onConfirm }: {
   task: CustomerTask; note: string; pending: boolean; error: string; allowed: boolean;
   onNote: (note: string) => void; onCancel: () => void; onConfirm: () => void;
@@ -179,7 +206,7 @@ export function TaskCompletionConfirm({ task, note, pending, error, allowed, onN
     <p className="cct-confirm-task">{task.title}<small>{task.customerName || ("email" in task ? task.email.fromEmail : task.customerPhone)}</small></p>
     <p>I completed all the actions in this task.</p>
     <p>This records your human confirmation of the entire request and checklist, not system verification.</p>
-    <p className="cct-confirm-boundary">{"email" in task ? "No booking change, customer email, or conversation closure is performed." : "No booking change, customer text, or conversation closure is performed."}</p>
+    <p className="cct-confirm-boundary">{"call" in task ? "No booking change, customer call, customer text, or conversation closure is performed." : "email" in task ? "No booking change, customer email, or conversation closure is performed." : "No booking change, customer text, or conversation closure is performed."}</p>
     <label>Completion note <span>(required)</span><textarea value={note} onChange={(event) => onNote(event.target.value)} placeholder="What did you complete?" rows={2} required /></label>
     {!allowed && <p className="cct-feedback" role="alert">Only the current task owner can mark this done.</p>}
     {error && <p className="cct-feedback" role="alert">{error}</p>}
@@ -212,7 +239,7 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
     finally { busyRef.current = false; setSaving(false); }
   };
   return <article className={`cct-card cct-card-${placement}`} data-task-id={task.id} data-task-status={task.status} aria-label={`Task: ${task.title}`}>
-    <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">Customer task · {"email" in task ? "EMAIL" : "SMS"}</span><strong>{task.title}</strong>
+    <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">Customer task · {"call" in task ? "AI CALL" : "email" in task ? "EMAIL" : "SMS"}</span><strong>{task.title}</strong>
       <small className="cct-customer-identity"><span>{task.customerName || "Customer"}</span><span className="cct-customer-phone">{"email" in task ? task.email.fromEmail : task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
     <div className="cct-card-status">
       <span>{task.status === "done" ? `Confirmed by ${task.completedBy?.name || "Staff"}` : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
@@ -221,23 +248,24 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
       {editable && <button type="button" disabled={busy || !canComplete} title="Confirm all actions in this task are complete"
         onClick={() => { if (!canComplete || busy) return; setError(""); setNote(""); setConfirmOpen(true); }}>Mark done</button>}
     </div>
-    <button type="button" className="cct-conversation-link" disabled={!onOpenConversation || !("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)}
-      onClick={() => { if (onOpenConversation && ("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)) onOpenConversation(task); }}>Open full conversation</button>
-    <details className="cct-details"><summary>{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment <ChevronDown /></summary><div className="cct-details-body">
-      <section className="cct-source-message"><h4>{"email" in task ? "Customer email" : "Customer text"}</h4>{"email" in task && task.email.bodyFormat === "html"
+    {"call" in task ? <CustomerTaskCallEvidence task={task} /> : <button type="button" className="cct-conversation-link" disabled={!onOpenConversation || !("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)}
+      onClick={() => { if (onOpenConversation && ("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)) onOpenConversation(task); }}>Open full conversation</button>}
+    <details className="cct-details"><summary>{"call" in task ? "Caller evidence" : <>{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment </>}<ChevronDown /></summary><div className="cct-details-body">
+      <section className="cct-source-message"><h4>{"call" in task ? "Caller evidence" : "email" in task ? "Customer email" : "Customer text"}</h4>{"email" in task && task.email.bodyFormat === "html"
         ? <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.sourceText, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />
         : <p className="cct-verbatim">{task.sourceText}</p>}</section>
       <section><ul className="cct-items">{task.items.map((item) => {
         const confirmed = item.completedBy !== null && item.completedAt !== null;
         return <li key={item.id}><div><strong>{item.title}</strong>
+          {"call" in task && <blockquote>{item.evidenceQuote}</blockquote>}
           {"email" in task && task.email.bodyFormat === "html" && <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.evidenceQuote, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />}
           {confirmed && <small>Human-confirmed by {item.completedBy!.name} · {taskTimestamp(item.completedAt!)}</small>}</div>
           {confirmed ? <Check aria-label="Item human-confirmed" /> : editable ? <button type="button" disabled={busy}
             aria-label={`Confirm completed item: ${item.title}`} onClick={() => void update(() => actions.completeItem(task.id, item.id))}>Confirm item</button> : <small>Not confirmed</small>}
         </li>;
       })}</ul></section>
-      <section className={`cct-reply cct-reply-${task.reply.status}`}><h4>Acknowledgment</h4><strong>{customerTaskReplyStatus(task.reply.status)}</strong>
-        <p className="cct-verbatim">{task.reply.text}</p></section>
+      {!("call" in task) && <section className={`cct-reply cct-reply-${task.reply.status}`}><h4>Acknowledgment</h4><strong>{customerTaskReplyStatus(task.reply.status)}</strong>
+        <p className="cct-verbatim">{task.reply.text}</p></section>}
       {task.status === "done" && <section className="cct-completion"><h4>Staff confirmation</h4><p>Human-confirmed by {task.completedBy?.name || "Staff"}{task.completedAt !== null && ` · ${taskTimestamp(task.completedAt)}`} · not system-verified.</p>
         {task.completionNote && <p className="cct-verbatim">{task.completionNote}</p>}</section>}
       <div className="cct-prepared"><span>Task prepared</span><time dateTime={new Date(task.activity.find((entry) => entry.action === "created")?.at ?? task.receivedAt).toISOString()}>

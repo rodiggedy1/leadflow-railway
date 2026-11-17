@@ -1442,6 +1442,7 @@ export default function CommandChatExactLive() {
   }, [showNotice, testBridgeMutation]);
 
   const openSmsDrawerFromTask = useCallback((task: CustomerTask) => {
+    if ("call" in task) return; // TaskCard opens its canonical call evidence locally.
     if ("email" in task) {
       if (!task.email.threadId) { showNotice("This task's linked conversation is unavailable."); return; }
       setSelectedLeadCardPhone(null);

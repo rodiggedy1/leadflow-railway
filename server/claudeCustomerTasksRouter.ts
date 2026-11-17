@@ -11,6 +11,7 @@ const idInput = z.object({ id }).strict();
 export interface CustomerTasksRouterOptions {
   getStore(): Promise<ClaudeCustomerTasksStore>;
   broadcast(): void | Promise<void>;
+  readCallRecordingUrl?: (providerCallId: string) => Promise<string | null>;
 }
 /** Injectable offline seam. Staff identity comes exclusively from opsChatProcedure. */
 export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOptions) {
@@ -36,6 +37,13 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
       .query(() => run(store => store.list())),
     get: opsChatProcedure.input(idInput).output(customerTaskSchema.nullable())
       .query(({ input }) => run(store => store.get(input.id))),
+    recording: opsChatProcedure.input(idInput).output(z.object({ url: z.string().url().nullable() }).strict())
+      .query(({ input }) => run(async store => {
+        const task = await store.get(input.id);
+        if (!task || !("call" in task)) throw new TRPCError({ code: "NOT_FOUND", message: "Call task not found." });
+        const read = options.readCallRecordingUrl ?? (await import("./instinct/claudeCustomerCallRecording")).readCustomerCallRecordingUrl;
+        return { url: await read(task.call.providerCallId) };
+      })),
     claim: opsChatProcedure.input(idInput).output(customerTaskSchema)
       .mutation(({ input, ctx }) => write(store => store.claimTask(input.id, actor(ctx.opsCaller)))),
     completeItem: opsChatProcedure.input(z.object({ id, itemId: z.string().min(1) }).strict()).output(customerTaskSchema)

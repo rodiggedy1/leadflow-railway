@@ -789,7 +789,7 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
   return {
     name: "Madison — Maids in Black",
     firstMessage:
-      "Hi, thank you for calling Maids in Black! This is Madison. How can I help you today?",
+      "Hi, thank you for calling Maids in Black! I’m Madison, your AI customer-service assistant. I can help with quotes, booking requests, and cleaning questions. How can I help you today?",
     model: {
       provider: "openai",
       model: "gpt-4o",

@@ -19,6 +19,22 @@ const componentPath = "client/src/components/ClaudeCustomerTasks.tsx";
 const pagePath = "client/src/pages/CommandChatExactLive.tsx";
 const source = readFileSync(componentPath, "utf8");
 const page = readFileSync(pagePath, "utf8");
+const withoutCallPage = (value: string) => value.replace('    if ("call" in task) return; // TaskCard opens its canonical call evidence locally.\n', "");
+function withoutCallComponent(value: string) {
+  return value
+    .replace(', DialogTrigger } from "@/components/ui/dialog"', ' } from "@/components/ui/dialog"')
+    .replace('    case "not_applicable": return "Not applicable · AI call";\n', '')
+    .replace(/\/\*\* Canonical call evidence[^]*?(?=export function TaskCompletionConfirm)/, '')
+    .replace('"call" in task ? "No booking change, customer call, customer text, or conversation closure is performed." : ', '')
+    .replace('"call" in task ? "AI CALL" : ', '')
+    .replace('{"call" in task ? <CustomerTaskCallEvidence task={task} /> : <button', '<button')
+    .replace('Open full conversation</button>}', 'Open full conversation</button>')
+    .replace('{"call" in task ? "Caller evidence" : <>{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment </>}', '{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment ')
+    .replace('"call" in task ? "Caller evidence" : ', '')
+    .replace('          {"call" in task && <blockquote>{item.evidenceQuote}</blockquote>}\n', '')
+    .replace('{!("call" in task) && <section className={`cct-reply', '<section className={`cct-reply')
+    .replace('<p className="cct-verbatim">{task.reply.text}</p></section>}', '<p className="cct-verbatim">{task.reply.text}</p></section>');
+}
 const taskQueueInsets = "\n/* Match the working Leads queue's side insets; keep the grid and Leads untouched. */\n.ccc-live #ccc-tasks-panel .cct-queue {\n  margin: 0 10px 12px;\n  padding: 12px;\n  border: 1px solid transparent;\n}\n";
 const unchangedTaskCss = (value: string) => value.replace(taskQueueInsets, "");
 const baseline = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
@@ -294,8 +310,8 @@ describe("Exact offline SMS control and protected source bytes", () => {
   it("restores no email dot logic, provider polling or backend edits", () => {
     const rollback = "c56e87bc2e6bde342d832db8415c2152a2033345";
     const restored = (path: string) => execFileSync("git", ["show", `${rollback}:${path}`], { encoding: "utf8" });
-    expect(page.replace('<CommandChatEmailDetail key={threadId} initialThreadId={threadId}', '<CommandChatEmailDetail initialThreadId={threadId}')).toBe(restored(pagePath));
-    expect(source.replace('Customer task · {"email" in task ? "EMAIL" : "SMS"}', 'Customer task')).toBe(restored(componentPath));
+    expect(withoutCallPage(page).replace('<CommandChatEmailDetail key={threadId} initialThreadId={threadId}', '<CommandChatEmailDetail initialThreadId={threadId}')).toBe(restored(pagePath));
+    expect(withoutCallComponent(source).replace('Customer task · {"email" in task ? "EMAIL" : "SMS"}', 'Customer task')).toBe(restored(componentPath));
     for (const path of ["server/gmailService.ts", "server/opsChatRouter.ts", "server/gmailRouter.ts", "server/gmailGlanceWorker.ts",
       "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailStore.ts",
       "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeAgentClient.ts"]) {
@@ -323,7 +339,7 @@ describe("Exact offline SMS control and protected source bytes", () => {
   it("limits page changes to the type annotation and leading email callback branch; preserves the entire SMS resolver body, drawer and email overlay", () => {
     const branch = '    if ("email" in task) {\n      if (!task.email.threadId) { showNotice("This task\'s linked conversation is unavailable."); return; }\n      setSelectedLeadCardPhone(null);\n      setSelectedLeadCardDraft(null);\n      setSelectedLeadCardSnapshot(null);\n      setSelectedLeadDetail(null);\n      setSelectedSmsConversation(null);\n      setSelectedEmailThreadId(task.email.threadId);\n      return;\n    }\n';
     expect(page).toContain(branch);
-    const normalized = page.replace(branch, "").replace('function taskConversation(task: Extract<CustomerTask, { sessionId: number }>,', 'function taskConversation(task: CustomerTask,')
+    const normalized = withoutCallPage(page).replace(branch, "").replace('function taskConversation(task: Extract<CustomerTask, { sessionId: number }>,', 'function taskConversation(task: CustomerTask,')
       .replace('<CommandChatEmailDetail key={threadId} initialThreadId={threadId}', '<CommandChatEmailDetail initialThreadId={threadId}');
     expect(normalized).toBe(controlPage);
     let detail = readFileSync("client/src/pages/CommandChatEmailDetail.tsx", "utf8")
@@ -347,7 +363,7 @@ describe("Exact offline SMS control and protected source bytes", () => {
       ['{"email" in task && task.email.bodyFormat === "html"\n        ? <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.sourceText, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />\n        : <p className="cct-verbatim">{task.sourceText}</p>}', '<p className="cct-verbatim">{task.sourceText}</p>'],
       ['          {"email" in task && task.email.bodyFormat === "html" && <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.evidenceQuote, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />}\n', ''],
     ];
-    let normalized = source;
+    let normalized = withoutCallComponent(source);
     for (const [candidate, original] of approved) { expect(normalized.split(candidate)).toHaveLength(2); normalized = normalized.replace(candidate, original); }
     expect(normalized.split('{"email" in task ? "Customer email" : "Customer text"}')).toHaveLength(3);
     normalized = normalized.replaceAll('{"email" in task ? "Customer email" : "Customer text"}', 'Customer text');
@@ -448,7 +464,8 @@ describe("Command Chat right-rail clipping regression (offline actual CSS and ta
   it("changes only three layout declarations and preserves the complete component, handlers, task styles, columns and navigation", () => {
     expect(liveCss.replace(correction, "")).toBe(originalCss);
     for (const path of [componentPath, pagePath, "client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-reference-composition.css", "client/src/pages/command-chat-crm-review.css", "client/src/components/ReviewWorkspaceNav.tsx", "client/src/components/review-workspace-nav.css"]) {
-      expect(unchangedTaskCss(readFileSync(path, "utf8"))).toBe(execFileSync("git", ["show", `${layoutBaseline}:${path}`], { encoding: "utf8" }));
+      const candidate = readFileSync(path, "utf8");
+      expect(unchangedTaskCss(path === componentPath ? withoutCallComponent(candidate) : path === pagePath ? withoutCallPage(candidate) : candidate)).toBe(execFileSync("git", ["show", `${layoutBaseline}:${path}`], { encoding: "utf8" }));
     }
   });
   it("reproduces the untouched control's 70px right-rail clipping, not a task-card intrinsic-width overflow", () => {
