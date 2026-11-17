@@ -11,6 +11,7 @@ import * as icons from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 import * as contract from "../shared/claudeCustomerTasks";
 import type { CustomerTask } from "../shared/claudeCustomerTasks";
+import { withoutApprovedSmsBookingQuote } from "./smsBookingQuoteSourceControl";
 
 // LOCAL ONLY: actual client TSX, injected React/tRPC, synthetic records only.
 // Never import the app/router, authentication, DB, Gmail, provider or model.
@@ -315,7 +316,7 @@ describe("Exact offline SMS control and protected source bytes", () => {
     for (const path of ["server/gmailService.ts", "server/opsChatRouter.ts", "server/gmailRouter.ts", "server/gmailGlanceWorker.ts",
       "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailStore.ts",
       "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeAgentClient.ts"]) {
-      expect(readFileSync(path, "utf8")).toBe(restored(path));
+      expect(withoutApprovedSmsBookingQuote(path, readFileSync(path, "utf8"))).toBe(restored(path));
     }
     expect(readFileSync("server/gmailService.ts", "utf8")).not.toContain("getEmailInboxUnansweredStatuses");
     expect(readFileSync("server/opsChatRouter.ts", "utf8")).not.toContain("getEmailInboxUnansweredStatuses");

@@ -50,7 +50,7 @@ export const customerHistoryHash = (history: unknown): string => createHash("sha
 export interface CustomerSmsSession extends AlternativeSessionRow { leadSource?: unknown; smsOptOut?: unknown; csQueue?: unknown }
 export interface CustomerSmsStore {
   claim(binding: CustomerSmsBinding): Promise<CustomerSmsClaim | null>;
-  prepare(claim: CustomerSmsClaim, plan: CustomerReplyPlan): Promise<boolean>;
+  prepare(claim: CustomerSmsClaim, plan: CustomerReplyPlan): Promise<boolean | CustomerReplyPlan>;
   recordAcceptance(claim: CustomerSmsClaim, providerMessageId: string): Promise<boolean>;
   markUncertain(claim: CustomerSmsClaim): Promise<void>;
   suppress(claim: CustomerSmsClaim, code: string): Promise<void>;
@@ -137,8 +137,12 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
         || currentConfig.testCustomerOverride !== config.testCustomerOverride || currentConfig.scope !== config.scope) {
         await options.store.suppress(claim, "CONFIG_CHANGED"); return { outcome: "suppressed" };
       }
-      if (!await options.store.prepare(claim, plan)) return { outcome: "suppressed" };
-      hasTask = plan.task !== null;
+      const prepared = await options.store.prepare(claim, plan);
+      if (!prepared) return { outcome: "suppressed" };
+      // Quote links and their canonical price text commit with the existing
+      // task/receipt. Submit that exact durable text, never the pre-link draft.
+      const replyPlan = typeof prepared === "object" ? prepared : plan;
+      hasTask = replyPlan.task !== null;
       await refreshTask();
       const submissionConfig = options.config();
       if (!submissionConfig || submissionConfig.startAt !== config.startAt || submissionConfig.allowedPhone !== config.allowedPhone
@@ -147,7 +151,7 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       }
       // Durable exact reply and actionable task already exist before submission.
       submissionStarted = true;
-      const response = await options.send({ to: phone, content: plan.replyText, fromNumberId: input.receivingPhoneNumberId });
+      const response = await options.send({ to: phone, content: replyPlan.replyText, fromNumberId: input.receivingPhoneNumberId });
       if (!response.success || typeof response.messageId !== "string" || !response.messageId.trim()) {
         await options.store.markUncertain(claim); await refreshTask(); return { outcome: "uncertain" };
       }

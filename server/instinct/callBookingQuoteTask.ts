@@ -1,6 +1,14 @@
 import type { ProposedCustomerTask } from "../../shared/claudeCustomerTasks";
 import type { CustomerCallSource } from "./claudeCustomerCalls";
 
+/** Shared task wording only; task persistence and completion remain canonical. */
+export function appendBookingQuoteFollowup(task: ProposedCustomerTask | null, evidenceQuote: string): ProposedCustomerTask {
+  const title = "Follow up on cleaning booking link";
+  const item = { title: "Review the customer's booking-link completion", evidenceQuote };
+  if (!task) return { title, items: [item] };
+  return { ...task, items: [...task.items, item] };
+}
+
 /** A saved quote link is not a completed booking. Add only the requested human
  * follow-up to the existing call task; all other generated caller actions remain. */
 export function withCallBookingQuoteTask(options: {
@@ -14,9 +22,6 @@ export function withCallBookingQuoteTask(options: {
     // a generated quotation, a tool result, a guessed identity or assistant speech.
     const evidenceQuote = [...source.customerTurns].filter(turn => turn.trim()).sort((a, b) => b.length - a.length)[0];
     if (!evidenceQuote) throw new Error("CALL_QUOTE_TASK_SOURCE_UNAVAILABLE");
-    const title = "Follow up on cleaning booking link";
-    const item = { title: "Review the customer's booking-link completion", evidenceQuote };
-    if (!task) return { title, items: [item] };
-    return { ...task, items: [...task.items, item] };
+    return appendBookingQuoteFollowup(task, evidenceQuote);
   };
 }

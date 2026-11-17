@@ -13,9 +13,18 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
   const { createAlternativeSessionReader } = await import("./claudeSmsAlternativeSessionRead");
   const { createReceivingLineReader } = await import("./claudeSmsAlternative");
   const { createClaudeCustomerTasksStore } = await import("./claudeCustomerTasksStore");
-  const { generateClaudeCustomerSmsPlan } = await import("./claudeCustomerSmsGeneration");
+  const { createClaudeCustomerSmsGeneratorWithReply } = await import("./claudeCustomerSmsGeneration");
+  const { createSmsBookingQuoteReplyGenerator } = await import("./smsBookingQuoteGeneration");
+  const { createSmsBookingQuoteStore } = await import("./smsBookingQuoteStore");
+  const { createSmsBookingQuotePlanPreparer } = await import("./smsBookingQuoteApplication");
   const reader = createAlternativeSessionReader({ getDatabase: async () => db });
   const { sendSms } = await import("../openphone");
+  const quoteStore = createSmsBookingQuoteStore(db);
+  let linkPrepared = false;
+  const taskStore = createClaudeCustomerTasksStore(db, {
+    allowTestCustomer: isClaudeCustomerSmsPilotCustomerOverride,
+    preparePlan: createSmsBookingQuotePlanPreparer(quoteStore, Date.now, () => { linkPrepared = true; }),
+  });
   const service = createClaudeCustomerSmsService({
     config: claudeCustomerSmsConfig,
     readSession: async id => {
@@ -26,8 +35,21 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
       return { ...context, leadSource: rows[0].leadSource, smsOptOut: rows[0].smsOptOut, csQueue: rows[0].csQueue };
     },
     readReceivingLine: createReceivingLineReader(),
-    generate: generateClaudeCustomerSmsPlan,
-    store: createClaudeCustomerTasksStore(db, { allowTestCustomer: isClaudeCustomerSmsPilotCustomerOverride }),
+    generate: createClaudeCustomerSmsGeneratorWithReply(createSmsBookingQuoteReplyGenerator({
+      smsBookingQuote: { readState: quoteStore.read },
+    })),
+    store: { ...taskStore, prepare: async (claim, plan) => {
+      linkPrepared = false;
+      const prepared = await taskStore.prepare(claim, plan);
+      if (prepared && linkPrepared) {
+        // The existing task/reply transaction has committed before any refresh.
+        try {
+          const { broadcastOpsUpdate } = await import("../sseBroadcast");
+          broadcastOpsUpdate("booking_funnel_update");
+        } catch { /* Refresh failure never changes the durable reply/send outcome. */ }
+      }
+      return prepared;
+    } },
     send: sendSms,
     onTaskChange: async () => {
       const { broadcastOpsUpdate } = await import("../sseBroadcast");

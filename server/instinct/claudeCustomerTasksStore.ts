@@ -58,7 +58,7 @@ const stop = (text: string) => /^\s*(stop|unsubscribe|quit|end|remove me|opt.?ou
 
 export interface ClaudeCustomerTasksStore {
   claim(binding: CustomerSmsBinding): Promise<CustomerSmsClaim | null>;
-  prepare(claim: CustomerSmsClaim, plan: CustomerReplyPlan): Promise<boolean>;
+  prepare(claim: CustomerSmsClaim, plan: CustomerReplyPlan): Promise<boolean | CustomerReplyPlan>;
   recordAcceptance(claim: CustomerSmsClaim, providerMessageId: string): Promise<boolean>;
   markUncertain(claim: CustomerSmsClaim): Promise<void>;
   suppress(claim: CustomerSmsClaim, code: string): Promise<void>;
@@ -120,7 +120,11 @@ export function createClaudeCustomerTaskPersistence() {
 }
 
 /** Passive factory: no application DB fetch, network, model, sender, or booking action. */
-export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCustomer?: (phone: string) => boolean } = {}): ClaudeCustomerTasksStore {
+export function createClaudeCustomerTasksStore(db: Db, options: {
+  allowTestCustomer?: (phone: string) => boolean;
+  /** SMS-only opt-in. Runs after freshness, in the task/reply transaction. */
+  preparePlan?: (tx: Tx, claim: CustomerSmsClaim, plan: CustomerReplyPlan) => Promise<CustomerReplyPlan | null>;
+} = {}): ClaudeCustomerTasksStore {
   const { parseTask, taskRow, saveTask, createTask } = createClaudeCustomerTaskPersistence();
   function validateReceipt(draft: Record<string, any> | undefined, claim: CustomerSmsClaim): Record<string, any> {
     const binding = bindingSchema.parse(claim.binding);
@@ -220,7 +224,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCusto
       }
     },
     prepare: (claim, rawPlan) => db.transaction(async tx => {
-      const plan = customerReplyPlanSchema.parse(rawPlan), draft = await receipt(tx, claim);
+      const originalPlan = options.preparePlan ? null : customerReplyPlanSchema.parse(rawPlan), draft = await receipt(tx, claim);
       if (draft.status !== "TOOLS_RUNNING") return false;
       if (draft.dismissedAt || draft.dismissedBy || !await fresh(tx, claim.binding)) {
         const changed = header(await tx.execute(sql`UPDATE madison_sms_drafts SET status = 'DISMISSED', errorStage = 'GATE',
@@ -229,6 +233,8 @@ export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCusto
         if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_SUPPRESSION_SAVE_FAILED");
         return false;
       }
+      const preparedPlan = await options.preparePlan?.(tx, claim, rawPlan) ?? null;
+      const plan = originalPlan ?? customerReplyPlanSchema.parse(preparedPlan ?? rawPlan);
       if (plan.task?.items.some(item => !claim.binding.inboundText.includes(item.evidenceQuote))) {
         return fail("PRECONDITION_FAILED", "The checklist is not grounded in the incoming customer message.");
       }
@@ -242,7 +248,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: { allowTestCusto
         approvedText = ${plan.replyText}, capabilityResult = ${JSON.stringify({ phase: "submission_started", taskId: id })},
         updatedAt = NOW(3) WHERE id = ${claim.draftId} AND capability = ${capability} AND status = 'TOOLS_RUNNING'`));
       if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_PREPARE_FAILED");
-      return true;
+      return preparedPlan ? plan : true;
     }),
     recordAcceptance: (claim, providerMessageId) => db.transaction(async tx => {
       if (!providerMessageId?.trim()) return fail("PRECONDITION_FAILED", "A provider acceptance ID is required.");

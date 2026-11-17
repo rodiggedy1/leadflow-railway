@@ -120,9 +120,16 @@ export function createClaudeCustomerReplyGenerator(options: ClaudeCustomerSmsGen
 }
 
 export function createClaudeCustomerSmsGenerator(options: ClaudeCustomerSmsGenerationOptions = {}) {
-  const generateReply = createClaudeCustomerReplyGenerator(options);
+  return createClaudeCustomerSmsGeneratorWithReply(createClaudeCustomerReplyGenerator(options));
+}
+
+/** The automatic SMS adapter can add booking qualification without changing the
+ * shared email content factory or bypassing exact saved-conversation checks. */
+export function createClaudeCustomerSmsGeneratorWithReply<T extends CustomerReplyPlan>(
+  generateReply: (input: ClaudeCustomerReplyInput) => Promise<T>,
+) {
   return async function generateClaudeCustomerSmsPlan(binding: ClaudeCustomerSmsGenerationBinding,
-    sessionSnapshot: AlternativeSessionRow): Promise<CustomerReplyPlan> {
+    sessionSnapshot: AlternativeSessionRow): Promise<T> {
     const originalConversation = exactConversation(binding, sessionSnapshot);
     return generateReply({ incomingMessage: binding.inboundText,
       context: { binding, contact: sessionSnapshot.contact, originalConversation,

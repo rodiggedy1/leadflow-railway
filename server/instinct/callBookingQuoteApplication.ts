@@ -9,25 +9,12 @@ import { callBookingQuoteSendInputSchema, previewCallBookingQuote } from "./call
 import { createCallBookingQuoteStore, type CallBookingQuoteReceipt } from "./callBookingQuoteStore";
 import { createPublicBookingPriceSnapshot } from "../../shared/publicBookingPricing";
 import type { CreateCustomerBookingLinkInput } from "../../shared/bookingFunnel";
+import { buildCallBookingQuoteSms } from "./bookingQuotePresentation";
+export { buildCallBookingQuoteSms } from "./bookingQuotePresentation";
 
 const object = (value: unknown): Record<string, any> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
 const internalPhones = new Set(["+12028885362", "+19347898077"]);
 export const CALL_QUOTE_BOOKING_ORIGIN = "https://quote.maidinblack.com";
-const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: cents % 100 ? 2 : 0 }).format(cents / 100);
-
-export function buildCallBookingQuoteSms(input: CreateCustomerBookingLinkInput, link: CallBookingQuoteReceipt["link"], origin: string): string {
-  const snapshot = createPublicBookingPriceSnapshot(input.pricing);
-  const url = new URL(link.urlPath, origin);
-  if (url.origin !== new URL(origin).origin || !/^\/book\/mib-[a-z0-9-]+$/.test(url.pathname) || url.search || url.hash) throw new Error("CALL_QUOTE_LINK_INVALID");
-  if (link.firstCleaningTotalCents !== snapshot.breakdown.firstCleaningTotalCents) throw new Error("CALL_QUOTE_PRICE_CHANGED");
-  const firstName = input.customerName.split(/\s+/)[0];
-  const extras = snapshot.breakdown.extras.length
-    ? snapshot.breakdown.extras.map(extra => `${extra.quantity > 1 ? `${extra.quantity} × ` : ""}${extra.label}`).join("\n")
-    : "No add-ons selected";
-  const frequency = input.pricing.recurrence !== "one-time" && snapshot.breakdown.futureVisitTotalCents !== null
-    ? `\nYour ${input.pricing.recurrence} follow-up cleaning price is ${money(snapshot.breakdown.futureVisitTotalCents)}.` : "";
-  return `Hi ${firstName}! Madison from Maids in Black here. Thanks for chatting with me!\n\nHere’s your ${snapshot.serviceName.toLowerCase()} quote for your ${input.pricing.bedrooms === 0 ? "studio" : `${input.pricing.bedrooms}-bedroom`} ${input.pricing.homeType.toLowerCase()}:\n${extras}\n\nYour first-cleaning quote is ${money(link.firstCleaningTotalCents)}.${frequency}\nYou can review the details, choose your time and complete your booking here:\n${url.href}`;
-}
 
 type Store = ReturnType<typeof createCallBookingQuoteStore>;
 export interface CallBookingQuoteDependencies {
