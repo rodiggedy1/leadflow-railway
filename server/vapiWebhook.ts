@@ -31,6 +31,8 @@ import { sendSms } from "./openphone";
 import { getDb } from "./db";
 import { fieldMgmtCalls, callLog } from "../drizzle/schema";
 import { eq, or } from "drizzle-orm";
+import { ENV } from "./_core/env";
+import { verifyCallBookingQuoteServerToken } from "./instinct/callBookingQuote";
 
 const OWNER_ALERT_NUMBER = "+13029816191";
 
@@ -132,6 +134,19 @@ export function registerVapiWebhookRoute(app: Express): void {
           let result: unknown;
 
           switch (name) {
+            case "getBookingQuote":
+            case "textBookingQuote": {
+              if (!verifyCallBookingQuoteServerToken((req.headers as unknown as Record<string, unknown>)["x-instinct-call-quote-token"], ENV.vapiPrivateKey)) {
+                result = { success: false, code: "UNAUTHORIZED_CALL_QUOTE", message: "The call quote request could not be authenticated. No quote was created or texted." };
+                break;
+              }
+              const { executeCallBookingQuoteTool } = await import("./instinct/callBookingQuoteApplication");
+              result = await executeCallBookingQuoteTool({
+                callId: typeof callObj?.id === "string" ? callObj.id : "",
+                toolCallId: id, name, args,
+              });
+              break;
+            }
             case "getQuote": {
               result = handleGetQuote(args as {
                 bedrooms: string;

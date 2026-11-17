@@ -4,6 +4,8 @@ import { getAssistantId } from "../vapiService";
 import { normalizePhone } from "../utils/phone";
 import { createClaudeCustomerCallTaskHandler, createClaudeCustomerCallTaskGenerator, type CustomerCallSource } from "./claudeCustomerCalls";
 import { createClaudeCustomerCallsStore } from "./claudeCustomerCallsStore";
+import { withCallBookingQuoteTask } from "./callBookingQuoteTask";
+import { hasSavedCallBookingQuote } from "./callBookingQuoteStore";
 
 const object = (value: unknown): Record<string, any> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
 const rows = (value: unknown): Record<string, any>[] => (value as any)[0];
@@ -78,7 +80,7 @@ export async function handleClaudeCustomerCallReport(report: unknown): Promise<v
     return response.json();
   } });
   const result = await createClaudeCustomerCallTaskHandler({ readSource, store: createClaudeCustomerCallsStore(db),
-    generate: createClaudeCustomerCallTaskGenerator() })(report);
+    generate: withCallBookingQuoteTask({ generate: createClaudeCustomerCallTaskGenerator(), hasSavedQuote: callId => hasSavedCallBookingQuote(db, callId) }) })(report);
   if (result.status === "created") {
     const { broadcastOpsUpdate } = await import("../sseBroadcast");
     broadcastOpsUpdate("task_update", { channel: "command" });

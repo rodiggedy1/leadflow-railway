@@ -1,3 +1,4 @@
+import { withCallBookingQuoteTask } from "./callBookingQuoteTask";
 import { getTableName } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { describe, it, expect, vi } from "vitest";
@@ -107,5 +108,33 @@ describe("actual durable call task adapter — offline transactional storage", (
     const task = (await h.tasks.list())[0]; await h.tasks.claimTask(task.id, owner); expect((await h.tasks.get(task.id))?.status).toBe("claimed");
     await h.tasks.completeItem(task.id, "item-1", owner); await h.tasks.completeTask(task.id, "Both actions completed by staff", owner);
     expect((await h.tasks.get(task.id))?.status).toBe("done"); expect(h.state().cards.filter((r: any) => r.channel === "command")).toHaveLength(1);
+  });
+});
+
+
+describe("quoted booking request retains the existing AI CALL task card", () => {
+  it("persists one unclaimed call task after a quote link, not Done or a confirmed booking", async () => {
+    const h = port();
+    const generate = withCallBookingQuoteTask({ hasSavedQuote: async id => id === "synthetic-call", generate: async () => null });
+    const handle = createClaudeCustomerCallTaskHandler({ readSource: async () => source(), store: h.store, generate });
+    const created = await handle({ message: { call: { id: "synthetic-call" } } });
+    expect(created.status).toBe("created");
+    const task = (await h.tasks.list())[0];
+    expect(task.status).toBe("unclaimed"); expect(task.completedAt).toBeNull();
+    expect(task.title).toBe("Follow up on cleaning booking link");
+    expect(task.items[0].title).toBe("Review the customer's booking-link completion");
+    expect(task.items[0].evidenceQuote).toBe(source().customerTurns[0]);
+    expect(h.state().cards.filter((row: any) => row.channel === "command")).toHaveLength(1);
+    expect((await handle({ message: { call: { id: "synthetic-call" } } })).status).toBe("duplicate");
+    await h.tasks.claimTask(task.id, owner); expect((await h.tasks.get(task.id))?.status).toBe("claimed");
+    await expect(h.tasks.completeTask(task.id, "", owner)).rejects.toThrow("completion note");
+    await h.tasks.completeTask(task.id, "Customer completion reviewed by staff", owner);
+    expect((await h.tasks.get(task.id))?.status).toBe("done");
+  });
+  it("preserves non-quote tasks exactly and keeps additional requested caller actions on quote cards", async () => {
+    expect(await withCallBookingQuoteTask({ hasSavedQuote: async () => false, generate: async () => plan })(source())).toBe(plan);
+    const quoted = await withCallBookingQuoteTask({ hasSavedQuote: async () => true, generate: async () => plan })(source());
+    expect(quoted!.items.slice(0, plan.items.length)).toEqual(plan.items);
+    expect(quoted!.items).toHaveLength(plan.items.length + 1);
   });
 });

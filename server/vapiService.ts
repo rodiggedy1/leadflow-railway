@@ -24,6 +24,8 @@ import { eq, desc, and, ne, or } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
 
+import { buildCallBookingQuoteToolDefinitions, callBookingQuoteServerToken, withCallBookingQuoteInstructions } from "./instinct/callBookingQuote";
+
 const VAPI_API_BASE = "https://api.vapi.ai";
 
 // ─── Vapi API helpers ──────────────────────────────────────────────────────────
@@ -287,6 +289,7 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
 
 function buildToolDefinitions(webhookUrl: string) {
   return [
+    ...buildCallBookingQuoteToolDefinitions(webhookUrl, callBookingQuoteServerToken(ENV.vapiPrivateKey)),
     {
       type: "function" as const,
       function: {
@@ -796,7 +799,7 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
       messages: [
         {
           role: "system",
-          content: buildSystemPrompt(),
+          content: withCallBookingQuoteInstructions(buildSystemPrompt()),
         },
       ],
       temperature: 0.4,
@@ -1611,6 +1614,10 @@ Return ONLY a JSON object with these 4 keys. No markdown, no explanation.`,
     return;
   }
 
+  // Only this call's canonical quote-link receipt bypasses the old quote fallback.
+  const { hasCallBookingQuoteAttempt } = await import("./instinct/callBookingQuoteStore");
+  const quoteLinkHandled = await hasCallBookingQuoteAttempt(db, vapiCallId);
+
   // Helper: find the most recent session for this phone
   const findLatestSession = async (): Promise<number | null> => {
     if (!normalizedPhone) return null;
@@ -1645,7 +1652,7 @@ Return ONLY a JSON object with these 4 keys. No markdown, no explanation.`,
 
   // If a lead was NOT created mid-call but we have enough structured data, create it now
   // This is the fallback path when mid-call tool calls failed
-  if (!leadCreated && normalizedPhone && structuredData) {
+  if (!quoteLinkHandled && !leadCreated && normalizedPhone && structuredData) {
     const { callerName, callerEmail, bedrooms, bathrooms, serviceType, quotedPrice, address, preferredDate } = structuredData as typeof structuredData & { callerEmail?: string };
     if (callerName && bedrooms && bathrooms && serviceType) {
       try {
@@ -1750,7 +1757,7 @@ Return ONLY a JSON object with these 4 keys. No markdown, no explanation.`,
   if (isFieldMgmtCall) {
     console.log(`[Vapi] Skipping post-call SMS — fieldMgmt/CallCenter call vapiCallId=${vapiCallId}`);
   }
-  if (normalizedPhone && callSummaryForSms && !leadCreated && !callerOptedOut && !isInternalPhone && !isFieldMgmtCall) {
+  if (!quoteLinkHandled && normalizedPhone && callSummaryForSms && !leadCreated && !callerOptedOut && !isInternalPhone && !isFieldMgmtCall) {
     const callerName = structuredData?.callerName ?? "there";
     const firstName = callerName.split(" ")[0];
     const price = structuredData?.quotedPrice;

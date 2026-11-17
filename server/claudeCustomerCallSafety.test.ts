@@ -10,6 +10,15 @@ import { getAgentFromRequest } from "./_core/agentAuth";
 import { createClaudeCustomerTasksRouter } from "./claudeCustomerTasksRouter";
 const BASELINE = "8a1789ddfca54d3e771a412bf5c60c8ebca694f2";
 const baseline = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
+function withoutApprovedQuoteIntegration(source: string) {
+  return source
+    .replace('import { buildCallBookingQuoteToolDefinitions, callBookingQuoteServerToken, withCallBookingQuoteInstructions } from "./instinct/callBookingQuote";\n\n', "")
+    .replace('    ...buildCallBookingQuoteToolDefinitions(webhookUrl, callBookingQuoteServerToken(ENV.vapiPrivateKey)),\n', "")
+    .replace('content: withCallBookingQuoteInstructions(buildSystemPrompt()),', 'content: buildSystemPrompt(),')
+    .replace('  // Only this call\'s canonical quote-link receipt bypasses the old quote fallback.\n  const { hasCallBookingQuoteAttempt } = await import("./instinct/callBookingQuoteStore");\n  const quoteLinkHandled = await hasCallBookingQuoteAttempt(db, vapiCallId);\n\n', "")
+    .replace('if (!quoteLinkHandled && !leadCreated && normalizedPhone && structuredData)', 'if (!leadCreated && normalizedPhone && structuredData)')
+    .replace('if (!quoteLinkHandled && normalizedPhone && callSummaryForSms', 'if (normalizedPhone && callSummaryForSms');
+}
 const task = customerCallTaskSchema.parse({ id: 77, version: 1, kind: "claude_customer_task", sessionId: null, customerName: "Synthetic Jane", customerPhone: "+13015550123",
   receivingPhoneNumberId: null, receivingPhoneNumber: null, sourceMessageId: "synthetic-call", sourceText: "Move my visit", receivedAt: 1800000000000,
   title: "Review visit change", items: [{ id: "item-1", title: "Review change", evidenceQuote: "Move my visit", completedBy: null, completedAt: null }],
@@ -33,7 +42,7 @@ describe("explicitly approved greeting and voice-ID exceptions and source bounda
     const opening = 'Hi, thank you for calling Maids in Black! I’m Madison, your AI customer-service assistant. I can help with quotes, booking requests, and cleaning questions. How can I help you today?';
     const oldVoice = 'voiceId: "6aDn1KB0hjpdcocrUkmq"';
     const newVoice = 'voiceId: "6u6JbqKdaQy89ENzLSju"';
-    const current = readFileSync("server/vapiService.ts", "utf8"); expect(current.split(opening)).toHaveLength(2); expect(current.split(newVoice)).toHaveLength(2); expect(current).not.toContain(oldVoice); expect(current.replace(opening, original).replace(newVoice, oldVoice)).toBe(baseline("server/vapiService.ts"));
+    const current = withoutApprovedQuoteIntegration(readFileSync("server/vapiService.ts", "utf8")); expect(current.split(opening)).toHaveLength(2); expect(current.split(newVoice)).toHaveLength(2); expect(current).not.toContain(oldVoice); expect(current.replace(opening, original).replace(newVoice, oldVoice)).toBe(baseline("server/vapiService.ts"));
   });
   it("preserves all existing SMS/email prompts, providers, send paths, schema, crons and booking/payment UI", () => {
     for (const path of ["server/webhooks.ts", "server/cronSync.ts", "server/routers.ts", "server/gmailService.ts", "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsApplication.ts", "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeSmsAlternative.ts", "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailStore.ts", "server/instinct/claudeAgentClient.ts", "drizzle/schema.ts", "server/_core/index.ts", "client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-exact-live.css", "client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));
