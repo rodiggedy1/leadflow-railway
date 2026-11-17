@@ -147,18 +147,23 @@ When {{customer.number}} is available (not blank), call the lookupCustomer tool 
 
 If lookupCustomer returns found=true:
 - Immediately use their name in your very next reply, e.g. "Hi [first name]! How can I help you today?" Do not wait for them to mention a booking first.
-- You now know their booking details. Use this context to answer their questions naturally.
-- If they ask about their appointment time, ETA, or "when is my cleaner coming": answer directly from the booking data.
+- found=true recognizes the customer; it does NOT mean they have a current or upcoming appointment. Only use appointment details when hasUpcomingBooking=true and upcomingBooking is present.
+- Use currentLocalDate from this fresh lookup as today's booking-context date, not an older date in the startup prompt.
+- previousBooking is a historical record, not an upcoming appointment or proof that a cleaning was completed. Do not bring up old services unless the caller asks about them or they are relevant to the caller's stated issue.
+- If hasUpcomingBooking=false, do not offer to change an old booking or announce an upcoming cleaning. If the caller wants a new quote or cleaning, proceed with the normal new-booking qualification flow; customer recognition does not block it.
+- If they ask about their appointment time or "when is my cleaner coming": answer only from the verified upcomingBooking. If no such booking is returned, explain that no current/upcoming appointment was verified rather than inventing one from history.
 - If they want to reschedule: call rescheduleRequest (do NOT start a new booking flow).
 - If they want to cancel: call cancelRequest (do NOT start a new booking flow).
 - If they have a complaint about a past cleaning: call complaintRequest.
 - For reschedule/cancel/complaint: after calling the tool, say "I've submitted your request and our team will call you back shortly to confirm."
 - If they ask when their cleaner is arriving / what time they're coming / ETA:
-  - If etaInfo was returned by lookupCustomer: answer directly — "Your cleaner is expected at [time]."
-  - If no etaInfo: call requestEtaCall, then say "I'm checking with your cleaner right now — you'll get a text with their ETA shortly."
+  - If hasUpcomingBooking=true, the verified appointment is today, and etaInfo was returned: answer directly — "Your cleaner is expected at [time]."
+  - If hasUpcomingBooking=true and the verified appointment is today but no etaInfo is returned: call requestEtaCall, then say "I'm checking with your cleaner right now — you'll get a text with their ETA shortly."
+  - Do not reuse a historical ETA or a future appointment's ETA as today's cleaner arrival.
 
 If lookupCustomer returns found=false:
 - Treat them as a new caller and proceed with your normal goals below.
+- If lookupAvailable=false, the lookup was unavailable or the phone was invalid; do not claim that the customer has no booking. Help with their stated request without inventing appointment details.
 
 ## PRICING — calculate this yourself, do not call any tool for the price
 
@@ -429,7 +434,7 @@ function buildToolDefinitions(webhookUrl: string) {
       type: "function" as const,
       function: {
         name: "lookupCustomer",
-        description: "Look up an existing customer's upcoming booking using their phone number. Call this at the start of every call when {{customer.number}} is available to check if the caller is an existing customer with an upcoming appointment.",
+        description: "Recognize a customer by their exact phone number and separately check approved booking records for a current/upcoming appointment. Call this at the start when {{customer.number}} is available. found=true means customer recognition only; use appointment details only when hasUpcomingBooking=true and upcomingBooking is present. previousBooking is history, never an upcoming appointment. An unfinished quote is not a booking.",
         parameters: {
           type: "object",
           properties: {
@@ -583,78 +588,12 @@ export async function handleRequestEtaCall(args: {
   }
 }
 
-/** Look up an existing customer's upcoming booking from our DB using their phone number */
+/** Recognize a caller separately from verified current/upcoming LeadFlow bookings. */
 export async function handleLookupCustomer(args: {
   phone: string;
-}): Promise<{ found: boolean; customerName?: string; jobDate?: string; serviceTime?: string; serviceType?: string; address?: string; teamName?: string; bookingStatus?: string; etaInfo?: string; message: string }> {
-  try {
-    const db = await getDb();
-    if (!db) return { found: false, message: "Database unavailable" };
-    const { cleanerJobs } = await import("../drizzle/schema");
-    const { sql: sqlFn } = await import("drizzle-orm");
-    const digits10 = args.phone.replace(/[^\d]/g, "").slice(-10);
-    if (!digits10 || digits10.length < 7) return { found: false, message: "Invalid phone number" };
-    // Look up upcoming or today's job for this customer
-    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-    const todayET = nowET.toISOString().slice(0, 10);
-    const rows = await db
-      .select({
-        customerName: cleanerJobs.customerName,
-        jobDate: cleanerJobs.jobDate,
-        serviceDateTime: cleanerJobs.serviceDateTime,
-        serviceType: cleanerJobs.serviceType,
-        jobAddress: cleanerJobs.jobAddress,
-        teamName: cleanerJobs.teamName,
-        bookingStatus: cleanerJobs.bookingStatus,
-        etaTimestamp: cleanerJobs.etaTimestamp,
-        etaTimeStr: cleanerJobs.etaTimeStr,
-        jobStatus: cleanerJobs.jobStatus,
-      })
-      .from(cleanerJobs)
-      .where(sqlFn`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE ${'%' + digits10}`)
-      .orderBy(sqlFn`${cleanerJobs.jobDate} DESC`)
-      .limit(1);
-    if (!rows.length) {
-      return { found: false, message: "No upcoming booking found for this phone number." };
-    }
-    const job = rows[0];
-    let serviceTime = "time not confirmed";
-    if (job.serviceDateTime) {
-      try {
-        serviceTime = new Date(job.serviceDateTime).toLocaleTimeString("en-US", {
-          timeZone: "America/New_York",
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        });
-      } catch { /* keep default */ }
-    }
-    let etaInfo: string | undefined;
-    if (job.etaTimeStr) {
-      etaInfo = `ETA: ${job.etaTimeStr}`;
-    } else if (job.etaTimestamp) {
-      try {
-        etaInfo = `ETA: ${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true })}`;
-      } catch { /* ignore */ }
-    }
-    const jobDateDisplay = job.jobDate === todayET ? "today" : job.jobDate ?? "recent";
-    return {
-      found: true,
-      customerName: job.customerName ?? undefined,
-      jobDate: jobDateDisplay,
-      serviceTime,
-      serviceType: job.serviceType ?? undefined,
-      address: job.jobAddress ?? undefined,
-      teamName: job.teamName ?? undefined,
-      bookingStatus: job.bookingStatus ?? undefined,
-      etaInfo,
-      message: `Found booking for ${job.customerName ?? "customer"}: ${job.serviceType ?? "cleaning"} on ${jobDateDisplay} at ${serviceTime}${job.teamName ? ` with ${job.teamName}` : ""}${etaInfo ? `. ${etaInfo}` : ""}.`,
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[Vapi] lookupCustomer failed:", msg);
-    return { found: false, message: "Unable to look up booking at this time." };
-  }
+}): Promise<import("./instinct/voiceCustomerBookingLookup").VoiceCustomerBookingLookupResult> {
+  const { lookupVoiceCustomerBookingContext } = await import("./instinct/voiceCustomerBookingLookup");
+  return lookupVoiceCustomerBookingContext(args.phone);
 }
 
 /** Handle a reschedule request from an existing customer — creates a callback task flagged as reschedule */

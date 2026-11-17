@@ -14,6 +14,21 @@ import { registerVapiWebhookRoute } from "./vapiWebhook";
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const baseline = (path: string) => execFileSync("git", ["show", `f168a07c986a992020dac74e8c52fce4c268b689:${path}`], { cwd: root, encoding: "utf8", maxBuffer: 5_000_000 });
+function withoutApprovedCustomerLookup(source: string) {
+  const approvedBase = execFileSync("git", ["show", "dd40d73242d004d0855022c7c96126964b1df8be:server/vapiService.ts"], { encoding: "utf8", maxBuffer: 5_000_000 });
+  const blocks = [
+    /(?<=## Existing customer detection[^\n]*\n)[\s\S]*?(?=## PRICING)/g,
+    /(?<=        name: "lookupCustomer",\n        )description: "[^\n]*",/g,
+    /\/\*\*(?:(?!\/\*\*|\*\/)[\s\S])*\*\/\nexport async function handleLookupCustomer[\s\S]*?(?=\/\*\* Handle a reschedule request)/g,
+  ];
+  for (const block of blocks) {
+    const original = approvedBase.match(block);
+    expect(original).toHaveLength(1);
+    expect(source.match(block)).toHaveLength(1);
+    source = source.replace(block, () => original![0]);
+  }
+  return source;
+}
 const retainedQuote = {
   pricing: { extras: [], bedrooms: 1, homeType: "Apartment", bathrooms: 1, condition: 5, hourCount: 1, maidCount: 1, serviceId: "standard", recurrence: "one-time", pricingMode: "home" },
   extrasConfirmed: true,
@@ -120,7 +135,7 @@ describe("call-only canonical quote integration — offline", () => {
     expect(JSON.parse(result.results[0].result)).toEqual({ price: 100 });
   });
   it("keeps the complete voice service identical outside precisely approved quote registration, prompt and fallback guards", () => {
-    let candidate = read("server/vapiService.ts");
+    let candidate = withoutApprovedCustomerLookup(read("server/vapiService.ts"));
     candidate = candidate.replace('import { buildCallBookingQuoteToolDefinitions, callBookingQuoteServerToken, withCallBookingQuoteInstructions } from "./instinct/callBookingQuote";\n\n', "");
     candidate = candidate.replace('    ...buildCallBookingQuoteToolDefinitions(webhookUrl, callBookingQuoteServerToken(ENV.vapiPrivateKey)),\n', "");
     candidate = candidate.replace('content: withCallBookingQuoteInstructions(buildSystemPrompt()),', 'content: buildSystemPrompt(),');

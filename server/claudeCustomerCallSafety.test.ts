@@ -10,6 +10,21 @@ import { getAgentFromRequest } from "./_core/agentAuth";
 import { createClaudeCustomerTasksRouter } from "./claudeCustomerTasksRouter";
 const BASELINE = "8a1789ddfca54d3e771a412bf5c60c8ebca694f2";
 const baseline = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
+function withoutApprovedCustomerLookup(source: string) {
+  const approvedBase = execFileSync("git", ["show", "dd40d73242d004d0855022c7c96126964b1df8be:server/vapiService.ts"], { encoding: "utf8", maxBuffer: 5_000_000 });
+  const blocks = [
+    /(?<=## Existing customer detection[^\n]*\n)[\s\S]*?(?=## PRICING)/g,
+    /(?<=        name: "lookupCustomer",\n        )description: "[^\n]*",/g,
+    /\/\*\*(?:(?!\/\*\*|\*\/)[\s\S])*\*\/\nexport async function handleLookupCustomer[\s\S]*?(?=\/\*\* Handle a reschedule request)/g,
+  ];
+  for (const block of blocks) {
+    const original = approvedBase.match(block);
+    expect(original).toHaveLength(1);
+    expect(source.match(block)).toHaveLength(1);
+    source = source.replace(block, () => original![0]);
+  }
+  return source;
+}
 function withoutApprovedQuoteIntegration(source: string) {
   return source
     .replace('import { buildCallBookingQuoteToolDefinitions, callBookingQuoteServerToken, withCallBookingQuoteInstructions } from "./instinct/callBookingQuote";\n\n', "")
@@ -42,7 +57,7 @@ describe("explicitly approved greeting and voice-ID exceptions and source bounda
     const opening = 'Hi, thank you for calling Maids in Black! I’m Madison, your AI customer-service assistant. I can help with quotes, booking requests, and cleaning questions. How can I help you today?';
     const oldVoice = 'voiceId: "6aDn1KB0hjpdcocrUkmq"';
     const newVoice = 'voiceId: "6u6JbqKdaQy89ENzLSju"';
-    const current = withoutApprovedQuoteIntegration(readFileSync("server/vapiService.ts", "utf8")); expect(current.split(opening)).toHaveLength(2); expect(current.split(newVoice)).toHaveLength(2); expect(current).not.toContain(oldVoice); expect(current.replace(opening, original).replace(newVoice, oldVoice)).toBe(baseline("server/vapiService.ts"));
+    const current = withoutApprovedQuoteIntegration(withoutApprovedCustomerLookup(readFileSync("server/vapiService.ts", "utf8"))); expect(current.split(opening)).toHaveLength(2); expect(current.split(newVoice)).toHaveLength(2); expect(current).not.toContain(oldVoice); expect(current.replace(opening, original).replace(newVoice, oldVoice)).toBe(baseline("server/vapiService.ts"));
   });
   it("preserves all existing SMS/email prompts, providers, send paths, schema, crons and booking/payment UI", () => {
     for (const path of ["server/webhooks.ts", "server/cronSync.ts", "server/routers.ts", "server/gmailService.ts", "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsApplication.ts", "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeSmsAlternative.ts", "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailStore.ts", "server/instinct/claudeAgentClient.ts", "drizzle/schema.ts", "server/_core/index.ts", "client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-exact-live.css", "client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));

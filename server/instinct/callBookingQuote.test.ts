@@ -361,7 +361,16 @@ describe("narrow call quote prompt replacement", () => {
     const actualSource = readFileSync(new URL("../vapiService.ts", import.meta.url), "utf8");
     const actual = extractPromptBuilder(actualSource, callTime);
     const adaptedActual = actual.includes("## PRICING — authoritative call booking quote tools") ? actual : withCallBookingQuoteInstructions(actual);
-    expect(adaptedActual).toBe(result);
+    // Only the separately approved customer-context repair may differ from this historical prompt.
+    const customerSection = /## Existing customer detection[^\n]*\n[\s\S]*?(?=## PRICING)/g;
+    const priorSection = original.match(customerSection);
+    const currentSection = adaptedActual.match(customerSection);
+    expect(priorSection).toHaveLength(1);
+    expect(currentSection).toHaveLength(1);
+    expect(currentSection![0]).toBe(actual.match(customerSection)![0]);
+    expect(currentSection![0]).toContain("hasUpcomingBooking=true and upcomingBooking is present");
+    expect(currentSection![0]).toContain("previousBooking is a historical record");
+    expect(adaptedActual.replace(customerSection, () => priorSection![0])).toBe(result);
   });
 });
 
