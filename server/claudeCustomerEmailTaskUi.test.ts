@@ -152,21 +152,6 @@ function rig(task: CustomerTask, input = source, inbox: Record<string, unknown>[
 }
 
 describe("Email task in the existing queue and canonical command stream (offline)", () => {
-  it.each(["queue", "stream"] as const)("shows the saved EMAIL or SMS source in the closed %s header in every task status", placement => {
-    for (const channel of ["EMAIL", "SMS"] as const) for (const status of ["unclaimed", "claimed", "done"] as const) {
-      const overrides = { status, sourceText: "The request mentions email and SMS, but its words do not choose the source.",
-        owner: status === "unclaimed" ? null : actor, completedBy: status === "done" ? confirmer : null,
-        completedAt: status === "done" ? NOW : null };
-      const task = channel === "EMAIL" ? email(overrides) : sms(overrides);
-      const work = rig(task); const tree = work.render(placement);
-      const heading = nodes(tree).find(node => node.type === "header")!;
-      expect(text(nodes(heading).find(node => node.props.className === "cct-task-label"))).toBe(`Customer task · ${channel}`);
-      expect(nodes(tree).find(node => node.type === "details")!.props.open).toBeUndefined();
-      for (const mutation of Object.values(work.a)) expect(mutation).not.toHaveBeenCalled();
-      expect(task.status).toBe(status);
-    }
-  });
-
   it.each(["queue", "stream"] as const)("renders real fromEmail in the closed %s identity, exact source text first, and no invented phone or raw internal email IDs", placement => {
     const task = email(); const work = rig(task); const tree = work.render(placement);
     const heading = nodes(tree).find(node => node.type === "header")!;
@@ -287,7 +272,7 @@ describe("Exact offline SMS control and protected source bytes", () => {
       const sibling = { id: 999, leadName: task.customerName, leadPhone: task.customerPhone, lastInboundPhoneNumberId: "WRONG_LINE" };
       const exact = { ...sibling, id: task.sessionId, lastInboundPhoneNumberId: "EXACT_LINE" };
       const candidate = rig(task, source, [sibling, exact]); const control = rig(task, controlSource, [sibling, exact], controlPage);
-      expect(candidate.html(placement, pending).replace('<span class="cct-task-label">Customer task · SMS</span>', '<span class="cct-task-label">Customer task</span>')).toBe(control.html(placement, pending));
+      expect(candidate.html(placement, pending)).toBe(control.html(placement, pending));
       button(candidate.render(placement, pending), "Open full conversation").props.onClick();
       button(control.render(placement, pending), "Open full conversation").props.onClick();
       for (const name of Object.keys(candidate.open.setters)) expect(candidate.open.setters[name].mock.calls).toEqual(control.open.setters[name].mock.calls);
@@ -299,25 +284,13 @@ describe("Exact offline SMS control and protected source bytes", () => {
   it("limits page changes to the type annotation and leading email callback branch; preserves the entire SMS resolver body, drawer and email overlay", () => {
     const branch = '    if ("email" in task) {\n      if (!task.email.threadId) { showNotice("This task\'s linked conversation is unavailable."); return; }\n      setSelectedLeadCardPhone(null);\n      setSelectedLeadCardDraft(null);\n      setSelectedLeadCardSnapshot(null);\n      setSelectedLeadDetail(null);\n      setSelectedSmsConversation(null);\n      setSelectedEmailThreadId(task.email.threadId);\n      return;\n    }\n';
     expect(page).toContain(branch);
-    const normalized = page.replace(branch, "").replace('function taskConversation(task: Extract<CustomerTask, { sessionId: number }>,', 'function taskConversation(task: CustomerTask,')
-      .replace('  messageCount: number;\n  isUnread: boolean;\n  hasUnanswered: boolean;\n};', '  messageCount: number;\n  isUnread: boolean;\n};')
-      .replace('<i className={thread.hasUnanswered !== false ? "is-unread" : ""} aria-label={thread.hasUnanswered === false ? "Email replied to" : "Email awaiting reply"} />', '<i className={thread.isUnread ? "is-unread" : ""} />')
-      .replace('<CommandChatEmailDetail key={threadId} initialThreadId={threadId}', '<CommandChatEmailDetail initialThreadId={threadId}');
+    const normalized = page.replace(branch, "").replace('function taskConversation(task: Extract<CustomerTask, { sessionId: number }>,', 'function taskConversation(task: CustomerTask,');
     expect(normalized).toBe(controlPage);
-    const detailPath = "client/src/pages/CommandChatEmailDetail.tsx";
-    const restoredDetail = readFileSync(detailPath, "utf8")
-      .replace('  sentBy?: { name: string; photoUrl: string | null } | null;\n', "")
-      .replace(/          const outboundName = message\.sentBy\?\.name\?\.trim\(\) \|\| "You";\n/g, "")
-      .replace(/        const outboundName = message\.sentBy\?\.name\?\.trim\(\) \|\| "You";\n/g, "")
-      .replaceAll('outbound ? initialsFor(outboundName) : messageInitials', 'outbound ? "Y" : messageInitials')
-      .replaceAll('outbound ? outboundName : (message.from || senderName)', 'outbound ? "You" : (message.from || senderName)');
-    expect(restoredDetail).toBe(baseline(detailPath));
-    for (const path of ["client/src/pages/command-chat-email-detail.css", "client/src/components/claude-customer-tasks.css"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));
+    for (const path of ["client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css", "client/src/components/claude-customer-tasks.css"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));
   });
 
   it("limits compact task changes to approved identity/copy/conversation slots, preserving all original authentication, mutation, state, pending and button blocks", () => {
     const approved = [
-      ['Customer task · {"email" in task ? "EMAIL" : "SMS"}', 'Customer task'],
       ['{task.customerName || ("email" in task ? task.email.fromEmail : task.customerPhone)}', '{task.customerName || task.customerPhone}'],
       ['{"email" in task ? "No booking change, customer email, or conversation closure is performed." : "No booking change, customer text, or conversation closure is performed."}', 'No booking change, customer text, or conversation closure is performed.'],
       ['{"email" in task ? task.email.fromEmail : task.customerPhone}', '{task.customerPhone}'],
