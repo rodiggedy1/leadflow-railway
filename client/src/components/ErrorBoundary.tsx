@@ -11,6 +11,33 @@ interface State {
   error: Error | null;
 }
 
+/** A route chunk that failed to download (Chrome, Safari, Firefox and Vite CSS preload wording). */
+export function isStaleDynamicImport(error: Error | null): boolean {
+  const message = `${error?.name}: ${error?.message}`;
+  return (
+    message.includes("Failed to fetch dynamically imported module") ||
+    message.includes("Importing a module script failed") ||
+    message.includes("error loading dynamically imported module") ||
+    message.includes("Unable to preload CSS")
+  );
+}
+
+// Shown while the startup script in index.html fetches a fresh copy of the page. No button: it keeps
+// retrying on its own; the phone number appears from the third attempt, matching the startup script.
+function RetryingLoader() {
+  const attempt = Number(new URLSearchParams(window.location.search).get("lf_retry")) || 0;
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
+      <div role="status" aria-label="Loading" className="w-8 h-8 border-4 border-[#E8735A] border-t-transparent rounded-full animate-spin" />
+      {attempt >= 2 ? (
+        <p className="text-sm text-muted-foreground">
+          Still loading. You can also book by phone: <a href="tel:+12028885362" className="underline">202-888-5362</a>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -22,19 +49,24 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error) {
-    const message = `${error.name}: ${error.message}`;
-    const isStaleDynamicImport =
-      message.includes("Failed to fetch dynamically imported module") ||
-      message.includes("Importing a module script failed");
-    const recoveryKey = "leadflow-stale-chunk-recovery";
-
-    if (isStaleDynamicImport && !sessionStorage.getItem(recoveryKey)) {
-      sessionStorage.setItem(recoveryKey, "1");
-      window.location.reload();
+    if (!isStaleDynamicImport(error)) return;
+    const retryLoad = (window as Window & { __leadflowRetryLoad?: () => void }).__leadflowRetryLoad;
+    if (retryLoad) {
+      retryLoad();
+      return;
     }
+    // Page served without the startup script: fall back to one plain reload per session.
+    const recoveryKey = "leadflow-stale-chunk-recovery";
+    try {
+      if (!sessionStorage.getItem(recoveryKey)) {
+        sessionStorage.setItem(recoveryKey, "1");
+        window.location.reload();
+      }
+    } catch {}
   }
 
   render() {
+    if (this.state.hasError && isStaleDynamicImport(this.state.error)) return <RetryingLoader />;
     if (this.state.hasError) {
       return (
         <div className="flex items-center justify-center min-h-screen p-8 bg-background">

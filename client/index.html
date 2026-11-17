@@ -5,13 +5,28 @@
     <meta charset="UTF-8" />
     <script>
       // Startup recovery. If one of our own bundles under /assets/ fails to load (for example a page
-      // from before a deploy asks for a file that no longer exists), React never starts and the page
-      // stays white. Once the page has settled with nothing rendered, reload once to get the current
-      // page; if that already happened in the last minute, show a short message instead of a blank page.
+      // from before a deploy asks for a file that no longer exists, or a download fails), React never
+      // starts and the page would stay white. Once the page has settled with nothing rendered, show a
+      // loading spinner and keep fetching a fresh copy of the page on a growing delay (immediately, then
+      // 2s, 5s, 10s, then every 30s) until it opens. There is no button and no fast loop. The attempt
+      // number travels in the URL (lf_retry) so the delay keeps growing across reloads without browser
+      // storage, and it is removed again once the page has opened.
+      // ErrorBoundary calls window.__leadflowRetryLoad when a route chunk fails after React started.
       // Inline and plain ES5 on purpose: it has to run even when every bundle fails.
       (function () {
-        var KEY = "leadflow-asset-reload-at";
-        var pending = false;
+        var PARAM = "lf_retry";
+        var DELAYS = [0, 2000, 5000, 10000, 30000];
+        var PHONE_HINT_FROM = 2;
+        var scheduled = false;
+        var watching = false;
+
+        function attempt() {
+          try {
+            return Math.max(0, parseInt(new URL(location.href).searchParams.get(PARAM), 10) || 0);
+          } catch (e) {
+            return 0;
+          }
+        }
 
         function isOwnAsset(url) {
           try {
@@ -27,43 +42,76 @@
           return !!(root && root.hasChildNodes());
         }
 
-        function showMessage() {
+        function showLoading(n) {
           var root = document.getElementById("root") || document.body;
           root.innerHTML =
-            "<div style='min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#111;text-align:center'>" +
-            "<div style='max-width:360px'>" +
-            "<h1 style='font-size:20px;margin:0 0 8px'>This page did not finish loading</h1>" +
-            "<p style='font-size:15px;line-height:1.5;margin:0 0 20px;color:#444'>Please reload the page. If it still does not load, call us at <a href='tel:+12028885362' style='color:#111'>202-888-5362</a>.</p>" +
-            "<button type='button' onclick='location.reload()' style='font:inherit;font-size:16px;padding:12px 24px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer'>Reload page</button>" +
-            "</div></div>";
+            "<style>@keyframes lf-spin{to{transform:rotate(360deg)}}</style>" +
+            "<div style='min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;text-align:center'>" +
+            "<div role='status' aria-label='Loading' style='width:32px;height:32px;box-sizing:border-box;border:4px solid #E8735A;border-top-color:transparent;border-radius:50%;animation:lf-spin .8s linear infinite'></div>" +
+            (n >= PHONE_HINT_FROM
+              ? "<p style='margin:0;font-size:14px;line-height:1.5;color:#666'>Still loading. You can also book by phone: <a href='tel:+12028885362' style='color:#111'>202-888-5362</a></p>"
+              : "") +
+            "</div>";
         }
 
-        function recover() {
-          if (appRendered()) return;
-          var last = 0;
-          try {
-            last = Number(sessionStorage.getItem(KEY)) || 0;
-          } catch (e) {}
-          if (Date.now() - last > 60000) {
+        // Fetch a fresh copy of the page after the delay for this attempt. fromApp: React is running
+        // and shows its own spinner, so the page content is left alone.
+        function retry(fromApp) {
+          if (scheduled) return;
+          scheduled = true;
+          var n = attempt();
+          if (!fromApp) showLoading(n);
+          setTimeout(function () {
             try {
-              sessionStorage.setItem(KEY, String(Date.now()));
+              var url = new URL(location.href);
+              url.searchParams.set(PARAM, String(n + 1));
+              location.replace(url.href);
+            } catch (e) {
               location.reload();
-              return;
-            } catch (e) {}
-          }
-          // Already reloaded a moment ago, or storage is unavailable: never loop.
-          showMessage();
+            }
+          }, DELAYS[Math.min(n, DELAYS.length - 1)]);
+        }
+
+        window.__leadflowRetryLoad = function () {
+          retry(true);
+        };
+
+        // After a retry, drop the marker once the page has opened and stayed up for 10 seconds.
+        function forgetAttemptsOnceOpen() {
+          var root = document.getElementById("root");
+          if (!root || typeof MutationObserver === "undefined") return;
+          var timer = null;
+          var check = function () {
+            if (timer || !root.hasChildNodes()) return;
+            timer = setTimeout(function () {
+              if (scheduled) return;
+              try {
+                var url = new URL(location.href);
+                url.searchParams.delete(PARAM);
+                history.replaceState(history.state, "", url.href);
+              } catch (e) {}
+            }, 10000);
+          };
+          new MutationObserver(check).observe(root, { childList: true });
+          check();
+        }
+        if (attempt() > 0) {
+          if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", forgetAttemptsOnceOpen);
+          else forgetAttemptsOnceOpen();
         }
 
         window.addEventListener(
           "error",
           function (event) {
             var target = event.target;
-            if (pending || !target || (target.tagName !== "SCRIPT" && target.tagName !== "LINK")) return;
+            if (watching || !target || (target.tagName !== "SCRIPT" && target.tagName !== "LINK")) return;
             if (!isOwnAsset(target.src || target.href)) return;
-            pending = true;
+            watching = true;
             var settle = function () {
-              setTimeout(recover, 1000);
+              setTimeout(function () {
+                watching = false;
+                if (!appRendered()) retry(false);
+              }, 1000);
             };
             if (document.readyState === "complete") settle();
             else window.addEventListener("load", settle);
