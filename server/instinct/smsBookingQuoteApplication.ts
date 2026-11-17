@@ -11,6 +11,7 @@ const preparationSchema = z.object({
   update: smsBookingQuoteUpdateSchema,
   originalConversation: z.array(reviewJsonSchema),
   quoteTextTemplate: z.string().nullable(),
+  missingQuestionLanguage: z.enum(["en", "es"]).optional(),
 }).strict();
 const preparedReplySchema = customerReplyPlanSchema.extend({ smsBookingQuote: preparationSchema }).strict();
 type Store = ReturnType<typeof createSmsBookingQuoteStore>;

@@ -206,7 +206,40 @@ describe("SMS-only additive quote generation", () => {
   it("lets incomplete quote/link actions ask a base question with no output template", async () => {
     const input = fixture("Please send a new cleaning quote"), bookingQuote = update(input, {}, { action: "link", evidence: {} });
     const h = harness(active(input, { replyText: "How many bedrooms and bathrooms are in your home?", bookingQuote, quoteTextTemplate: null }));
-    expect((await h.generate(input)).smsBookingQuote).toEqual({ previous: null, update: bookingQuote, originalConversation: input.context.originalConversation, quoteTextTemplate: null });
+    const plan = await h.generate(input);
+    expect(plan.replyText).toBe("Would you like a home-cleaning quote or an hourly-cleaning quote?");
+    expect(plan.smsBookingQuote).toEqual({ previous: null, update: bookingQuote, originalConversation: input.context.originalConversation,
+      quoteTextTemplate: null, missingQuestionLanguage: "en" });
+  });
+
+  it.each(["home", "hourly"] as const)("replaces a premature %s-mode page recap with the authoritative missing home type across every service and locale", async pricingMode => {
+    for (const serviceId of ["standard", "deep", "moveout"] as const) for (const action of ["quote", "link"] as const)
+      for (const language of ["en", "es"] as const) {
+        const priorFields: SmsBookingQuoteFields = { ...fields, pricingMode, serviceId, maidCount: 2, hourCount: 3 };
+        delete priorFields.homeType;
+        const priorInput = fixture(`Please prepare my new ${serviceId} ${pricingMode} cleaning quote: 2 bedrooms, 2 bathrooms, condition 5, one-time, no extras confirmed, two cleaners for three hours, 123 Synthetic Street, Washington DC, ${FUTURE_DATE} at 10:30.`);
+        const previous = advanceSmsBookingQuote(null, update(priorInput, priorFields, { action: "collect" }), {
+          binding: priorInput.context.binding as ClaudeCustomerSmsGenerationBinding, originalConversation: priorInput.context.originalConversation as any[], nowMs: NOW,
+        }).state;
+        const input = fixture(`For that new cleaning quote, ${FUTURE_DATE} at 08:30 please.`);
+        const bookingQuote = update(input, { requestedLocalDate: FUTURE_DATE, requestedLocalTime: "08:30" }, { action });
+        const replyText = language === "es" ? "Revisa los detalles y completa tu reserva en la página." : "Please review the details and complete your booking on the page to lock it in.";
+        const h = harness(active(input, { bookingQuote, replyText, quoteTextTemplate: null, quotePresentationLanguage: language }), previous);
+        const before = JSON.stringify(previous), plan = await h.generate(input);
+        expect(plan.replyText).toBe(language === "es"
+          ? "Un detalle antes de preparar tu cotización: ¿es una casa, apartamento, casa adosada o condominio?"
+          : "One detail before I can prepare your quote: is this a house, apartment, townhome or condo?");
+        expect(plan.replyText).not.toMatch(/page|página|https?:|\$|\{\{/);
+        expect(plan.smsBookingQuote).toEqual({ previous, update: bookingQuote, originalConversation: input.context.originalConversation,
+          quoteTextTemplate: null, missingQuestionLanguage: language });
+        const advanced = advanceSmsBookingQuote(previous, plan.smsBookingQuote!.update, {
+          binding: input.context.binding as ClaudeCustomerSmsGenerationBinding, originalConversation: input.context.originalConversation as any[], nowMs: NOW,
+        });
+        expect(advanced.missing).toEqual(["homeType"]); expect(advanced.preview).toBeNull(); expect(advanced.input).toBeNull();
+        expect(advanced.state.fields).toMatchObject({ requestedLocalDate: FUTURE_DATE, requestedLocalTime: "08:30", extras: [], extrasConfirmed: true });
+        expect(advanced.state.fields).not.toHaveProperty("homeType"); expect(JSON.stringify(previous)).toBe(before);
+        expect(h.runner).toHaveBeenCalledTimes(1);
+      }
   });
 
   it("accepts a customer-language Spanish quote template with backend-only prices/link and EST inside estés", async () => {

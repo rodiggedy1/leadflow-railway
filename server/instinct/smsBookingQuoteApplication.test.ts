@@ -1,5 +1,6 @@
 import { getTableName } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLAUDE_CUSTOMER_REPLY_CAPABILITY as capability, CLAUDE_CUSTOMER_TASK_ACTION as taskAction } from "../../shared/claudeCustomerTasks";
 import { createPublicBookingPriceSnapshot } from "../../shared/publicBookingPricing";
@@ -46,6 +47,26 @@ const QUOTE_TEMPLATE = "Your first cleaning quote is {{firstCleaningPrice}}. Fut
 const LINK_TEMPLATE = `${QUOTE_TEMPLATE} Review and complete your booking here: {{bookingLink}}. This is a quote, not a reservation.`;
 const FOLLOWUP_TITLE = "Follow up on cleaning booking link";
 const FOLLOWUP_ITEM = "Review the customer's booking-link completion";
+const MISSING_HOME_QUESTION = {
+  en: "One detail before I can prepare your quote: is this a house, apartment, townhome or condo?",
+  es: "Un detalle antes de preparar tu cotización: ¿es una casa, apartamento, casa adosada o condominio?",
+};
+const STALE_PAGE_RECAP = "Thanks, María. Review the details and complete your booking on the page.";
+const MISSING_HOME_CASES = (["standard", "deep", "moveout"] as const).flatMap(serviceId =>
+  (["home", "hourly"] as const).flatMap(pricingMode =>
+    (["en", "es"] as const).map(language => ({ serviceId, pricingMode, language }))));
+function missingHomeFixture(serviceId: CallBookingQuotePricing["serviceId"], pricingMode: CallBookingQuotePricing["pricingMode"]) {
+  const completePricing: CallBookingQuotePricing = { ...pricing, serviceId, pricingMode, bedrooms: 4, bathrooms: 3, condition: 7,
+    maidCount: pricingMode === "hourly" ? 2 : 1, hourCount: pricingMode === "hourly" ? 4 : 1,
+    recurrence: "weekly", extras: [{ id: "inside-fridge", quantity: 2 }, { id: "inside-oven", quantity: 1 }] };
+  const fields: SmsBookingQuoteFields = { ...fullFields, ...completePricing,
+    requestedLocalDate: "2026-11-23", requestedLocalTime: "14:45" };
+  delete fields.homeType;
+  const text = `Please send my new ${serviceId} ${pricingMode} cleaning quote link. My name is ${NAME}, ${ADDRESS}, Monday November 23 at 2:45 pm. `
+    + "4 bedrooms, 3 bathrooms, condition 7, weekly cleaning. Two Inside Fridge and one Inside Oven, extras confirmed."
+    + (pricingMode === "hourly" ? " I want 2 maids for 4 hours." : "");
+  return { completePricing, fields, text };
+}
 type Row = Record<string, any>;
 type Fault = "none" | "funnel" | "state-insert" | "state-save" | "task-insert" | "task-save" | "receipt-insert" | "receipt-prepare" | "acceptance-save";
 
@@ -346,6 +367,134 @@ describe("SMS new-booking quote application: real generator → qualification �
     expect(h.send.mock.calls[3][0].content).toContain(`${SMS_QUOTE_BOOKING_ORIGIN}/book/${funnel.publicFunnelNumber}`);
     expect(h.send.mock.calls[3][0].content).not.toMatch(/\{\{|2026-11-17T|18:00:00|booking (?:code|number|confirmed)|payment complete/i);
     expect(h.quoteRows()).toHaveLength(1); expect(h.quoteRows()[0].channel).toBe(SMS_BOOKING_QUOTE_CHANNEL);
+  });
+
+  it.each(MISSING_HOME_CASES)("asks only for missing homeType before linking $serviceId/$pricingMode in $language, then completes the same quote from the actual house answer", async ({ serviceId, pricingMode, language }) => {
+    const h = harness(), fixture = missingHomeFixture(serviceId, pricingMode);
+    const first = await h.turn(fixture.text, fixture.fields, "link", {
+      replyText: STALE_PAGE_RECAP, quotePresentationLanguage: language,
+    });
+    expect(first.result).toEqual({ outcome: "accepted" });
+    expect(h.send).toHaveBeenCalledTimes(1);
+    const question = h.send.mock.calls[0][0].content;
+    expect(question).toBe(MISSING_HOME_QUESTION[language]);
+    expect(question).not.toMatch(/complete your booking|booking (?:on|page)|completa.*reserva|\$|https?:|\/book\/|\{\{/i);
+    expect(h.quote()).toMatchObject({ quoteId: first.input.providerMessageId, revision: 1, link: null });
+    expect(h.quote()!.fields).toEqual(fixture.fields);
+    expect(h.quote()!.fields).not.toHaveProperty("homeType");
+    expect(h.quote()!.fields).toMatchObject({ requestedLocalDate: "2026-11-23", requestedLocalTime: "14:45",
+      extras: fixture.completePricing.extras, extrasConfirmed: true, recurrence: "weekly",
+      maidCount: pricingMode === "hourly" ? 2 : 1, hourCount: pricingMode === "hourly" ? 4 : 1 });
+    expect(h.state().funnels).toEqual([]); expect(h.tasks()).toEqual([]);
+    expect(h.state().drafts[0].capabilityResult.taskId).toBeNull();
+    expect(h.writes.some(write => write.table === "booking_funnel_records" || write.kind === taskAction)).toBe(false);
+    expectAcceptedHistory(h, first.input);
+
+    const quoteId = h.quote()!.quoteId, second = await h.turn("It is a house", { homeType: "House" }, "link", {
+      replyText: language === "es" ? "Gracias, María. Revisa los detalles de tu cotización." : "Thanks, María. Here are your quote details.",
+      quotePresentationLanguage: language,
+    });
+    expect(second.result).toEqual({ outcome: "accepted" });
+    expect(h.quote()).toMatchObject({ quoteId, revision: 2, fields: { ...fixture.fields, homeType: "House" } });
+    expect(h.quote()!.evidence.homeType).toEqual({ turnIndex: 2, quote: "It is a house" });
+    const prompt = JSON.parse(h.runner.mock.calls[1][0].userPrompt);
+    expect(prompt.context.smsBookingQuote.state).toMatchObject({ quoteId, link: null, fields: fixture.fields });
+    expect(prompt.context.originalConversation[1]).toMatchObject({ role: "assistant", content: question });
+    expect(h.quoteRows()).toHaveLength(1); expect(h.state().funnels).toHaveLength(1);
+    const preview = previewCallBookingQuote({ pricing: fixture.completePricing, extrasConfirmed: true });
+    if (!preview.success) throw Error("Completed home-type fixture must preview successfully");
+    const funnel = h.state().funnels[0], link = h.quote()!.link!, content = h.send.mock.calls[1][0].content;
+    expect(funnel).toMatchObject({ customerName: NAME, customerPhone: PHONE, address: ADDRESS,
+      requestedLocalDate: "2026-11-23", requestedLocalTime: "14:45", extras: fixture.completePricing.extras,
+      priceSnapshot: createPublicBookingPriceSnapshot(fixture.completePricing),
+      firstCleaningTotalCents: preview.firstCleaningTotalCents, futureVisitTotalCents: preview.futureVisitTotalCents,
+      stage: "lead", source: "customer-booking-link", bookedByAgentName: "Instinct · AI SMS" });
+    expect(link).toMatchObject({ token: funnel.publicFunnelNumber, firstCleaningTotalCents: preview.firstCleaningTotalCents });
+    expect(content).toContain(language === "es" ? `Tu cotización para la primera limpieza es ${preview.priceFormatted}.`
+      : `Your first-cleaning quote is ${preview.priceFormatted}.`);
+    expect(content).toContain(language === "es" ? `Próximas visitas (semanales): ${preview.futureVisitPriceFormatted}.`
+      : `Your weekly follow-up cleaning price is ${preview.futureVisitPriceFormatted}.`);
+    expect(content).toContain(language === "es" ? "2 × Interior del refrigerador" : "2 × Inside Fridge");
+    expect(content).toContain(language === "es" ? "Interior del horno" : "Inside Oven");
+    expect(content).not.toMatch(/No add-ons selected|No se seleccionaron|\{\{/);
+    const url = `${SMS_QUOTE_BOOKING_ORIGIN}${link.urlPath}`;
+    expect(content.split(url)).toHaveLength(2);
+    expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([url]);
+    expect(h.tasks()).toHaveLength(1);
+    const task = h.tasks()[0];
+    expect(task).toMatchObject({ title: FOLLOWUP_TITLE, status: "unclaimed", owner: null, completionNote: null,
+      sourceMessageId: second.input.providerMessageId, sourceText: "It is a house",
+      items: [{ title: FOLLOWUP_ITEM, evidenceQuote: "It is a house", completedBy: null, completedAt: null }],
+      reply: { text: content, status: "sent", providerMessageId: h.state().drafts[1].outboundOpenPhoneId } });
+    expectAcceptedHistory(h, second.input);
+    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.readKnowledge).toHaveBeenCalledTimes(2); expect(h.send).toHaveBeenCalledTimes(2);
+    const before = structuredClone(h.state());
+    expect(["excluded", "duplicate"]).toContain((await h.run(second.input)).outcome);
+    expect(h.state()).toEqual(before); expect(h.send).toHaveBeenCalledTimes(2); expect(h.runner).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["en", "es"] as const)("corrects stale incomplete-link page prose during direct claim/prepare without generation in %s", async language => {
+    const h = harness(), fixture = missingHomeFixture("deep", "hourly"), input = h.append(fixture.text);
+    const store = h.stores().taskStore, binding: CustomerSmsBinding = {
+      sessionId: input.sessionId, providerMessageId: input.providerMessageId, fromPhone: PHONE,
+      receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS, inboundText: input.inboundText,
+      createdAt: NOW, receivedAt: input.receivedAt, customerName: NAME,
+      historyHash: createHash("sha256").update(h.row().messageHistory).digest("hex"),
+    };
+    const claim = await store.claim(binding);
+    expect(claim).not.toBeNull();
+    const output = h.output(input, fixture.fields, "link"), rawPlan = {
+      replyText: STALE_PAGE_RECAP, task: null,
+      smsBookingQuote: { previous: null, update: output.bookingQuote, originalConversation: h.history(), quoteTextTemplate: null,
+        ...(language === "es" ? { missingQuestionLanguage: "es" as const } : {}) },
+    };
+    const prepared = await store.prepare(claim!, rawPlan);
+    expect(prepared).toEqual({ replyText: MISSING_HOME_QUESTION[language], task: null });
+    expect(h.quote()!.fields).toEqual(fixture.fields);
+    expect(h.quote()).toMatchObject({ quoteId: input.providerMessageId, revision: 1, link: null });
+    expect(h.state().funnels).toEqual([]); expect(h.tasks()).toEqual([]);
+    expect(h.state().drafts[0]).toMatchObject({ status: "SENDING", generatedDraft: MISSING_HOME_QUESTION[language],
+      approvedText: MISSING_HOME_QUESTION[language], capabilityResult: { phase: "submission_started", taskId: null } });
+    expect(h.runner).not.toHaveBeenCalled(); expect(h.readKnowledge).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled();
+    const accepted = await h.send({ to: PHONE, fromNumberId: LINE, content: MISSING_HOME_QUESTION[language] });
+    expect(accepted.success).toBe(true);
+    expect(await store.recordAcceptance(claim!, accepted.messageId!)).toBe(true);
+    expectAcceptedHistory(h, input);
+    expect(h.state().funnels).toEqual([]); expect(h.tasks()).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
+    expect(h.runner).not.toHaveBeenCalled();
+  });
+
+  it.each(["en", "es"] as const)("keeps %s when a complete link preference becomes past before durable preparation", async language => {
+    const crossings = [
+      { receivedAt: Date.parse("2026-11-17T18:00:00Z"), preparedAt: Date.parse("2026-11-17T18:01:00Z"), time: "13:00",
+        question: { en: "What time would you prefer for your cleaning?", es: "¿Qué horario prefieres para tu limpieza?" } },
+      { receivedAt: Date.parse("2026-11-18T04:59:00Z"), preparedAt: Date.parse("2026-11-18T05:00:00Z"), time: "23:59",
+        question: { en: "Which upcoming date would you prefer for your cleaning?", es: "¿Qué próxima fecha prefieres para tu limpieza?" } },
+    ];
+    for (const crossing of crossings) {
+      const h = harness(), fields = { ...fullFields, requestedLocalDate: "2026-11-17", requestedLocalTime: crossing.time };
+      const input = h.append(`${FULL_TEXT} For this new quote use November 17 at ${crossing.time}.`);
+      const binding: CustomerSmsBinding = { sessionId: input.sessionId, providerMessageId: input.providerMessageId,
+        fromPhone: PHONE, receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS, inboundText: input.inboundText,
+        createdAt: crossing.receivedAt, receivedAt: crossing.receivedAt, customerName: NAME,
+        historyHash: createHash("sha256").update(h.row().messageHistory).digest("hex") };
+      h.queue(h.output(input, fields, "link", { quotePresentationLanguage: language }));
+      const generate = createSmsBookingQuoteReplyGenerator({ runner: h.runner, readKnowledge: h.readKnowledge,
+        smsBookingQuote: { readState: async () => null } });
+      const plan = await generate({ incomingMessage: input.inboundText,
+        context: { binding, originalConversation: h.history(), receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS },
+        protectedIds: [input.providerMessageId, LINE] });
+      expect(plan.smsBookingQuote!.quoteTextTemplate).not.toBeNull();
+      expect(plan.smsBookingQuote).not.toHaveProperty("missingQuestionLanguage");
+      const store = createClaudeCustomerTasksStore(h.db, { preparePlan: createSmsBookingQuotePlanPreparer(h.stores().quoteStore, () => crossing.preparedAt) });
+      const claim = await store.claim(binding); expect(claim).not.toBeNull();
+      const prepared = await store.prepare(claim!, plan);
+      expect(prepared).toEqual({ replyText: crossing.question[language], task: null });
+      expect(h.state().drafts[0]).toMatchObject({ status: "SENDING", generatedDraft: crossing.question[language], approvedText: crossing.question[language] });
+      expect(h.quote()).toMatchObject({ link: null, fields: { requestedLocalDate: "2026-11-17", requestedLocalTime: crossing.time } });
+      expect(h.state().funnels).toEqual([]); expect(h.tasks()).toEqual([]);
+      expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).not.toHaveBeenCalled();
+    }
   });
 
   it("corrects pricing under the same quote id but creates a replacement personalized link only on a later explicit link request", async () => {

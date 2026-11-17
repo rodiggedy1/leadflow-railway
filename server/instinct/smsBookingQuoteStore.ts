@@ -9,7 +9,8 @@ import { createCustomerBookingLink } from "../customerBookingLinkService";
 import type { getDb } from "../db";
 import { normalizePhone } from "../utils/phone";
 import { callBookingQuoteSendInputSchema } from "./callBookingQuote";
-import { renderSmsBookingQuoteText } from "./bookingQuotePresentation";
+import { createSmsBookingQuotePresentation, renderSmsBookingQuoteText } from "./bookingQuotePresentation";
+import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQuestion";
 import type { CustomerSmsBinding } from "./claudeCustomerTasksStore";
 import {
   advanceSmsBookingQuote, assertSmsBookingQuoteModelText, smsBookingQuoteStateSchema, smsBookingQuoteUpdateSchema,
@@ -57,6 +58,7 @@ export interface SmsBookingQuotePrepareInput {
   nowMs?: number;
   replyText: string;
   quoteTextTemplate?: string | null;
+  missingQuestionLanguage?: "en" | "es";
 }
 export interface SmsBookingQuotePrepared {
   planReplyText: string;
@@ -248,7 +250,11 @@ export function createSmsBookingQuoteStore(db: Db): SmsBookingQuoteStore {
       }
       let linkCreated = false;
       let linkIncluded = false;
-      let planReplyText = base;
+      // A preference can become past between generation and this transaction.
+      // Reuse only the exact server-owned presentation's locale, never model prose.
+      const missingQuestionLanguage = options.missingQuestionLanguage ?? (advanced.preview?.success
+        && options.quoteTextTemplate === createSmsBookingQuotePresentation(advanced.preview.priceSnapshot, update.action === "link", "es") ? "es" : "en");
+      let planReplyText = createSmsBookingQuoteMissingQuestion(advanced, update.action, missingQuestionLanguage) ?? base;
       if (update.action === "link" && advanced.input && advanced.preview?.success) {
         const input = normalizeInput(advanced.input);
         if (!representedInput || canonicalJson(input) !== canonicalJson(representedInput)

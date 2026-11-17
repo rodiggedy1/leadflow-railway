@@ -9,6 +9,7 @@ import {
 import { runInitialLeadDraft } from "./claudeAgentClient";
 import { validateClaudeReviewReply } from "./claudeSmsAlternative";
 import { createSmsBookingQuotePresentation } from "./bookingQuotePresentation";
+import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQuestion";
 import {
   advanceSmsBookingQuote,
   assertSmsBookingQuoteModelText as assertNoQuotePriceOrUrl,
@@ -24,6 +25,7 @@ export interface SmsBookingQuotePreparation {
   update: SmsBookingQuoteUpdate;
   originalConversation: any[];
   quoteTextTemplate: string | null;
+  missingQuestionLanguage?: "en" | "es";
 }
 export type SmsBookingQuoteReplyPlan = CustomerReplyPlan & { smsBookingQuote?: SmsBookingQuotePreparation };
 export type SmsBookingQuoteGenerationOptions = ClaudeCustomerSmsGenerationOptions & {
@@ -142,6 +144,9 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
       ?? (template !== null && /(?:\b(?:tu\s+)?primera limpieza\b|próximas visitas\b|revisa y completa tu reserva\b)/i.test(template) ? "es" : "en");
     const presentation = complete && advanced.preview?.success
       ? createSmsBookingQuotePresentation(advanced.preview.priceSnapshot, update.action === "link", language) : null;
-    return { ...plan, smsBookingQuote: { previous, update, originalConversation, quoteTextTemplate: presentation } };
+    const missingQuestion = createSmsBookingQuoteMissingQuestion(advanced, update.action, language);
+    return { ...plan, replyText: missingQuestion ?? plan.replyText,
+      smsBookingQuote: { previous, update, originalConversation, quoteTextTemplate: presentation,
+        ...(missingQuestion !== null ? { missingQuestionLanguage: language } : {}) } };
   };
 }
