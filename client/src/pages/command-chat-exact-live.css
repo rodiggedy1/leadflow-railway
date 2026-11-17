@@ -316,3 +316,10 @@
 .ccc-voice-handoff-details-panel p,.ccc-voice-handoff-details-panel>div{display:grid;gap:4px;margin:0;font-size:10px;line-height:1.45}
 .ccc-voice-handoff-details-panel strong{color:#a9a9b2;font-size:9px;letter-spacing:.45px;text-transform:uppercase}
 .ccc-voice-handoff-details-panel pre{max-height:180px;margin:0;overflow:auto;color:#e4e4e8;font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Preserve the existing columns and make the full right rail reachable on narrow workspaces. */
+.ccc-live .ccc-workspace { overflow-x: auto; }
+.ccc-live .ccc-command-grid { min-width: 1121px; }
+@media (max-width: 900px) {
+  .ccc-live .ccc-command-grid { min-width: 1052px; }
+}

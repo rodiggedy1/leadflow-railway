@@ -407,3 +407,70 @@ describe("HTML-only email source representation with the existing popup sanitize
     expect(sanitizer.sanitize).not.toHaveBeenCalled();
   });
 });
+
+
+describe("Command Chat right-rail clipping regression (offline actual CSS and task markup)", () => {
+  const layoutBaseline = "4f5581243b9f0585a2053ecf36cce96be91e1a1f";
+  const liveCssPath = "client/src/pages/command-chat-exact-live.css";
+  const liveCss = readFileSync(liveCssPath, "utf8");
+  const originalCss = execFileSync("git", ["show", `${layoutBaseline}:${liveCssPath}`], { encoding: "utf8" });
+  const correction = "\n/* Preserve the existing columns and make the full right rail reachable on narrow workspaces. */\n.ccc-live .ccc-workspace { overflow-x: auto; }\n.ccc-live .ccc-command-grid { min-width: 1121px; }\n@media (max-width: 900px) {\n  .ccc-live .ccc-command-grid { min-width: 1052px; }\n}\n";
+  const cssImports = [...page.matchAll(/^import "(\.\/[^\"]+\.css)";/gm)].map(match => join("client/src/pages", match[1]));
+  const styles = (live: string) => readFileSync("client/src/components/claude-customer-tasks.css", "utf8") + "\n" + cssImports.map(path => path === liveCssPath ? live : readFileSync(path, "utf8")).join("\n")
+    + "\n" + readFileSync("client/src/components/review-workspace-nav.css", "utf8") + "\n" + readFileSync("client/src/pages/review-typography.css", "utf8");
+  const longName = "Synthetic staff member with a very long display name";
+  const fixtures = [
+    sms({ customerName: longName, title: "Review the customer's complete deep cleaning request and supplied property details" }),
+    email({ id: 703, customerName: longName, status: "claimed", owner: { ...actor, name: longName }, email: { ...email().email, fromEmail: "averylongcustomeremailwithoutspaces@example.test" } }),
+    sms({ id: 704, status: "done", owner: actor, completedBy: { ...actor, name: longName } }),
+  ];
+  const cards = fixtures.map(task => renderToStaticMarkup(rig(task).render("stream"))).join("")
+    .replaceAll("cct-card-stream", "cct-card-queue");
+  function geometry(width: number, expanded: boolean, live: string) {
+    const directory = mkdtempSync(join(tmpdir(), "task-column-layout-test-"));
+    try {
+      const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles(live)}html,body{margin:0}*,::before,::after{box-sizing:border-box}</style><div class="review-nav-host"><aside class="review-workspace-nav ${expanded ? "is-expanded" : ""}"></aside><main class="ccc-app ccc-widget-app ccc-live"><section class="ccc-workspace"><div class="ccc-command-grid"><aside class="ccc-command-panel ccc-left-panel"></aside><section class="ccc-command-panel ccc-center-panel"></section><aside class="ccc-command-panel ccc-right-panel"><div class="cct-panel-content"><section class="cct-queue"><div class="cct-task-list">${cards}</div></section></div></aside></div></section></main></div><script>
+      const w=document.querySelector('.ccc-workspace');w.scrollLeft=w.scrollWidth;
+      const grid=document.querySelector('.ccc-command-grid'),panel=document.querySelector('.ccc-right-panel');
+      const box=el=>{const r=el.getBoundingClientRect();return {x:r.x,right:r.right,width:r.width,client:el.clientWidth,scroll:el.scrollWidth}};
+      const result={viewport:innerWidth,grid:box(grid),panel:box(panel),workspace:box(w),cards:Array.from(document.querySelectorAll('.cct-card')).map(c=>({card:box(c),status:box(c.querySelector('.cct-card-status')),button:c.querySelector('.cct-card-status>button')?box(c.querySelector('.cct-card-status>button')):null,summary:box(c.querySelector('summary')),chevron:box(c.querySelector('summary>svg'))}))};
+      const out=document.createElement('pre');out.id='layout-result';out.textContent=btoa(JSON.stringify(result));document.body.append(out);
+      </script>`;
+      writeFileSync(join(directory, "test.html"), html);
+      const dom = execFileSync("chromium", ["--headless", "--no-sandbox", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--no-first-run", "--host-resolver-rules=MAP * ~NOTFOUND", `--user-data-dir=${join(directory, "profile")}`, `--window-size=${width},950`, "--virtual-time-budget=300", "--dump-dom", `file://${join(directory, "test.html")}`], { encoding: "utf8", timeout: 20_000, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 2_000_000 });
+      const encoded = dom.match(/<pre id="layout-result">([A-Za-z0-9+/=]+)<\/pre>/)?.[1];
+      expect(encoded).toBeDefined();
+      return JSON.parse(Buffer.from(encoded!, "base64").toString("utf8")) as any;
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }
+  it("changes only three layout declarations and preserves the complete component, handlers, task styles, columns and navigation", () => {
+    expect(liveCss.replace(correction, "")).toBe(originalCss);
+    for (const path of [componentPath, pagePath, "client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-reference-composition.css", "client/src/pages/command-chat-crm-review.css", "client/src/components/ReviewWorkspaceNav.tsx", "client/src/components/review-workspace-nav.css"]) {
+      expect(readFileSync(path, "utf8")).toBe(execFileSync("git", ["show", `${layoutBaseline}:${path}`], { encoding: "utf8" }));
+    }
+  });
+  it("reproduces the untouched control's 70px right-rail clipping, not a task-card intrinsic-width overflow", () => {
+    const control = geometry(584, false, originalCss);
+    expect(control.panel.right - control.grid.right).toBeCloseTo(70, 0);
+    expect(control.cards[0].button.right).toBeGreaterThan(control.grid.right);
+    expect(control.cards[0].chevron.right).toBeGreaterThan(control.grid.right);
+    expect(control.cards[0].card.scroll).toBeLessThanOrEqual(control.cards[0].card.client);
+  });
+  it.each([584, 900, 901, 1024, 1280, 1440])("keeps the full right rail and Claim/Mark done/details controls reachable at %ipx with either navigation state", width => {
+    for (const expanded of [false, true]) {
+      const result = geometry(width, expanded, liveCss);
+      expect(result.grid.scroll).toBeLessThanOrEqual(result.grid.client + 1);
+      expect(result.panel.right).toBeLessThanOrEqual(result.workspace.right + 1);
+      expect(result.panel.right).toBeLessThanOrEqual(result.viewport + 1);
+      for (const c of result.cards) {
+        expect(c.card.right).toBeLessThanOrEqual(result.panel.right);
+        expect(c.card.scroll).toBeLessThanOrEqual(c.card.client + 1);
+        for (const control of [c.button, c.summary, c.chevron].filter(Boolean)) {
+          expect(control.x).toBeGreaterThanOrEqual(c.card.x);
+          expect(control.right).toBeLessThanOrEqual(c.card.right);
+          expect(control.right).toBeLessThanOrEqual(result.viewport);
+        }
+      }
+    }
+  }, 30_000);
+});
