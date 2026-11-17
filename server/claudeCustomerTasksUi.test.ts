@@ -43,6 +43,7 @@ type Ui = {
   CustomerTaskQueue: React.ComponentType<any>;
   TaskCompletionConfirm: React.ComponentType<any>;
   ClaudeCustomerTasksProvider: React.ComponentType<any>;
+  ClaudeCustomerTasksQueue: React.ComponentType<any>;
   ClaudeCustomerTaskStreamCard: React.ComponentType<any>;
 };
 function load(react = React, trpc: unknown = {}): Ui {
@@ -178,15 +179,16 @@ describe("Customer task compact queue and exact canonical identity", () => {
     expect(rendered).not.toContain('class="cct-log"'); expect(rendered).toContain("Task prepared");
   });
 
-  it("preserves every button JSX and all non-presentation logic byte-for-byte against the released control", () => {
+  it("preserves all existing button JSX and task mutation/state logic while adding only the conversation link", () => {
     const buttons = (source: string) => {
       const ast = ts.createSourceFile("card.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
       const result: string[] = [];
-      const visit = (node: ts.Node) => { if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button") result.push(node.getText(ast)); ts.forEachChild(node, visit); };
+      const visit = (node: ts.Node) => { if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button" && !node.openingElement.getText(ast).includes('className="cct-conversation-link"')) result.push(node.getText(ast)); ts.forEachChild(node, visit); };
       visit(ast); return result;
     };
     expect(hash(JSON.stringify(buttons(componentSource)))).toBe("a252f9ab6d7d4b78ca48c4d339a8e4c57eed7332b415730eaeb991efe5732411");
-    expect(hash(componentSource.slice(0, componentSource.indexOf('<details className="cct-details">')))).toBe("8007b9f26b2eaf46066de784b4d5f30055136a531c877baaab2e260593fe2b9f");
+    expect(hash(componentSource.slice(componentSource.indexOf('  const run ='), componentSource.indexOf('  return <TaskContext.Provider')))).toBe("ce3e4148342bb5aa0dcc7289c8177f32d92c8c84729f05c46d71c7c0a6154c07");
+    expect(hash(componentSource.slice(componentSource.indexOf('  const [confirmOpen'), componentSource.indexOf('  return <article')))).toBe("7804809679708c1360153b78dddaf31f418ac8edc0d81d96b33d55ea3d00614f");
     expect(hash(componentSource.slice(componentSource.indexOf('{error && !confirmOpen')))).toBe("2693e4f9f82fe9fb3659260f70de3baf74eb24e224b8bff31dda9237f5a78587");
   });
 
@@ -396,9 +398,72 @@ describe("Customer task additive integration and style contract", () => {
     const unclaimed = fixture();
     const claimed = fixture({ id: 102, status: "claimed", owner: actor, title: "Review access instructions", customerName: "Synthetic customer B",
       reply: { text: "Our staff will review this request and follow up after the change.", status: "sent", providerMessageId: "OM_SYNTHETIC_ACCEPTED" } });
-    const body = html(ui.CustomerTaskQueue, { tasks: [unclaimed, claimed], callerId: "17", actions: actions(), onRefresh: () => {} });
-    const stream = html(ui.TaskCard, { task: claimed, callerId: "17", actions: actions(), placement: "stream", now: NOW });
+    const body = html(ui.CustomerTaskQueue, { tasks: [unclaimed, claimed], callerId: "17", actions: actions(), onOpenConversation: () => {}, onRefresh: () => {} });
+    const stream = html(ui.TaskCard, { task: claimed, callerId: "17", actions: actions(), onOpenConversation: () => {}, placement: "stream", now: NOW });
     const confirm = html(ui.TaskCompletionConfirm, { task: claimed, note: "", pending: false, allowed: true, error: "", onNote: () => {}, onCancel: () => {}, onConfirm: () => {} });
     writeFileSync(output, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic customer tasks · offline UI fixture</title><style>${css}\n*{box-sizing:border-box}body{margin:0;background:#19191d;color:#ededf3;font:13px system-ui}main{max-width:1080px;margin:40px auto;padding:20px}h1{font-size:18px}h2{font-size:12px;color:#aaaab9;font-weight:500;margin-bottom:12px}.fixture-grid{display:grid;grid-template-columns:340px 1fr;gap:28px}.fixture-panel{padding:12px;background:#202024;border:1px solid #3b3b43;border-radius:12px}.fixture-panel-top{display:flex;justify-content:space-between;border-bottom:1px solid #3b3b43;padding-bottom:10px}.fixture-confirm{max-width:390px;margin-top:22px;padding:18px;border:1px solid #4d4d58;border-radius:12px;background:#25252c}@media(max-width:700px){main{margin:10px auto}.fixture-grid{grid-template-columns:1fr}}</style></head><body><main><h1>Customer tasks · synthetic offline fixture</h1><p>No real customer data, app startup, or live services.</p><div class="fixture-grid"><aside class="fixture-panel"><div class="fixture-panel-top"><div class="cct-panel-tabs"><button aria-pressed="false">Leads</button><button aria-pressed="true">Tasks</button></div><span>Open CRM ›</span></div>${body}</aside><section><h2>Same canonical TaskCard in the command stream</h2>${stream}<section class="fixture-confirm"><strong>Mark task done?</strong>${confirm}</section></section></div></main></body></html>\n`);
+  });
+});
+
+describe("Task link opens the existing exact-session SMS drawer", () => {
+  function opener(inbox: Record<string, unknown>[] = []) {
+    const ast = ts.createSourceFile("page.tsx", pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const helper = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "taskConversation")!;
+    let callback: ts.VariableDeclaration | undefined;
+    const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && node.name.getText(ast) === "openSmsDrawerFromTask") callback = node; ts.forEachChild(node, visit); }; visit(ast);
+    expect(helper).toBeDefined(); expect(callback).toBeDefined();
+    const setters = Object.fromEntries(["setSelectedLeadCardPhone", "setSelectedLeadCardDraft", "setSelectedLeadCardSnapshot", "setSelectedLeadDetail", "setSelectedEmailThreadId", "setSelectedSmsConversation", "showNotice"].map(name => [name, vi.fn()]));
+    const module = { exports: {} as { resolve: (task: CustomerTask, rows: Record<string, unknown>[]) => Record<string, unknown> | null; open: (task: CustomerTask) => void } };
+    const code = helper.getText(ast) + "\nconst " + callback!.getText(ast) + ";\nexports.resolve = taskConversation; exports.open = openSmsDrawerFromTask;";
+    runInNewContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText,
+      { module, exports: module.exports, ...setters, smsInbox: inbox, useCallback: (fn: unknown) => fn }, { timeout: 1500 });
+    return { ...module.exports, setters };
+  }
+
+  it.each(["queue", "stream"] as const)("opens from %s in every task state for all staff, even while Claim saves, without invoking a mutation", placement => {
+    for (const status of ["unclaimed", "claimed", "done"] as const) for (const pending of [false, true]) {
+      const task = fixture({ status, owner: status === "unclaimed" ? null : { id: "other-agent", name: "Other staff" } });
+      const route = opener(); const a = actions(); const tree = stateHarness().render("TaskCard", { task, callerId: "17", pending, actions: a, onOpenConversation: route.open, placement, now: NOW });
+      const link = button(tree, "Open full conversation"); expect(link).toBeDefined(); expect(link.props.type).toBe("button"); expect(link.props.disabled).toBe(false);
+      link.props.onClick(); expect(route.setters.setSelectedSmsConversation.mock.calls[0][0].id).toBe(task.sessionId);
+      expect(a.claim).not.toHaveBeenCalled(); expect(a.complete).not.toHaveBeenCalled(); expect(a.completeItem).not.toHaveBeenCalled(); expect(task.status).toBe(status);
+    }
+  });
+
+  it("uses an exact-ID inbox row even when an earlier sibling shares the same phone and name", () => {
+    const task = fixture(); const sibling = { id: 999, leadPhone: task.customerPhone, leadName: task.customerName, lastInboundPhoneNumberId: "WRONG_SIBLING_LINE" };
+    const exact = { ...sibling, id: task.sessionId, lastInboundPhoneNumberId: "LATEST_EXACT_LINE" }; const route = opener([sibling, exact]);
+    expect(route.resolve(task, [sibling, exact])).toBe(exact); route.open(task); expect(route.setters.setSelectedSmsConversation).toHaveBeenCalledWith(exact);
+    for (const name of ["setSelectedLeadCardPhone", "setSelectedLeadCardDraft", "setSelectedLeadCardSnapshot", "setSelectedLeadDetail", "setSelectedEmailThreadId"]) expect(route.setters[name]).toHaveBeenCalledWith(null);
+  });
+
+  it("opens the exact stored session missing from the inbox without borrowing sibling metadata or inventing preview history", () => {
+    const task = fixture({ sessionId: 43, customerName: null }); const sibling = { id: 42, leadPhone: task.customerPhone, lastInboundPhoneNumberId: "WRONG_LINE" }; const route = opener([sibling]);
+    const result = route.resolve(task, [sibling])!;
+    expect(result).toEqual({ id: 43, leadName: null, leadPhone: task.customerPhone, leadSource: null, lastMessageText: null, lastMsgTs: null, lastMessageTs: null, lastSenderRole: null, hasUnanswered: false, aiSummary: null, personType: "customer", lastInboundPhoneNumberId: task.receivingPhoneNumberId, receivedAt: task.receivedAt, calledAt: null });
+    route.open(task); expect(route.setters.setSelectedSmsConversation).toHaveBeenCalledWith(result); expect(route.setters.showNotice).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])("never resolves, creates, or opens another session when the task ID is invalid: %s", sessionId => {
+    const task = { ...fixture(), sessionId }; const route = opener([{ id: 42, leadPhone: task.customerPhone }]);
+    expect(route.resolve(task, [])).toBeNull(); route.open(task); expect(route.setters.setSelectedSmsConversation).not.toHaveBeenCalled(); expect(route.setters.showNotice).toHaveBeenCalledTimes(1);
+    const open = vi.fn(); const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), onOpenConversation: open, now: NOW });
+    const link = button(tree, "Open full conversation"); expect(link.props.disabled).toBe(true); link.props.onClick(); expect(open).not.toHaveBeenCalled();
+  });
+
+  it("passes the same page callback through the existing provider to queue and canonical stream cards", () => {
+    const open = vi.fn(); const task = fixture();
+    const api = { useUtils: () => ({}), claudeCustomerTasks: { identity: { useQuery: () => ({ data: actor }) }, list: { useQuery: () => ({ data: [task] }) },
+      ...Object.fromEntries(["claim", "completeItem", "complete"].map(name => [name, { useMutation: () => ({}) }])) } };
+    const context = stateHarness(api).render("ClaudeCustomerTasksProvider", { callerId: "17", children: null, onOpenConversation: open }).props.value; expect(context.onOpenConversation).toBe(open);
+    const queueHarness = stateHarness({}, context); const queue = queueHarness.render("ClaudeCustomerTasksQueue", {}); expect(queue.props.onOpenConversation).toBe(open);
+    const queueTree = queueHarness.render("CustomerTaskQueue", queue.props); expect(elements(queueTree).find(node => node.type === queueHarness.ui.TaskCard)!.props.onOpenConversation).toBe(open);
+    const stream = stateHarness({ claudeCustomerTasks: { get: { useQuery: () => ({ data: task, isLoading: false, isError: false }) } } }, context).render("ClaudeCustomerTaskStreamCard", { taskId: task.id });
+    expect(stream.props.onOpenConversation).toBe(open); expect(stream.props.task).toBe(task);
+    expect(pageSource).toContain('onOpenConversation={openSmsDrawerFromTask}');
+    expect(pageSource.match(/<SmsConversationDrawer conversation=/g)).toHaveLength(1);
+    expect(pageSource).toContain('{ sessionId: conversation.id }');
+    const callback = between("  const openSmsDrawerFromTask =", "  const openSmsDrawerFromLead =");
+    for (const forbidden of ["mutate", "fetch", "openSmsDrawerFromLead", "leadCardConversation", "normalizedLeadPhone", "createSession", "window.open"]) expect(callback).not.toContain(forbidden);
   });
 });

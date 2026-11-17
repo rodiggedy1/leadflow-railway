@@ -31,6 +31,8 @@
 .cct-card .cct-primary, .cct-confirm-body .cct-primary { border-color: #576b60; background: #304238; color: #e2eee7; }
 .cct-card button:hover:not(:disabled), .cct-views button:hover, .cct-refresh:hover, .cct-confirm-body button:hover:not(:disabled), .cct-feedback button:hover { border-color: #777782; color: #fff; }
 .cct-card button:disabled, .cct-confirm-body button:disabled { opacity: .5; cursor: not-allowed; }
+.cct-card .cct-conversation-link { margin-top: 5px; padding: 3px 0; border-color: transparent; background: transparent; color: #d2b5ff; text-decoration: underline; text-underline-offset: 3px; }
+.cct-card .cct-conversation-link:hover:not(:disabled) { border-color: transparent; color: #f0e3ff; }
 .cct-details { margin-top: 7px; border-top: 1px solid #393940; }
 .cct-details > summary { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-top: 7px; color: #ababba; font-size: 10px; cursor: pointer; list-style: none; }
 .cct-details > summary::-webkit-details-marker { display: none; }

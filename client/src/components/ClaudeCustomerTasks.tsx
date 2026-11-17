@@ -18,6 +18,7 @@ type TaskContextValue = {
   failed: boolean;
   pendingIds: ReadonlySet<number>;
   actions: CustomerTaskActions;
+  onOpenConversation?: (task: CustomerTask) => void;
   refresh: () => void;
 };
 const TaskContext = createContext<TaskContextValue | null>(null);
@@ -66,7 +67,7 @@ function taskAge(value: number, now: number): string {
 }
 
 /** Own only the existing tRPC caches; the page retains its one Ops SSE connection. */
-export function ClaudeCustomerTasksProvider({ callerId, children }: { callerId: string; children: ReactNode }) {
+export function ClaudeCustomerTasksProvider({ callerId, children, onOpenConversation }: { callerId: string; children: ReactNode; onOpenConversation?: (task: CustomerTask) => void }) {
   const utils = trpc.useUtils();
   // Use the same Ops authentication as task mutations. Do not reintroduce the
   // global auth.me request or infer identity from a cached display name/cookie.
@@ -113,7 +114,7 @@ export function ClaudeCustomerTasksProvider({ callerId, children }: { callerId: 
     complete: (id, note) => run(id, () => complete.mutateAsync({ id, note: note.trim() })),
   };
   return <TaskContext.Provider value={{ callerId: effectiveCallerId, tasks: query.data ?? [], loading: query.isLoading || identity.isLoading,
-    failed: query.isError || identity.isError, pendingIds, actions, refresh }}>{children}</TaskContext.Provider>;
+    failed: query.isError || identity.isError, pendingIds, actions, onOpenConversation, refresh }}>{children}</TaskContext.Provider>;
 }
 
 function useCustomerTasks() {
@@ -125,13 +126,13 @@ function useCustomerTasks() {
 export function ClaudeCustomerTasksQueue() {
   const context = useCustomerTasks();
   return <CustomerTaskQueue tasks={context.tasks} callerId={context.callerId} loading={context.loading}
-    failed={context.failed} pendingIds={context.pendingIds} actions={context.actions} onRefresh={context.refresh} />;
+    failed={context.failed} pendingIds={context.pendingIds} actions={context.actions} onOpenConversation={context.onOpenConversation} onRefresh={context.refresh} />;
 }
 
 /** Pure input seams allow synthetic SSR validation without importing the real app. */
-export function CustomerTaskQueue({ tasks, callerId, loading = false, failed = false, pendingIds = new Set<number>(), actions, onRefresh }: {
+export function CustomerTaskQueue({ tasks, callerId, loading = false, failed = false, pendingIds = new Set<number>(), actions, onOpenConversation, onRefresh }: {
   tasks: CustomerTask[]; callerId: string; loading?: boolean; failed?: boolean; pendingIds?: ReadonlySet<number>;
-  actions: CustomerTaskActions; onRefresh: () => void;
+  actions: CustomerTaskActions; onOpenConversation?: (task: CustomerTask) => void; onRefresh: () => void;
 }) {
   const [view, setView] = useState<CustomerTaskView>("open");
   const queues = customerTaskQueues(tasks, callerId);
@@ -148,7 +149,7 @@ export function CustomerTaskQueue({ tasks, callerId, loading = false, failed = f
     {failed && <p className="cct-feedback" role="alert">Tasks could not be refreshed. Retry to get the latest status.</p>}
     {loading ? <p className="cct-feedback" role="status"><Loader2 />Loading tasks…</p> : <>
       <div className="cct-task-list">{queues[view].map((task) => <TaskCard key={task.id} task={task} callerId={callerId}
-        pending={pendingIds.has(task.id)} actions={actions} />)}</div>
+        pending={pendingIds.has(task.id)} actions={actions} onOpenConversation={onOpenConversation} />)}</div>
       {!queues[view].length && !failed && <p className="cct-feedback">{view === "open" ? "No open tasks." : view === "mine" ? "No tasks claimed by you." : "No staff-confirmed tasks yet."}</p>}
     </>}
   </section>;
@@ -166,7 +167,7 @@ export function ClaudeCustomerTaskStreamCard({ taskId }: { taskId: number | null
   if (query.isLoading) return <p className="cct-feedback" role="status"><Loader2 />Loading task…</p>;
   if (!query.data) return <p className="cct-feedback" role="status">Task record unavailable.</p>;
   return <TaskCard task={query.data} callerId={context.callerId} pending={context.pendingIds.has(query.data.id)}
-    actions={context.actions} placement="stream" />;
+    actions={context.actions} onOpenConversation={context.onOpenConversation} placement="stream" />;
 }
 
 export function TaskCompletionConfirm({ task, note, pending, error, allowed, onNote, onCancel, onConfirm }: {
@@ -187,9 +188,9 @@ export function TaskCompletionConfirm({ task, note, pending, error, allowed, onN
 }
 
 /** Same compact card in the queue and stream, always supplied a canonical backend record. */
-export function TaskCard({ task, callerId, pending = false, actions, placement = "queue", now = Date.now() }: {
+export function TaskCard({ task, callerId, pending = false, actions, onOpenConversation, placement = "queue", now = Date.now() }: {
   task: CustomerTask; callerId: string; pending?: boolean; actions: CustomerTaskActions;
-  placement?: "queue" | "stream"; now?: number;
+  onOpenConversation?: (task: CustomerTask) => void; placement?: "queue" | "stream"; now?: number;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -219,6 +220,8 @@ export function TaskCard({ task, callerId, pending = false, actions, placement =
       {editable && <button type="button" disabled={busy || !canComplete} title="Confirm all actions in this task are complete"
         onClick={() => { if (!canComplete || busy) return; setError(""); setNote(""); setConfirmOpen(true); }}>Mark done</button>}
     </div>
+    <button type="button" className="cct-conversation-link" disabled={!onOpenConversation || !Number.isSafeInteger(task.sessionId) || task.sessionId <= 0}
+      onClick={() => { if (onOpenConversation && Number.isSafeInteger(task.sessionId) && task.sessionId > 0) onOpenConversation(task); }}>Open full conversation</button>
     <details className="cct-details"><summary>Customer text &amp; acknowledgment <ChevronDown /></summary><div className="cct-details-body">
       <section className="cct-source-message"><h4>Customer text</h4><p className="cct-verbatim">{task.sourceText}</p></section>
       <section><ul className="cct-items">{task.items.map((item) => {

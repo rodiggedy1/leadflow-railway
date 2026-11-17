@@ -55,7 +55,7 @@ import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AiConcierge from "@/components/AiConcierge";
 import { ClaudeCustomerTasksProvider, ClaudeCustomerTasksQueue, ClaudeCustomerTaskStreamCard, customerTaskIdFromMessage } from "@/components/ClaudeCustomerTasks";
-import { CLAUDE_CUSTOMER_TASK_ACTION } from "@shared/claudeCustomerTasks";
+import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, type ClaudeSmsAlternativeGenerateInput, type ClaudeSmsAlternativeResult } from "@shared/claudeSmsAlternative";
 import { THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, type ClaudeInitialLeadFacts, type ClaudeInitialLeadInput, type ClaudeInitialLeadResult } from "@shared/claudeInitialLead";
@@ -329,6 +329,19 @@ function formatRelative(value: number) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h`;
   return dateLabel(value);
+}
+
+function taskConversation(task: CustomerTask, inbox: readonly SmsInboxConversation[]): SmsInboxConversation | null {
+  if (!Number.isSafeInteger(task.sessionId) || task.sessionId <= 0) return null;
+  const exact = inbox.find((conversation) => conversation.id === task.sessionId);
+  if (exact) return exact;
+  // View descriptor only: the existing drawer reads this exact stored session.
+  return {
+    id: task.sessionId, leadName: task.customerName, leadPhone: task.customerPhone,
+    leadSource: null, lastMessageText: null, lastMsgTs: null, lastMessageTs: null,
+    lastSenderRole: null, hasUnanswered: false, aiSummary: null, personType: "customer",
+    lastInboundPhoneNumberId: task.receivingPhoneNumberId, receivedAt: task.receivedAt, calledAt: null,
+  };
 }
 
 function formatPhoneDisplay(value: string) {
@@ -1428,6 +1441,17 @@ export default function CommandChatExactLive() {
     }
   }, [showNotice, testBridgeMutation]);
 
+  const openSmsDrawerFromTask = useCallback((task: CustomerTask) => {
+    const conversation = taskConversation(task, smsInbox);
+    if (!conversation) { showNotice("This task's linked conversation is unavailable."); return; }
+    setSelectedLeadCardPhone(null);
+    setSelectedLeadCardDraft(null);
+    setSelectedLeadCardSnapshot(null);
+    setSelectedLeadDetail(null);
+    setSelectedEmailThreadId(null);
+    setSelectedSmsConversation(conversation);
+  }, [showNotice, smsInbox]);
+
   const openSmsDrawerFromLead = useCallback((lead: CommandLead) => {
     const inboxConversation = smsInbox.find((conversation) => (
       (lead.sessionId !== null && conversation.id === lead.sessionId)
@@ -1666,7 +1690,7 @@ export default function CommandChatExactLive() {
   if (!agentMe) return <LoginGate onSuccess={() => void refetchAgent()} />;
 
   return (
-    <ClaudeCustomerTasksProvider callerId={String(agentMe.id)}>
+    <ClaudeCustomerTasksProvider callerId={String(agentMe.id)} onOpenConversation={openSmsDrawerFromTask}>
     <main className="ccc-app ccc-widget-app ccc-live" aria-label="MIB Command workspace">
       <section className="ccc-workspace">
         <div className="ccc-command-grid">
