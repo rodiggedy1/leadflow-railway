@@ -17,6 +17,7 @@ function builtApp() {
   mkdirSync(join(dist, "assets"));
   writeFileSync(join(dist, "index.html"), INDEX);
   writeFileSync(join(dist, "assets", "index-NEW.js"), "console.log('current build');");
+  writeFileSync(join(dist, "guide.html"), "<!doctype html><p>standalone page</p>");
   const app = express();
   serveStatic(app, dist);
   return app;
@@ -44,9 +45,30 @@ describe("serveStatic — missing bundles", () => {
     async path => {
       const res = await request(builtApp()).get(path).expect(200);
       expect(res.headers["content-type"]).toMatch(/text\/html/);
+      expect(res.headers["cache-control"]).toBe("no-cache");
       expect(res.text).toBe(INDEX);
     }
   );
+});
+
+describe("serveStatic — HTML is always revalidated", () => {
+  it.each(["/index.html", "/guide.html"])("sends no-cache for the static HTML file %s", async path => {
+    const res = await request(builtApp()).get(path).expect(200);
+    expect(res.headers["content-type"]).toMatch(/text\/html/);
+    expect(res.headers["cache-control"]).toBe("no-cache");
+  });
+
+  it("still lets an unchanged page revalidate to a 304", async () => {
+    const app = builtApp();
+    const first = await request(app).get("/").expect(200);
+    expect(first.headers.etag).toBeTruthy();
+    await request(app).get("/").set("If-None-Match", first.headers.etag).expect(304);
+  });
+
+  it("leaves bundle caching unchanged", async () => {
+    const res = await request(builtApp()).get("/assets/index-NEW.js").expect(200);
+    expect(res.headers["cache-control"]).toBe("public, max-age=0");
+  });
 });
 
 const html = readFileSync(resolve(import.meta.dirname, "..", "client", "index.html"), "utf8");

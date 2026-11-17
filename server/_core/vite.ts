@@ -47,6 +47,11 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
+// HTML is revalidated on every load so a page from an older deploy (pointing at bundles that no
+// longer exist) is never reused from a browser or Cloudflare cache. ETag/Last-Modified still let an
+// unchanged page come back as a cheap 304. Hashed bundles keep express.static's default headers.
+const HTML_CACHE_CONTROL = "no-cache";
+
 function builtClientPath() {
   return process.env.NODE_ENV === "development"
     ? path.resolve(import.meta.dirname, "../..", "dist", "public")
@@ -60,7 +65,13 @@ export function serveStatic(app: Express, distPath = builtClientPath()) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(
+    express.static(distPath, {
+      setHeaders(res, filePath) {
+        if (filePath.endsWith(".html")) res.setHeader("Cache-Control", HTML_CACHE_CONTROL);
+      },
+    })
+  );
 
   // Built bundles live under /assets with hashed names. A missing one (asked for by a page from an
   // older deploy) must be a real 404: answering with index.html makes browsers reject it as a module
@@ -72,6 +83,7 @@ export function serveStatic(app: Express, distPath = builtClientPath()) {
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
+    res.set("Cache-Control", HTML_CACHE_CONTROL);
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
