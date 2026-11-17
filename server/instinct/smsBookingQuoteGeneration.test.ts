@@ -89,6 +89,7 @@ describe("SMS-only additive quote generation", () => {
     expect(prompts.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(Object.keys(prompts).sort()).toEqual(["systemPrompt", "userPrompt"]);
     expect(JSON.parse(prompts.userPrompt)).toEqual({ incomingMessage: input.incomingMessage, context: { ...input.context,
+      originalConversation: (input.context.originalConversation as any[]).map((turn, turnIndex) => ({ ...turn, turnIndex })),
       smsBookingQuote: { state: null, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }, knowledgeBase: MAIDS_IN_BLACK_KNOWLEDGE_BASE } });
     expect(JSON.stringify(input)).toBe(before);
   });
@@ -130,10 +131,59 @@ describe("SMS-only additive quote generation", () => {
     const before = JSON.stringify(prior);
     await h.generate(large);
     const payload = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
-    expect(payload.context.originalConversation).toEqual(large.context.originalConversation);
+    expect(payload.context.originalConversation).toEqual((large.context.originalConversation as any[]).map((turn, turnIndex) => ({ ...turn, turnIndex })));
+    expect(payload.context.originalConversation.map((turn: any) => turn.turnIndex)).toEqual(Array.from({ length: 651 }, (_, index) => index));
+    expect((large.context.originalConversation as any[]).every(turn => !Object.prototype.hasOwnProperty.call(turn, "turnIndex"))).toBe(true);
     expect(payload.context.smsBookingQuote.state).toEqual(prior);
     expect(payload.context.knowledgeBase).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(JSON.stringify(prior)).toBe(before);
+  });
+
+  it("supplies authoritative indices for the reproduced 114-turn qualification failure without changing durable evidence", async () => {
+    const text = "Yes, that's the home that is for and it's a standard cleaning";
+    const history = Array.from({ length: 114 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `Synthetic history ${index}` }));
+    history[105] = { role: "user", content: "123 Synthetic Street and 8 AM would work well it's a two bedroom two bathroom" };
+    history[106] = { role: "assistant", content: "123 Synthetic Street, a 2 bedroom, 2 bathroom home" };
+    history[112] = { role: "assistant", content: "Is this for 123 Synthetic Street, 2 bedrooms and 2 bathrooms, and which clean?" };
+    history[113] = { role: "user", content: text };
+    const input = fixture(text, history.map((turn, index) => index === 113 ? { ...turn, opMsgId: "msg-current" } : turn));
+    const before = JSON.stringify(input);
+    const h = harness(null);
+    h.runner.mockImplementation(async options => {
+      const payload = JSON.parse(options.userPrompt), turns = payload.context.originalConversation;
+      const home = turns.find((turn: any) => turn.role === "user" && turn.content.includes("two bedroom two bathroom"));
+      const current = turns.at(-1);
+      expect(home.turnIndex).toBe(105); expect(current.turnIndex).toBe(113);
+      expect(options.systemPrompt).toContain("copy that exact value into evidence");
+      const evidence = (turnIndex: number, quote: string) => ({ turnIndex, quote });
+      return { finalSmsText: JSON.stringify({ replyText: "Would you prefer one-time, weekly, biweekly or monthly cleaning, and which day and time?", task: null,
+        bookingQuote: { action: "collect", intentEvidenceQuote: "it's a standard cleaning",
+          fields: { address: "123 Synthetic Street", bedrooms: 2, bathrooms: 2, pricingMode: "home", serviceId: "standard" },
+          evidence: { address: evidence(home.turnIndex, "123 Synthetic Street"), bedrooms: evidence(home.turnIndex, "two bedroom"),
+            bathrooms: evidence(home.turnIndex, "two bathroom"), pricingMode: evidence(current.turnIndex, "Yes, that's the home that is for"),
+            serviceId: evidence(current.turnIndex, "it's a standard cleaning") } }, quotePresentationLanguage: "en" }) };
+    });
+    const result = await h.generate(input);
+    expect(result.smsBookingQuote?.update.evidence.address?.turnIndex).toBe(105);
+    expect(result.smsBookingQuote?.update.evidence.serviceId?.turnIndex).toBe(113);
+    expect(result.smsBookingQuote?.originalConversation).toBe(input.context.originalConversation);
+    expect(result.smsBookingQuote?.quoteTextTemplate).toBeNull(); expect(result.task).toBeNull();
+    expect(JSON.stringify(input)).toBe(before); expect(h.runner).toHaveBeenCalledTimes(1);
+    const invalid = structuredClone(result.smsBookingQuote!.update);
+    for (const evidence of Object.values(invalid.evidence)) if (evidence) evidence.turnIndex += 1;
+    await expect(harness({ replyText: result.replyText, task: null, bookingQuote: invalid }).generate(input)).rejects.toThrow("SMS_QUOTE_EVIDENCE_NOT_CUSTOMER");
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it("overwrites untrusted turnIndex labels only in model input, not original history or its hash", async () => {
+    const input = fixture();
+    (input.context.originalConversation as any[])[0].turnIndex = 900;
+    (input.context.originalConversation as any[])[1].turnIndex = 0;
+    const before = JSON.stringify(input), h = harness(active(input));
+    const result = await h.generate(input);
+    expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt).context.originalConversation.map((turn: any) => turn.turnIndex)).toEqual([0, 1, 2]);
+    expect(result.smsBookingQuote?.originalConversation).toBe(input.context.originalConversation);
+    expect(JSON.stringify(input)).toBe(before);
   });
 
   it("uses receivedAt rather than boot/current wall clock for relative-date context", async () => {
