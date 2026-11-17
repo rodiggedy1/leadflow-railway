@@ -32,9 +32,23 @@ describe("call evidence — actual verified provider record only", () => {
     const db: any = { execute: vi.fn(async q => { const query = new MySqlDialect().sqlToQuery(q); queries.push(query.sql); if (query.sql.includes("voice_calls")) return [[stored()]]; if (query.sql.includes("field_mgmt_calls") || query.sql.includes("cleaner_profiles")) return [[]]; if (query.sql.includes("callback_tasks")) return [[callback()]]; throw Error("Unexpected query"); }) };
     const read = createCustomerCallSourceReader({ db, fetchCall, assistantId: "synthetic-assistant" });
     expect(await read({ message: { type: "end-of-call-report", call: { id: "synthetic-call" }, artifact: { transcript: "forged webhook evidence" } } })).not.toBeNull();
-    expect(fetchCall).toHaveBeenCalledWith("synthetic-call"); expect(queries).toHaveLength(4); expect(queries.every(q => q.startsWith("SELECT"))).toBe(true);
+    expect(fetchCall).toHaveBeenCalledWith("synthetic-call"); expect(queries).toHaveLength(3); expect(queries.every(q => q.startsWith("SELECT"))).toBe(true);
   });
-  it("excludes active cleaner callers without creating tasks or reading any job data", async () => { const queries: string[] = []; const db: any = { execute: vi.fn(async q => { const sql = new MySqlDialect().sqlToQuery(q).sql; queries.push(sql); if (sql.includes("voice_calls")) return [[stored()]]; if (sql.includes("cleaner_profiles")) return [[{ phone: "(301) 555-0123" }]]; return [[]]; }) }; expect(await createCustomerCallSourceReader({ db, fetchCall: async () => full(), assistantId: "synthetic-assistant" })({ message: { type: "end-of-call-report", call: { id: "synthetic-call" } } })).toBeNull(); expect(queries.some(q => q.includes("callback_tasks"))).toBe(false); });
+  it("accepts a verified inbound customer-assistant call even when the caller phone appears in cleaner profiles", async () => {
+    const queries: string[] = [];
+    const db: any = { execute: vi.fn(async q => {
+      const query = new MySqlDialect().sqlToQuery(q); queries.push(query.sql);
+      if (query.sql.includes("voice_calls")) return [[stored()]];
+      if (query.sql.includes("cleaner_profiles")) return [[{ id: 101, phone: "+13015550123", isActive: 1 }, { id: 102, phone: "(301) 555-0123", isActive: 1 }]];
+      if (query.sql.includes("callback_tasks")) return [[callback()]];
+      if (query.sql.includes("field_mgmt_calls")) return [[]];
+      throw Error("Unexpected query");
+    }) };
+    const source = await createCustomerCallSourceReader({ db, fetchCall: async () => full(), assistantId: "synthetic-assistant" })({ message: { type: "end-of-call-report", call: { id: "synthetic-call" } } });
+    expect(source).toMatchObject({ providerCallId: "synthetic-call", callerPhone: "+13015550123", customerTurns: ["Move the cleaning to Friday."], callbackTaskIds: [401] });
+    expect(queries.some(q => q.includes("cleaner_profiles"))).toBe(false);
+    expect(queries.every(q => q.startsWith("SELECT"))).toBe(true);
+  });
   it("does not invoke provider lookup for unmatched or field-management calls", async () => {
     const fetchCall = vi.fn(); const db: any = { execute: vi.fn(async q => new MySqlDialect().sqlToQuery(q).sql.includes("voice_calls") ? [[stored()]] : [[{ id: 1 }]]) };
     expect(await createCustomerCallSourceReader({ db, fetchCall, assistantId: "synthetic-assistant" })({ message: { type: "end-of-call-report", call: { id: "synthetic-call" } } })).toBeNull(); expect(fetchCall).not.toHaveBeenCalled();

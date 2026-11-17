@@ -59,11 +59,6 @@ export function createCustomerCallSourceReader({ db, fetchCall, assistantId }: C
     if (matches.length !== 1) return null;
     if (rows(await db.execute(sql`SELECT id FROM field_mgmt_calls WHERE vapiCallId = ${call.id}`)).length) return null;
     const full = await fetchCall(call.id);
-    const phone = normalizePhone(object(full)?.customer?.number);
-    if (phone) {
-      const cleaners = rows(await db.execute(sql`SELECT phone FROM cleaner_profiles WHERE isActive = 1 AND phone IS NOT NULL`));
-      if (cleaners.some(row => normalizePhone(row.phone) === phone)) return null;
-    }
     const callbacks = rows(await db.execute(sql`SELECT * FROM callback_tasks WHERE voiceCallId = ${Number(matches[0].id)} ORDER BY id`));
     return customerCallSourceFromRecord(full, matches[0], callbacks, assistantId);
   };
