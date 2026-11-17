@@ -3,6 +3,75 @@
 
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Startup recovery. If one of our own bundles under /assets/ fails to load (for example a page
+      // from before a deploy asks for a file that no longer exists), React never starts and the page
+      // stays white. Once the page has settled with nothing rendered, reload once to get the current
+      // page; if that already happened in the last minute, show a short message instead of a blank page.
+      // Inline and plain ES5 on purpose: it has to run even when every bundle fails.
+      (function () {
+        var KEY = "leadflow-asset-reload-at";
+        var pending = false;
+
+        function isOwnAsset(url) {
+          try {
+            var parsed = new URL(url, location.href);
+            return parsed.origin === location.origin && parsed.pathname.indexOf("/assets/") === 0;
+          } catch (e) {
+            return false;
+          }
+        }
+
+        function appRendered() {
+          var root = document.getElementById("root");
+          return !!(root && root.hasChildNodes());
+        }
+
+        function showMessage() {
+          var root = document.getElementById("root") || document.body;
+          root.innerHTML =
+            "<div style='min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#111;text-align:center'>" +
+            "<div style='max-width:360px'>" +
+            "<h1 style='font-size:20px;margin:0 0 8px'>This page did not finish loading</h1>" +
+            "<p style='font-size:15px;line-height:1.5;margin:0 0 20px;color:#444'>Please reload the page. If it still does not load, call us at <a href='tel:+12028885362' style='color:#111'>202-888-5362</a>.</p>" +
+            "<button type='button' onclick='location.reload()' style='font:inherit;font-size:16px;padding:12px 24px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer'>Reload page</button>" +
+            "</div></div>";
+        }
+
+        function recover() {
+          if (appRendered()) return;
+          var last = 0;
+          try {
+            last = Number(sessionStorage.getItem(KEY)) || 0;
+          } catch (e) {}
+          if (Date.now() - last > 60000) {
+            try {
+              sessionStorage.setItem(KEY, String(Date.now()));
+              location.reload();
+              return;
+            } catch (e) {}
+          }
+          // Already reloaded a moment ago, or storage is unavailable: never loop.
+          showMessage();
+        }
+
+        window.addEventListener(
+          "error",
+          function (event) {
+            var target = event.target;
+            if (pending || !target || (target.tagName !== "SCRIPT" && target.tagName !== "LINK")) return;
+            if (!isOwnAsset(target.src || target.href)) return;
+            pending = true;
+            var settle = function () {
+              setTimeout(recover, 1000);
+            };
+            if (document.readyState === "complete") settle();
+            else window.addEventListener("load", settle);
+          },
+          true
+        );
+      })();
+    </script>
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1" />

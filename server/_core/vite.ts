@@ -47,11 +47,13 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
-export function serveStatic(app: Express) {
-  const distPath =
-    process.env.NODE_ENV === "development"
-      ? path.resolve(import.meta.dirname, "../..", "dist", "public")
-      : path.resolve(import.meta.dirname, "public");
+function builtClientPath() {
+  return process.env.NODE_ENV === "development"
+    ? path.resolve(import.meta.dirname, "../..", "dist", "public")
+    : path.resolve(import.meta.dirname, "public");
+}
+
+export function serveStatic(app: Express, distPath = builtClientPath()) {
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -59,6 +61,14 @@ export function serveStatic(app: Express) {
   }
 
   app.use(express.static(distPath));
+
+  // Built bundles live under /assets with hashed names. A missing one (asked for by a page from an
+  // older deploy) must be a real 404: answering with index.html makes browsers reject it as a module
+  // script ("text/html is not a valid JavaScript MIME type") and the page stays white.
+  // no-store keeps Cloudflare and browsers from caching the 404 across a deploy.
+  app.use("/assets", (_req, res) => {
+    res.status(404).set("Cache-Control", "no-store").type("text/plain").send("Not found");
+  });
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
