@@ -418,7 +418,7 @@ describe("Common queue/stream human-completion popup", () => {
     refresh.resolve(); await flush();
     expect(rig.context().pendingIds.has(101)).toBe(false);
     const saved = rig.render("TaskCard", { ...props, task: rig.gets.get(101), pending: false }, `card:${placement}`);
-    expect(isOpen(saved)).toBe(false); expect(text(saved)).toContain("Done · human-confirmed");
+    expect(isOpen(saved)).toBe(false); expect(text(saved)).toContain(`Confirmed by ${actor.name}`);
     expect(button(saved, "Mark done")).toBeUndefined(); expect(button(saved, "Claim")).toBeUndefined();
     expect(rig.ui.customerTaskQueues(rig.rows()!, actor.id).done.map(task => task.id)).toEqual([101]);
   });

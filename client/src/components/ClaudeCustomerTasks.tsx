@@ -214,7 +214,7 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
     <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">Customer task</span><strong>{task.title}</strong>
       <small className="cct-customer-identity"><span>{task.customerName || "Customer"}</span><span className="cct-customer-phone">{task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
     <div className="cct-card-status">
-      <span>{task.status === "done" ? "Done · human-confirmed" : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
+      <span>{task.status === "done" ? `Confirmed by ${task.completedBy?.name || "Staff"}` : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
       {task.status === "unclaimed" && <button type="button" className="cct-primary" disabled={busy || !callerId}
         onClick={() => void update(() => actions.claim(task.id))}>{busy ? <><Loader2 aria-hidden="true" />Claiming…</> : "Claim"}</button>}
       {editable && <button type="button" disabled={busy || !canComplete} title="Confirm all actions in this task are complete"

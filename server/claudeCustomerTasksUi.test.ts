@@ -279,9 +279,39 @@ describe("Customer task human completion and authoritative updates", () => {
     const task = fixture({ status: "done", owner: actor, completedBy: actor, completedAt: NOW,
       completionNote: "Synthetic confirmation only", activity: [{ action: "completed", actor, at: NOW, note: "Synthetic confirmation only" }] });
     const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW });
-    expect(rendered).toContain("Done · human-confirmed"); expect(rendered).toContain("Human-confirmed by Synthetic staff");
+    expect(rendered).toContain("Confirmed by Synthetic staff"); expect(rendered).toContain("Human-confirmed by Synthetic staff");
     expect(rendered).toContain("not system-verified"); expect(rendered).toContain("Synthetic confirmation only");
     expect(rendered).not.toContain("Mark done"); expect(rendered).not.toContain(">Claim</button>");
+  });
+
+  it.each(["queue", "stream"] as const)("shows the actual completion agent on the closed %s card, not the owner or current viewer", placement => {
+    const task = fixture({ status: "done", owner: { id: "owner", name: "Claiming agent" }, completedBy: { id: "confirmer", name: "Confirming agent" }, completedAt: NOW });
+    const tree = stateHarness().render("TaskCard", { task, callerId: "viewer", actions: actions(), placement, now: NOW });
+    const badge = elements(tree).find(node => node.props.className === "cct-card-status")!;
+    expect(text(badge)).toBe("Confirmed by Confirming agent"); expect(text(badge)).not.toContain("Claiming agent");
+    const rendered = html(ui.TaskCard, { task, callerId: "viewer", actions: actions(), placement, now: NOW });
+    expect(rendered).not.toContain('class="cct-details" open'); expect(rendered).not.toContain("Done · human-confirmed");
+    expect(button(tree, "Open full conversation")).toBeDefined(); expect(button(tree, "Claim")).toBeUndefined(); expect(button(tree, "Mark done")).toBeUndefined();
+    expect(task.completedBy?.name).toBe("Confirming agent");
+  });
+
+  it.each(["queue", "stream"] as const)("does not invent a completion agent for missing attribution and safely renders full names in %s", placement => {
+    const task = fixture({ status: "done", owner: actor, completedBy: null });
+    const badge = (value: CustomerTask) => elements(stateHarness().render("TaskCard", { task: value, callerId: "17", actions: actions(), placement, now: NOW })).find(node => node.props.className === "cct-card-status")!;
+    expect(text(badge(task))).toBe("Confirmed by Staff"); expect(text(badge(task))).not.toContain(actor.name);
+    const name = '<script>not HTML</script> & ' + 'Full agent name '.repeat(12);
+    const named = fixture({ status: "done", completedBy: { id: "confirmer", name } });
+    expect(text(badge(named))).toBe(`Confirmed by ${name}`);
+    const rendered = html(ui.TaskCard, { task: named, callerId: "17", actions: actions(), placement, now: NOW });
+    expect(rendered).toContain('&lt;script&gt;not HTML&lt;/script&gt; &amp;'); expect(rendered).not.toContain('<script>');
+  });
+
+  it("keeps Unclaimed and Claimed by labels unchanged until the whole task is completed", () => {
+    for (const task of [fixture(), fixture({ status: "claimed", owner: actor })]) {
+      const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), now: NOW });
+      const badge = elements(tree).find(node => node.props.className === "cct-card-status")!;
+      expect(text(badge)).toContain(task.status === "unclaimed" ? "Unclaimed" : "Claimed by Synthetic staff"); expect(text(badge)).not.toContain("Confirmed by");
+    }
   });
 
   it("uses server response in list/get caches, inputs contain no identity, errors invalidate, independent tasks are not capped", async () => {
