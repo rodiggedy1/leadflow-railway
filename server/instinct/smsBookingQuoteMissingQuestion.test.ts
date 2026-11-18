@@ -18,7 +18,7 @@ function qualify(patch: SmsBookingQuoteFields, action: SmsBookingQuoteUpdate["ac
   return advanceSmsBookingQuote(null, { action, fields: patch, intentEvidenceQuote: context.binding.inboundText,
     evidence: Object.fromEntries(Object.keys(patch).map(key => [key, { turnIndex: 0, quote: context.binding.inboundText }])) }, context);
 }
-const requiredFields = [...Object.keys(callBookingQuotePricingSchema.shape), "extrasConfirmed", "customerName", "address", "requestedLocalDate", "requestedLocalTime"] as (keyof SmsBookingQuoteFields)[];
+const requiredFields = [...Object.keys(callBookingQuotePricingSchema.shape).filter(key => key !== "pricingMode" && key !== "homeType"), "extrasConfirmed", "customerName", "address", "requestedLocalDate", "requestedLocalTime"] as (keyof SmsBookingQuoteFields)[];
 beforeEach(() => { vi.stubGlobal("fetch", vi.fn(() => { throw Error("OFFLINE_ONLY"); })); });
 afterEach(() => { expect(globalThis.fetch).not.toHaveBeenCalled(); vi.unstubAllGlobals(); });
 
@@ -49,8 +49,9 @@ describe("SMS authoritative missing-fact questions", () => {
     const patch: SmsBookingQuoteFields = { ...fields };
     delete patch.homeType; delete patch.condition; delete patch.customerName;
     const advanced = qualify(patch);
-    expect(advanced.missing).toEqual(["homeType", "condition", "customerName"]);
-    expect(createSmsBookingQuoteMissingQuestion(advanced, "link")).toBe("One detail before I can prepare your quote: is this a house, apartment, townhome or condo?");
+    expect(advanced.missing).toEqual(["condition", "customerName"]);
+    expect(advanced.state.fields.homeType).toBe("House"); expect(advanced.state.evidence).not.toHaveProperty("homeType");
+    expect(createSmsBookingQuoteMissingQuestion(advanced, "link")).toBe("How much cleaning does it need (1 to 10)?\n1 = already clean, 5 = normal, 10 = heavy buildup.");
     const full = qualify(fields);
     expect(full.missing).toEqual([]); expect(full.input).not.toBeNull();
     expect(full.state.fields).not.toHaveProperty("customerEmail"); expect(full.state.fields).not.toHaveProperty("notes");

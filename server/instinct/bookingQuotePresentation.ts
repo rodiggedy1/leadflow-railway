@@ -74,3 +74,36 @@ export function renderSmsBookingQuoteText(base: string, presentation: string | n
   const facts = bookingQuoteFacts(snapshot, language);
   return `${base}\n\n${smsQuoteText(language, facts.firstCleaningPrice, facts.futureVisitPrice, facts.extras, snapshot.input.recurrence, bookingLinkUrl)}`;
 }
+
+/** Fulfilled SMS links only. All facts come from the verified canonical input/snapshot;
+ * this is presentation, not a second pricing engine or booking confirmation. */
+export function renderSmsBookingQuoteSummary(input: CreateCustomerBookingLinkInput,
+  snapshot: PublicBookingPriceSnapshot, bookingLinkUrl: string,
+  language: BookingQuotePresentationLanguage = "en"): string {
+  const facts = bookingQuoteFacts(snapshot, language);
+  const locale = language === "es" ? "es-US" : "en-US";
+  const date = new Intl.DateTimeFormat(locale, { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" })
+    .format(new Date(`${input.requestedLocalDate}T12:00:00Z`));
+  const time = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" })
+    .format(new Date(`2000-01-01T${input.requestedLocalTime}:00Z`));
+  const size = snapshot.input.bedrooms === 0 ? language === "es" ? "Estudio" : "Studio"
+    : language === "es" ? `${snapshot.input.bedrooms} habitaciones` : `${snapshot.input.bedrooms} bed`;
+  if (language === "es") {
+    return `Tu limpieza está lista para agendar. Estos son los detalles:\n\n`
+      + `📅 Fecha solicitada: ${date}\n⏰ Hora solicitada: ${time}\n📍 Dirección: ${input.address}\n`
+      + `🧹 Servicio: ${snapshot.serviceName}\n🛏️ Tamaño: ${size} / ${snapshot.input.bathrooms} baños\n💵 Total: ${facts.firstCleaningPrice}`
+      + facts.frequency + `\nServicios adicionales:\n${facts.extras}\n\n`
+      + `Antes de nuestra llegada:\nRetira los objetos personales de las superficies y los pisos\n`
+      + `Avísanos si hay mascotas o instrucciones de acceso 🧼\n\n`
+      + `Último paso para completar tu reserva: 👇\n`
+      + `Agregamos tus datos a este enlace rápido para que puedas terminar en unos 60 segundos ⏱️\n🔗 ${bookingLinkUrl}`;
+  }
+  return `Your cleaning is ready to schedule. Here are the details:\n\n`
+    + `📅 Requested date: ${date}\n⏰ Requested time: ${time}\n📍 Address: ${input.address}\n`
+    + `🧹 Service: ${snapshot.serviceName}\n🛏️ Home size: ${size} / ${snapshot.input.bathrooms} bath\n💵 Total: ${facts.firstCleaningPrice}`
+    + facts.frequency + `\nExtras:\n${facts.extras}\n\n`
+    + `Before we arrive:\nPlease clear personal items off counters and floors\n`
+    + `Let us know about pets or any entry instructions 🧼\n\n`
+    + `Last step to complete your booking: 👇\n`
+    + `We’ve added your info to this quick link, so you can finish in about 60 seconds ⏱️\n🔗 ${bookingLinkUrl}`;
+}

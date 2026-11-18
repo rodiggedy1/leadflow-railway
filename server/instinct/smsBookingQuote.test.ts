@@ -136,13 +136,15 @@ describe("pure progressive qualification and canonical parity", () => {
   it("handles a routine incomplete quote without throwing or guessing", () => {
     const result = run({ bedrooms: 2 }, { action: "collect" });
     expect(result.preview).toBeNull(); expect(result.input).toBeNull();
-    expect(result.state.fields).toEqual({ bedrooms: 2 });
-    expect(result.missing).toEqual(expect.arrayContaining(["pricingMode", "serviceId", "bathrooms", "condition", "homeType", "maidCount", "hourCount", "extras", "recurrence", "extrasConfirmed", "customerName", "address", "requestedLocalDate", "requestedLocalTime"]));
+    expect(result.state.fields).toEqual({ bedrooms: 2, pricingMode: "home", homeType: "House", maidCount: 1, hourCount: 1 });
+    expect(result.missing).toEqual(expect.arrayContaining(["serviceId", "bathrooms", "condition", "extras", "recurrence", "extrasConfirmed", "customerName", "address", "requestedLocalDate", "requestedLocalTime"]));
+    for (const key of ["pricingMode", "homeType", "maidCount", "hourCount"]) expect(result.missing).not.toContain(key);
+    expect(result.state.evidence).not.toHaveProperty("pricingMode"); expect(result.state.evidence).not.toHaveProperty("homeType");
     expect(result.state).toMatchObject({ version: 1, revision: 1, sessionId: 42, customerPhone: PHONE, receivingPhoneNumberId: LINE, quoteId: "inbound-1", link: null });
   });
-  it("adds ONLY structural home staffing and never guesses other pricing facts", () => {
+  it("adds only the approved unknown-property default and structural home staffing, not other pricing facts", () => {
     const result = run({ pricingMode: "home" }, { action: "collect" });
-    expect(result.state.fields).toEqual({ pricingMode: "home", maidCount: 1, hourCount: 1 });
+    expect(result.state.fields).toEqual({ pricingMode: "home", homeType: "House", maidCount: 1, hourCount: 1 });
     expect(result.state.evidence).not.toHaveProperty("maidCount");
     expect(result.missing).not.toContain("maidCount"); expect(result.missing).not.toContain("hourCount");
     expect(result.missing).toEqual(expect.arrayContaining(["extras", "recurrence", "extrasConfirmed"]));
@@ -376,8 +378,8 @@ describe("saved names, explicit restarts and existing-link lifetime", () => {
   it("restarts ONLY explicitly, clearing old fields/evidence/link and using current provider ID", () => {
     const next = nextTurn(withLink(), { bedrooms: 1 }, "Start a distinct new quote for a 1-bedroom home.", { restart: true }).result;
     expect(next.state).toMatchObject({ revision: 2, quoteId: "inbound-2", fields: { bedrooms: 1 }, link: null });
-    expect(next.state.fields).toEqual({ bedrooms: 1 }); expect(Object.keys(next.state.evidence)).toEqual(["bedrooms"]);
-    expect(next.input).toBeNull(); expect(next.missing).toContain("pricingMode");
+    expect(next.state.fields).toEqual({ bedrooms: 1, pricingMode: "home", homeType: "House", maidCount: 1, hourCount: 1 }); expect(Object.keys(next.state.evidence)).toEqual(["bedrooms"]);
+    expect(next.input).toBeNull(); expect(next.missing).toContain("serviceId"); expect(next.missing).not.toContain("pricingMode");
   });
 });
 
@@ -406,7 +408,7 @@ describe("New York NOW, relative-date model resolution, and past preferences", (
       requestedLocalDate: { turnIndex: 0, quote: "tomorrow" }, requestedLocalTime: { turnIndex: 0, quote: "half past ten" },
     } });
     const result = advanceSmsBookingQuote(null, good, ctx);
-    expect(result.state.fields).toEqual({ requestedLocalDate: "2026-11-18", requestedLocalTime: "10:30" });
+    expect(result.state.fields).toEqual({ requestedLocalDate: "2026-11-18", requestedLocalTime: "10:30", pricingMode: "home", homeType: "House", maidCount: 1, hourCount: 1 });
     expect(smsBookingQuoteUpdateSchema.safeParse({ ...good, fields: { requestedLocalDate: "tomorrow" } }).success).toBe(false);
     expect(() => advanceSmsBookingQuote(null, { ...good, evidence: { ...good.evidence, requestedLocalDate: { turnIndex: 0, quote: "2026-11-18" } } }, ctx)).toThrow("SMS_QUOTE_EVIDENCE_NOT_LITERAL");
   });

@@ -47,14 +47,16 @@ const QUOTE_TEMPLATE = "Your first cleaning quote is {{firstCleaningPrice}}. Fut
 const LINK_TEMPLATE = `${QUOTE_TEMPLATE} Review and complete your booking here: {{bookingLink}}. This is a quote, not a reservation.`;
 const FOLLOWUP_TITLE = "Follow up on cleaning booking link";
 const FOLLOWUP_ITEM = "Review the customer's booking-link completion";
-const MISSING_HOME_QUESTION = {
-  en: "One detail before I can prepare your quote: is this a house, apartment, townhome or condo?",
-  es: "Un detalle antes de preparar tu cotización: ¿es una casa, apartamento, casa adosada o condominio?",
+const MISSING_CONDITION_QUESTION = {
+  en: "How much cleaning does it need (1 to 10)?\n1 = already clean, 5 = normal, 10 = heavy buildup.",
+  es: "¿Cuánta limpieza necesita (del 1 al 10)?\n1 = limpio, 5 = normal, 10 = mucha suciedad.",
 };
 const STALE_PAGE_RECAP = "Thanks, María. Review the details and complete your booking on the page.";
 const MISSING_HOME_CASES = (["standard", "deep", "moveout"] as const).flatMap(serviceId =>
   (["home", "hourly"] as const).flatMap(pricingMode =>
     (["en", "es"] as const).map(language => ({ serviceId, pricingMode, language }))));
+const DEFAULT_HOME_CASES = (["standard", "deep", "moveout"] as const).flatMap(serviceId =>
+  (["one-time", "weekly", "biweekly", "monthly"] as const).map(recurrence => ({ serviceId, recurrence })));
 function missingHomeFixture(serviceId: CallBookingQuotePricing["serviceId"], pricingMode: CallBookingQuotePricing["pricingMode"]) {
   const completePricing: CallBookingQuotePricing = { ...pricing, serviceId, pricingMode, bedrooms: 4, bathrooms: 3, condition: 7,
     maidCount: pricingMode === "hourly" ? 2 : 1, hourCount: pricingMode === "hourly" ? 4 : 1,
@@ -324,14 +326,16 @@ describe("SMS new-booking quote application: real generator → qualification �
     const h = harness();
     const first = await h.turn(`I want a new deep home cleaning quote. My name is ${NAME}. The address is ${ADDRESS}, Friday November 20 at 10:30 am.`, {
       customerName: NAME, address: ADDRESS, requestedLocalDate: "2026-11-20", requestedLocalTime: "10:30", pricingMode: "home", serviceId: "deep",
-    }, "collect", { replyText: "How many bedrooms and bathrooms are there, and what type of home is it?" });
+    }, "collect", { replyText: "How many bedrooms and bathrooms are there?" });
     expect(first.result).toEqual({ outcome: "accepted" }); expect(h.state().funnels).toEqual([]);
     expect(h.quote()?.fields).not.toHaveProperty("extras"); expect(h.quote()?.fields).not.toHaveProperty("recurrence");
+    expect(h.quote()?.fields.homeType).toBe("House"); expect(h.quote()?.evidence).not.toHaveProperty("homeType");
     const quoteId = h.quote()!.quoteId;
     const second = await h.turn("It is a House with 3 bedrooms and 2 bathrooms. Condition 5, biweekly cleaning please.", {
       homeType: "House", bedrooms: 3, bathrooms: 2, condition: 5, recurrence: "biweekly",
     }, "collect", { replyText: "Would you like any add-ons, or no extras?" });
     expect(second.result).toEqual({ outcome: "accepted" }); expect(h.quote()?.fields).not.toHaveProperty("extras");
+    expect(h.quote()?.evidence.homeType).toEqual({ turnIndex: 2, quote: second.input.inboundText });
     const prompt = JSON.parse(h.runner.mock.calls[1][0].userPrompt);
     expect(prompt.context.smsBookingQuote.state).toMatchObject({ quoteId, fields: { customerName: NAME, address: ADDRESS, requestedLocalTime: "10:30" } });
     expect(prompt.context.originalConversation).toHaveLength(3); expect(prompt.context.originalConversation[1].role).toBe("assistant");
@@ -369,72 +373,131 @@ describe("SMS new-booking quote application: real generator → qualification �
     expect(h.quoteRows()).toHaveLength(1); expect(h.quoteRows()[0].channel).toBe(SMS_BOOKING_QUOTE_CHANNEL);
   });
 
-  it.each(MISSING_HOME_CASES)("asks only for missing homeType before linking $serviceId/$pricingMode in $language, then completes the same quote from the actual house answer", async ({ serviceId, pricingMode, language }) => {
+  it.each(MISSING_HOME_CASES)("defaults absent homeType to House and links $serviceId/$pricingMode on the first turn in $language without fabricated evidence", async ({ serviceId, pricingMode, language }) => {
     const h = harness(), fixture = missingHomeFixture(serviceId, pricingMode);
     const first = await h.turn(fixture.text, fixture.fields, "link", {
       replyText: STALE_PAGE_RECAP, quotePresentationLanguage: language,
     });
     expect(first.result).toEqual({ outcome: "accepted" });
     expect(h.send).toHaveBeenCalledTimes(1);
-    const question = h.send.mock.calls[0][0].content;
-    expect(question).toBe(MISSING_HOME_QUESTION[language]);
-    expect(question).not.toMatch(/complete your booking|booking (?:on|page)|completa.*reserva|\$|https?:|\/book\/|\{\{/i);
-    expect(h.quote()).toMatchObject({ quoteId: first.input.providerMessageId, revision: 1, link: null });
-    expect(h.quote()!.fields).toEqual(fixture.fields);
-    expect(h.quote()!.fields).not.toHaveProperty("homeType");
+    expect(h.quote()).toMatchObject({ quoteId: first.input.providerMessageId, revision: 1 });
+    expect(h.quote()!.fields).toEqual({ ...fixture.fields, homeType: "House" });
+    expect(h.quote()!.evidence).not.toHaveProperty("homeType");
     expect(h.quote()!.fields).toMatchObject({ requestedLocalDate: "2026-11-23", requestedLocalTime: "14:45",
       extras: fixture.completePricing.extras, extrasConfirmed: true, recurrence: "weekly",
       maidCount: pricingMode === "hourly" ? 2 : 1, hourCount: pricingMode === "hourly" ? 4 : 1 });
-    expect(h.state().funnels).toEqual([]); expect(h.tasks()).toEqual([]);
-    expect(h.state().drafts[0].capabilityResult.taskId).toBeNull();
-    expect(h.writes.some(write => write.table === "booking_funnel_records" || write.kind === taskAction)).toBe(false);
-    expectAcceptedHistory(h, first.input);
-
-    const quoteId = h.quote()!.quoteId, second = await h.turn("It is a house", { homeType: "House" }, "link", {
-      replyText: language === "es" ? "Gracias, María. Revisa los detalles de tu cotización." : "Thanks, María. Here are your quote details.",
-      quotePresentationLanguage: language,
-    });
-    expect(second.result).toEqual({ outcome: "accepted" });
-    expect(h.quote()).toMatchObject({ quoteId, revision: 2, fields: { ...fixture.fields, homeType: "House" } });
-    expect(h.quote()!.evidence.homeType).toEqual({ turnIndex: 2, quote: "It is a house" });
-    const prompt = JSON.parse(h.runner.mock.calls[1][0].userPrompt);
-    expect(prompt.context.smsBookingQuote.state).toMatchObject({ quoteId, link: null, fields: fixture.fields });
-    expect(prompt.context.originalConversation[1]).toMatchObject({ role: "assistant", content: question });
+    if (pricingMode === "hourly") {
+      expect(h.quote()!.evidence.maidCount).toEqual({ turnIndex: 0, quote: fixture.text });
+      expect(h.quote()!.evidence.hourCount).toEqual({ turnIndex: 0, quote: fixture.text });
+    } else {
+      expect(h.quote()!.evidence).not.toHaveProperty("maidCount"); expect(h.quote()!.evidence).not.toHaveProperty("hourCount");
+    }
     expect(h.quoteRows()).toHaveLength(1); expect(h.state().funnels).toHaveLength(1);
     const preview = previewCallBookingQuote({ pricing: fixture.completePricing, extrasConfirmed: true });
-    if (!preview.success) throw Error("Completed home-type fixture must preview successfully");
-    const funnel = h.state().funnels[0], link = h.quote()!.link!, content = h.send.mock.calls[1][0].content;
+    if (!preview.success) throw Error("Defaulted home-type fixture must preview successfully");
+    const funnel = h.state().funnels[0], link = h.quote()!.link!, content = h.send.mock.calls[0][0].content;
     expect(funnel).toMatchObject({ customerName: NAME, customerPhone: PHONE, address: ADDRESS,
       requestedLocalDate: "2026-11-23", requestedLocalTime: "14:45", extras: fixture.completePricing.extras,
       priceSnapshot: createPublicBookingPriceSnapshot(fixture.completePricing),
       firstCleaningTotalCents: preview.firstCleaningTotalCents, futureVisitTotalCents: preview.futureVisitTotalCents,
       stage: "lead", source: "customer-booking-link", bookedByAgentName: "Instinct · AI SMS" });
     expect(link).toMatchObject({ token: funnel.publicFunnelNumber, firstCleaningTotalCents: preview.firstCleaningTotalCents });
-    expect(content).toContain(language === "es" ? `Tu cotización para la primera limpieza es ${preview.priceFormatted}.`
-      : `Your first-cleaning quote is ${preview.priceFormatted}.`);
+    expect(content).toContain(preview.priceFormatted);
     expect(content).toContain(language === "es" ? `Próximas visitas (semanales): ${preview.futureVisitPriceFormatted}.`
       : `Your weekly follow-up cleaning price is ${preview.futureVisitPriceFormatted}.`);
     expect(content).toContain(language === "es" ? "2 × Interior del refrigerador" : "2 × Inside Fridge");
     expect(content).toContain(language === "es" ? "Interior del horno" : "Inside Oven");
-    expect(content).not.toMatch(/No add-ons selected|No se seleccionaron|\{\{/);
+    expect(content).not.toContain(STALE_PAGE_RECAP);
+    expect(content).not.toMatch(/No add-ons selected|No se seleccionaron|\{\{|house|apartment|townhome|condo|casa|apartamento|condominio|arrival window|ventana de llegada/i);
+    expect(content).not.toContain("?");
     const url = `${SMS_QUOTE_BOOKING_ORIGIN}${link.urlPath}`;
     expect(content.split(url)).toHaveLength(2);
     expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([url]);
     expect(h.tasks()).toHaveLength(1);
     const task = h.tasks()[0];
     expect(task).toMatchObject({ title: FOLLOWUP_TITLE, status: "unclaimed", owner: null, completionNote: null,
-      sourceMessageId: second.input.providerMessageId, sourceText: "It is a house",
-      items: [{ title: FOLLOWUP_ITEM, evidenceQuote: "It is a house", completedBy: null, completedAt: null }],
-      reply: { text: content, status: "sent", providerMessageId: h.state().drafts[1].outboundOpenPhoneId } });
-    expectAcceptedHistory(h, second.input);
-    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.readKnowledge).toHaveBeenCalledTimes(2); expect(h.send).toHaveBeenCalledTimes(2);
+      sourceMessageId: first.input.providerMessageId, sourceText: fixture.text,
+      items: [{ title: FOLLOWUP_ITEM, evidenceQuote: fixture.text, completedBy: null, completedAt: null }],
+      reply: { text: content, status: "sent", providerMessageId: h.state().drafts[0].outboundOpenPhoneId } });
+    expectAcceptedHistory(h, first.input);
+    expect(h.runner).toHaveBeenCalledTimes(1); expect(h.readKnowledge).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
     const before = structuredClone(h.state());
-    expect(["excluded", "duplicate"]).toContain((await h.run(second.input)).outcome);
-    expect(h.state()).toEqual(before); expect(h.send).toHaveBeenCalledTimes(2); expect(h.runner).toHaveBeenCalledTimes(2);
+    expect(["excluded", "duplicate"]).toContain((await h.run(first.input)).outcome);
+    expect(h.state()).toEqual(before); expect(h.send).toHaveBeenCalledTimes(1); expect(h.runner).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(DEFAULT_HOME_CASES)("defaults unknown mode/type for $serviceId/$recurrence without changing canonical prices or inventing customer evidence", async ({ serviceId, recurrence }) => {
+    const h = harness(), fixture = missingHomeFixture(serviceId, "home");
+    const fields = { ...fixture.fields, recurrence };
+    delete fields.pricingMode; delete fields.maidCount; delete fields.hourCount;
+    const text = fixture.text.replace(`${serviceId} home`, serviceId).replace("weekly cleaning", `${recurrence} cleaning`);
+    const value = await h.turn(text, fields);
+    expect(value.result).toEqual({ outcome: "accepted" });
+    expect(h.quote()!.fields).toEqual({ ...fields, pricingMode: "home", homeType: "House", maidCount: 1, hourCount: 1 });
+    expect(h.quote()!.evidence).toEqual(Object.fromEntries(Object.keys(fields).map(key => [key, { turnIndex: 0, quote: text }])));
+    const expectedPricing = { ...fixture.completePricing, recurrence }, snapshot = createPublicBookingPriceSnapshot(expectedPricing);
+    const preview = previewCallBookingQuote({ pricing: expectedPricing, extrasConfirmed: true });
+    if (!preview.success) throw Error("Application-default fixture must preview successfully");
+    expect(h.state().funnels).toHaveLength(1); expect(h.quoteRows()).toHaveLength(1); expect(h.tasks()).toHaveLength(1);
+    expect(h.state().funnels[0]).toMatchObject({ priceSnapshot: snapshot, firstCleaningTotalCents: preview.firstCleaningTotalCents,
+      futureVisitTotalCents: preview.futureVisitTotalCents, stage: "lead" });
+    const content = h.send.mock.calls[0][0].content;
+    expect(content).toContain(`🧹 Service: ${snapshot.serviceName}`); expect(content).toContain(`💵 Total: ${preview.priceFormatted}`);
+    if (recurrence === "one-time") expect(content).not.toMatch(/follow-up cleaning|future-visit|Próximas visitas/);
+    else expect(content).toContain(`Your ${recurrence} follow-up cleaning price is ${preview.futureVisitPriceFormatted}.`);
+    expect(content).not.toMatch(/home-cleaning quote or|hourly-cleaning quote|house|apartment|townhome|condo|\?/i);
+    expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`]);
+    expectAcceptedHistory(h, value.input); expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
+    const before = structuredClone(h.state());
+    expect(["excluded", "duplicate"]).toContain((await h.run(value.input)).outcome);
+    expect(h.state()).toEqual(before); expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["Apartment", "Townhome", "Condo"] as const)("preserves a customer-provided %s while defaulting only unknown pricing mode", async homeType => {
+    const h = harness(), fields = { ...fullFields, homeType };
+    delete fields.pricingMode; delete fields.maidCount; delete fields.hourCount;
+    const value = await h.turn(FULL_TEXT.replace("Deep home cleaning", "Deep cleaning").replace("House", homeType), fields);
+    expect(value.result).toEqual({ outcome: "accepted" });
+    expect(h.quote()?.fields).toMatchObject({ pricingMode: "home", homeType, maidCount: 1, hourCount: 1 });
+    expect(h.quote()?.evidence.homeType).toEqual({ turnIndex: 0, quote: value.input.inboundText });
+    expect(h.quote()?.evidence).not.toHaveProperty("pricingMode");
+    expect(h.state().funnels[0].priceSnapshot).toEqual(createPublicBookingPriceSnapshot({ ...pricing, homeType }));
+    expect(h.send.mock.calls[0][0].content).not.toContain(homeType); expectAcceptedHistory(h, value.input);
+  });
+
+  it("requires actual counts for explicit hourly after a default home quote, then preserves prior hourly mode/counts on an omitted patch", async () => {
+    const h = harness(), fields = { ...fullFields };
+    delete fields.pricingMode; delete fields.homeType; delete fields.maidCount; delete fields.hourCount;
+    expect((await h.turn(FULL_TEXT.replace("Deep home cleaning", "Deep cleaning").replace(", House", ""), fields)).result).toEqual({ outcome: "accepted" });
+    const hourly = await h.turn("Change this new cleaning quote to hourly and send its link.", { pricingMode: "hourly" });
+    expect(hourly.result).toEqual({ outcome: "accepted" });
+    expect(h.quote()?.fields).toMatchObject({ pricingMode: "hourly", homeType: "House" });
+    expect(h.quote()?.fields).not.toHaveProperty("maidCount"); expect(h.quote()?.fields).not.toHaveProperty("hourCount");
+    expect(h.send.mock.calls[1][0].content).toBe("How many cleaners would you like for your hourly cleaning?");
+    expect(h.send.mock.calls[1][0].content).not.toContain("/book/"); expect(h.state().funnels).toHaveLength(1); expect(h.tasks()).toHaveLength(1);
+    const cleaners = await h.turn("For this new hourly cleaning quote I want 2 cleaners; please send the link.", { maidCount: 2 });
+    expect(cleaners.result).toEqual({ outcome: "accepted" });
+    expect(h.send.mock.calls[2][0].content).toBe("How many hours would you like for your hourly cleaning?");
+    expect(h.state().funnels).toHaveLength(1); expect(h.tasks()).toHaveLength(1);
+    const complete = await h.turn("I want 4 hours for this new hourly cleaning quote; send its link.", { hourCount: 4 });
+    expect(complete.result).toEqual({ outcome: "accepted" });
+    const current = structuredClone(h.quote()!);
+    expect(current.fields).toMatchObject({ pricingMode: "hourly", maidCount: 2, hourCount: 4, homeType: "House" });
+    expect(current.evidence).toMatchObject({ pricingMode: { turnIndex: 2, quote: hourly.input.inboundText },
+      maidCount: { turnIndex: 4, quote: cleaners.input.inboundText }, hourCount: { turnIndex: 6, quote: complete.input.inboundText } });
+    expect(current.evidence).not.toHaveProperty("homeType");
+    expect(h.state().funnels[1].priceSnapshot).toEqual(createPublicBookingPriceSnapshot({ ...pricing, pricingMode: "hourly", maidCount: 2, hourCount: 4 }));
+    const repeated = await h.turn("Please repeat that exact new hourly quote link.", {});
+    expect(repeated.result).toEqual({ outcome: "accepted" }); expect(h.quote()?.link).toEqual(current.link);
+    expect(h.quote()?.fields).toEqual(current.fields); expect(h.quote()?.evidence).toEqual(current.evidence);
+    expect(h.state().funnels).toHaveLength(2); expect(h.tasks()).toHaveLength(3); expect(h.send).toHaveBeenCalledTimes(5);
+    for (const value of [hourly, cleaners, complete, repeated]) expectAcceptedHistory(h, value.input);
   });
 
   it.each(["en", "es"] as const)("corrects stale incomplete-link page prose during direct claim/prepare without generation in %s", async language => {
-    const h = harness(), fixture = missingHomeFixture("deep", "hourly"), input = h.append(fixture.text);
+    const h = harness(), fixture = missingHomeFixture("deep", "hourly");
+    delete fixture.fields.condition;
+    const input = h.append(fixture.text.replace("condition 7, ", ""));
     const store = h.stores().taskStore, binding: CustomerSmsBinding = {
       sessionId: input.sessionId, providerMessageId: input.providerMessageId, fromPhone: PHONE,
       receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS, inboundText: input.inboundText,
@@ -449,14 +512,16 @@ describe("SMS new-booking quote application: real generator → qualification �
         ...(language === "es" ? { missingQuestionLanguage: "es" as const } : {}) },
     };
     const prepared = await store.prepare(claim!, rawPlan);
-    expect(prepared).toEqual({ replyText: MISSING_HOME_QUESTION[language], task: null });
-    expect(h.quote()!.fields).toEqual(fixture.fields);
+    expect(prepared).toEqual({ replyText: MISSING_CONDITION_QUESTION[language], task: null });
+    expect(prepared!.replyText).not.toMatch(/complete your booking|booking (?:on|page)|completa.*reserva|https?:|\/book\/|\{\{/i);
+    expect(h.quote()!.fields).toEqual({ ...fixture.fields, homeType: "House" });
+    expect(h.quote()!.evidence).not.toHaveProperty("homeType"); expect(h.quote()!.fields).not.toHaveProperty("condition");
     expect(h.quote()).toMatchObject({ quoteId: input.providerMessageId, revision: 1, link: null });
     expect(h.state().funnels).toEqual([]); expect(h.tasks()).toEqual([]);
-    expect(h.state().drafts[0]).toMatchObject({ status: "SENDING", generatedDraft: MISSING_HOME_QUESTION[language],
-      approvedText: MISSING_HOME_QUESTION[language], capabilityResult: { phase: "submission_started", taskId: null } });
+    expect(h.state().drafts[0]).toMatchObject({ status: "SENDING", generatedDraft: MISSING_CONDITION_QUESTION[language],
+      approvedText: MISSING_CONDITION_QUESTION[language], capabilityResult: { phase: "submission_started", taskId: null } });
     expect(h.runner).not.toHaveBeenCalled(); expect(h.readKnowledge).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled();
-    const accepted = await h.send({ to: PHONE, fromNumberId: LINE, content: MISSING_HOME_QUESTION[language] });
+    const accepted = await h.send({ to: PHONE, fromNumberId: LINE, content: MISSING_CONDITION_QUESTION[language] });
     expect(accepted.success).toBe(true);
     expect(await store.recordAcceptance(claim!, accepted.messageId!)).toBe(true);
     expectAcceptedHistory(h, input);
@@ -568,6 +633,35 @@ describe("SMS new-booking quote application: real generator → qualification �
     expect(h.state()).toEqual(before); expect(h.send).toHaveBeenCalledTimes(3); expect(h.runner).toHaveBeenCalledTimes(3);
   });
 
+  it.each([false, true])("reuses the exact default House link after an evidenced Apartment correction then House return with reuseFactories=%s", async reuseFactories => {
+    const h = harness(reuseFactories), fixture = missingHomeFixture("deep", "home");
+    delete fixture.fields.pricingMode; delete fixture.fields.maidCount; delete fixture.fields.hourCount;
+    const first = await h.turn(fixture.text.replace("deep home", "deep"), fixture.fields);
+    expect(first.result).toEqual({ outcome: "accepted" });
+    const original = structuredClone(h.quote()!), originalContent = h.send.mock.calls[0][0].content;
+    expect(original.fields).toMatchObject({ pricingMode: "home", homeType: "House" });
+    expect(original.evidence).not.toHaveProperty("homeType"); expect(original.evidence).not.toHaveProperty("pricingMode");
+    const correction = await h.turn("Correction: it is an Apartment. Send the revised new cleaning quote link.", { homeType: "Apartment" });
+    expect(correction.result).toEqual({ outcome: "accepted" }); expect(h.quote()?.link?.token).not.toBe(original.link!.token);
+    expect(h.quote()?.evidence.homeType).toEqual({ turnIndex: 2, quote: correction.input.inboundText });
+    const returned = await h.turn("Actually it is a House. Please send that original new cleaning quote link.", { homeType: "House" });
+    expect(returned.result).toEqual({ outcome: "accepted" });
+    expect(h.quote()).toMatchObject({ quoteId: original.quoteId, revision: 3, fields: original.fields, link: original.link });
+    expect(h.quote()?.evidence.homeType).toEqual({ turnIndex: 4, quote: returned.input.inboundText });
+    expect(h.quote()?.evidence).not.toHaveProperty("pricingMode");
+    expect(h.state().funnels).toHaveLength(2); expect(h.quoteRows()).toHaveLength(1);
+    expect(h.state().funnels.map(row => row.priceSnapshot.input.homeType)).toEqual(["House", "Apartment"]);
+    const saved = JSON.parse(h.quoteRows()[0].metadata).quotes;
+    expect(saved).toHaveLength(2); expect(saved.map((row: Row) => row.input.pricing.homeType)).toEqual(["House", "Apartment"]);
+    expect(saved.every((row: Row) => row.quoteId === original.quoteId)).toBe(true);
+    expect(h.send.mock.calls[2][0].content).toBe(originalContent);
+    expect(h.tasks()).toHaveLength(3); expect(h.state().drafts).toHaveLength(3);
+    for (const value of [first, correction, returned]) expectAcceptedHistory(h, value.input);
+    const before = structuredClone(h.state());
+    expect(["excluded", "duplicate"]).toContain((await h.run(returned.input)).outcome);
+    expect(h.state()).toEqual(before); expect(h.send).toHaveBeenCalledTimes(3); expect(h.runner).toHaveBeenCalledTimes(3);
+  });
+
   it("normalizes name spacing, email case, note whitespace and extras order when returning to an earlier exact input without factory resets", async () => {
     const h = harness(true), extras = [{ id: "inside-oven", quantity: 1 }, { id: "inside-fridge", quantity: 1 }];
     const fields = { ...fullFields, customerName: "María  García", customerEmail: "Maya@Example.com", notes: ["  use side entrance  "], extras };
@@ -652,7 +746,7 @@ describe("SMS new-booking quote application: real generator → qualification �
   it("isolates same-customer quote state by receiving line and session without importing another quote's fields", async () => {
     const h = harness(); await h.turn(); const original = structuredClone(h.quote()!);
     h.addSession(8, LINE_TWO); h.addSession(9, LINE);
-    expect((await h.turn("I would like a new cleaning quote.", { serviceId: "standard" }, "collect", { replyText: "What type of home and room counts should this quote use?" }, 8)).result.outcome).toBe("accepted");
+    expect((await h.turn("I would like a new cleaning quote.", { serviceId: "standard" }, "collect", { replyText: "How many bedrooms and bathrooms should this quote use?" }, 8)).result.outcome).toBe("accepted");
     expect(h.quote(8, LINE_TWO)).toMatchObject({ fields: { customerName: NAME, serviceId: "standard" }, link: null });
     expect(h.quote(8, LINE_TWO)?.fields).not.toHaveProperty("address"); expect(h.quote(8, LINE_TWO)?.fields).not.toHaveProperty("extras");
     expect((await h.turn("I need a separate new quote.", {}, "collect", { replyText: "What cleaning service would you like?" }, 9)).result.outcome).toBe("accepted");
@@ -679,16 +773,36 @@ describe("SMS new-booking quote application: real generator → qualification �
     expect(savedOriginal).toEqual(original);
   });
 
-  it("preserves grounded room counts and requested local times in conversational text around canonical facts", async () => {
-    const h = harness();
-    const value = await h.turn(FULL_TEXT, fullFields, "link", {
+  it.each([3, 0])("sends the exact server-owned requested-date/time summary for %s bedrooms with all canonical extras and a single actual link/CTA", async bedrooms => {
+    const h = harness(), extras = [{ id: "inside-oven", quantity: 1 }, { id: "inside-fridge", quantity: 2 }];
+    const fields = { ...fullFields, bedrooms, recurrence: "weekly" as const, extras };
+    const text = FULL_TEXT.replace("3 bedrooms", bedrooms === 0 ? "a studio" : "3 bedrooms").replace("biweekly", "weekly")
+      .replace("no extras confirmed", "one Inside Oven and two Inside Fridge, extras confirmed");
+    const value = await h.turn(text, fields, "link", {
       replyText: "Thanks, María. This is for 3 bedrooms and 2 bathrooms. Your requested time is 10:30 am.",
       quoteTextTemplate: LINK_TEMPLATE,
     });
     expect(value.result).toEqual({ outcome: "accepted" });
-    expect(h.send.mock.calls[0][0].content).toContain("3 bedrooms and 2 bathrooms");
-    expect(h.send.mock.calls[0][0].content).toContain("requested time is 10:30 am");
     expect(h.state().funnels).toHaveLength(1);
+    const snapshot = createPublicBookingPriceSnapshot({ ...pricing, bedrooms, recurrence: "weekly", extras: [...extras].sort((a, b) => a.id.localeCompare(b.id)) });
+    const preview = previewCallBookingQuote({ pricing: { ...pricing, bedrooms, recurrence: "weekly", extras }, extrasConfirmed: true });
+    if (!preview.success) throw Error("Expected canonical complete SMS summary fixture");
+    const url = `${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`, content = h.send.mock.calls[0][0].content;
+    expect(content).toBe("Your cleaning is ready to schedule. Here are the details:\n\n"
+      + "📅 Requested date: Friday, November 20\n⏰ Requested time: 10:30 AM\n"
+      + `📍 Address: ${ADDRESS}\n🧹 Service: ${snapshot.serviceName}\n`
+      + `🛏️ Home size: ${bedrooms === 0 ? "Studio" : "3 bed"} / 2 bath\n💵 Total: ${preview.priceFormatted}`
+      + `\nYour weekly follow-up cleaning price is ${preview.futureVisitPriceFormatted}.`
+      + "\nExtras:\n2 × Inside Fridge\nInside Oven\n\nBefore we arrive:\n"
+      + "Please clear personal items off counters and floors\nLet us know about pets or any entry instructions 🧼\n\n"
+      + "Last step to complete your booking: 👇\nWe’ve added your info to this quick link, so you can finish in about 60 seconds ⏱️\n"
+      + `🔗 ${url}`);
+    expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([url]);
+    expect(content.split("Last step to complete your booking:")).toHaveLength(2);
+    expect(content).not.toMatch(/arrival window|November 17|2026-11-17|13:00|House|Apartment|townhome|condo|reserved|confirmed|guaranteed|available/i);
+    expect(h.state().funnels[0]).toMatchObject({ requestedLocalDate: "2026-11-20", requestedLocalTime: "10:30", priceSnapshot: snapshot });
+    expect(h.state().funnels[0].priceSnapshot.input).not.toHaveProperty("arrivalPreference");
+    expect(h.send).toHaveBeenCalledTimes(1); expect(h.tasks()).toHaveLength(1);
     expectAcceptedHistory(h, value.input);
   });
 
@@ -706,7 +820,7 @@ describe("SMS new-booking quote application: real generator → qualification �
       if (!preview.success) throw Error("Expected canonical parity fixture");
       const content = h.send.mock.calls[0][0].content;
       expect(preview.futureVisitPriceFormatted).not.toBe(preview.priceFormatted);
-      expect(content).toContain(`Your first-cleaning quote is ${preview.priceFormatted}.`);
+      expect(content).toContain(action === "link" ? `💵 Total: ${preview.priceFormatted}` : `Your first-cleaning quote is ${preview.priceFormatted}.`);
       expect(content).toMatch(new RegExp(`Your ${recurrence} (?:follow-up cleaning|future-visit) price is \\$${preview.futureVisitTotalCents! / 100}\\.`));
       expect(content.split(preview.priceFormatted)).toHaveLength(2);
       expect(content.split(preview.futureVisitPriceFormatted!)).toHaveLength(2);
@@ -720,14 +834,16 @@ describe("SMS new-booking quote application: real generator → qualification �
     }
   });
 
-  it("submits a legitimate Maya Pounds acknowledgement instead of treating the customer's surname as a generated price", async () => {
+  it.each(["quote", "link"] as const)("accepts a legitimate Maya Pounds acknowledgement without mistaking the surname for a price for %s", async action => {
     const h = harness(), name = "Maya Pounds", replyText = "Thanks, Maya Pounds. Here are the details for your review.";
     h.row().customerName = name;
-    const value = await h.turn(FULL_TEXT.replace(NAME, name), { ...fullFields, customerName: name }, "link", { replyText });
+    const value = await h.turn(FULL_TEXT.replace(NAME, name), { ...fullFields, customerName: name }, action, { replyText });
     expect(value.result).toEqual({ outcome: "accepted" }); expect(h.send).toHaveBeenCalledTimes(1);
-    expect(h.send.mock.calls[0][0].content).toContain(replyText);
-    expect(h.quote()?.fields.customerName).toBe(name); expect(h.state().funnels).toHaveLength(1);
-    expect(h.state().funnels[0].customerName).toBe(name); expect(h.tasks()).toHaveLength(1);
+    if (action === "quote") expect(h.send.mock.calls[0][0].content).toContain(replyText);
+    else expect(h.send.mock.calls[0][0].content).not.toContain(replyText);
+    expect(h.quote()?.fields.customerName).toBe(name); expect(h.state().funnels).toHaveLength(action === "link" ? 1 : 0);
+    if (action === "link") expect(h.state().funnels[0].customerName).toBe(name);
+    expect(h.tasks()).toHaveLength(action === "link" ? 1 : 0);
     expectAcceptedHistory(h, value.input);
   });
 
@@ -737,7 +853,8 @@ describe("SMS new-booking quote application: real generator → qualification �
       : "First cleaning: {{firstCleaningPrice}}. Review and complete booking here: {{bookingLink}}." };
     const value = await h.turn(`${FULL_TEXT} My email is ${email}.`, { ...fullFields, customerEmail: email }, "link", patch);
     expect(value.result).toEqual({ outcome: "accepted" });
-    expect(h.send.mock.calls[0][0].content).toContain(email);
+    expect(h.quote()?.fields.customerEmail).toBe(email);
+    expect(h.send.mock.calls[0][0].content).not.toContain(patch.replyText);
     expect(h.state().funnels).toHaveLength(1);
     expect(h.state().funnels[0].customerEmail).toBe(email);
     expectAcceptedHistory(h, value.input);
@@ -753,18 +870,26 @@ describe("SMS new-booking quote application: real generator → qualification �
     expect(h.send).not.toHaveBeenCalled();
   });
 
-  it("retains Spanish acknowledgements and complete canonical facts through the structured locale contract without a legacy template", async () => {
+  it("uses a Spanish server-owned summary with complete canonical facts instead of the model acknowledgement without a legacy template", async () => {
     const h = harness(), fields = { ...fullFields, extras: [{ id: "inside-fridge", quantity: 2 }] };
     const text = `Quiero el enlace para una limpieza nueva. Soy ${NAME}, ${ADDRESS}, el veinte de noviembre a las diez y media, limpieza profunda, casa, tres dormitorios, dos baños, condición cinco, cada dos semanas, dos interiores de refrigerador confirmados.`;
     const value = await h.turn(text, fields, "link", { replyText: "Gracias, María. Revisa los detalles antes de completar la reserva.", quotePresentationLanguage: "es" });
     expect(value.result.outcome).toBe("accepted");
     const content = h.send.mock.calls[0][0].content, preview = previewCallBookingQuote({ pricing: { ...pricing, extras: fields.extras }, extrasConfirmed: true });
     if (!preview.success) throw Error("Expected canonical Spanish fixture");
-    expect(content).toContain(`Tu cotización para la primera limpieza es ${preview.priceFormatted}.`);
+    expect(content).toContain(`💵 Total: ${preview.priceFormatted}`);
     expect(content).toContain(`Próximas visitas (cada dos semanas): ${preview.futureVisitPriceFormatted}.`);
     expect(content).toContain("2 × Interior del refrigerador"); expect(content).not.toContain("No se seleccionaron");
-    expect(content).toContain("Gracias, María"); expect(content).not.toContain("Your first-cleaning");
+    expect(content).toMatch(/^Tu limpieza está lista para agendar\. Estos son los detalles:\n\n/);
+    expect(content).toContain(`📍 Dirección: ${ADDRESS}\n🧹 Servicio: Deep Cleaning\n🛏️ Tamaño: 3 habitaciones / 2 baños`);
+    expect(content).toContain("📅 Fecha solicitada: viernes, 20 de noviembre");
+    expect(content).toContain("⏰ Hora solicitada: 10:30 a.m.");
+    expect(content).toContain("Antes de nuestra llegada:\nRetira los objetos personales de las superficies y los pisos\nAvísanos si hay mascotas o instrucciones de acceso 🧼");
+    expect(content).toContain("Agregamos tus datos a este enlace rápido para que puedas terminar en unos 60 segundos ⏱️");
+    expect(content).not.toMatch(/Gracias, María|Your first-cleaning|casa|apartamento|condominio|ventana de llegada|confirmada|reservada|disponibilidad garantizada/i);
     expect(content.split(`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`)).toHaveLength(2);
+    expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`]);
+    expect(content.split("Último paso para completar tu reserva:")).toHaveLength(2);
     expectAcceptedHistory(h, value.input);
   });
 
@@ -773,7 +898,8 @@ describe("SMS new-booking quote application: real generator → qualification �
     const value = await h.turn(text, fullFields, "link", { replyText: "Gracias, María. Revisa tu cotización y completa la reserva en la página.",
       quoteTextTemplate: "Primera limpieza: {{firstCleaningPrice}}. Próximas visitas: {{futureVisitPrice}}. Extras: {{extras}}. Revisa y completa tu reserva: {{bookingLink}}. Esta cotización no es una reserva confirmada." });
     expect(value.result.outcome).toBe("accepted"); const content = h.send.mock.calls[0][0].content;
-    expect(content).toContain("Gracias, María"); expect(content).toContain("Próximas visitas");
+    expect(content).toMatch(/^Tu limpieza está lista para agendar\. Estos son los detalles:/);
+    expect(content).not.toContain("Gracias, María"); expect(content).toContain("Próximas visitas");
     const preview = previewCallBookingQuote({ pricing, extrasConfirmed: true }); if (!preview.success) throw Error("Expected canonical quote");
     expect(content).toContain(preview.priceFormatted); expect(content).toContain(preview.futureVisitPriceFormatted!);
     expect(content).toContain(`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()?.link?.urlPath}`); expect(content).not.toMatch(/\{\{|2026-11-17T|18:00:00|PN-synthetic|synthetic-inbound|pago completado|tu reserva está confirmada/i);
@@ -971,17 +1097,31 @@ describe("ordinary customer service and original human-task authority remain int
   });
 
   it("a mixed new quote and real access-note request retains the actual task and its finalized durable acknowledgment before provider submission", async () => {
+    const acknowledgment = "Thanks, María. We'll take care of your request and confirm once the access note is updated.";
     const h = harness(), value = await h.turn(`${FULL_TEXT} Also use gate 1234 for my existing customer access note.`, fullFields, "link", {
-      replyText: "Thanks, María. We'll take care of your request and confirm once the access note is updated.",
+      replyText: acknowledgment,
       task: { title: "Update customer access note", items: [{ title: "Use the requested gate code", evidenceQuote: "use gate 1234" }] },
     });
     expect(value.result).toEqual({ outcome: "accepted" }); expect(h.tasks()).toHaveLength(1); expect(h.state().funnels).toHaveLength(1);
+    const content = h.send.mock.calls[0][0].content, url = `${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`;
+    expect(content.startsWith(`${acknowledgment}\n\nYour cleaning is ready to schedule. Here are the details:\n\n`)).toBe(true);
+    expect(content.split(acknowledgment)).toHaveLength(2);
+    expect(content).toContain("📅 Requested date: Friday, November 20\n⏰ Requested time: 10:30 AM");
+    expect(content).toContain("🛏️ Home size: 3 bed / 2 bath\n💵 Total:");
+    expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([url]);
+    expect(content.split("Last step to complete your booking:")).toHaveLength(2);
+    expect(content.endsWith(`🔗 ${url}`)).toBe(true);
+    expect(content.slice(acknowledgment.length)).not.toMatch(/access note (?:is|was|has been) updated|booking (?:confirmed|reserved)|arrival window|House/i);
+    expect(h.send).toHaveBeenCalledTimes(1); expect(h.runner).toHaveBeenCalledTimes(1);
     expect(h.tasks()[0]).toMatchObject({ title: "Update customer access note", status: "unclaimed",
       reply: { text: h.send.mock.calls[0][0].content, status: "sent" }, items: [
         { title: "Use the requested gate code", evidenceQuote: "use gate 1234" },
         { title: FOLLOWUP_ITEM, evidenceQuote: value.input.inboundText },
       ] });
     expect(h.tasks()[0].reply.text).toContain(h.quote()!.link!.token); expectAcceptedHistory(h, value.input);
+    const before = structuredClone(h.state());
+    expect(["excluded", "duplicate"]).toContain((await h.run(value.input)).outcome);
+    expect(h.state()).toEqual(before); expect(h.send).toHaveBeenCalledTimes(1); expect(h.runner).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a grounded ordinary question's exact legacy two-field reply with no task or quote-state write", async () => {

@@ -26,6 +26,7 @@ export function createSmsBookingQuotePlanPreparer(store: Store, nowMs: () => num
       binding: claim.binding,
       ...plan.smsBookingQuote,
       replyText: plan.replyText,
+      preserveTaskAcknowledgment: plan.task !== null,
       nowMs: nowMs(),
     });
     if (prepared.linkCreated) onLinkPrepared?.();

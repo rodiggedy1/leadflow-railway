@@ -9,7 +9,7 @@ import { createCustomerBookingLink } from "../customerBookingLinkService";
 import type { getDb } from "../db";
 import { normalizePhone } from "../utils/phone";
 import { callBookingQuoteSendInputSchema } from "./callBookingQuote";
-import { createSmsBookingQuotePresentation, renderSmsBookingQuoteText } from "./bookingQuotePresentation";
+import { createSmsBookingQuotePresentation, renderSmsBookingQuoteText, renderSmsBookingQuoteSummary } from "./bookingQuotePresentation";
 import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQuestion";
 import type { CustomerSmsBinding } from "./claudeCustomerTasksStore";
 import {
@@ -59,6 +59,8 @@ export interface SmsBookingQuotePrepareInput {
   replyText: string;
   quoteTextTemplate?: string | null;
   missingQuestionLanguage?: "en" | "es";
+  /** Application-owned: keep the original acknowledgment for mixed human work. */
+  preserveTaskAcknowledgment?: boolean;
 }
 export interface SmsBookingQuotePrepared {
   planReplyText: string;
@@ -185,9 +187,13 @@ function baseReply(text: string): string {
   return reply;
 }
 function renderQuoteText(base: string, template: string | null | undefined, snapshot: PublicBookingPriceSnapshot,
-  link: SmsBookingQuoteState["link"]): string {
+  link: SmsBookingQuoteState["link"], summaryInput?: CreateCustomerBookingLinkInput, preserveTaskAcknowledgment = false): string {
   const bookingLink = link ? verifiedLinkUrl(link, snapshot) : null;
-  const reply = claudeSmsAlternativeReplySchema.parse({ replyText: renderSmsBookingQuoteText(base, template, snapshot, bookingLink) }).replyText;
+  const language = template === createSmsBookingQuotePresentation(snapshot, bookingLink !== null, "es") ? "es" : "en";
+  const text = bookingLink && summaryInput
+    ? `${preserveTaskAcknowledgment ? `${base}\n\n` : ""}${renderSmsBookingQuoteSummary(summaryInput, snapshot, bookingLink, language)}`
+    : renderSmsBookingQuoteText(base, template, snapshot, bookingLink);
+  const reply = claudeSmsAlternativeReplySchema.parse({ replyText: text }).replyText;
   if (/[{}]/.test(reply) || (bookingLink && reply.split(bookingLink).length - 1 !== 1)) throw new Error("SMS_QUOTE_INVALID_RENDERED_TEXT");
   return reply;
 }
@@ -271,7 +277,7 @@ export function createSmsBookingQuoteStore(db: Db): SmsBookingQuoteStore {
         const snapshot = createPublicBookingPriceSnapshot(input.pricing);
         if (advanced.preview.firstCleaningTotalCents !== snapshot.breakdown.firstCleaningTotalCents
           || advanced.preview.futureVisitTotalCents !== snapshot.breakdown.futureVisitTotalCents) return conflict();
-        planReplyText = renderQuoteText(base, options.quoteTextTemplate, snapshot, state.link);
+        planReplyText = renderQuoteText(base, options.quoteTextTemplate, snapshot, state.link, input, options.preserveTaskAcknowledgment === true);
         linkIncluded = true;
       } else if (update.action === "quote" && advanced.preview?.success) {
         const snapshot = createPublicBookingPriceSnapshot(advanced.preview.priceSnapshot.input);

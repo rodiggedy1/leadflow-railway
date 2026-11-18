@@ -207,16 +207,16 @@ describe("SMS-only additive quote generation", () => {
     const input = fixture("Please send a new cleaning quote"), bookingQuote = update(input, {}, { action: "link", evidence: {} });
     const h = harness(active(input, { replyText: "How many bedrooms and bathrooms are in your home?", bookingQuote, quoteTextTemplate: null }));
     const plan = await h.generate(input);
-    expect(plan.replyText).toBe("Would you like a home-cleaning quote or an hourly-cleaning quote?");
+    expect(plan.replyText).toBe("Would you like a standard, deep or move-out cleaning?");
     expect(plan.smsBookingQuote).toEqual({ previous: null, update: bookingQuote, originalConversation: input.context.originalConversation,
       quoteTextTemplate: null, missingQuestionLanguage: "en" });
   });
 
-  it.each(["home", "hourly"] as const)("replaces a premature %s-mode page recap with the authoritative missing home type across every service and locale", async pricingMode => {
+  it.each(["home", "hourly"] as const)("replaces a premature %s-mode page recap with the authoritative missing condition across every service and locale", async pricingMode => {
     for (const serviceId of ["standard", "deep", "moveout"] as const) for (const action of ["quote", "link"] as const)
       for (const language of ["en", "es"] as const) {
         const priorFields: SmsBookingQuoteFields = { ...fields, pricingMode, serviceId, maidCount: 2, hourCount: 3 };
-        delete priorFields.homeType;
+        delete priorFields.condition;
         const priorInput = fixture(`Please prepare my new ${serviceId} ${pricingMode} cleaning quote: 2 bedrooms, 2 bathrooms, condition 5, one-time, no extras confirmed, two cleaners for three hours, 123 Synthetic Street, Washington DC, ${FUTURE_DATE} at 10:30.`);
         const previous = advanceSmsBookingQuote(null, update(priorInput, priorFields, { action: "collect" }), {
           binding: priorInput.context.binding as ClaudeCustomerSmsGenerationBinding, originalConversation: priorInput.context.originalConversation as any[], nowMs: NOW,
@@ -227,17 +227,17 @@ describe("SMS-only additive quote generation", () => {
         const h = harness(active(input, { bookingQuote, replyText, quoteTextTemplate: null, quotePresentationLanguage: language }), previous);
         const before = JSON.stringify(previous), plan = await h.generate(input);
         expect(plan.replyText).toBe(language === "es"
-          ? "Un detalle antes de preparar tu cotización: ¿es una casa, apartamento, casa adosada o condominio?"
-          : "One detail before I can prepare your quote: is this a house, apartment, townhome or condo?");
+          ? "¿Cuánta limpieza necesita (del 1 al 10)?\n1 = limpio, 5 = normal, 10 = mucha suciedad."
+          : "How much cleaning does it need (1 to 10)?\n1 = already clean, 5 = normal, 10 = heavy buildup.");
         expect(plan.replyText).not.toMatch(/page|página|https?:|\$|\{\{/);
         expect(plan.smsBookingQuote).toEqual({ previous, update: bookingQuote, originalConversation: input.context.originalConversation,
           quoteTextTemplate: null, missingQuestionLanguage: language });
         const advanced = advanceSmsBookingQuote(previous, plan.smsBookingQuote!.update, {
           binding: input.context.binding as ClaudeCustomerSmsGenerationBinding, originalConversation: input.context.originalConversation as any[], nowMs: NOW,
         });
-        expect(advanced.missing).toEqual(["homeType"]); expect(advanced.preview).toBeNull(); expect(advanced.input).toBeNull();
+        expect(advanced.missing).toEqual(["condition"]); expect(advanced.preview).toBeNull(); expect(advanced.input).toBeNull();
         expect(advanced.state.fields).toMatchObject({ requestedLocalDate: FUTURE_DATE, requestedLocalTime: "08:30", extras: [], extrasConfirmed: true });
-        expect(advanced.state.fields).not.toHaveProperty("homeType"); expect(JSON.stringify(previous)).toBe(before);
+        expect(advanced.state.fields).not.toHaveProperty("condition"); expect(JSON.stringify(previous)).toBe(before);
         expect(h.runner).toHaveBeenCalledTimes(1);
       }
   });

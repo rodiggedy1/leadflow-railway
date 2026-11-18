@@ -29,7 +29,7 @@ import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQu
 
 // These are offline preservation/contract tests, not a real Claude compliance evaluation.
 // All content and state readers are injected; no stores, transports or live models run.
-const BASELINE = "a1164acdbb17dc85b6abaad19a8db2d363f63702";
+const BASELINE = "30445a6f98a69af8e6db27c16c9cce380c26031a";
 const NOW = Date.parse("2026-11-17T17:00:00.000Z");
 const DATE = "2026-11-18";
 const URL = "https://quote.maidinblack.com/book/mib-synthetic-writing-style";
@@ -337,12 +337,11 @@ function withoutConditionStrings(source: string, path: string): string {
   return source;
 }
 const protectedSources = [
-  "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/bookingQuotePresentation.ts",
+  "server/instinct/claudeCustomerSmsGeneration.ts",
   "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsApplication.ts", "server/instinct/claudeCustomerSmsManualGuard.ts",
   "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailGuards.ts",
   "server/instinct/claudeCustomerEmailSource.ts", "server/instinct/claudeCustomerEmailStore.ts",
   "server/instinct/callBookingQuote.ts", "server/instinct/callBookingQuoteApplication.ts", "server/instinct/callBookingQuoteStore.ts", "server/instinct/callBookingQuoteTask.ts",
-  "server/instinct/smsBookingQuoteApplication.ts", "server/instinct/smsBookingQuoteStore.ts",
   "server/instinct/claudeSmsAlternative.ts", "server/instinct/claudeAgentClient.ts",
   "server/csReplyStream.ts", "server/knowledgeBase.ts", "server/madisonKnowledgeRetrieval.ts",
   "shared/publicBookingPricing.ts", "shared/bookingFunnel.ts", "shared/claudeCustomerTasks.ts", "shared/claudeSmsAlternative.ts",
@@ -353,14 +352,26 @@ describe("local source-preservation audit against the approved baseline", () => 
     { path: "server/instinct/smsBookingQuoteGeneration.ts", name: "TEMPLATE_INSTRUCTIONS", boundary: "// These checks apply" },
   ])("changes only $name, leaving schemas, qualifier, guards and actual generator byte-identical", ({ path, name, boundary }) => {
     const source = currentSource(path), baseline = baselineSource(path);
-    expect(withoutPromptInitializer(source, path, name)).toBe(withoutPromptInitializer(baseline, path, name));
+    const approvedDefaults = "  // Explicitly approved SMS defaults, not customer statements or invented evidence.\n  fields.pricingMode ??= \"home\";\n  fields.homeType ??= \"House\";\n\n";
+    const controlSource = name === "SMS_BOOKING_QUOTE_INSTRUCTIONS" ? source.replace(approvedDefaults, "") : source;
+    if (name === "SMS_BOOKING_QUOTE_INSTRUCTIONS") expect(source).toContain(approvedDefaults);
+    expect(withoutPromptInitializer(controlSource, path, name)).toBe(withoutPromptInitializer(baseline, path, name));
     expect(source.indexOf(boundary)).toBeGreaterThan(-1); expect(baseline.indexOf(boundary)).toBeGreaterThan(-1);
-    if (name === "SMS_BOOKING_QUOTE_INSTRUCTIONS") expect(source.slice(0, source.indexOf(boundary))).toBe(baseline.slice(0, baseline.indexOf(boundary)));
+    if (name === "SMS_BOOKING_QUOTE_INSTRUCTIONS") expect(controlSource.slice(0, controlSource.indexOf(boundary))).toBe(baseline.slice(0, baseline.indexOf(boundary)));
     else expect(source.slice(source.indexOf(boundary))).toBe(baseline.slice(baseline.indexOf(boundary)));
   });
   it("changes only the condition en/es string values, preserving every other question and the pure helper", () => {
     const path = "server/instinct/smsBookingQuoteMissingQuestion.ts";
     expect(withoutConditionStrings(currentSource(path), path)).toBe(withoutConditionStrings(baselineSource(path), path));
+  });
+  it("appends only a new SMS summary while preserving the entire existing call and price-only SMS presentation", () => {
+    const path = "server/instinct/bookingQuotePresentation.ts";
+    expect(currentSource(path).startsWith(baselineSource(path))).toBe(true);
+    expect(currentSource(path).slice(baselineSource(path).length)).toContain("export function renderSmsBookingQuoteSummary(");
+  });
+  it("adds only application-owned mixed-task acknowledgment preservation in the original bridge", () => {
+    const path = "server/instinct/smsBookingQuoteApplication.ts";
+    expect(currentSource(path)).toBe(baselineSource(path).replace("      replyText: plan.replyText,\n", "      replyText: plan.replyText,\n      preserveTaskAcknowledgment: plan.task !== null,\n"));
   });
   it.each(protectedSources)("preserves protected call/email/base/style/renderer/transport/pricing source: %s", path => {
     expect(currentSource(path)).toBe(baselineSource(path));
