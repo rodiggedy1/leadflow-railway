@@ -7,7 +7,7 @@ const questions: Partial<Record<keyof SmsBookingQuoteFields, Record<BookingQuote
   bedrooms: { en: "How many bedrooms are there, or is it a studio?", es: "¿Cuántas habitaciones hay, o es un estudio?" },
   bathrooms: { en: "How many bathrooms are there?", es: "¿Cuántos baños hay?" },
   homeType: { en: "One detail before I can prepare your quote: is this a house, apartment, townhome or condo?", es: "Un detalle antes de preparar tu cotización: ¿es una casa, apartamento, casa adosada o condominio?" },
-  condition: { en: "How would you rate the condition from 1 to 10: 1 is already clean, 5 is light or normal, and 10 is severe buildup needing a serious reset?", es: "¿Cómo calificarías el estado del 1 al 10: 1 ya está limpio, 5 es ligero o normal y 10 tiene mucha suciedad acumulada y necesita una limpieza intensa?" },
+  condition: { en: "How much cleaning does it need (1 to 10)?\n1 = already clean, 5 = normal, 10 = heavy buildup.", es: "¿Cuánta limpieza necesita (del 1 al 10)?\n1 = limpio, 5 = normal, 10 = mucha suciedad." },
   maidCount: { en: "How many cleaners would you like for your hourly cleaning?", es: "¿Cuántas personas quieres para tu limpieza por horas?" },
   hourCount: { en: "How many hours would you like for your hourly cleaning?", es: "¿Cuántas horas quieres para tu limpieza por horas?" },
   extras: { en: "Would you like any extras, or no extras?", es: "¿Quieres algún servicio adicional o ninguno?" },

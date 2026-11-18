@@ -30,7 +30,7 @@ describe("SMS authoritative missing-fact questions", () => {
       const advanced = qualify(patch), before = JSON.stringify(advanced);
       expect(advanced.missing[0]).toBe(field);
       const question = createSmsBookingQuoteMissingQuestion(advanced, "link", language);
-      expect(question).toBeTypeOf("string"); expect(question!.endsWith("?")).toBe(true);
+      expect(question).toBeTypeOf("string"); expect(question!.split("\n")[0].endsWith("?")).toBe(true);
       expect(question).not.toMatch(/page|página|https?:|\/book\/|\$|\{\{|booked|confirmed|reservad/i);
       expect(advanced.input).toBeNull(); expect(advanced.state.fields).not.toHaveProperty(field);
       expect(JSON.stringify(advanced)).toBe(before);
