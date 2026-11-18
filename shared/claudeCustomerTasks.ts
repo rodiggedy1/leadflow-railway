@@ -49,7 +49,8 @@ export const customerStaffCallTaskSchema = customerCallTaskSchema.extend({
     provider: z.literal("openphone"), providerCallId: z.string().regex(/^AC.+$/), recordingId: z.number().int().positive(),
     transcript: z.string().min(1), recordingUrl: z.string().url().nullable(),
     businessPhoneNumberId: z.string().regex(/^PN.+$/), businessPhoneNumber: z.string().min(1),
-    staffUserId: z.string().regex(/^US.+$/), direction: z.enum(["incoming", "outgoing"]),
+    staffUserId: z.string().regex(/^US.+$/).nullable(), direction: z.enum(["incoming", "outgoing"]),
+    transcriptSource: z.enum(["quo", "saved"]).optional(), evidenceScope: z.literal("call_transcript").optional(),
   }).strict(),
 }).strict();
 export const customerTaskSchema = z.union([customerSmsTaskSchema, customerEmailTaskSchema, customerCallTaskSchema, customerStaffCallTaskSchema]);

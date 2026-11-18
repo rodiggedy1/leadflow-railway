@@ -1,5 +1,30 @@
 /** Test-only: remove only the fixed approved staff-call feature hunks.
  * All unrelated bytes remain subject to the original historical comparisons. */
+const repairHunks: Record<string, Array<[string, string, number]>> = {
+  "server/webhooks.ts": [
+    ['import { dispatchClaudeStaffCallEvent, dispatchClaudeStaffCallTranscriptReady } from "./instinct/claudeStaffCallsApplication";\n', 'import { dispatchClaudeStaffCallEvent } from "./instinct/claudeStaffCallsApplication";\n', 1],
+    ['    dispatchClaudeStaffCallTranscriptReady(callId);\n', "", 1],
+    ['  dispatchClaudeStaffCallTranscriptReady(callId);\n', "", 1],
+  ],
+  "shared/claudeCustomerTasks.ts": [
+    ['staffUserId: z.string().regex(/^US.+$/).nullable(), direction:', 'staffUserId: z.string().regex(/^US.+$/), direction:', 1],
+    ['    transcriptSource: z.enum(["quo", "saved"]).optional(), evidenceScope: z.literal("call_transcript").optional(),\n', "", 1],
+  ],
+  "client/src/components/ClaudeCustomerTasks.tsx": [
+    ['task.customerName || (task.call.provider === "openphone" ? "Caller" : "Customer")', 'task.customerName || "Customer"', 1],
+    ['task.customerName || ("call" in task && task.call.provider === "openphone" ? "Caller" : "Customer")', 'task.customerName || "Customer"', 1],
+    ['{"call" in task && task.call.provider === "openphone" ? "Staff task" : "Customer task"} · ', 'Customer task · ', 1],
+    ['"call" in task ? task.call.provider === "openphone" ? "Call evidence" : "Caller evidence" : ', '"call" in task ? "Caller evidence" : ', 2],
+  ],
+};
+export function withoutApprovedStaffCallRepair(path: string, source: string): string {
+  for (const [current, original, occurrences] of repairHunks[path] ?? []) {
+    const count = source.split(current).length - 1;
+    if (count !== 0 && count !== occurrences) throw new Error(`Unexpected staff-call repair hunk: ${path}`);
+    source = source.split(current).join(original);
+  }
+  return source;
+}
 const schema = `export const customerStaffCallTaskSchema = customerCallTaskSchema.extend({
   call: z.object({
     provider: z.literal("openphone"), providerCallId: z.string().regex(/^AC.+$/), recordingId: z.number().int().positive(),
@@ -28,6 +53,7 @@ const hunks: Record<string, Array<[string, string, number]>> = {
   ],
 };
 export function withoutApprovedStaffCallFeature(path: string, source: string): string {
+  source = withoutApprovedStaffCallRepair(path, source);
   for (const [current, original, occurrences] of hunks[path] ?? []) {
     const count = source.split(current).length - 1;
     if (count !== 0 && count !== occurrences) throw new Error(`Unexpected staff-call preservation hunk: ${path}`);

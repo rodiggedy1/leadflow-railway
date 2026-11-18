@@ -197,7 +197,7 @@ export function CustomerTaskCallEvidence({ task }: { task: Extract<CustomerTask,
     <DialogTrigger asChild><button type="button" className="cct-conversation-link">Open full call</button></DialogTrigger>
     <DialogContent className="cct-confirm-dialog">
       <DialogTitle>{task.call.provider === "openphone" ? "Full staff call" : "Full AI call"}</DialogTitle>
-      <DialogDescription>{task.customerName || "Customer"}{task.customerPhone && ` · ${task.customerPhone}`}</DialogDescription>
+      <DialogDescription>{task.customerName || (task.call.provider === "openphone" ? "Caller" : "Customer")}{task.customerPhone && ` · ${task.customerPhone}`}</DialogDescription>
       <div className="cct-confirm-body">
         <section aria-label="Full call transcript"><h4>Full call transcript</h4><p className="cct-verbatim">{task.call.transcript}</p></section>
         {open && task.call.recordingUrl && <CustomerTaskCallRecording taskId={task.id} />}
@@ -247,8 +247,8 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
     finally { busyRef.current = false; setSaving(false); }
   };
   return <article className={`cct-card cct-card-${placement}`} data-task-id={task.id} data-task-status={task.status} aria-label={`Task: ${task.title}`}>
-    <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">Customer task · {"call" in task ? task.call.provider === "openphone" ? "PHONE CALL" : "AI CALL" : "email" in task ? "EMAIL" : "SMS"}</span><strong>{task.title}</strong>
-      <small className="cct-customer-identity"><span>{task.customerName || "Customer"}</span><span className="cct-customer-phone">{"email" in task ? task.email.fromEmail : task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
+    <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">{"call" in task && task.call.provider === "openphone" ? "Staff task" : "Customer task"} · {"call" in task ? task.call.provider === "openphone" ? "PHONE CALL" : "AI CALL" : "email" in task ? "EMAIL" : "SMS"}</span><strong>{task.title}</strong>
+      <small className="cct-customer-identity"><span>{task.customerName || ("call" in task && task.call.provider === "openphone" ? "Caller" : "Customer")}</span><span className="cct-customer-phone">{"email" in task ? task.email.fromEmail : task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
     <div className="cct-card-status">
       <span>{task.status === "done" ? `Confirmed by ${task.completedBy?.name || "Staff"}` : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
       {task.status === "unclaimed" && <button type="button" className="cct-primary" disabled={busy || !callerId}
@@ -258,8 +258,8 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
     </div>
     {"call" in task ? <CustomerTaskCallEvidence task={task} /> : <button type="button" className="cct-conversation-link" disabled={!onOpenConversation || !("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)}
       onClick={() => { if (onOpenConversation && ("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)) onOpenConversation(task); }}>Open full conversation</button>}
-    <details className="cct-details"><summary>{"call" in task ? "Caller evidence" : <>{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment </>}<ChevronDown /></summary><div className="cct-details-body">
-      <section className="cct-source-message"><h4>{"call" in task ? "Caller evidence" : "email" in task ? "Customer email" : "Customer text"}</h4>{"email" in task && task.email.bodyFormat === "html"
+    <details className="cct-details"><summary>{"call" in task ? task.call.provider === "openphone" ? "Call evidence" : "Caller evidence" : <>{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment </>}<ChevronDown /></summary><div className="cct-details-body">
+      <section className="cct-source-message"><h4>{"call" in task ? task.call.provider === "openphone" ? "Call evidence" : "Caller evidence" : "email" in task ? "Customer email" : "Customer text"}</h4>{"email" in task && task.email.bodyFormat === "html"
         ? <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.sourceText, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />
         : <p className="cct-verbatim">{task.sourceText}</p>}</section>
       <section><ul className="cct-items">{task.items.map((item) => {

@@ -9,65 +9,95 @@ const object = (value: unknown): Record<string, any> | null => value && typeof v
 const instant = (value: unknown): number | null => typeof value === "string" && value.trim() && Number.isFinite(Date.parse(value)) ? Date.parse(value) : null;
 const rows = (value: unknown): Record<string, any>[] => (value as any)[0];
 
-/** Provider-authenticated data only. A webhook, summary or Whisper role label is not speaker evidence. */
+function verifiedCall(callId: string, payload: unknown, stored: Record<string, any>): Record<string, any> | null {
+  const call = object(object(payload)?.data);
+  if (!call || !/^AC.+$/.test(callId) || call.id !== callId || call.id !== stored.openphoneCallId
+    || call.status !== "completed" || call.aiHandled !== null || !["incoming", "outgoing"].includes(call.direction)
+    || call.direction !== stored.direction || !Number.isSafeInteger(Number(stored.id)) || Number(stored.id) <= 0
+    || typeof call.phoneNumberId !== "string" || !/^PN.+$/.test(call.phoneNumberId)) return null;
+  const started = instant(call.createdAt), answered = instant(call.answeredAt), ended = instant(call.completedAt);
+  const staffUserId = call.direction === "incoming" ? call.answeredBy : call.initiatedBy;
+  if (started === null || answered === null || ended === null || ended < answered || answered < started
+    || !(staffUserId === null || typeof staffUserId === "string" && /^US.+$/.test(staffUserId))) return null;
+  return call;
+}
+
+function transcriptEvidence(native: unknown, stored: Record<string, any>): {
+  dialogue: Record<string, any>[]; transcriptSource: "quo" | "saved";
+} | null {
+  if (native !== null) {
+    const transcription = object(object(native)?.data);
+    // Present but malformed/wrong-call provider data must never silently use a fallback.
+    if (!transcription || transcription.callId !== stored.openphoneCallId) return null;
+    if (transcription.dialogue !== undefined) {
+      if (!Array.isArray(transcription.dialogue)) return null;
+      let previousStart = -1;
+      for (const raw of transcription.dialogue) {
+        const turn = object(raw);
+        if (!turn || typeof turn.content !== "string" || !turn.content.trim() || typeof turn.start !== "number"
+          || typeof turn.end !== "number" || !Number.isFinite(turn.start) || !Number.isFinite(turn.end)
+          || turn.start < 0 || turn.end < turn.start || turn.start < previousStart
+          || !(turn.identifier == null || typeof turn.identifier === "string")
+          || !(turn.userId == null || typeof turn.userId === "string")) return null;
+        previousStart = turn.start;
+      }
+    }
+    if (transcription.status === "completed") {
+      if (!Array.isArray(transcription.dialogue) || !transcription.dialogue.length) return null;
+      return { dialogue: transcription.dialogue, transcriptSource: "quo" };
+    }
+    if (!["absent", "in-progress", "failed", "pending", "processing"].includes(transcription.status)) return null;
+  }
+  if (typeof stored.transcript !== "string" || !stored.transcript.trim()) return null;
+  let dialogue: unknown;
+  try { dialogue = JSON.parse(stored.transcript); } catch { return null; }
+  if (!Array.isArray(dialogue) || !dialogue.length
+    || dialogue.some(raw => !object(raw) || typeof raw.content !== "string" || !raw.content.trim())) return null;
+  // The exact saved row authenticates the call, not a speaker. Whisper is not diarized.
+  return { dialogue, transcriptSource: "saved" };
+}
+
+/** Provider-authenticated call plus exact-row evidence. Saved labels are not speaker proof. */
 export function staffCallSourceFromRecords(input: {
   callId: string; call: unknown; transcript: unknown; phoneNumbers: unknown; stored: Record<string, any>;
   sessions: Record<string, any>[];
 }): StaffCallSource | null {
-  const call = object(object(input.call)?.data), transcription = object(object(input.transcript)?.data);
+  const call = verifiedCall(input.callId, input.call, input.stored);
   const lines = object(input.phoneNumbers)?.data;
   const stored = input.stored;
-  if (!call || call.id !== input.callId || !/^AC.+$/.test(input.callId) || call.id !== stored.openphoneCallId
-    || call.status !== "completed" || call.aiHandled !== null || !["incoming", "outgoing"].includes(call.direction)
-    || call.direction !== stored.direction || !Number.isSafeInteger(Number(stored.id)) || Number(stored.id) <= 0
-    || !transcription || transcription.callId !== call.id || transcription.status !== "completed"
-    || !Array.isArray(transcription.dialogue) || !transcription.dialogue.length || !Array.isArray(lines)) return null;
-  const started = instant(call.createdAt), answered = instant(call.answeredAt), ended = instant(call.completedAt);
+  if (!call || !Array.isArray(lines)) return null;
+  const evidence = transcriptEvidence(input.transcript, stored);
+  if (!evidence) return null;
   const staffUserId = call.direction === "incoming" ? call.answeredBy : call.initiatedBy;
-  if (started === null || answered === null || ended === null || ended < answered || answered < started
-    || typeof staffUserId !== "string" || !/^US.+$/.test(staffUserId)) return null;
   const matches = lines.filter(line => line?.id === call.phoneNumberId);
   if (matches.length !== 1) return null;
-  const line = matches[0], businessPhone = normalizePhone(line.number);
-  if (!businessPhone || !Array.isArray(line.users) || !line.users.some((user: any) => user?.id === staffUserId)) return null;
-  const internalPhones = new Set(lines.map(line => normalizePhone(line?.number)).filter(Boolean));
+  const line = matches[0], businessPhone = typeof line.number === "string" ? normalizePhone(line.number) : null;
+  if (!businessPhone) return null;
   const participants = Array.isArray(call.participants) ? call.participants.map((phone: unknown) => typeof phone === "string" ? normalizePhone(phone) : null) : [];
-  const external = Array.from(new Set(participants.filter((phone: string | null) => phone && !internalPhones.has(phone))));
-  if (participants.some((phone: string | null) => !phone) || external.length !== 1) return null;
-  const callerPhone = external[0] as string;
-  if (callerPhone !== normalizePhone(stored.callerPhone)) return null;
-  const staffIds = new Set(lines.flatMap(line => Array.isArray(line?.users) ? line.users.map((user: any) => user?.id) : []));
-  const customerTurns: string[] = [], transcript: string[] = [];
-  let staffSpoke = false, previousStart = -1;
-  for (const raw of transcription.dialogue) {
-    const turn = object(raw);
-    if (!turn || typeof turn.content !== "string" || !turn.content.trim() || typeof turn.start !== "number"
-      || typeof turn.end !== "number" || !Number.isFinite(turn.start) || !Number.isFinite(turn.end)
-      || turn.start < 0 || turn.end < turn.start || turn.start < previousStart
-      || !(turn.identifier === null || typeof turn.identifier === "string")
-      || !(turn.userId === null || typeof turn.userId === "string")) return null;
-    previousStart = turn.start;
-    const phone = turn.identifier ? normalizePhone(turn.identifier) : null;
-    const customer = phone === callerPhone && turn.userId === null;
-    const staff = typeof turn.userId === "string" && staffIds.has(turn.userId) && phone !== callerPhone;
-    // Do not silently drop unattributed speech: its later corrections could change the request.
-    if (!customer && !staff) return null;
-    if (customer) customerTurns.push(turn.content); else staffSpoke = true;
-    transcript.push(`${customer ? "Customer" : "Staff"}: ${turn.content}`);
+  const counterparts = Array.from(new Set(participants.filter((phone: string | null) => phone && phone !== businessPhone)));
+  if (participants.some((phone: string | null) => !phone) || counterparts.length !== 1 || !participants.includes(businessPhone)) return null;
+  const callerPhone = counterparts[0] as string;
+  if (typeof stored.callerPhone !== "string" || callerPhone !== normalizePhone(stored.callerPhone)) return null;
+  const staffIds = new Set(lines.flatMap(line => Array.isArray(line?.users)
+    ? line.users.map((user: any) => user?.id).filter((id: unknown) => typeof id === "string" && /^US.+$/.test(id)) : []));
+  const evidenceSegments: string[] = [], transcript: string[] = [];
+  for (const turn of evidence.dialogue) {
+    const phone = typeof turn.identifier === "string" ? normalizePhone(turn.identifier) : null;
+    const caller = evidence.transcriptSource === "quo" && phone === callerPhone && turn.userId === null;
+    const staff = evidence.transcriptSource === "quo" && typeof turn.userId === "string" && staffIds.has(turn.userId)
+      && phone !== callerPhone;
+    evidenceSegments.push(turn.content);
+    transcript.push(`${caller ? "Caller" : staff ? "Staff" : "Unattributed"}: ${turn.content}`);
   }
-  if (!customerTurns.length || !staffSpoke) return null;
   // Only a unique exact phone match may supply a name/link. Never select the latest session.
-  const matchingSessions = input.sessions.filter(session => normalizePhone(session.leadPhone) === callerPhone);
-  // Mirror the existing customer-task classifications, without changing SMS or
-  // converting a known team/hiring/internal call into an unlinked customer call.
-  if (matchingSessions.some(session => /cleaner|hiring|interview|internal|staff|schedule_confirm/i.test(session.leadSource ?? "")
-    || session.csQueue === "Teams" || /^INTERVIEW_|^SCHEDULE_CONFIRM/.test(session.stage ?? ""))) return null;
+  const matchingSessions = input.sessions.filter(session => typeof session.leadPhone === "string" && normalizePhone(session.leadPhone) === callerPhone);
   const session = matchingSessions.length === 1 && Number(matchingSessions[0].id) === Number(stored.sessionId)
     && Number.isSafeInteger(Number(stored.sessionId)) && Number(stored.sessionId) > 0 ? matchingSessions[0] : null;
   const recordingUrl = typeof stored.recordingUrl === "string" && /^https:\/\//i.test(stored.recordingUrl) ? stored.recordingUrl : null;
   const parsed = staffCallSourceSchema.safeParse({ recordingId: Number(stored.id), providerCallId: call.id,
     sessionId: session ? Number(session.id) : null, callerPhone, callerName: typeof session?.leadName === "string" ? session.leadName : null,
-    receivedAt: started, transcript: transcript.join("\n"), customerTurns, recordingUrl,
+    receivedAt: instant(call.createdAt), transcript: transcript.join("\n"), evidenceSegments, recordingUrl,
+    transcriptSource: evidence.transcriptSource, evidenceScope: "call_transcript",
     businessPhoneNumberId: call.phoneNumberId, businessPhoneNumber: businessPhone, staffUserId, direction: call.direction });
   return parsed.success ? parsed.data : null;
 }
@@ -77,13 +107,12 @@ export function createStaffCallSourceReader(options: {
 }) {
   return async (callId: string): Promise<StaffCallSource | null> => {
     if (!/^AC.+$/.test(callId)) return null;
-    const saved = rows(await options.db.execute(sql`SELECT id, openphoneCallId, callerPhone, direction, sessionId, recordingUrl FROM openphone_call_recordings WHERE openphoneCallId = ${callId}`));
+    const saved = rows(await options.db.execute(sql`SELECT id, openphoneCallId, callerPhone, direction, sessionId, recordingUrl, transcript FROM openphone_call_recordings WHERE openphoneCallId = ${callId}`));
     if (saved.length !== 1) return null;
     const call = await options.readProvider(`/v1/calls/${encodeURIComponent(callId)}`);
-    const verified = object(object(call)?.data);
-    if (verified?.id !== callId || verified.status !== "completed" || verified.aiHandled !== null) return null;
+    if (!verifiedCall(callId, call, saved[0])) return null;
     const transcript = await options.readProvider(`/v1/call-transcripts/${encodeURIComponent(callId)}`);
-    if (object(object(transcript)?.data)?.status !== "completed") return null;
+    if (!transcriptEvidence(transcript, saved[0])) return null;
     const phoneNumbers = await options.readProvider("/v1/phone-numbers");
     const sessions = rows(await options.db.execute(sql`SELECT id, leadPhone, leadName, leadSource, csQueue, stage FROM conversation_sessions WHERE leadPhone = ${saved[0].callerPhone}`));
     return staffCallSourceFromRecords({ callId, call, transcript, phoneNumbers, stored: saved[0], sessions });
@@ -118,5 +147,11 @@ export function dispatchClaudeStaffCallEvent(event: unknown): void {
   const callId = envelope?.type === "call.recording.completed" ? call?.id
     : ["call.transcript.completed", "callTranscript"].includes(envelope?.type) ? call?.callId : null;
   if (typeof callId !== "string" || !/^AC.+$/.test(callId)) return;
+  void handleClaudeStaffCall(callId).catch(() => console.error("[Instinct Staff Call Tasks] Call task processing unavailable."));
+}
+
+/** Fresh exact source read after the existing transcript save, never a model retry. */
+export function dispatchClaudeStaffCallTranscriptReady(callId: string): void {
+  if (process.env.PREVIEW_MODE === "true" || typeof callId !== "string" || !/^AC.+$/.test(callId)) return;
   void handleClaudeStaffCall(callId).catch(() => console.error("[Instinct Staff Call Tasks] Call task processing unavailable."));
 }

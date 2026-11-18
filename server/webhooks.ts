@@ -54,7 +54,7 @@ import { enqueueScoring } from "./csStatusScorer";
 import { computeSessionSummary } from "./sessionSummary";
 import { getConfiguredCsPhoneNumberIds, getCsOutboundDeliveryRecipient, reconcileDeliveredCsOutbound } from "./quoOutboundReconciliation";
 import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride } from "./instinct/claudeCustomerSms";
-import { dispatchClaudeStaffCallEvent } from "./instinct/claudeStaffCallsApplication";
+import { dispatchClaudeStaffCallEvent, dispatchClaudeStaffCallTranscriptReady } from "./instinct/claudeStaffCallsApplication";
 
 // Own only a fresh, real pilot message. Missing metadata, STOP and other phones
 // retain their original handling; this predicate never selects a session.
@@ -2002,6 +2002,7 @@ async function transcribeAndDebriefRecording(callId: string, recordingUrl: strin
     .limit(1);
   if (existing[0]?.transcript) {
     console.log(`[Whisper] Transcript already exists for callId=${callId} — skipping`);
+    dispatchClaudeStaffCallTranscriptReady(callId);
     return;
   }
 
@@ -2029,6 +2030,7 @@ async function transcribeAndDebriefRecording(callId: string, recordingUrl: strin
     .where(eq(openphoneCallRecordings.openphoneCallId, callId));
 
   console.log(`[Whisper] Transcript stored for callId=${callId}`);
+  dispatchClaudeStaffCallTranscriptReady(callId);
 
   // Generate debrief
   await generatePostCallDebrief(callId, dialogue);

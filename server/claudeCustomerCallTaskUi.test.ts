@@ -227,7 +227,7 @@ describe("Staff Quo calls reuse the unchanged task card and human controls", () 
   it.each(["queue", "stream"] as const)("renders a PHONE CALL in %s with exact caller evidence and the same full-call dialog", placement => {
     const task = staffCall(), work = rig(task);
     let tree = work.render(placement);
-    expect(text(nodes(tree).find(node => node.props.className === "cct-task-label"))).toBe("Customer task · PHONE CALL");
+    expect(text(nodes(tree).find(node => node.props.className === "cct-task-label"))).toBe("Staff task · PHONE CALL");
     expect(text(tree)).toContain(task.customerPhone!); expect(text(tree)).toContain(task.items[0].evidenceQuote);
     expect(text(tree)).not.toContain("Acknowledgment"); expect(work.get).not.toHaveBeenCalled(); expect(work.recording).not.toHaveBeenCalled();
     button(tree, "Open full call").props.onClick(); tree = work.render(placement);
@@ -236,6 +236,25 @@ describe("Staff Quo calls reuse the unchanged task card and human controls", () 
     expect(nodes(tree).find(node => node.type === "audio")!.props.src).toBe(work.recordingUrl);
     expect(work.onOpenConversation).not.toHaveBeenCalled();
     for (const action of Object.values(work.a)) expect(action).not.toHaveBeenCalled();
+  });
+  it.each(["queue", "stream"] as const)("preserves unknown attribution for a saved whole-call transcript in %s without a fake customer quote or assignee", placement => {
+    const original = staffCall(), transcript = "Unattributed: Please call tomorrow. I will check and get back to you.";
+    const task = contract.customerStaffCallTaskSchema.parse({ ...original, customerName: null, sourceText: "Please call tomorrow. I will check and get back to you.",
+      call: { ...original.call, staffUserId: null, transcript, transcriptSource: "saved", evidenceScope: "call_transcript" } });
+    const work = rig(task); let tree = work.render(placement);
+    expect(text(nodes(tree).find(node => node.props.className === "cct-source-message"))).toBe(`Call evidence${task.sourceText}`);
+    expect(text(tree)).not.toContain("Caller evidence"); expect(text(tree)).not.toContain("Customer task");
+    expect(text(nodes(tree).find(node => node.props.className === "cct-customer-identity"))).toContain("Caller");
+    button(tree, "Open full call").props.onClick(); tree = work.render(placement);
+    expect(text(tree)).toContain(transcript); expect(task.call.staffUserId).toBeNull(); expect(task.owner).toBeNull();
+    for (const action of Object.values(work.a)) expect(action).not.toHaveBeenCalled();
+    expect(work.get).not.toHaveBeenCalled(); expect(work.onOpenConversation).not.toHaveBeenCalled();
+  });
+  it("still parses old Quo task metadata without inserting provenance defaults or changing any AI-call schema", () => {
+    const old = staffCall(); expect(old.call).not.toHaveProperty("transcriptSource"); expect(old.call).not.toHaveProperty("evidenceScope");
+    expect(contract.customerStaffCallTaskSchema.parse(old)).toEqual(old);
+    const ai = call(); expect(contract.customerCallTaskSchema.parse(ai)).toEqual(ai);
+    expect(contract.customerCallTaskSchema.safeParse({ ...ai, call: { ...ai.call, staffUserId: null, transcriptSource: "saved" } }).success).toBe(false);
   });
   it.each(["queue", "stream"] as const)("retains identical Claim/Done ownership, required note and completion controls for %s staff calls", async placement => {
     const task = staffCall(), unclaimed = rig(task);

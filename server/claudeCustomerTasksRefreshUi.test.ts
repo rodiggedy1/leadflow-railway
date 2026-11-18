@@ -290,7 +290,9 @@ describe("Stream shared-list refresh display-only boundary", () => {
     expect(normalize(withoutApprovedStaffCallFeature(path, source), true)).toBe(normalize(baseline, false));
     const allowed = [path, "server/claudeCustomerTasksUi.test.ts", "server/claudeCustomerEmailTaskUi.test.ts", "server/claudeCustomerCallTaskUi.test.ts", "server/claudeCustomerTasksRefreshUi.test.ts",
       "shared/claudeCustomerTasks.ts", "server/webhooks.ts", "server/claudeCustomerTasksRouter.ts", "server/claudeCustomerTasksRouter.test.ts", "server/claudeCustomerCallSafety.test.ts", "server/smsBookingQuoteIsolation.test.ts",
-      "server/claudeCustomerTaskClaimLifecycle.test.ts", "server/instinct/smsBookingQuoteWritingStyle.test.ts", "server/callBookingQuoteIntegration.test.ts"];
+      "server/claudeCustomerTaskClaimLifecycle.test.ts", "server/instinct/smsBookingQuoteWritingStyle.test.ts", "server/callBookingQuoteIntegration.test.ts",
+      "server/instinct/claudeStaffCalls.ts", "server/instinct/claudeStaffCallsApplication.ts", "server/instinct/claudeStaffCallsStore.ts", "server/instinct/claudeStaffCalls.test.ts", "server/instinct/claudeStaffCallsStore.test.ts",
+      "server/staffCallSourceControl.ts", "server/claudeStaffCallSafety.test.ts"];
     const changed = execFileSync("git", ["diff", "--name-only", "HEAD"], { cwd, encoding: "utf8" }).trim().split("\n").filter(Boolean);
     expect(changed.filter(file => !allowed.includes(file))).toEqual([]);
   });

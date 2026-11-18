@@ -17,6 +17,7 @@ const receiptSchema = z.object({
   version: z.literal(1), providerCallId: z.string().min(1), recordingId: z.number().int().positive(),
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/), phase: z.enum(["generating", "prepared", "no_task", "failed"]),
   taskId: z.number().int().positive().nullable(), code: z.string().nullable(),
+  sourceSnapshot: staffCallSourceSchema.optional(),
 }).strict().refine(state => state.phase === "prepared"
   ? state.taskId !== null && state.code === null
   : state.taskId === null && (state.phase === "failed" ? state.code !== null : state.code === null));
@@ -30,6 +31,17 @@ function detached(source: StaffCallSource): StaffCallSource {
   return JSON.parse(JSON.stringify(staffCallSourceSchema.parse(source)));
 }
 
+// Decode only the saved-row evidence contract; labels do not authenticate speakers.
+function savedEvidence(value: unknown): string[] | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  let dialogue: unknown;
+  try { dialogue = JSON.parse(value); } catch { return null; }
+  if (!Array.isArray(dialogue) || !dialogue.length || dialogue.some(segment => !segment
+    || typeof segment !== "object" || Array.isArray(segment) || typeof segment.content !== "string"
+    || !segment.content.trim())) return null;
+  return dialogue.map(segment => segment.content);
+}
+
 /** Passive factory: no DB acquisition, provider/model calls, sessions or sends. */
 export function createClaudeStaffCallsStore(db: Db) {
   const tasks = createClaudeCustomerTaskPersistence();
@@ -37,10 +49,11 @@ export function createClaudeStaffCallsStore(db: Db) {
     const [row] = rows(await tx.execute(sql`SELECT * FROM ops_chat_messages WHERE activeDedupKey = ${key} FOR UPDATE`));
     return row;
   }
-  async function exactCall(tx: Tx, source: StaffCallSource) {
-    const [row] = rows(await tx.execute(sql`SELECT id, openphoneCallId, callerPhone, direction FROM openphone_call_recordings WHERE id = ${source.recordingId} FOR UPDATE`));
+  async function exactCall(tx: Tx, source: StaffCallSource, verifySavedEvidence = true) {
+    const [row] = rows(await tx.execute(sql`SELECT id, openphoneCallId, callerPhone, direction, transcript FROM openphone_call_recordings WHERE id = ${source.recordingId} FOR UPDATE`));
     if (!row || Number(row.id) !== source.recordingId || row.openphoneCallId !== source.providerCallId
       || row.callerPhone !== source.callerPhone || row.direction !== source.direction) fail();
+    if (verifySavedEvidence && source.transcriptSource === "saved" && !isDeepStrictEqual(savedEvidence(row.transcript), source.evidenceSegments)) fail();
   }
   function validateReceipt(row: Record<string, any> | undefined, claim: StaffCallClaim) {
     if (!Number.isSafeInteger(claim.receiptId) || claim.receiptId <= 0 || !row || Number(row.id) !== claim.receiptId
@@ -51,13 +64,16 @@ export function createClaudeStaffCallsStore(db: Db) {
   async function readClaim(tx: Tx, claim: StaffCallClaim) {
     const source = detached(claim.source);
     if (claim.key !== receiptKey(source.providerCallId)) fail();
-    await exactCall(tx, source);
+    // Evidence is checked under the recording lock when claimed, then frozen in
+    // the durable receipt. Later native transcription must not invalidate that
+    // verified snapshot or cause a second generation for this same call.
+    await exactCall(tx, source, false);
     const row = validateReceipt(await byKey(tx, claim.key), claim);
     let state: z.infer<typeof receiptSchema>;
     try { state = receiptSchema.parse(typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata); }
     catch { return fail(); }
     if (state.fingerprint !== hash(JSON.stringify(source)) || state.recordingId !== source.recordingId
-      || state.providerCallId !== source.providerCallId) fail();
+      || state.providerCallId !== source.providerCallId || !isDeepStrictEqual(state.sourceSnapshot, source)) fail();
     return { source, row, state };
   }
   async function save(tx: Tx, claim: StaffCallClaim, state: z.infer<typeof receiptSchema>) {
@@ -76,7 +92,7 @@ export function createClaudeStaffCallsStore(db: Db) {
           await exactCall(tx, source);
           if (await byKey(tx, key)) return null;
           const state = { version: 1 as const, providerCallId: source.providerCallId, recordingId: source.recordingId,
-            fingerprint: hash(JSON.stringify(source)), phase: "generating" as const, taskId: null, code: null };
+            fingerprint: hash(JSON.stringify(source)), phase: "generating" as const, taskId: null, code: null, sourceSnapshot: source };
           const encoded = JSON.stringify(receiptSchema.parse(state));
           const receiptId = Number(header(await tx.insert(opsChatMessages).values({
             channel: STAFF_CALL_RECEIPT_CHANNEL, quickAction: STAFF_CALL_RECEIPT_ACTION,
@@ -97,16 +113,17 @@ export function createClaudeStaffCallsStore(db: Db) {
       const { source, state } = await readClaim(tx, claim);
       if (state.phase !== "generating") return state.taskId;
       const task = raw === null ? null : proposedCustomerTaskSchema.parse(raw);
-      if (task?.items.some(item => !source.customerTurns.some(turn => turn.includes(item.evidenceQuote)))) {
-        throw new CustomerTaskStoreError("PRECONDITION_FAILED", "The checklist is not grounded in the customer's actual words.");
+      if (task?.items.some(item => !source.evidenceSegments.some(segment => segment.includes(item.evidenceQuote)))) {
+        throw new CustomerTaskStoreError("PRECONDITION_FAILED", "The checklist is not grounded in the saved call transcript.");
       }
       const identity = {
         sessionId: source.sessionId, customerName: source.callerName, customerPhone: source.callerPhone,
-        sourceMessageId: source.providerCallId, sourceText: source.customerTurns.join("\n\n"), receivedAt: source.receivedAt,
+        sourceMessageId: source.providerCallId, sourceText: source.evidenceSegments.join("\n\n"), receivedAt: source.receivedAt,
         receivingPhoneNumberId: null, receivingPhoneNumber: null,
         call: { provider: "openphone" as const, providerCallId: source.providerCallId, recordingId: source.recordingId,
           transcript: source.transcript, recordingUrl: source.recordingUrl, businessPhoneNumberId: source.businessPhoneNumberId,
-          businessPhoneNumber: source.businessPhoneNumber, staffUserId: source.staffUserId, direction: source.direction },
+          businessPhoneNumber: source.businessPhoneNumber, staffUserId: source.staffUserId, direction: source.direction,
+          transcriptSource: source.transcriptSource, evidenceScope: source.evidenceScope },
       };
       const taskId = await tasks.createTask(tx, identity, { replyText: "", task }, taskKey(source.providerCallId));
       if (taskId !== null) {
