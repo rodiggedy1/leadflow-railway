@@ -165,11 +165,19 @@ export function ClaudeCustomerTaskStreamCard({ taskId }: { taskId: number | null
     enabled: validId, staleTime: 0, refetchOnWindowFocus: true, retry: false,
   });
   if (!validId) return <p className="cct-feedback" role="status">Task reference unavailable.</p>;
-  if (query.isError) return <p className="cct-feedback" role="alert">Task could not be refreshed. <button type="button" onClick={() => void query.refetch()}>Retry</button></p>;
+  const task = query.data?.id === taskId ? query.data : null;
+  const code = query.error?.data?.code;
+  const httpStatus = query.error?.data?.httpStatus;
+  const transientFailure = (!code || ["INTERNAL_SERVER_ERROR", "TIMEOUT", "TOO_MANY_REQUESTS", "BAD_GATEWAY", "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT"].includes(code))
+    && (httpStatus === undefined || httpStatus === 408 || httpStatus === 429 || httpStatus >= 500);
+  if (query.isError && (!task || !transientFailure)) return <p className="cct-feedback" role="alert">Task could not be refreshed. <button type="button" onClick={() => void query.refetch()}>Retry</button></p>;
   if (query.isLoading) return <p className="cct-feedback" role="status"><Loader2 />Loading task…</p>;
-  if (!query.data) return <p className="cct-feedback" role="status">Task record unavailable.</p>;
-  return <TaskCard task={query.data} callerId={context.callerId} pending={context.pendingIds.has(query.data.id)}
-    actions={context.actions} onOpenConversation={context.onOpenConversation} placement="stream" />;
+  if (!task) return <p className="cct-feedback" role="status">Task record unavailable.</p>;
+  return <>
+    <TaskCard key={task.id} task={task} callerId={context.callerId} pending={context.pendingIds.has(task.id)}
+      actions={context.actions} onOpenConversation={context.onOpenConversation} placement="stream" />
+    {query.isError && <p className="cct-feedback" role="alert">Task could not be refreshed. Showing the last loaded status. <button type="button" onClick={() => void query.refetch()}>Retry</button></p>}
+  </>;
 }
 
 /** Canonical call evidence needs no SMS session or conversation lookup. */

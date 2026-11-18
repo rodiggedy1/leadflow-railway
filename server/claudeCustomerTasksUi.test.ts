@@ -190,7 +190,8 @@ describe("Customer task compact queue and exact canonical identity", () => {
         if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button" && !node.openingElement.getText(ast).includes('className="cct-conversation-link"')) result.push(node.getText(ast));
         ts.forEachChild(node, visit);
       };
-      visit(ast); return result;
+      // The non-destructive refresh warning repeats the exact existing Retry JSX.
+      visit(ast); return [...new Set(result)];
     };
     expect(hash(JSON.stringify(buttons(componentSource)))).toBe("a252f9ab6d7d4b78ca48c4d339a8e4c57eed7332b415730eaeb991efe5732411");
     expect(hash(componentSource.slice(componentSource.indexOf('  const run ='), componentSource.indexOf('  return <TaskContext.Provider')))).toBe("ce3e4148342bb5aa0dcc7289c8177f32d92c8c84729f05c46d71c7c0a6154c07");
@@ -371,9 +372,11 @@ describe("Customer task human completion and authoritative updates", () => {
     const context = { callerId: "17", pendingIds: new Set(), actions: actions() };
     const harness = stateHarness({ claudeCustomerTasks: { get: { useQuery: get } } }, context);
     let tree = harness.render("ClaudeCustomerTaskStreamCard", { taskId: 101 });
-    expect(tree.type).toBe(harness.ui.TaskCard); expect(tree.props.task).toEqual(result); expect(tree.props.placement).toBe("stream");
+    let card = elements(tree).find(node => node.type === harness.ui.TaskCard)!;
+    expect(card.props.task).toEqual(result); expect(card.props.placement).toBe("stream");
     result = fixture({ status: "done", owner: actor }); tree = harness.render("ClaudeCustomerTaskStreamCard", { taskId: 101 });
-    expect(tree.props.task.status).toBe("done");
+    card = elements(tree).find(node => node.type === harness.ui.TaskCard)!;
+    expect(card.props.task.status).toBe("done");
     harness.render("ClaudeCustomerTaskStreamCard", { taskId: null });
     expect(get.mock.calls.at(-1)).toEqual([{ id: 0 }, { enabled: false, staleTime: 0, refetchOnWindowFocus: true, retry: false }]);
   });
@@ -501,7 +504,8 @@ describe("Task link opens the existing exact-session SMS drawer", () => {
     const queueHarness = stateHarness({}, context); const queue = queueHarness.render("ClaudeCustomerTasksQueue", {}); expect(queue.props.onOpenConversation).toBe(open);
     const queueTree = queueHarness.render("CustomerTaskQueue", queue.props); expect(elements(queueTree).find(node => node.type === queueHarness.ui.TaskCard)!.props.onOpenConversation).toBe(open);
     const stream = stateHarness({ claudeCustomerTasks: { get: { useQuery: () => ({ data: task, isLoading: false, isError: false }) } } }, context).render("ClaudeCustomerTaskStreamCard", { taskId: task.id });
-    expect(stream.props.onOpenConversation).toBe(open); expect(stream.props.task).toBe(task);
+    const streamCard = elements(stream).find(node => node.props.placement === "stream")!;
+    expect(streamCard.props.onOpenConversation).toBe(open); expect(streamCard.props.task).toBe(task);
     expect(pageSource).toContain('onOpenConversation={openSmsDrawerFromTask}');
     expect(pageSource.match(/<SmsConversationDrawer conversation=/g)).toHaveLength(1);
     expect(pageSource).toContain('{ sessionId: conversation.id }');

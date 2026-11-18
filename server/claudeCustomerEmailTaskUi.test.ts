@@ -21,8 +21,19 @@ const pagePath = "client/src/pages/CommandChatExactLive.tsx";
 const source = readFileSync(componentPath, "utf8");
 const page = readFileSync(pagePath, "utf8");
 const withoutCallPage = (value: string) => value.replace('    if ("call" in task) return; // TaskCard opens its canonical call evidence locally.\n', "");
+const releasedTaskSource = execFileSync("git", ["show", `964db1830ac97ec8473fac0b3a7d00638d829aea:${componentPath}`], { encoding: "utf8" });
+function withoutApprovedStreamRefresh(value: string) {
+  const node = (input: string) => {
+    const parsed = ts.createSourceFile(componentPath, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const matches = parsed.statements.filter(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "ClaudeCustomerTaskStreamCard");
+    expect(matches).toHaveLength(1);
+    return { parsed, statement: matches[0] };
+  };
+  const current = node(value), released = node(releasedTaskSource);
+  return value.slice(0, current.statement.getStart(current.parsed)) + released.statement.getText(released.parsed) + value.slice(current.statement.end);
+}
 function withoutCallComponent(value: string) {
-  return value
+  return withoutApprovedStreamRefresh(value)
     .replace(', DialogTrigger } from "@/components/ui/dialog"', ' } from "@/components/ui/dialog"')
     .replace('    case "not_applicable": return "Not applicable · AI call";\n', '')
     .replace(/\/\*\* Canonical call evidence[^]*?(?=export function TaskCompletionConfirm)/, '')
@@ -299,7 +310,8 @@ describe("Email task in the existing queue and canonical command stream (offline
     await context.actions.completeItem(702, "oven"); expect(completeItem).toHaveBeenCalledWith({ id: 702, itemId: "oven" });
     await context.actions.complete(702, "  Confirmed by staff  "); expect(complete).toHaveBeenCalledWith({ id: 702, note: "Confirmed by staff" });
     expect(rows[0]).toBe(completed); expect(gets.get(702)).toBe(completed);
-    work.setContext(provider()); const stream = work.render("ClaudeCustomerTaskStreamCard", { taskId: 702 }); expect(stream.props.task).toBe(completed);
+    work.setContext(provider()); const stream = work.render("ClaudeCustomerTaskStreamCard", { taskId: 702 });
+    expect(nodes(stream).find(node => node.type === work.ui.TaskCard)!.props.task).toBe(completed);
     const before = invalidate.mock.calls.length; claim.mockRejectedValueOnce(new Error("Synthetic ownership conflict"));
     await expect(provider().actions.claim(702)).rejects.toThrow("Synthetic ownership conflict"); expect(invalidate.mock.calls.length).toBeGreaterThan(before);
     expect(rows[0]).toBe(completed); expect(provider().pendingIds.size).toBe(0);
