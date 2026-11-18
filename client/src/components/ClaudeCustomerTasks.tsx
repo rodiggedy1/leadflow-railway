@@ -17,6 +17,7 @@ type TaskContextValue = {
   tasks: CustomerTask[];
   loading: boolean;
   failed: boolean;
+  transientFailure: boolean;
   pendingIds: ReadonlySet<number>;
   actions: CustomerTaskActions;
   onOpenConversation?: (task: CustomerTask) => void;
@@ -76,6 +77,12 @@ export function ClaudeCustomerTasksProvider({ callerId, children, onOpenConversa
   const identity = trpc.claudeCustomerTasks.identity.useQuery(undefined, { staleTime: 300_000, retry: false, refetchOnWindowFocus: false });
   const effectiveCallerId = identity.data?.id || "";
   const query = trpc.claudeCustomerTasks.list.useQuery({}, { staleTime: 0, refetchOnWindowFocus: true, retry: false });
+  const transientFailure = [identity.error, query.error].every(error => {
+    const code = error?.data?.code;
+    const httpStatus = error?.data?.httpStatus;
+    return (!code || ["INTERNAL_SERVER_ERROR", "TIMEOUT", "TOO_MANY_REQUESTS", "BAD_GATEWAY", "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT"].includes(code))
+      && (httpStatus === undefined || httpStatus === 408 || httpStatus === 429 || httpStatus >= 500);
+  });
   const claim = trpc.claudeCustomerTasks.claim.useMutation();
   const completeItem = trpc.claudeCustomerTasks.completeItem.useMutation();
   const complete = trpc.claudeCustomerTasks.complete.useMutation();
@@ -116,7 +123,7 @@ export function ClaudeCustomerTasksProvider({ callerId, children, onOpenConversa
     complete: (id, note) => run(id, () => complete.mutateAsync({ id, note: note.trim() })),
   };
   return <TaskContext.Provider value={{ callerId: effectiveCallerId, tasks: query.data ?? [], loading: query.isLoading || identity.isLoading,
-    failed: query.isError || identity.isError, pendingIds, actions, onOpenConversation, refresh }}>{children}</TaskContext.Provider>;
+    failed: query.isError || identity.isError, transientFailure, pendingIds, actions, onOpenConversation, refresh }}>{children}</TaskContext.Provider>;
 }
 
 function useCustomerTasks() {
@@ -161,22 +168,15 @@ export function CustomerTaskQueue({ tasks, callerId, loading = false, failed = f
 export function ClaudeCustomerTaskStreamCard({ taskId }: { taskId: number | null }) {
   const context = useCustomerTasks();
   const validId = taskId !== null && Number.isSafeInteger(taskId) && taskId > 0;
-  const query = trpc.claudeCustomerTasks.get.useQuery({ id: taskId ?? 0 }, {
-    enabled: validId, staleTime: 0, refetchOnWindowFocus: true, retry: false,
-  });
   if (!validId) return <p className="cct-feedback" role="status">Task reference unavailable.</p>;
-  const task = query.data?.id === taskId ? query.data : null;
-  const code = query.error?.data?.code;
-  const httpStatus = query.error?.data?.httpStatus;
-  const transientFailure = (!code || ["INTERNAL_SERVER_ERROR", "TIMEOUT", "TOO_MANY_REQUESTS", "BAD_GATEWAY", "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT"].includes(code))
-    && (httpStatus === undefined || httpStatus === 408 || httpStatus === 429 || httpStatus >= 500);
-  if (query.isError && (!task || !transientFailure)) return <p className="cct-feedback" role="alert">Task could not be refreshed. <button type="button" onClick={() => void query.refetch()}>Retry</button></p>;
-  if (query.isLoading) return <p className="cct-feedback" role="status"><Loader2 />Loading task…</p>;
+  const task = context.tasks.find(record => record.id === taskId) ?? null;
+  if (context.failed && (!task || !context.transientFailure)) return <p className="cct-feedback" role="alert">Task could not be refreshed. <button type="button" onClick={() => void context.refresh()}>Retry</button></p>;
+  if (context.loading) return <p className="cct-feedback" role="status"><Loader2 />Loading task…</p>;
   if (!task) return <p className="cct-feedback" role="status">Task record unavailable.</p>;
   return <>
     <TaskCard key={task.id} task={task} callerId={context.callerId} pending={context.pendingIds.has(task.id)}
       actions={context.actions} onOpenConversation={context.onOpenConversation} placement="stream" />
-    {query.isError && <p className="cct-feedback" role="alert">Task could not be refreshed. Showing the last loaded status. <button type="button" onClick={() => void query.refetch()}>Retry</button></p>}
+    {context.failed && <p className="cct-feedback" role="alert">Task could not be refreshed. Showing the last loaded status. <button type="button" onClick={() => void context.refresh()}>Retry</button></p>}
   </>;
 }
 

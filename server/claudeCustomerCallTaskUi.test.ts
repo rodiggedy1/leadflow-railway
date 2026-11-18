@@ -17,6 +17,25 @@ const pagePath = "client/src/pages/CommandChatExactLive.tsx";
 const source = readFileSync(componentPath, "utf8");
 const page = readFileSync(pagePath, "utf8");
 const baseline = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
+function withoutApprovedTaskReads(value: string) {
+  const classifier = `  const transientFailure = [identity.error, query.error].every(error => {
+    const code = error?.data?.code;
+    const httpStatus = error?.data?.httpStatus;
+    return (!code || ["INTERNAL_SERVER_ERROR", "TIMEOUT", "TOO_MANY_REQUESTS", "BAD_GATEWAY", "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT"].includes(code))
+      && (httpStatus === undefined || httpStatus === 408 || httpStatus === 429 || httpStatus >= 500);
+  });
+`;
+  expect(value.split(classifier)).toHaveLength(2);
+  value = value.replace('  transientFailure: boolean;\n', '').replace(classifier, '')
+    .replace('failed: query.isError || identity.isError, transientFailure, pendingIds', 'failed: query.isError || identity.isError, pendingIds');
+  const stream = (input: string) => {
+    const parsed = ts.createSourceFile(componentPath, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const matches = parsed.statements.filter(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "ClaudeCustomerTaskStreamCard");
+    expect(matches).toHaveLength(1); return { parsed, statement: matches[0] };
+  };
+  const current = stream(value), original = stream(baseline(componentPath));
+  return value.slice(0, current.statement.getStart(current.parsed)) + original.statement.getText(original.parsed) + value.slice(current.statement.end);
+}
 const NOW = 1_800_000_000_000;
 const actor = { id: "synthetic-owner-openid", name: "Synthetic staff" };
 const confirmer = { id: "synthetic-confirmer", name: "Confirming staff" };
@@ -144,7 +163,7 @@ describe("Canonical AI customer call task evidence in the actual queue and strea
     expect(nodes(tree).find(node => node.type === "details")!.props.open).toBeUndefined();
     expect(sanitizer.sanitize).not.toHaveBeenCalled(); expect(work.onOpenConversation).not.toHaveBeenCalled();
     for (const mutation of Object.values(work.a)) expect(mutation).not.toHaveBeenCalled();
-    if (placement === "stream") expect(work.get).toHaveBeenCalledWith({ id: 903 }, { enabled: true, staleTime: 0, refetchOnWindowFocus: true, retry: false });
+    expect(work.get).not.toHaveBeenCalled();
   });
 
   it.each(["queue", "stream"] as const)("opens the complete %s call in a local dialog independent of session, ownership, status, pending or SMS callback", placement => {
@@ -275,7 +294,7 @@ describe("AI call addition preserves actual baseline SMS/email, layout and popup
   it("preserves provider, handlers, confirmation state/buttons, CSS, email popup and complete SMS/email callback bytes", () => {
     const original = baseline(componentPath);
     const between = (value: string, start: string, end: string) => value.slice(value.indexOf(start), value.indexOf(end, value.indexOf(start)));
-    expect(between(source, "/** Own only", "/** Canonical call evidence")).toBe(between(original, "/** Own only", "export function TaskCompletionConfirm"));
+    expect(between(withoutApprovedTaskReads(source), "/** Own only", "/** Canonical call evidence")).toBe(between(original, "/** Own only", "export function TaskCompletionConfirm"));
     expect(between(source, "  const [confirmOpen", "  return <article")).toBe(between(original, "  const [confirmOpen", "  return <article"));
     expect(source.slice(source.indexOf("{error && !confirmOpen"))).toBe(original.slice(original.indexOf("{error && !confirmOpen")));
     expect(page.replace('    if ("call" in task) return; // TaskCard opens its canonical call evidence locally.\n', "")).toBe(baseline(pagePath));

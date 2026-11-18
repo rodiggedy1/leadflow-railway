@@ -22,7 +22,19 @@ const source = readFileSync(componentPath, "utf8");
 const page = readFileSync(pagePath, "utf8");
 const withoutCallPage = (value: string) => value.replace('    if ("call" in task) return; // TaskCard opens its canonical call evidence locally.\n', "");
 const releasedTaskSource = execFileSync("git", ["show", `964db1830ac97ec8473fac0b3a7d00638d829aea:${componentPath}`], { encoding: "utf8" });
+const sharedReadClassifier = `  const transientFailure = [identity.error, query.error].every(error => {
+    const code = error?.data?.code;
+    const httpStatus = error?.data?.httpStatus;
+    return (!code || ["INTERNAL_SERVER_ERROR", "TIMEOUT", "TOO_MANY_REQUESTS", "BAD_GATEWAY", "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT"].includes(code))
+      && (httpStatus === undefined || httpStatus === 408 || httpStatus === 429 || httpStatus >= 500);
+  });
+`;
 function withoutApprovedStreamRefresh(value: string) {
+  if (value.includes('  transientFailure: boolean;\n')) {
+    expect(value.split(sharedReadClassifier)).toHaveLength(2);
+    value = value.replace('  transientFailure: boolean;\n', '').replace(sharedReadClassifier, '')
+      .replace('failed: query.isError || identity.isError, transientFailure, pendingIds', 'failed: query.isError || identity.isError, pendingIds');
+  }
   const node = (input: string) => {
     const parsed = ts.createSourceFile(componentPath, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const matches = parsed.statements.filter(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "ClaudeCustomerTaskStreamCard");
@@ -223,7 +235,7 @@ describe("Email task in the existing queue and canonical command stream (offline
       "+13015550123", "+13015550987", "PN_SYNTHETIC_LINE", "0000000", "tel:", "mailto:"]) expect(html).not.toContain(hidden);
     expect(nodes(tree).find(node => node.type === "details")!.props.open).toBeUndefined();
     expect(work.context.callerId).toBe(actor.id);
-    if (placement === "stream") expect(work.get).toHaveBeenCalledWith({ id: task.id }, { enabled: true, staleTime: 0, refetchOnWindowFocus: true, retry: false });
+    expect(work.get).not.toHaveBeenCalled();
   });
 
   it.each(["queue", "stream"] as const)("clicks the actual %s link into the existing exact Gmail-thread overlay in every status, independent of task ownership/pending", placement => {

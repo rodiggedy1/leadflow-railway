@@ -187,10 +187,10 @@ describe("Customer task compact queue and exact canonical identity", () => {
       const result: string[] = [];
       const visit = (node: ts.Node) => {
         if (ts.isFunctionDeclaration(node) && node.name?.text === "CustomerTaskCallRecording") return;
-        if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button" && !node.openingElement.getText(ast).includes('className="cct-conversation-link"')) result.push(node.getText(ast));
+        if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button" && !node.openingElement.getText(ast).includes('className="cct-conversation-link"')) result.push(node.getText(ast).replace('onClick={() => void context.refresh()}', 'onClick={() => void query.refetch()}'));
         ts.forEachChild(node, visit);
       };
-      // The non-destructive refresh warning repeats the exact existing Retry JSX.
+      // Only Retry now reads the shared list; all task-action button JSX stays identical.
       visit(ast); return [...new Set(result)];
     };
     expect(hash(JSON.stringify(buttons(componentSource)))).toBe("a252f9ab6d7d4b78ca48c4d339a8e4c57eed7332b415730eaeb991efe5732411");
@@ -366,19 +366,19 @@ describe("Customer task human completion and authoritative updates", () => {
     expect(componentSource).not.toContain("trpc.auth.me");
   });
 
-  it("stream ignores stored snapshot and renders same TaskCard from get; invalid references disable get", () => {
-    let result = fixture({ status: "claimed", owner: actor });
-    const get = vi.fn(() => ({ data: result, isLoading: false, isError: false, refetch: vi.fn() }));
-    const context = { callerId: "17", pendingIds: new Set(), actions: actions() };
+  it("stream ignores stored snapshots and renders the same TaskCard from the shared list without per-card reads", () => {
+    const result = fixture({ status: "claimed", owner: actor });
+    const get = vi.fn(() => { throw new Error("Stream must not request a task separately"); });
+    const context = { callerId: "17", pendingIds: new Set(), actions: actions(), tasks: [result], loading: false, failed: false, transientFailure: true };
     const harness = stateHarness({ claudeCustomerTasks: { get: { useQuery: get } } }, context);
     let tree = harness.render("ClaudeCustomerTaskStreamCard", { taskId: 101 });
     let card = elements(tree).find(node => node.type === harness.ui.TaskCard)!;
     expect(card.props.task).toEqual(result); expect(card.props.placement).toBe("stream");
-    result = fixture({ status: "done", owner: actor }); tree = harness.render("ClaudeCustomerTaskStreamCard", { taskId: 101 });
+    context.tasks = [fixture({ status: "done", owner: actor })]; tree = harness.render("ClaudeCustomerTaskStreamCard", { taskId: 101 });
     card = elements(tree).find(node => node.type === harness.ui.TaskCard)!;
     expect(card.props.task.status).toBe("done");
-    harness.render("ClaudeCustomerTaskStreamCard", { taskId: null });
-    expect(get.mock.calls.at(-1)).toEqual([{ id: 0 }, { enabled: false, staleTime: 0, refetchOnWindowFocus: true, retry: false }]);
+    expect(text(harness.render("ClaudeCustomerTaskStreamCard", { taskId: null }))).toBe("Task reference unavailable.");
+    expect(get).not.toHaveBeenCalled();
   });
 });
 
