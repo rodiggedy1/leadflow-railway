@@ -149,8 +149,10 @@ function providerHarness(...args: [] | [CustomerTask[] | undefined]) {
     if (placement === "queue") return elements(queue()).find(node => node.type === harness.ui.TaskCard && node.props.task.id === 101)!;
     context();
     const wrapper = harness.render("ClaudeCustomerTaskStreamCard", { taskId: 101 });
-    expect(wrapper.type).toBe(harness.ui.TaskCard);
-    return wrapper;
+    expect(wrapper.type).toBe(React.Fragment);
+    const card = elements(wrapper).find(node => node.type === harness.ui.TaskCard && node.props.task.id === 101)!;
+    expect(card).toBeDefined();
+    return card;
   };
   const card = (placement: Placement) => harness.render("TaskCard", cardElement(placement).props, `card:${placement}`);
   const confirmElement = (tree: Element) => elements(tree).find(node => node.type === harness.ui.TaskCompletionConfirm)!;

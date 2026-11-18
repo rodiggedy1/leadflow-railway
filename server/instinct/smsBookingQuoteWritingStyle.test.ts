@@ -26,6 +26,7 @@ import {
 } from "./smsBookingQuote";
 import { createSmsBookingQuoteReplyGenerator, SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS } from "./smsBookingQuoteGeneration";
 import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQuestion";
+import { withoutApprovedStaffCallFeature } from "../staffCallSourceControl";
 
 // These are offline preservation/contract tests, not a real Claude compliance evaluation.
 // All content and state readers are injected; no stores, transports or live models run.
@@ -374,6 +375,6 @@ describe("local source-preservation audit against the approved baseline", () => 
     expect(currentSource(path)).toBe(baselineSource(path).replace("      replyText: plan.replyText,\n", "      replyText: plan.replyText,\n      preserveTaskAcknowledgment: plan.task !== null,\n"));
   });
   it.each(protectedSources)("preserves protected call/email/base/style/renderer/transport/pricing source: %s", path => {
-    expect(currentSource(path)).toBe(baselineSource(path));
+    expect(withoutApprovedStaffCallFeature(path, currentSource(path))).toBe(baselineSource(path));
   });
 });

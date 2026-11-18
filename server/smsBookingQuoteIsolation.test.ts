@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { withoutApprovedSmsBookingQuote } from "./smsBookingQuoteSourceControl";
+import { withoutApprovedStaffCallFeature } from "./staffCallSourceControl";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const baseline = "b1bf3cff91be631ec7a38e2675a28993ebd3e1d6";
@@ -29,7 +30,10 @@ describe("SMS booking quote additive boundaries — offline source control", () 
     "client/src/components/claude-customer-tasks.css", "client/src/pages/CommandChatExactLive.tsx",
     "client/src/pages/command-chat-exact-live.css",
   ])("preserves protected source byte-for-byte: %s", file => {
-    expect(current(file)).toBe(before(file));
+    // The shared-list UI correction was separately released before staff-call work.
+    const original = file === "client/src/components/ClaudeCustomerTasks.tsx"
+      ? execFileSync("git", ["show", `0f6f5369e4799e5c789fffae7fb221db6569c645:${file}`], { cwd: root, encoding: "utf8" }) : before(file);
+    expect(withoutApprovedStaffCallFeature(file, current(file))).toBe(original);
   });
 
   it("allows only moving the existing call formatter into the shared passive presentation module", () => {

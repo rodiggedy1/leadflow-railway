@@ -217,6 +217,41 @@ describe("Canonical AI customer call task evidence in the actual queue and strea
   });
 });
 
+describe("Staff Quo calls reuse the unchanged task card and human controls", () => {
+  function staffCall() {
+    return contract.customerStaffCallTaskSchema.parse({ ...call(), sourceMessageId: "ACsynthetic-staff",
+      call: { provider: "openphone", providerCallId: "ACsynthetic-staff", recordingId: 91,
+        transcript: "Customer: Please add the oven.\nStaff: I will arrange that later.", recordingUrl: "https://recordings.example.test/staff.wav",
+        businessPhoneNumberId: "PNsynthetic", businessPhoneNumber: "+13015550987", staffUserId: "USsynthetic", direction: "incoming" } });
+  }
+  it.each(["queue", "stream"] as const)("renders a PHONE CALL in %s with exact caller evidence and the same full-call dialog", placement => {
+    const task = staffCall(), work = rig(task);
+    let tree = work.render(placement);
+    expect(text(nodes(tree).find(node => node.props.className === "cct-task-label"))).toBe("Customer task · PHONE CALL");
+    expect(text(tree)).toContain(task.customerPhone!); expect(text(tree)).toContain(task.items[0].evidenceQuote);
+    expect(text(tree)).not.toContain("Acknowledgment"); expect(work.get).not.toHaveBeenCalled(); expect(work.recording).not.toHaveBeenCalled();
+    button(tree, "Open full call").props.onClick(); tree = work.render(placement);
+    expect(text(tree)).toContain("Full staff call"); expect(text(tree)).toContain(task.call.transcript);
+    expect(work.recording).toHaveBeenCalledWith({ id: task.id }, { retry: false, staleTime: 0, refetchOnWindowFocus: false });
+    expect(nodes(tree).find(node => node.type === "audio")!.props.src).toBe(work.recordingUrl);
+    expect(work.onOpenConversation).not.toHaveBeenCalled();
+    for (const action of Object.values(work.a)) expect(action).not.toHaveBeenCalled();
+  });
+  it.each(["queue", "stream"] as const)("retains identical Claim/Done ownership, required note and completion controls for %s staff calls", async placement => {
+    const task = staffCall(), unclaimed = rig(task);
+    button(unclaimed.render(placement), "Claim").props.onClick(); await flush(); expect(unclaimed.a.claim).toHaveBeenCalledWith(task.id);
+    expect(task.status).toBe("unclaimed");
+    const work = rig({ ...task, status: "claimed", owner: actor, claimedAt: NOW });
+    button(work.render(placement), "Mark done").props.onClick(); let tree = work.render(placement);
+    expect(button(tree, "Confirm done").props.disabled).toBe(true);
+    nodes(tree).find(node => node.type === "textarea")!.props.onChange({ target: { value: "  Arranged oven cleaning  " } });
+    tree = work.render(placement); button(tree, "Confirm done").props.onClick(); await flush();
+    expect(work.a.complete).toHaveBeenCalledWith(task.id, "Arranged oven cleaning");
+    const other = rig({ ...task, status: "claimed", owner: { id: "someone-else", name: actor.name }, claimedAt: NOW });
+    expect(button(other.render(placement), "Mark done")).toBeUndefined();
+  });
+});
+
 describe("AI call task human confirmation and canonical state remain unchanged (offline)", () => {
   it.each(["queue", "stream"] as const)("preserves Claim/Done, owner gates, confirmation note and item action behavior in %s", async placement => {
     const unclaimed = rig(call()); const claimButton = button(unclaimed.render(placement), "Claim"); claimButton.props.onClick(); claimButton.props.onClick(); await flush();

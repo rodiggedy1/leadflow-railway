@@ -12,6 +12,7 @@ export interface CustomerTasksRouterOptions {
   getStore(): Promise<ClaudeCustomerTasksStore>;
   broadcast(): void | Promise<void>;
   readCallRecordingUrl?: (providerCallId: string) => Promise<string | null>;
+  readStaffCallRecordingUrl?: (providerCallId: string) => Promise<string | null>;
 }
 /** Injectable offline seam. Staff identity comes exclusively from opsChatProcedure. */
 export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOptions) {
@@ -41,6 +42,10 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
       .query(({ input }) => run(async store => {
         const task = await store.get(input.id);
         if (!task || !("call" in task)) throw new TRPCError({ code: "NOT_FOUND", message: "Call task not found." });
+        if (task.call.provider === "openphone") {
+          const read = options.readStaffCallRecordingUrl ?? (await import("./instinct/claudeStaffCallRecording")).readStaffCallRecordingUrl;
+          return { url: await read(task.call.providerCallId) };
+        }
         const read = options.readCallRecordingUrl ?? (await import("./instinct/claudeCustomerCallRecording")).readCustomerCallRecordingUrl;
         return { url: await read(task.call.providerCallId) };
       })),

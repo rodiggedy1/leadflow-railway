@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { customerCallTaskSchema, type CustomerTask } from "../shared/claudeCustomerTasks";
 import { withoutApprovedSmsBookingQuote } from "./smsBookingQuoteSourceControl";
+import { withoutApprovedStaffCallFeature } from "./staffCallSourceControl";
 import type { TrpcContext } from "./_core/context";
 vi.mock("./db", () => ({ getDb: vi.fn(async () => null) }));
 vi.mock("./_core/agentAuth", () => ({ getAgentFromRequest: vi.fn(async () => null) }));
@@ -61,6 +62,6 @@ describe("explicitly approved greeting and voice-ID exceptions and source bounda
     const current = withoutApprovedQuoteIntegration(withoutApprovedCustomerLookup(readFileSync("server/vapiService.ts", "utf8"))); expect(current.split(opening)).toHaveLength(2); expect(current.split(newVoice)).toHaveLength(2); expect(current).not.toContain(oldVoice); expect(current.replace(opening, original).replace(newVoice, oldVoice)).toBe(baseline("server/vapiService.ts"));
   });
   it("preserves all existing SMS/email prompts, providers, send paths, schema, crons and booking/payment UI", () => {
-    for (const path of ["server/webhooks.ts", "server/cronSync.ts", "server/routers.ts", "server/gmailService.ts", "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsApplication.ts", "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeSmsAlternative.ts", "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailStore.ts", "server/instinct/claudeAgentClient.ts", "drizzle/schema.ts", "server/_core/index.ts", "client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-exact-live.css", "client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css"]) expect(withoutApprovedSmsBookingQuote(path, readFileSync(path, "utf8"))).toBe(baseline(path));
+    for (const path of ["server/webhooks.ts", "server/cronSync.ts", "server/routers.ts", "server/gmailService.ts", "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsApplication.ts", "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeSmsAlternative.ts", "server/instinct/claudeCustomerEmail.ts", "server/instinct/claudeCustomerEmailApplication.ts", "server/instinct/claudeCustomerEmailStore.ts", "server/instinct/claudeAgentClient.ts", "drizzle/schema.ts", "server/_core/index.ts", "client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-exact-live.css", "client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css"]) expect(withoutApprovedSmsBookingQuote(path, withoutApprovedStaffCallFeature(path, readFileSync(path, "utf8")))).toBe(baseline(path));
   });
 });

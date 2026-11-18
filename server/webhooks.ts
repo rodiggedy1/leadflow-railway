@@ -54,6 +54,7 @@ import { enqueueScoring } from "./csStatusScorer";
 import { computeSessionSummary } from "./sessionSummary";
 import { getConfiguredCsPhoneNumberIds, getCsOutboundDeliveryRecipient, reconcileDeliveredCsOutbound } from "./quoOutboundReconciliation";
 import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride } from "./instinct/claudeCustomerSms";
+import { dispatchClaudeStaffCallEvent } from "./instinct/claudeStaffCallsApplication";
 
 // Own only a fresh, real pilot message. Missing metadata, STOP and other phones
 // retain their original handling; this predicate never selects a session.
@@ -151,11 +152,13 @@ export function registerWebhookRoutes(app: Express) {
       // Route by event type
       if (event?.type === "call.recording.completed") {
         await handleCallRecordingCompleted(event);
+        dispatchClaudeStaffCallEvent(event);
         return;
       }
 
       if (event?.type === "call.transcript.completed" || event?.type === "callTranscript") {
         await handleCallTranscriptCompleted(event);
+        dispatchClaudeStaffCallEvent(event);
         return;
       }
 

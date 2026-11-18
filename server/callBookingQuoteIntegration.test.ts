@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import { callBookingQuoteServerToken, callBookingQuoteSendInputSchema, previewCallBookingQuote } from "./instinct/callBookingQuote";
+import { withoutApprovedStaffCallFeature } from "./staffCallSourceControl";
 const mock = vi.hoisted(() => ({ execute: vi.fn(async (_request: any): Promise<any> => ({ success: true })), getQuote: vi.fn(() => ({ price: 100 })), notify: vi.fn(), getDb: vi.fn(async () => null) }));
 vi.mock("./instinct/callBookingQuoteApplication", () => ({ executeCallBookingQuoteTool: mock.execute }));
 vi.mock("./vapiService", () => ({ handleGetQuote: mock.getQuote, handleCreateLead: vi.fn(), handleSendSms: vi.fn(), handleScheduleCallback: vi.fn(), handleLookupCustomer: vi.fn(), handleRescheduleRequest: vi.fn(), handleCancelRequest: vi.fn(), handleComplaintRequest: vi.fn(), handleRequestEtaCall: vi.fn(), processEndOfCallReport: vi.fn(async () => {}) }));
@@ -145,8 +146,10 @@ describe("call-only canonical quote integration — offline", () => {
     expect(candidate).toBe(baseline("server/vapiService.ts"));
   });
   it("keeps every customer-facing source, pricing policy, schema, payment and messaging source unchanged", () => {
-    const diff = execFileSync("git", ["diff", "--name-only", "f168a07c986a992020dac74e8c52fce4c268b689", "--", "client", "shared", "drizzle", "server/openphone.ts", "server/webhooks.ts", "server/routers.ts", "server/_core/index.ts", "server/versioned-migrations"], { cwd: root, encoding: "utf8" });
-    expect(diff.trim()).toBe("");
+    // Preserve the actual released UI, including the separately approved shared-list correction.
+    const released = "0f6f5369e4799e5c789fffae7fb221db6569c645";
+    const diff = execFileSync("git", ["diff", "--name-only", released, "--", "client", "shared", "drizzle", "server/openphone.ts", "server/webhooks.ts", "server/routers.ts", "server/_core/index.ts", "server/versioned-migrations"], { cwd: root, encoding: "utf8" });
+    for (const path of diff.trim().split("\n").filter(Boolean)) expect(withoutApprovedStaffCallFeature(path, read(path)), path).toBe(execFileSync("git", ["show", `${released}:${path}`], { cwd: root, encoding: "utf8" }));
   });
   it("keeps the entire existing webhook unchanged outside quote imports and two new branches", () => {
     let candidate = read("server/vapiWebhook.ts");

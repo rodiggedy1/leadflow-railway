@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as contract from "../shared/claudeCustomerTasks";
 import type { CustomerTask } from "../shared/claudeCustomerTasks";
 import { withoutApprovedSmsBookingQuote } from "./smsBookingQuoteSourceControl";
+import { withoutApprovedStaffCallFeature } from "./staffCallSourceControl";
 
 // LOCAL ONLY: actual client TSX, injected React/tRPC, synthetic records only.
 // Never import the app/router, authentication, DB, Gmail, provider or model.
@@ -45,7 +46,7 @@ function withoutApprovedStreamRefresh(value: string) {
   return value.slice(0, current.statement.getStart(current.parsed)) + released.statement.getText(released.parsed) + value.slice(current.statement.end);
 }
 function withoutCallComponent(value: string) {
-  return withoutApprovedStreamRefresh(value)
+  return withoutApprovedStreamRefresh(withoutApprovedStaffCallFeature(componentPath, value))
     .replace(', DialogTrigger } from "@/components/ui/dialog"', ' } from "@/components/ui/dialog"')
     .replace('    case "not_applicable": return "Not applicable · AI call";\n', '')
     .replace(/\/\*\* Canonical call evidence[^]*?(?=export function TaskCompletionConfirm)/, '')
