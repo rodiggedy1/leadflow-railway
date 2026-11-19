@@ -71,7 +71,8 @@ describe("LeadFlow-owned Schedule workspace", () => {
 
     expect(scheduleRouter).not.toContain("invokeLLM");
     expect(scheduleRouter).not.toContain("confirmationCalls");
-    expect(scheduleRouter).toContain("bookingTeamDefault(job, teams)");
+    expect(scheduleRouter).toContain("bookingTeamDefault(job, teams, bookingAssignmentsById.get(job.bookingId!))");
+    expect(scheduleRouter).toContain("readBookingAssignmentsForSchedule(db, bookingIds)");
     expect(scheduleRouter).toContain('source: "booking_default" as const');
     expect(scheduleRouter).toContain('source: "schedule" as const');
     expect(scheduleRouter).not.toContain("db.insert(scheduleAssignments)");
@@ -97,5 +98,16 @@ describe("LeadFlow-owned Schedule workspace", () => {
       expect(source).not.toContain(legacyJobSymbol);
       expect(source).not.toContain(legacyJobTable);
     }
+  });
+
+  it("keeps assigned archived-team jobs visible without showing empty archived routes", () => {
+    const shell = read("client/src/pages/LeadflowScheduleCRMExactLive.tsx");
+    const section = shell.split('<section className="scr-schedule-main">')[1];
+    const expression = section.split("teams.filter(team => ")[1].split(".map(team => <TeamRoute")[0].slice(0, -1);
+    const visible = new Function("team", "grouped", `return (${expression});`);
+    const groups = new Map([[1, [{ id: 42 }]], [2, []], [3, []]]);
+    const teams = [{ id: 1, isArchived: 1 }, { id: 2, isArchived: 1 }, { id: 3, isArchived: 0 }];
+    expect(teams.filter(team => visible(team, groups)).map(team => team.id)).toEqual([1, 3]);
+    expect(shell).toContain("const isOff = team.isArchived === 1 || team.workScheduleUnavailable || team.isActive !== 1;");
   });
 });

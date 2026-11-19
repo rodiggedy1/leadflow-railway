@@ -17,7 +17,7 @@ import {
 import { agentProcedure, router } from "./_core/trpc";
 import { GeocodingResult, makeRequest } from "./_core/map";
 import { getDb } from "./db";
-import { bookingTeamDefault } from "./leadflowScheduleAssignmentDefaults";
+import { bookingTeamDefault, readBookingAssignmentsForSchedule } from "./leadflowScheduleAssignmentDefaults";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type TeamRow = typeof schedulingTeams.$inferSelect;
@@ -453,14 +453,16 @@ export const leadflowScheduleRouter = router({
       const jobs = jobRows.map(row => row.job);
       const jobStatusById = new Map(jobRows.map(row => [row.job.id, row.jobStatus]));
       const etaTimestampById = new Map(jobRows.map(row => [row.job.id, row.etaTimestamp]));
-      const [assignments, availability] = await Promise.all([
+      const bookingIds = Array.from(new Set(jobs.flatMap(job => job.bookingId == null ? [] : [job.bookingId])));
+      const [assignments, availability, bookingAssignmentsById] = await Promise.all([
         readOwnedAssignments(db, input.date, jobs.map(job => job.id)),
         loadAvailability(db, input.date, teams),
+        readBookingAssignmentsForSchedule(db, bookingIds),
       ]);
       const assignmentByJob = new Map(assignments.map(row => [Number(row.leadflowJobId), row]));
       const projectedJobs = jobs.map(job => {
         const persistedAssignment = assignmentByJob.get(job.id);
-        const bookingDefaultTeam = persistedAssignment ? null : bookingTeamDefault(job, teams);
+        const bookingDefaultTeam = persistedAssignment ? null : bookingTeamDefault(job, teams, bookingAssignmentsById.get(job.bookingId!));
         const serviceType = job.serviceName ?? null;
         return {
           id: job.id,
