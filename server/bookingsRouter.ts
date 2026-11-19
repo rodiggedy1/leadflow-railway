@@ -4,6 +4,7 @@ import { z } from "zod";
 import { internalExactBookingRouter } from "./internalExactBookingRouter";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
+import { repairAprilPortalLink } from "./aprilPortalLinkRepair";
 import {
   appSettings,
   bookingAssignments,
@@ -12,7 +13,6 @@ import {
   bookingSeries,
   bookings,
   customerPortalServiceRequests,
-  cleanerProfiles,
   conversationSessions,
   leadflowJobs,
   schedulingTeams,
@@ -932,18 +932,23 @@ export const bookingsRouter = router({
     return db
       .select({ id: schedulingTeams.id, name: schedulingTeams.name })
       .from(schedulingTeams)
-      .innerJoin(
-        cleanerProfiles,
-        and(
-          eq(cleanerProfiles.launch27TeamId, schedulingTeams.launch27TeamId),
-          eq(cleanerProfiles.isActive, 1)
-        )
-      )
       .where(
         and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0))
       )
       .orderBy(asc(schedulingTeams.name));
   }),
+  repairAprilPortalLink: bookingsAgentProcedure
+    .input(z.object({ confirmation: z.literal("LINK_APRIL_300002_TO_41996") }).strict())
+    .mutation(async ({ ctx }) => {
+      if (!ctx.agent.isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin approval is required for April's account repair." });
+      }
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      }
+      return repairAprilPortalLink(db);
+    }),
   assignTeam: bookingsAgentProcedure
     .input(
       z.object({
@@ -973,16 +978,6 @@ export const bookingsRouter = router({
         const teamRows = await tx
           .select({ id: schedulingTeams.id, name: schedulingTeams.name })
           .from(schedulingTeams)
-          .innerJoin(
-            cleanerProfiles,
-            and(
-              eq(
-                cleanerProfiles.launch27TeamId,
-                schedulingTeams.launch27TeamId
-              ),
-              eq(cleanerProfiles.isActive, 1)
-            )
-          )
           .where(
             and(
               eq(schedulingTeams.id, input.teamId),
