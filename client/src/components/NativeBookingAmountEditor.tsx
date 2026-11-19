@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { trpc } from "@/lib/trpc";
 import type { UpdateNativeBookingManualAmountResult } from "@shared/nativeBookingManualAmounts";
 
@@ -28,6 +28,11 @@ export type NativeBookingAmountSelection = {
   manualAmountRevision?: number;
 };
 
+export type NativeBookingAmountSaveState = { identity: string; dirty: boolean; canSave: boolean };
+export type NativeBookingAmountSaveControl = NativeBookingAmountSaveState & {
+  save: (options?: { deferRefresh?: boolean }) => Promise<boolean>;
+};
+
 export function nativeBookingAmountSummary(result: UpdateNativeBookingManualAmountResult): string {
   const selected = result.selectedChanged
     ? `This job's amount was saved as $${formatNativeBookingAmount(result.selectedAmountCents)}.`
@@ -42,11 +47,15 @@ export function NativeBookingAmountEditor({
   disabled = false,
   onAmountUpdated,
   onReload,
+  saveControlRef,
+  onSaveStateChange,
 }: {
   active: NativeBookingAmountSelection;
   disabled?: boolean;
   onAmountUpdated: () => void;
   onReload: () => void | Promise<unknown>;
+  saveControlRef: MutableRefObject<NativeBookingAmountSaveControl | null>;
+  onSaveStateChange: (state: NativeBookingAmountSaveState) => void;
 }) {
   const mutation = trpc.bookings.updateManualAmount.useMutation({ retry: false });
   const identity = JSON.stringify([
@@ -55,9 +64,13 @@ export function NativeBookingAmountEditor({
   ]);
   const selection = JSON.stringify([active.key, active.source, active.id, active.requestedLocalDate]);
   const currentIdentity = useRef(identity);
+  const currentSelection = useRef(selection);
+  const currentActive = useRef(active);
+  currentActive.current = active;
   const selectionVersion = useRef(0);
-  if (currentIdentity.current !== identity) {
-    currentIdentity.current = identity;
+  currentIdentity.current = identity;
+  if (currentSelection.current !== selection) {
+    currentSelection.current = selection;
     selectionVersion.current += 1;
   }
   const mounted = useRef(true);
@@ -68,6 +81,7 @@ export function NativeBookingAmountEditor({
     amount: active.firstCleaningTotalCents === null ? "" : formatNativeBookingAmount(active.firstCleaningTotalCents),
     scope: "visit" as "visit" | "subsequent",
   }));
+  const [savedDraft, setSavedDraft] = useState<{ identity: string; amount: number; scope: string } | null>(null);
   const [notice, setNotice] = useState<{ identity: string; selection: string; message: string; error: boolean; reloadRequired: boolean } | null>(null);
   useEffect(() => {
     mounted.current = true;
@@ -80,7 +94,6 @@ export function NativeBookingAmountEditor({
       scope: "visit",
     });
   }, [identity]);
-  if (active.source !== "booking") return null;
 
   const recurring = active.recurrence === "weekly" || active.recurrence === "biweekly" || active.recurrence === "monthly";
   const currentDraft = draft.identity === identity ? draft : {
@@ -92,9 +105,14 @@ export function NativeBookingAmountEditor({
   const currentNotice = notice && (notice.error ? notice.identity === identity : notice.selection === selection) ? notice : null;
   const busy = pending || mutation.isPending;
   const unavailable = !active.requestedLocalDate || active.firstCleaningTotalCents === null;
-  const save = async () => {
-    if (!mounted.current || inFlight.current || busy || disabled || unavailable || currentNotice?.reloadRequired || amountCents === null || currentIdentity.current !== identity) return;
-    if (!recurring && currentDraft.scope !== "visit") return;
+  const alreadySaved = savedDraft?.identity === identity && savedDraft.amount === amountCents && savedDraft.scope === currentDraft.scope;
+  const acknowledgedAmount = savedDraft?.identity === identity ? savedDraft.amount : active.firstCleaningTotalCents;
+  const dirty = !alreadySaved && (amountCents !== acknowledgedAmount || currentDraft.scope === "subsequent");
+  const canSave = !busy && !disabled && !unavailable && amountCents !== null && !currentNotice?.reloadRequired;
+  const save = async (options?: { deferRefresh?: boolean }): Promise<boolean> => {
+    if (active.source !== "booking" || !mounted.current || inFlight.current || !canSave || currentIdentity.current !== identity) return false;
+    if (!recurring && currentDraft.scope !== "visit") return false;
+    if (!dirty) return true;
     inFlight.current = true;
     setPending(true);
     setNotice(null);
@@ -109,18 +127,24 @@ export function NativeBookingAmountEditor({
         scope: currentDraft.scope,
         requestId: crypto.randomUUID(),
       });
-      // Refresh only through the existing detail/list/jobs callback. Never put an
-      // amount into the old details save or apply a mutation response to a row.
-      onAmountUpdated();
-      if (!mounted.current || currentIdentity.current !== identity || selectionVersion.current !== submittedVersion) return;
+      // The footer defers refresh until the existing details save finishes.
+      // Never put this amount into the legacy extras/notes price field.
+      if (!options?.deferRefresh) onAmountUpdated();
+      if (!mounted.current || currentSelection.current !== selection || selectionVersion.current !== submittedVersion) return false;
+      const refreshedResult = currentActive.current.manualAmountRevision === result.manualAmountRevision &&
+        currentActive.current.firstCleaningTotalCents === result.selectedAmountCents && currentActive.current.recurrence === active.recurrence;
+      if (currentIdentity.current !== identity && !refreshedResult) return false;
       if (result.bookingId !== active.id || result.selectedDate !== active.requestedLocalDate) {
         setNotice({ identity, selection, message: "The amount response did not match this booking. Reload booking and review its current amount.", error: true, reloadRequired: true });
-        return;
+        return false;
       }
+      if (currentIdentity.current !== identity) return true;
+      setSavedDraft({ identity, amount: result.selectedAmountCents, scope: currentDraft.scope });
       setDraft({ ...currentDraft, amount: formatNativeBookingAmount(result.selectedAmountCents) });
       setNotice({ identity, selection, message: nativeBookingAmountSummary(result), error: false, reloadRequired: false });
+      return true;
     } catch (error) {
-      if (!mounted.current || currentIdentity.current !== identity || selectionVersion.current !== submittedVersion) return;
+      if (!mounted.current || currentIdentity.current !== identity || selectionVersion.current !== submittedVersion) return false;
       const failure = error as { message?: string; data?: { code?: string } };
       const conflict = failure.data?.code === "CONFLICT";
       setNotice({
@@ -130,11 +154,20 @@ export function NativeBookingAmountEditor({
         error: true,
         reloadRequired: conflict,
       });
+      return false;
     } finally {
       inFlight.current = false;
       if (mounted.current) setPending(false);
     }
   };
+  useEffect(() => {
+    const control = { identity, dirty, canSave, save };
+    saveControlRef.current = control;
+    return () => { if (saveControlRef.current === control) saveControlRef.current = null; };
+  });
+  useEffect(() => {
+    onSaveStateChange({ identity, dirty, canSave });
+  }, [identity, dirty, canSave, onSaveStateChange]);
   const reload = async () => {
     if (!mounted.current || inFlight.current || busy || disabled) return;
     inFlight.current = true;
@@ -149,6 +182,7 @@ export function NativeBookingAmountEditor({
       if (mounted.current) setPending(false);
     }
   };
+  if (active.source !== "booking") return null;
   return (
     <div className="bcr-native-amount-editor" aria-label="Native booking amount">
       <label className="bcr-booking-price-input">
@@ -182,13 +216,10 @@ export function NativeBookingAmountEditor({
             ? `Only this job. Future visits remain $${formatNativeBookingAmount(active.futureVisitTotalCents)}.`
             : "Only this job. This does not create recurring visits."
           : "Apply from this job forward."}
-        {" "}Save amount is separate from extras, company notes, and schedule updates. No payment is charged or refunded.
+        {" "}Use Save booking updates below to save your changes. No payment is charged or refunded.
       </p>
       {amountCents === null && <p className="bcr-editor-hint" role="alert">Enter an amount from $0.00 to $100,000.00 using no more than two decimal places.</p>}
       {unavailable && <p className="bcr-editor-hint" role="alert">Reload booking to load its current date and amount before saving.</p>}
-      <button type="button" className="bcr-native-amount-save" disabled={busy || disabled || unavailable || amountCents === null || Boolean(currentNotice?.reloadRequired)} onClick={save}>
-        {busy ? "Saving amount…" : "Save amount"}
-      </button>
       {currentNotice && <p className="bcr-native-amount-notice" role={currentNotice.error ? "alert" : "status"}>{currentNotice.message}</p>}
       {(currentNotice?.error || unavailable) && (
         <button type="button" className="bcr-native-amount-reload" disabled={busy || disabled} onClick={reload}>

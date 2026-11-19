@@ -40,7 +40,7 @@ describe("native booking drawer commercial edits", () => {
     expect(implementation).not.toContain(prohibitedLegacySymbol);
   });
 
-  it("separates native amount scope from existing extras, notes and schedule saves", () => {
+  it("coordinates native amount scope with extras and notes through the existing single footer save", () => {
     const page = read("client/src/pages/BookingsCRMExactLive.tsx");
     const workspace = read("client/src/components/NativeBookingsWorkspace.tsx");
     const amountEditor = read("client/src/components/NativeBookingAmountEditor.tsx");
@@ -63,7 +63,17 @@ describe("native booking drawer commercial edits", () => {
     expect(amountEditor).toContain("This job only");
     expect(amountEditor).toContain("This and future jobs");
     expect(amountEditor).toContain("trpc.bookings.updateManualAmount.useMutation");
-    expect(amountEditor).toContain("Save amount");
+    expect(amountEditor).not.toContain("Save amount");
+    expect(amountEditor).not.toContain("bcr-native-amount-save");
+    expect(amountEditor).toContain("Use Save booking updates below");
+    expect(amountEditor).toContain("No payment is charged or refunded");
+    expect(amountEditor).toContain("NativeBookingAmountSaveControl");
+    expect(amountEditor).toContain("saveControlRef.current = control");
+    expect(amountEditor).toContain("onSaveStateChange({ identity, dirty, canSave })");
+    expect(amountEditor).toContain("if (!options?.deferRefresh) onAmountUpdated()");
+    expect(page).toContain("saveControlRef={amountSaveControlRef}");
+    expect(page).toContain("onSaveStateChange={onAmountSaveStateChange}");
+    expect(page).not.toContain("use Save amount to change the total");
     expect(page).toContain("active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents");
     expect(page).not.toMatch(
       /active\.source === "booking"\s*&&\s*active\.firstCleaningTotalCents\s*!==\s*null\s*&&\s*<NativeBookingCommercialEditor/
@@ -81,6 +91,16 @@ describe("native booking drawer commercial edits", () => {
       )
     );
     expect(footer).toContain('className="bcr-save-changes"');
+    expect(footer.match(/className="bcr-save-changes"/g)).toHaveLength(1);
+    expect(footer).toContain("const amountControl = amountSaveControlRef.current");
+    expect(footer).toContain("amountControl.identity !== amountIdentity");
+    expect(footer).toContain("amountControl.dirty && !amountControl.canSave");
+    expect(footer).toContain("model.bookingSavePending");
+    expect(footer).toContain("model.detailQuery.isFetching");
+    expect(footer).toContain("const detailsChanged =");
+    expect(footer).toContain("model.updateActiveBookingDetails");
+    expect(footer).toContain("beforeSubmit: amountControl.dirty");
+    expect(footer).toContain("amountControl.save({ deferRefresh: true })");
     expect(footer).toContain('className="bcr-cancel-booking"');
     expect(footer.indexOf("bcr-save-changes")).toBeLessThan(
       footer.indexOf("bcr-cancel-booking")
@@ -88,6 +108,31 @@ describe("native booking drawer commercial edits", () => {
     expect(page).not.toContain(
       "disabled={model.updateBookingDetails.isPending}\n                      onClick={() =>\n                        model.updateActiveBookingSchedule"
     );
+  });
+
+  it("retains the existing details mutation, schedule confirmation and payment/link action paths", () => {
+    const workspace = read("client/src/components/NativeBookingsWorkspace.tsx");
+    const page = read("client/src/pages/BookingsCRMExactLive.tsx");
+    const detailsSave = workspace.slice(
+      workspace.indexOf("const updateActiveBookingDetails ="),
+      workspace.indexOf("const updateActiveBookingSchedule =")
+    );
+    expect(detailsSave).toContain("beforeSubmit?: () => Promise<boolean>");
+    expect(detailsSave).toContain("detailsChanged: boolean");
+    expect(detailsSave).toContain("updateBookingDetails.mutateAsync");
+    expect(detailsSave).toContain("requestScheduleSave(");
+    expect(detailsSave).toContain("if (!await options.beforeSubmit())");
+    expect(detailsSave).toContain("if (!options || options.detailsChanged || changed)");
+    expect(detailsSave).toContain("refreshBookingAndFunnelQueries()");
+    expect(detailsSave).not.toContain("updateManualAmount");
+    for (const marker of [
+      "<BookingPaymentActions", "<PortalRequestPaymentActions", "<BookingTeamMagicLink",
+      "<BookingPayrollPanel active={active} model={model}", "onClick={model.copyCustomerMagicLink}",
+      "onClick={model.updateActiveRecordSchedule}", "onClick={model.cancelActiveRecord}",
+      "totalCents={active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents}",
+      "holdTotalCents={active.firstCleaningTotalCents}",
+    ]) expect(page).toContain(marker);
+    for (const source of [detailsSave, page]) expect(source).not.toContain(prohibitedLegacySymbol);
   });
 
   it("uses an additive company-notes migration for the native booking table", () => {

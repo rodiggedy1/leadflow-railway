@@ -5,10 +5,10 @@ import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { trpc } from "@/lib/trpc";
 import { BookingTeamMagicLink } from "@/components/BookingTeamMagicLink";
-import { NativeBookingAmountEditor } from "@/components/NativeBookingAmountEditor";
+import { NativeBookingAmountEditor, type NativeBookingAmountSaveControl, type NativeBookingAmountSaveState } from "@/components/NativeBookingAmountEditor";
 import { PUBLIC_BOOKING_PRICED_EXTRAS } from "@shared/publicBookingPricing";
 import { getBookingArrivalWindowLabel } from "@/lib/bookingArrivalDisplay";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -578,9 +578,13 @@ function NativeBookingCommercialEditor({
   active,
   model,
   onDraftChange,
+  amountSaveControlRef,
+  onAmountSaveStateChange,
 }: {
   active: any;
   model: any;
+  amountSaveControlRef: MutableRefObject<NativeBookingAmountSaveControl | null>;
+  onAmountSaveStateChange: (state: NativeBookingAmountSaveState) => void;
   onDraftChange: (draft: {
     bookingKey: string;
     firstCleaningTotalCents: number | null;
@@ -666,7 +670,7 @@ function NativeBookingCommercialEditor({
     onDraftChange,
     parsedFinalPrice,
   ]);
-  const isPending = model.updateBookingDetails.isPending;
+  const isPending = model.updateBookingDetails.isPending || model.bookingSavePending;
   return (
     <section className="bcr-editor-section bcr-booking-commercial-editor">
       <div className="bcr-section-title">
@@ -732,18 +736,14 @@ function NativeBookingCommercialEditor({
         active={active}
         disabled={isPending || model.detailQuery.isFetching || model.scheduleSavePending}
         onAmountUpdated={model.refreshBookingAndFunnelQueries}
+        saveControlRef={amountSaveControlRef}
+        onSaveStateChange={onAmountSaveStateChange}
         onReload={async () => {
           const result = await model.detailQuery.refetch();
           if (result.error) throw result.error;
           model.refreshBookingAndFunnelQueries();
         }}
       />
-      {hasManualAmount && (
-        <p className="bcr-editor-hint">
-          The saved manual amount remains authoritative. Save booking updates
-          saves extras and notes separately; use Save amount to change the total.
-        </p>
-      )}
       <label className="bcr-booking-company-notes">
         Company notes
         <textarea
@@ -767,6 +767,8 @@ function BookingDetailDrawer({ model }: { model: any }) {
     companyNotes: string | null;
     isSaveable: boolean;
   } | null>(null);
+  const amountSaveControlRef = useRef<NativeBookingAmountSaveControl | null>(null);
+  const [amountSaveState, setAmountSaveState] = useState<NativeBookingAmountSaveState | null>(null);
   if (!active) return null;
   const draftMatchesActiveBooking =
     active.source === "booking" && commercialDraft?.bookingKey === active.key;
@@ -882,6 +884,8 @@ function BookingDetailDrawer({ model }: { model: any }) {
               active={active}
               model={model}
               onDraftChange={setCommercialDraft}
+              amountSaveControlRef={amountSaveControlRef}
+              onAmountSaveStateChange={setAmountSaveState}
             />
           )}
           <section className="bcr-editor-section">
@@ -1430,10 +1434,22 @@ function BookingDetailDrawer({ model }: { model: any }) {
               disabled={
                 !activeCommercialDraft.isSaveable ||
                 model.scheduleSavePending ||
+                model.bookingSavePending ||
+                model.detailQuery.isFetching ||
+                Boolean(amountSaveState?.dirty && !amountSaveState.canSave) ||
                 !model.rescheduleDate ||
                 !model.rescheduleTime
               }
-              onClick={() =>
+              onClick={() => {
+                const amountControl = amountSaveControlRef.current;
+                const amountIdentity = JSON.stringify([active.key, active.source, active.id, active.requestedLocalDate,
+                  active.firstCleaningTotalCents, active.manualAmountRevision ?? 0, active.recurrence]);
+                if (!amountControl || amountControl.identity !== amountIdentity || (amountControl.dirty && !amountControl.canSave)) return;
+                const extrasKey = (extras: Array<{ id: string; quantity: number }>) =>
+                  JSON.stringify(extras.map(({ id, quantity }) => ({ id, quantity })).sort((a, b) => a.id.localeCompare(b.id)));
+                const detailsChanged = activeCommercialDraft.companyNotes !== (active.companyNotes?.trim() || null) ||
+                  activeCommercialDraft.firstCleaningTotalCents !== (active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents) ||
+                  extrasKey(activeCommercialDraft.extras) !== extrasKey(active.extras);
                 model.updateActiveBookingDetails({
                   extras: activeCommercialDraft.extras.map(extra => ({
                     id: extra.id,
@@ -1442,10 +1458,15 @@ function BookingDetailDrawer({ model }: { model: any }) {
                   firstCleaningTotalCents:
                     activeCommercialDraft.firstCleaningTotalCents ?? 0,
                   companyNotes: activeCommercialDraft.companyNotes,
-                })
-              }
+                }, {
+                  detailsChanged,
+                  beforeSubmit: amountControl.dirty
+                    ? () => amountControl.save({ deferRefresh: true })
+                    : undefined,
+                });
+              }}
             >
-              {model.updateBookingDetails.isPending
+              {model.updateBookingDetails.isPending || model.bookingSavePending
                 ? "Saving…"
                 : "Save booking updates"}
             </button>

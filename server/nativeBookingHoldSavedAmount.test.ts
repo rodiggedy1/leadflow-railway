@@ -11,7 +11,7 @@ import { effectiveNativeVisitAmount, nativeBookingManualAmountsSchema } from "..
 const root = resolve(import.meta.dirname, "..");
 const routerPath = "server/bookingPaymentAdminRouter.ts";
 const current = () => readFileSync(resolve(root, routerPath), "utf8");
-const original = () => execFileSync("git", ["show", `HEAD:${routerPath}`], { cwd: root, encoding: "utf8" });
+const original = () => execFileSync("git", ["show", `a9e5139bad72d51e2a2ff7dfb9cce8c85255335a:${routerPath}`], { cwd: root, encoding: "utf8" });
 const BOOKING_DATE = "2030-01-02";
 const NOW = "2030-01-01T00:00:00.000Z";
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));

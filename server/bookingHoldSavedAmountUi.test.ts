@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 const root = resolve(import.meta.dirname, "..");
 const componentPath = "client/src/components/BookingPaymentActions.tsx";
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
-const head = (path: string) => execFileSync("git", ["show", `HEAD:${path}`], { cwd: root, encoding: "utf8" });
+const head = (path: string) => execFileSync("git", ["show", `a9e5139bad72d51e2a2ff7dfb9cce8c85255335a:${path}`], { cwd: root, encoding: "utf8" });
 const icon = () => null;
 type Element = React.ReactElement<Record<string, any>>;
 const elements = (tree: unknown): Element[] => Array.isArray(tree) ? tree.flatMap(elements)

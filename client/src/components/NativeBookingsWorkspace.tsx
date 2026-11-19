@@ -581,6 +581,8 @@ export default function NativeBookingsWorkspace({
   const [status, setStatus] = useState<StatusFilter>("All");
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const teamPortalLinkVersion = useRef(0);
+  const bookingSaveInFlight = useRef(false);
+  const [bookingSavePending, setBookingSavePending] = useState(false);
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
@@ -1015,6 +1017,8 @@ export default function NativeBookingsWorkspace({
     selectedBookingId,
     selectedFunnelId,
   ]);
+  const activeSaveSelection = useRef(active);
+  activeSaveSelection.current = active;
   const copyCustomerMagicLink = () => {
     if (!active?.customerName || !active.customerPhone) {
       setImportSummary(
@@ -1143,7 +1147,7 @@ export default function NativeBookingsWorkspace({
       }
     );
   };
-  const scheduleSavePending = updateLeadflowJob.isPending || updateBookingDetails.isPending || updateFunnelSchedule.isPending || updatePortalSchedule.isPending;
+  const scheduleSavePending = bookingSavePending || updateLeadflowJob.isPending || updateBookingDetails.isPending || updateFunnelSchedule.isPending || updatePortalSchedule.isPending;
   useEffect(() => {
     setPendingReschedule(null);
   }, [active?.key, active?.requestedLocalDate, active?.requestedLocalTime]);
@@ -1183,22 +1187,55 @@ export default function NativeBookingsWorkspace({
     extras: Array<{ id: string; quantity: number }>;
     firstCleaningTotalCents: number;
     companyNotes: string | null;
-  }) => {
-    if (!active || active.source !== "booking" || scheduleSavePending || pendingReschedule) return;
+  }, options?: { detailsChanged: boolean; beforeSubmit?: () => Promise<boolean> }) => {
+    if (!active || active.source !== "booking" || scheduleSavePending || pendingReschedule || bookingSaveInFlight.current) return;
     const booking = active;
-    const changed = rescheduleDate !== booking.requestedLocalDate || rescheduleTime !== booking.requestedLocalTime;
-    const submit = (rescheduleMode?: BookingRescheduleMode) => updateBookingDetails.mutate(
-      { bookingId: booking.id, ...input, ...(changed ? { requestedLocalDate: rescheduleDate, requestedLocalTime: rescheduleTime, rescheduleMode } : {}) },
-      {
-        onSuccess: () => {
-          if (changed) scheduleSaved(booking.customerName, rescheduleDate, rescheduleTime);
-          else { setImportSummary(`${booking.customerName}'s price, extras, and notes were saved.`); refreshBookingAndFunnelQueries(); }
-        },
-        onError: error => setImportSummary(`Booking updates could not be saved: ${error.message}`),
-      },
-    );
-    if (changed) requestScheduleSave(rescheduleDate, rescheduleTime, submit);
-    else submit();
+    const targetDate = rescheduleDate;
+    const targetTime = rescheduleTime;
+    const changed = targetDate !== booking.requestedLocalDate || targetTime !== booking.requestedLocalTime;
+    const submit = async (rescheduleMode?: BookingRescheduleMode) => {
+      if (bookingSaveInFlight.current || activeSaveSelection.current?.key !== booking.key ||
+          activeSaveSelection.current.requestedLocalDate !== booking.requestedLocalDate ||
+          activeSaveSelection.current.requestedLocalTime !== booking.requestedLocalTime) return;
+      bookingSaveInFlight.current = true;
+      setBookingSavePending(true);
+      let amountSaved = false;
+      try {
+        // Preserve the existing schedule-scope choice before making any write.
+        // Amount-only saves never submit legacy details or reset recurring intent.
+        if (options?.beforeSubmit) {
+          if (!await options.beforeSubmit()) {
+            setImportSummary("Booking updates stopped. Review the amount message and reload the booking before saving again.");
+            refreshBookingAndFunnelQueries();
+            return;
+          }
+          amountSaved = true;
+        }
+        if (activeSaveSelection.current?.key !== booking.key ||
+            activeSaveSelection.current.requestedLocalDate !== booking.requestedLocalDate ||
+            activeSaveSelection.current.requestedLocalTime !== booking.requestedLocalTime) {
+          setImportSummary(amountSaved ? "Amount saved. Other updates stopped because the selected booking changed." : "This booking changed. Review its current details before saving.");
+          refreshBookingAndFunnelQueries();
+          return;
+        }
+        if (!options || options.detailsChanged || changed) {
+          await updateBookingDetails.mutateAsync({ bookingId: booking.id, ...input,
+            ...(changed ? { requestedLocalDate: targetDate, requestedLocalTime: targetTime, rescheduleMode } : {}),
+          });
+        }
+        if (changed) scheduleSaved(booking.customerName, targetDate, targetTime);
+        else { setImportSummary(`${booking.customerName}'s booking updates were saved.`); refreshBookingAndFunnelQueries(); }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Please try again.";
+        setImportSummary(`${amountSaved ? "Amount saved, but other booking updates" : "Booking updates"} could not be saved: ${message}`);
+        if (amountSaved) refreshBookingAndFunnelQueries();
+      } finally {
+        bookingSaveInFlight.current = false;
+        setBookingSavePending(false);
+      }
+    };
+    if (changed) requestScheduleSave(targetDate, targetTime, mode => { void submit(mode); });
+    else void submit();
   };
   const updateActiveBookingSchedule = (input: {
     requestedLocalDate?: string;
@@ -1314,6 +1351,7 @@ export default function NativeBookingsWorkspace({
           rescheduleDate,
           rescheduleTime,
           scheduleSavePending,
+          bookingSavePending,
           revenueCents,
           rows,
           setActiveKey,
