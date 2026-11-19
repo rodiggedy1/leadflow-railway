@@ -73,5 +73,11 @@
 .schedule-crm-exact-live .scr-slot-finder button:disabled { cursor: not-allowed; opacity: .48; }
 
 
+/* All customer cards share the same brown surface, independent of job or interaction state. */
+.schedule-crm-exact-live .scr-job-card,
+.schedule-crm-exact-live .scr-job-card:hover,
+.schedule-crm-exact-live .scr-job-card.is-selected,
+.schedule-crm-exact-live .scr-job-card.is-conflict { background: #2b201e; }
+
 @media (max-width: 1000px) { .schedule-crm-exact-live .ocr-sidebar { display: none; } .schedule-crm-exact-live .scr-schedule-main { grid-template-columns: minmax(340px, 1fr) minmax(380px, 1.05fr); } }
 @media (max-width: 760px) { .schedule-crm-exact-live { height: auto; overflow: visible; } .schedule-crm-exact-live .scr-workspace { height: auto; overflow: visible; } .schedule-crm-exact-live .scr-schedule-main { display: grid; grid-template-columns: 1fr; overflow: visible; } .schedule-crm-exact-live .scr-route-stack { overflow: visible; } .schedule-crm-exact-live .scr-map-panel { min-height: 360px; } .schedule-crm-exact-live .scr-workspace-tabs a { white-space: nowrap; } }
