@@ -93,7 +93,7 @@ export async function syncNativeBookingOperationalProjection(
 ): Promise<void> {
   const now = new Date();
   const currentRows = await tx
-    .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate })
+    .select({ id: leadflowJobs.id, jobDate: leadflowJobs.jobDate, jobTotalCents: leadflowJobs.jobTotalCents })
     .from(leadflowJobs)
     .where(eq(leadflowJobs.bookingId, booking.id));
 
@@ -112,6 +112,28 @@ export async function syncNativeBookingOperationalProjection(
     }
     // Operational rescheduling already selected/moved the old occurrence.
     // Future IDs retain the original boundary even when this visit crosses them.
+    if (booking.manualAmountOverrides != null) {
+      options.futureJobIds.forEach((id) => {
+        const rows = currentRows.filter((row) => row.id === id);
+        if (rows.length !== 1 || id === current?.id) {
+          throw new TRPCError({ code: "CONFLICT", message: "The exact future operational visit cannot be selected safely for amount projection." });
+        }
+      });
+      if (new Set(options.futureJobIds).size !== options.futureJobIds.length) {
+        throw new TRPCError({ code: "CONFLICT", message: "The exact future operational visit cannot be selected safely for amount projection." });
+      }
+      if (current) await tx.update(leadflowJobs).set({
+        extras: nativeBookingExtras(booking),
+        customerNotes: nativeBookingCustomerNotes(booking),
+        updatedAt: now,
+      }).where(eq(leadflowJobs.id, current.id));
+      if (options.futureJobIds.length) await tx.update(leadflowJobs).set({
+        extras: nativeBookingExtras(booking),
+        customerNotes: nativeBookingCustomerNotes(booking),
+        updatedAt: now,
+      }).where(and(eq(leadflowJobs.bookingId, booking.id), inArray(leadflowJobs.id, options.futureJobIds)));
+      return;
+    }
     if (current) await tx.update(leadflowJobs).set({
       extras: nativeBookingExtras(booking),
       customerNotes: nativeBookingCustomerNotes(booking),
@@ -158,6 +180,12 @@ export async function syncNativeBookingOperationalProjection(
     hasStripeCard: nativeBookingHasCard(booking.paymentStatus),
   };
 
+  if (booking.manualAmountOverrides != null) {
+    operationalJob.jobTotalCents = current
+      ? current.jobTotalCents
+      : booking.firstCleaningTotalCents;
+  }
+
   if (current) {
     await tx
       .update(leadflowJobs)
@@ -173,6 +201,7 @@ export async function syncNativeBookingOperationalProjection(
     });
   }
 
+  if (booking.manualAmountOverrides == null) {
   await tx
     .update(leadflowJobs)
     .set({
@@ -191,6 +220,20 @@ export async function syncNativeBookingOperationalProjection(
         gt(leadflowJobs.jobDate, booking.requestedLocalDate),
       ),
     );
+  } else {
+    await tx
+      .update(leadflowJobs)
+      .set({
+        teamName: assignment.teamName,
+        teamId: assignment.teamId,
+        extras: operationalJob.extras,
+        frequency: operationalJob.frequency,
+        customerNotes: operationalJob.customerNotes,
+        hasStripeCard: operationalJob.hasStripeCard,
+        updatedAt: now,
+      })
+      .where(and(eq(leadflowJobs.bookingId, booking.id), gt(leadflowJobs.jobDate, booking.requestedLocalDate)));
+  }
 
   if (booking.futureVisitTotalCents === null) {
     await tx

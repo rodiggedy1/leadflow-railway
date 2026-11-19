@@ -29,6 +29,7 @@ import { verifyCanonicalCardSetup } from "./bookingPaymentVerification";
 import { authorizeCanonicalBookingHold, captureCanonicalPaymentIntent, cancelCanonicalPaymentIntent, chargeCanonicalSavedCard } from "./bookingPaymentActionsEngine";
 import { withUnclaimedNativeFirstVisit } from "./payableInvoiceBookingGuard";
 import { internalBookingHandoffRouter } from "./internalBookingHandoffRouter";
+import { effectiveNativeVisitAmount } from "../shared/nativeBookingManualAmounts";
 
 const confirmedBookingInput = z.object({
   bookingId: z.number().int().positive(),
@@ -458,16 +459,19 @@ export const bookingPaymentAdminRouter = router({
     }),
 
   placeHold: agentProcedure
-    .input(confirmedBookingInput)
+    .input(confirmedBookingInput.extend({ expectedAmountCents: z.number().int().nonnegative().safe().optional() }))
     .mutation(async ({ input, ctx }) => {
       const { db } = await paymentTargetOrThrow(input.bookingId);
       const agentName = ctx.agent?.agentName ?? "admin";
-      const { booking, profile, pending } = await withUnclaimedNativeFirstVisit(db, input.bookingId, async (tx, { booking, profile }) => {
+      const { booking, profile, pending, amountCents } = await withUnclaimedNativeFirstVisit(db, input.bookingId, async (tx, { booking, profile }) => {
         if (profile.paymentStatus !== "card_on_file")
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "A verified card on file is required before placing a hold.",
           });
+        const amountCents = effectiveNativeVisitAmount(booking, booking.requestedLocalDate, { firstVisit: true });
+        if (input.expectedAmountCents !== undefined && input.expectedAmountCents !== amountCents)
+          throw new TRPCError({ code: "CONFLICT", message: "The booking amount changed. Refresh the booking and confirm the current hold amount." });
         const existing = await tx
           .select()
           .from(paymentAuthorizations)
@@ -495,7 +499,7 @@ export const bookingPaymentAdminRouter = router({
           stripeCustomerId: profile.stripeCustomerId,
           stripePaymentMethodId: profile.stripePaymentMethodId,
           stripePaymentIntentId: null,
-          amountCents: booking.firstCleaningTotalCents,
+          amountCents,
           currency: "usd",
           operation: "authorization",
           status: "pending_card",
@@ -504,7 +508,7 @@ export const bookingPaymentAdminRouter = router({
           authorizedAt: null,
           notes: null,
         }).$returningId();
-        return { booking, profile, pending };
+        return { booking, profile, pending, amountCents };
       });
       const stripe = getStripeClient();
       let intent: Stripe.PaymentIntent;
@@ -514,7 +518,7 @@ export const bookingPaymentAdminRouter = router({
           profileId: profile.id,
           customerId: profile.stripeCustomerId,
           paymentMethodId: profile.stripePaymentMethodId,
-          amountCents: booking.firstCleaningTotalCents,
+          amountCents,
           publicBookingNumber: booking.publicBookingNumber,
           agentName,
           attempt: profile.version,

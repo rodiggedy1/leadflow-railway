@@ -4,6 +4,8 @@ import CustomerBookingLinksAdmin from "@/pages/CustomerBookingLinksAdmin";
 import { BookingPaymentActions } from "@/components/BookingPaymentActions";
 import { PortalRequestPaymentActions } from "@/components/PortalRequestPaymentActions";
 import { trpc } from "@/lib/trpc";
+import { BookingTeamMagicLink } from "@/components/BookingTeamMagicLink";
+import { NativeBookingAmountEditor } from "@/components/NativeBookingAmountEditor";
 import { PUBLIC_BOOKING_PRICED_EXTRAS } from "@shared/publicBookingPricing";
 import { getBookingArrivalWindowLabel } from "@/lib/bookingArrivalDisplay";
 import { useEffect, useState } from "react";
@@ -590,18 +592,23 @@ function NativeBookingCommercialEditor({
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [finalPrice, setFinalPrice] = useState("");
   const [companyNotes, setCompanyNotes] = useState("");
+  // The legacy extras/notes save must never write an effective manual override
+  // into the original creation price. Extras retain their existing raw delta.
+  const originalFirstCleaningTotalCents =
+    active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents;
+  const hasManualAmount = (active.manualAmountRevision ?? 0) > 0;
   useEffect(() => {
     setQuantities(
       Object.fromEntries(
         active.extras.map((extra: any) => [extra.id, extra.quantity])
       )
     );
-    setFinalPrice(((active.firstCleaningTotalCents ?? 0) / 100).toFixed(2));
+    setFinalPrice(((originalFirstCleaningTotalCents ?? 0) / 100).toFixed(2));
     setCompanyNotes(active.companyNotes ?? "");
   }, [
     active.companyNotes,
     active.extras,
-    active.firstCleaningTotalCents,
+    originalFirstCleaningTotalCents,
     active.key,
   ]);
   const updateQuantity = (id: string, nextQuantity: number) => {
@@ -637,7 +644,7 @@ function NativeBookingCommercialEditor({
       bookingKey: active.key,
       firstCleaningTotalCents: finalPriceIsValid
         ? parsedFinalPrice
-        : active.firstCleaningTotalCents,
+        : originalFirstCleaningTotalCents,
       extras: extras.map(extra => ({
         ...extra,
         label:
@@ -651,7 +658,7 @@ function NativeBookingCommercialEditor({
     });
   }, [
     active.extras,
-    active.firstCleaningTotalCents,
+    originalFirstCleaningTotalCents,
     active.key,
     companyNotes,
     extrasKey,
@@ -668,7 +675,9 @@ function NativeBookingCommercialEditor({
           <h3>Extras, price &amp; company notes</h3>
         </div>
         <span>
-          {finalPriceIsValid
+          {hasManualAmount && active.firstCleaningTotalCents !== null
+            ? `${formatCents(active.firstCleaningTotalCents)} first visit`
+            : finalPriceIsValid
             ? `$${(parsedFinalPrice / 100).toFixed(2)} first visit`
             : "First visit"}
         </span>
@@ -718,23 +727,23 @@ function NativeBookingCommercialEditor({
           );
         })}
       </div>
-      <label className="bcr-booking-price-input">
-        Final price ($)
-        <input
-          inputMode="decimal"
-          type="text"
-          value={finalPrice}
-          onChange={event => setFinalPrice(event.target.value)}
-          disabled={isPending}
-          aria-describedby="booking-price-hint"
-        />
-      </label>
-      <p id="booking-price-hint" className="bcr-editor-hint">
-        This changes only the first-visit amount.{" "}
-        {active.futureVisitTotalCents === null
-          ? "There is no recurring visit price."
-          : `Future visits remain $${(active.futureVisitTotalCents / 100).toFixed(0)}.`}
-      </p>
+      <NativeBookingAmountEditor
+        key={active.key}
+        active={active}
+        disabled={isPending || model.detailQuery.isFetching || model.scheduleSavePending}
+        onAmountUpdated={model.refreshBookingAndFunnelQueries}
+        onReload={async () => {
+          const result = await model.detailQuery.refetch();
+          if (result.error) throw result.error;
+          model.refreshBookingAndFunnelQueries();
+        }}
+      />
+      {hasManualAmount && (
+        <p className="bcr-editor-hint">
+          The saved manual amount remains authoritative. Save booking updates
+          saves extras and notes separately; use Save amount to change the total.
+        </p>
+      )}
       <label className="bcr-booking-company-notes">
         Company notes
         <textarea
@@ -766,15 +775,19 @@ function BookingDetailDrawer({ model }: { model: any }) {
     : active.source === "booking"
       ? {
           bookingKey: active.key,
-          firstCleaningTotalCents: active.firstCleaningTotalCents,
+          firstCleaningTotalCents:
+            active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents,
           extras: active.extras,
           companyNotes: active.companyNotes ?? null,
           isSaveable: true,
         }
       : null;
-  const displayedFirstCleaningTotalCents = draftMatchesActiveBooking
-    ? commercialDraft.firstCleaningTotalCents
-    : active.firstCleaningTotalCents;
+  const displayedFirstCleaningTotalCents =
+    active.source === "booking" && (active.manualAmountRevision ?? 0) > 0
+      ? active.firstCleaningTotalCents
+      : draftMatchesActiveBooking
+        ? commercialDraft.firstCleaningTotalCents
+        : active.firstCleaningTotalCents;
   const displayedExtras = draftMatchesActiveBooking
     ? commercialDraft.extras
     : active.extras;
@@ -1035,6 +1048,16 @@ function BookingDetailDrawer({ model }: { model: any }) {
                 </span>
               </button>
             )}
+            {(active.source === "booking" || active.source === "leadflow") && (
+              <BookingTeamMagicLink
+                key={`${active.key}:${active.assignedTeamId ?? "unassigned"}:${active.source === "booking" && (model.assignBookingTeam.isPending || model.detailQuery.isFetching) ? "refreshing" : "ready"}`}
+                source={active.source}
+                id={active.id}
+                assignedTeamName={active.assignedTeamName}
+                assignmentVersionRef={model.teamPortalLinkVersion}
+                disabled={active.source === "booking" && (model.assignBookingTeam.isPending || model.detailQuery.isFetching)}
+              />
+            )}
           </section>
           <BookingPayrollPanel active={active} model={model} />
           <section className="bcr-editor-section">
@@ -1065,7 +1088,7 @@ function BookingDetailDrawer({ model }: { model: any }) {
               active.firstCleaningTotalCents !== null ? (
               <BookingPaymentActions
                 bookingId={active.id}
-                totalCents={active.firstCleaningTotalCents}
+                totalCents={active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents}
                 paymentStatus={active.paymentStatus}
                 paymentMethod={active.paymentMethod}
               />
@@ -1095,7 +1118,8 @@ function BookingDetailDrawer({ model }: { model: any }) {
               active.firstCleaningTotalCents !== null ? (
               <BookingPaymentActions
                 bookingId={active.id}
-                totalCents={active.firstCleaningTotalCents}
+                totalCents={active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents}
+                    holdTotalCents={active.firstCleaningTotalCents}
                 paymentStatus={active.paymentStatus}
                 paymentMethod={active.paymentMethod}
               />

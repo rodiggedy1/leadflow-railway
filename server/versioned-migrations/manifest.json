@@ -591,6 +591,14 @@
       "sha256": "0801aaf2aaf81b57983ea58511257c3f8f35dc293f69169b0a604913afd57bfe",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0077_create_payable_invoice_deliveries.postconditions.json"
+    },
+    {
+      "id": "0078_add_booking_manual_amount_overrides",
+      "mode": "additive-columns-existing-table",
+      "sqlFile": "0078_add_booking_manual_amount_overrides.sql",
+      "sha256": "d3e2a5659b6f517e80a7fc6121aee1318a020c5d9dc9eb020277531daea1c7f0",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0078_add_booking_manual_amount_overrides.postconditions.json"
     }
   ]
 }

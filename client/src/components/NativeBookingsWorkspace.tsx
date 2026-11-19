@@ -88,6 +88,9 @@ type WorkspaceRow = {
   paymentChargedAt: number | null;
   firstCleaningTotalCents: number | null;
   futureVisitTotalCents: number | null;
+  originalFirstCleaningTotalCents?: number;
+  originalFutureVisitTotalCents?: number | null;
+  manualAmountRevision?: number;
   companyNotes: string | null;
 };
 
@@ -577,6 +580,7 @@ export default function NativeBookingsWorkspace({
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("All");
   const [importSummary, setImportSummary] = useState<string | null>(null);
+  const teamPortalLinkVersion = useRef(0);
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
@@ -739,6 +743,9 @@ export default function NativeBookingsWorkspace({
         paymentChargedAt: null,
         firstCleaningTotalCents: booking.firstCleaningTotalCents,
         futureVisitTotalCents: booking.futureVisitTotalCents,
+        originalFirstCleaningTotalCents: booking.originalFirstCleaningTotalCents,
+        originalFutureVisitTotalCents: booking.originalFutureVisitTotalCents,
+        manualAmountRevision: booking.manualAmountRevision,
         companyNotes: booking.companyNotes,
       }));
     const funnelRows = funnelLeads
@@ -879,6 +886,7 @@ export default function NativeBookingsWorkspace({
           extras: importedExtrasFrom(job.extras),
           specialRequestNotes: job.customerNotes ? [job.customerNotes] : [],
           assignmentStatus: job.teamName ? "assigned" : "unassigned",
+          assignedTeamId: job.teamId,
           assignedTeamName: job.teamName,
           paymentStatus: job.hasStripeCard ? "card_on_file" : "not_started",
           paymentBrand: job.paymentBrand,
@@ -954,6 +962,9 @@ export default function NativeBookingsWorkspace({
         paymentChargedAt: null,
         firstCleaningTotalCents: booking.firstCleaningTotalCents,
         futureVisitTotalCents: booking.futureVisitTotalCents,
+        originalFirstCleaningTotalCents: booking.originalFirstCleaningTotalCents,
+        originalFutureVisitTotalCents: booking.originalFutureVisitTotalCents,
+        manualAmountRevision: booking.manualAmountRevision,
         companyNotes: booking.companyNotes,
       };
     }
@@ -1117,6 +1128,7 @@ export default function NativeBookingsWorkspace({
   const assignActiveBookingTeam = (teamId: number) => {
     if (!active || active.source !== "booking" || assignBookingTeam.isPending)
       return;
+    teamPortalLinkVersion.current += 1;
     assignBookingTeam.mutate(
       { bookingId: active.id, teamId },
       {
@@ -1274,6 +1286,7 @@ export default function NativeBookingsWorkspace({
           activePhotoBookingKey,
           assignActiveBookingTeam,
           assignBookingTeam,
+          teamPortalLinkVersion,
           afterPhotos,
           assigned,
           beforePhotos,
@@ -1840,7 +1853,7 @@ export default function NativeBookingsWorkspace({
                 active.firstCleaningTotalCents !== null ? (
                   <BookingPaymentActions
                     bookingId={active.id}
-                    totalCents={active.firstCleaningTotalCents}
+                    totalCents={active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents}
                     paymentStatus={active.paymentStatus}
                     paymentMethod={active.paymentMethod}
                   />
@@ -1867,7 +1880,8 @@ export default function NativeBookingsWorkspace({
                 ) : active.firstCleaningTotalCents !== null ? (
                   <BookingPaymentActions
                     bookingId={active.id}
-                    totalCents={active.firstCleaningTotalCents}
+                    totalCents={active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents}
+                    holdTotalCents={active.firstCleaningTotalCents}
                     paymentStatus={active.paymentStatus}
                     paymentMethod={active.paymentMethod}
                   />

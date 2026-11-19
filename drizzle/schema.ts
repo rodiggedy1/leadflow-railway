@@ -4747,6 +4747,7 @@ export const bookings = mysqlTable("bookings", {
   pricingVersion: varchar("pricingVersion", { length: 64 }).notNull(),
   firstCleaningTotalCents: int("firstCleaningTotalCents").notNull(),
   futureVisitTotalCents: int("futureVisitTotalCents"),
+  manualAmountOverrides: json("manualAmountOverrides").$type<import("../shared/nativeBookingManualAmounts").NativeBookingManualAmounts>(),
   priceSnapshot: json("priceSnapshot").notNull(),
   companyNotes: text("companyNotes"),
   expiresAt: bigint("expiresAt", { mode: "number" }),

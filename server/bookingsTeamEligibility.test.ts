@@ -88,17 +88,18 @@ class FixtureDb {
     this.queries.push(query);
     assertSqlBoundary(sql);
     if (sql.startsWith("select ")) {
-      const parsed = /^select (.+) from `([^`]+)`(?: where (.*?))?(?: order by `([^`]+)`\.`([^`]+)` asc)?(?: limit \?)?$/.exec(sql);
+      const selectSql = sql.replace(/ for update$/, "");
+      const parsed = /^select (.+) from `([^`]+)`(?: where (.*?))?(?: order by `([^`]+)`\.`([^`]+)` asc)?(?: limit \?)?$/.exec(selectSql);
       if (!parsed) throw new Error(`Unsupported fixture SELECT: ${sql}`);
       const [, projection, table, where, orderTable, orderField] = parsed;
       if (this.failRead === table) throw new Error(`Synthetic read failure: ${table}`);
-      const filteredParams = sql.endsWith(" limit ?") ? params.slice(0, -1) : params;
+      const filteredParams = selectSql.endsWith(" limit ?") ? params.slice(0, -1) : params;
       let rows = this.state[table].filter(this.predicate(where, filteredParams));
       if (orderField) {
         expect(orderTable).toBe(table);
         rows = [...rows].sort((a, b) => String(a[orderField]).localeCompare(String(b[orderField])));
       }
-      if (sql.endsWith(" limit ?")) rows = rows.slice(0, Number(params.at(-1)));
+      if (selectSql.endsWith(" limit ?")) rows = rows.slice(0, Number(params.at(-1)));
       const fields = projection.split(", ").map(field => {
         const column = /^(?:`([^`]+)`\.)?`([^`]+)`$/.exec(field);
         if (!column || (column[1] && column[1] !== table)) throw new Error(`Unsupported projection: ${field}`);

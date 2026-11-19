@@ -5,6 +5,8 @@ import { internalExactBookingRouter } from "./internalExactBookingRouter";
 import { bookingsAgentProcedure, router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import { repairAprilPortalLink } from "./aprilPortalLinkRepair";
+import { selectNativeDisplayAmounts } from "../shared/nativeBookingManualAmounts";
+import { updateNativeBookingManualAmount, updateNativeBookingManualAmountInputSchema } from "./nativeBookingManualAmountService";
 import {
   appSettings,
   bookingAssignments,
@@ -13,6 +15,7 @@ import {
   bookingSeries,
   bookings,
   customerPortalServiceRequests,
+  cleanerProfiles,
   conversationSessions,
   leadflowJobs,
   schedulingTeams,
@@ -325,6 +328,7 @@ function mapAdminBooking(
   row: typeof bookings.$inferSelect,
   assignment?: ActiveBookingAssignment
 ) {
+  const amounts = selectNativeDisplayAmounts(row);
   return {
     id: row.id,
     publicBookingNumber: row.publicBookingNumber,
@@ -356,8 +360,9 @@ function mapAdminBooking(
     recurrence: row.recurrence,
     recurringIntentStatus: row.recurringIntentStatus,
     pricingVersion: row.pricingVersion,
-    firstCleaningTotalCents: row.firstCleaningTotalCents,
-    futureVisitTotalCents: row.futureVisitTotalCents,
+    ...amounts,
+    originalFirstCleaningTotalCents: row.firstCleaningTotalCents,
+    originalFutureVisitTotalCents: row.futureVisitTotalCents,
     bookedByAgentId: row.bookedByAgentId,
     bookedByAgentName: row.bookedByAgentName,
     companyNotes: row.companyNotes,
@@ -949,6 +954,53 @@ export const bookingsRouter = router({
       }
       return repairAprilPortalLink(db);
     }),
+  teamPortalProfile: bookingsAgentProcedure
+    .input(z.object({
+      source: z.enum(["booking", "leadflow"]),
+      id: z.number().int().positive(),
+    }).strict())
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      let launch27TeamId: number | null = null;
+      let teamName: string | null = null;
+      let nativeTeamId: number | null = null;
+      if (input.source === "booking") {
+        const [booking] = await db.select({ id: bookings.id }).from(bookings)
+          .where(eq(bookings.id, input.id)).limit(1);
+        if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found." });
+        const assignment = (await activeAssignmentsByBookingId(db, [booking.id])).get(booking.id);
+        if (assignment?.teamId !== null && assignment?.teamId !== undefined) {
+          const [team] = await db.select({ launch27TeamId: schedulingTeams.launch27TeamId })
+            .from(schedulingTeams).where(eq(schedulingTeams.id, assignment.teamId)).limit(1);
+          launch27TeamId = team?.launch27TeamId ?? null;
+          teamName = assignment.teamName;
+          nativeTeamId = assignment.teamId;
+        }
+      } else {
+        const [job] = await db.select({ bookingId: leadflowJobs.bookingId, teamId: leadflowJobs.teamId, teamName: leadflowJobs.teamName })
+          .from(leadflowJobs).where(eq(leadflowJobs.id, input.id)).limit(1);
+        if (!job || job.bookingId !== null) throw new TRPCError({ code: "NOT_FOUND", message: "Imported booking not found." });
+        launch27TeamId = job.teamId;
+        teamName = job.teamName;
+      }
+      if (launch27TeamId === null || !Number.isInteger(launch27TeamId) || launch27TeamId <= 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "The assigned team does not have a linked portal account." });
+      }
+      const profiles = await db.select({ id: cleanerProfiles.id, isActive: cleanerProfiles.isActive })
+        .from(cleanerProfiles).where(eq(cleanerProfiles.launch27TeamId, launch27TeamId)).limit(2);
+      if (profiles.length !== 1 || profiles[0].isActive !== 1) {
+        throw new TRPCError({ code: "CONFLICT", message: "The assigned team's active portal account could not be verified." });
+      }
+      if (nativeTeamId !== null) {
+        const linkedTeams = await db.select({ id: schedulingTeams.id }).from(schedulingTeams)
+          .where(eq(schedulingTeams.launch27TeamId, launch27TeamId)).limit(2);
+        if (linkedTeams.length !== 1 || linkedTeams[0].id !== nativeTeamId) {
+          throw new TRPCError({ code: "CONFLICT", message: "The assigned team's portal mapping could not be verified." });
+        }
+      }
+      return { cleanerProfileId: profiles[0].id, source: input.source, id: input.id, teamName };
+    }),
   assignTeam: bookingsAgentProcedure
     .input(
       z.object({
@@ -968,7 +1020,8 @@ export const bookingsRouter = router({
           .select()
           .from(bookings)
           .where(eq(bookings.id, input.bookingId))
-          .limit(1);
+          .limit(1)
+          .for("update");
         const booking = bookingRows[0];
         if (!booking)
           throw new TRPCError({
@@ -1079,6 +1132,18 @@ export const bookingsRouter = router({
       const updatedBooking = await db.transaction(tx => updateCanonicalBookingDetails(tx, input));
       publishNativeBookingRefresh();
       return updatedBooking;
+    }),
+  updateManualAmount: bookingsAgentProcedure
+    .input(updateNativeBookingManualAmountInputSchema)
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Booking service unavailable." });
+      const updated = await db.transaction(tx => updateNativeBookingManualAmount(tx, input, {
+        id: String(ctx.agent.agentId),
+        name: ctx.agent.agentName,
+      }));
+      publishNativeBookingRefresh();
+      return updated;
     }),
   cancel: bookingsAgentProcedure
     .input(z.object({ id: z.number().int().positive() }))

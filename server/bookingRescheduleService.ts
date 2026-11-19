@@ -12,6 +12,7 @@ import {
   nextRecurringBusinessDate,
 } from "./leadflowJobsService";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import { effectiveNativeVisitAmount } from "../shared/nativeBookingManualAmounts";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 export type BookingRescheduleTransaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -151,9 +152,18 @@ export async function rescheduleOperationalBooking(
     if (continuations.length > 1) badRequest("The original next recurring visit is ambiguous.");
     if (continuations.length === 1 && !active(continuations[0])) badRequest("The original next recurring visit is inactive; its continuation cannot be safely established.");
     if (continuations.length === 0) {
-      const nativeRows = selected.bookingId === null ? [] : await tx.select({ futureVisitTotalCents: bookings.futureVisitTotalCents }).from(bookings).where(eq(bookings.id, selected.bookingId)).limit(1);
+      const nativeRows = selected.bookingId === null ? [] : await tx.select({
+        requestedLocalDate: bookings.requestedLocalDate,
+        recurrence: bookings.recurrence,
+        firstCleaningTotalCents: bookings.firstCleaningTotalCents,
+        futureVisitTotalCents: bookings.futureVisitTotalCents,
+        manualAmountOverrides: bookings.manualAmountOverrides,
+      }).from(bookings).where(eq(bookings.id, selected.bookingId)).limit(1);
       if (oldTime === null) badRequest("The original visit time is unavailable; its unchanged recurring continuation cannot be safely established.");
-      const values = buildRecurringLeadflowJobValues(selected, continuationDate, nativeRows[0]?.futureVisitTotalCents ?? selected.jobTotalCents);
+      const recurringJobTotalCents = nativeRows[0]?.manualAmountOverrides != null
+        ? effectiveNativeVisitAmount(nativeRows[0], continuationDate, { firstVisit: false })
+        : nativeRows[0]?.futureVisitTotalCents ?? selected.jobTotalCents;
+      const values = buildRecurringLeadflowJobValues(selected, continuationDate, recurringJobTotalCents);
       continuationValues = {
         ...values, bookingSeriesId: selected.bookingSeriesId,
         bookingStatus: selected.bookingStatus === "unassigned" ? "unassigned" : "assigned",

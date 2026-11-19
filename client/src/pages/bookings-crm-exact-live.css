@@ -313,3 +313,16 @@
   .bcr-quote-modal-header { padding: 15px 16px; }
   .bcr-quote-modal-scroll > main { padding: 14px 12px 20px; }
 }
+
+/* Assigned-team portal access is explicit; existing assignment and payment controls stay unchanged. */
+.booking-crm-review .bcr-team-portal-link { margin-top: 10px; display: grid; gap: 7px; min-width: 0; }
+.booking-crm-review .bcr-team-portal-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.booking-crm-review .bcr-team-portal-actions button,
+.booking-crm-review .bcr-team-portal-actions a { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #8065bd; border-radius: 6px; background: #392c55; color: #f5f1ff; font: inherit; font-size: 10px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.booking-crm-review .bcr-team-portal-actions button:disabled { cursor: not-allowed; opacity: .48; }
+.booking-crm-review .bcr-team-portal-actions button:focus-visible,
+.booking-crm-review .bcr-team-portal-actions a:focus-visible,
+.booking-crm-review .bcr-team-portal-link input:focus-visible { outline: 2px solid #c1a8ff; outline-offset: 2px; }
+.booking-crm-review .bcr-team-portal-link p { margin: 0; color: #aca4bd; font-size: 10px; line-height: 1.45; }
+.booking-crm-review .bcr-team-portal-link p[role="alert"] { color: #e6a29b; }
+.booking-crm-review .bcr-team-portal-link input { box-sizing: border-box; width: 100%; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid #5c506f; border-radius: 6px; background: #16141b; color: #faf8ff; font: inherit; font-size: 11px; }

@@ -3,6 +3,7 @@ import { bookings, cleanerPortalJobPhotos, cleanerPortalJobProgress, cleanerPort
 import { getDb } from "./db";
 import { getCompletedBookingsForDate, type Launch27Booking } from "./launch27";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
+import { effectiveNativeFutureAmount } from "../shared/nativeBookingManualAmounts";
 
 export const LEADFLOW_JOB_IMPORT_DAYS = 30;
 export const LEADFLOW_JOB_ORIGIN_LAUNCH27 = "launch27_import";
@@ -433,6 +434,42 @@ export async function runEndOfDayLeadflowJobRecurrence(now = new Date()): Promis
     const nextDate = nextRecurringBusinessDate(job.jobDate, job.frequency);
     if (!nextDate || status === "cancelled" || status === "rescheduled") {
       skipped++;
+      continue;
+    }
+
+    if (job.bookingId !== null) {
+      try {
+        const outcome = await db.transaction(async (tx) => {
+          // Manual amount edits use this same booking-first lock. Acquire it
+          // even before the first override exists so insertion cannot race it.
+          const [nativeBooking] = await tx.select({
+            requestedLocalDate: bookings.requestedLocalDate,
+            recurrence: bookings.recurrence,
+            firstCleaningTotalCents: bookings.firstCleaningTotalCents,
+            futureVisitTotalCents: bookings.futureVisitTotalCents,
+            manualAmountOverrides: bookings.manualAmountOverrides,
+          }).from(bookings).where(eq(bookings.id, job.bookingId!)).limit(1).for("update");
+          const claimResult = await tx.update(leadflowJobs)
+            .set({ nextOccurrenceCreatedAt: new Date() })
+            .where(and(eq(leadflowJobs.id, job.id), isNull(leadflowJobs.nextOccurrenceCreatedAt)));
+          const claim = claimResult as unknown as { affectedRows?: number } | [{ affectedRows?: number }];
+          const claimed = Array.isArray(claim) ? claim[0]?.affectedRows : claim.affectedRows;
+          if (claimed !== 1) return null;
+          const jobsOnNextDate = await tx.select().from(leadflowJobs).where(eq(leadflowJobs.jobDate, nextDate));
+          if (jobsOnNextDate.some((candidate) => candidate.bookingId === job.bookingId)) return "skipped";
+          const recurringJobTotalCents = nativeBooking?.manualAmountOverrides != null
+            ? effectiveNativeFutureAmount(nativeBooking, nextDate) ?? job.jobTotalCents
+            : nativeBooking?.futureVisitTotalCents ?? job.jobTotalCents;
+          await tx.insert(leadflowJobs).values(buildRecurringLeadflowJobValues(job, nextDate, recurringJobTotalCents));
+          return "created";
+        });
+        if (outcome === "created") created++;
+        if (outcome === "skipped") skipped++;
+      } catch (error) {
+        errors++;
+        await db.update(leadflowJobs).set({ nextOccurrenceCreatedAt: null }).where(eq(leadflowJobs.id, job.id));
+        console.error(`[LeadflowJobs] Failed recurrence for job ${job.id}:`, error);
+      }
       continue;
     }
 

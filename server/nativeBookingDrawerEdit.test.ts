@@ -40,9 +40,10 @@ describe("native booking drawer commercial edits", () => {
     expect(implementation).not.toContain(prohibitedLegacySymbol);
   });
 
-  it("retains the first-visit only rule in the working CRM drawer", () => {
+  it("separates native amount scope from existing extras, notes and schedule saves", () => {
     const page = read("client/src/pages/BookingsCRMExactLive.tsx");
     const workspace = read("client/src/components/NativeBookingsWorkspace.tsx");
+    const amountEditor = read("client/src/components/NativeBookingAmountEditor.tsx");
 
     for (const marker of [
       "NativeBookingCommercialEditor",
@@ -53,13 +54,17 @@ describe("native booking drawer commercial edits", () => {
       'active.source === "booking" && (',
       'active.source === "booking" ? (',
       "updateActiveBookingSchedule",
-      "(active.firstCleaningTotalCents ?? 0)",
       "onDraftChange",
       "displayedFirstCleaningTotalCents",
       "displayedExtras",
       "Save booking updates",
     ])
-      expect(page).toContain(marker);
+      expect(page + amountEditor).toContain(marker);
+    expect(amountEditor).toContain("This job only");
+    expect(amountEditor).toContain("This and future jobs");
+    expect(amountEditor).toContain("trpc.bookings.updateManualAmount.useMutation");
+    expect(amountEditor).toContain("Save amount");
+    expect(page).toContain("active.originalFirstCleaningTotalCents ?? active.firstCleaningTotalCents");
     expect(page).not.toMatch(
       /active\.source === "booking"\s*&&\s*active\.firstCleaningTotalCents\s*!==\s*null\s*&&\s*<NativeBookingCommercialEditor/
     );

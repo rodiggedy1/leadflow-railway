@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "table": "bookings",
+  "columns": [
+    { "name": "manualAmountOverrides", "columnType": "json", "nullable": true }
+  ],
+  "indexes": []
+}
