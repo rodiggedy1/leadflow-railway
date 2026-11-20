@@ -8,6 +8,7 @@ import { importLaunch27JobsForDate, importNextThirtyDaysOfLaunch27Jobs, LEADFLOW
 import { broadcastCleanerPortalJobsChanged } from "./cleanerPortalUpdates";
 import { leadflowCallMatrixRouter } from "./leadflowCallMatrixRouter";
 import { teamLeaderboardEvidenceRouter } from "./teamLeaderboardEvidenceRouter";
+import { teamLeaderboardPublicationRouter } from "./teamLeaderboardPublicationRouter";
 import { sendSms } from "./openphone";
 import { calculateEffectivePayroll } from "./payrollCalculator";
 import { summarizeDashboardServices, summarizeDashboardSources } from "./dashboardAnalyticsPresentation";
@@ -396,6 +397,7 @@ function dateBefore(date: string, days: number) {
 export const leadflowJobsRouter = router({
   callMatrix: leadflowCallMatrixRouter,
   teamEvidence: teamLeaderboardEvidenceRouter,
+  leaderboard: teamLeaderboardPublicationRouter,
 
   /**
    * Read-only Operations Dashboard projection. The page needs live daily

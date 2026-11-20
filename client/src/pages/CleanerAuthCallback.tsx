@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getCleanerCallbackDestination } from "@shared/teamLeaderboardAccess";
 
 type State = "verifying" | "confirming" | "success" | "error";
 
@@ -28,6 +29,7 @@ export default function CleanerAuthCallback() {
   const token = callbackParams.get("token") ?? "";
   const requestedJob = callbackParams.get("job") ?? "";
   const messageJobQuery = /^leadflow:\d+$/.test(requestedJob) ? `?job=${encodeURIComponent(requestedJob)}` : "";
+  const callbackDestination = getCleanerCallbackDestination(callbackParams);
   const [state, setState] = useState<State>(token ? "verifying" : "error");
   const [errorMsg, setErrorMsg] = useState<string>(
     token ? "" : "No login token found in URL. Please use the link from your SMS."
@@ -74,14 +76,18 @@ export default function CleanerAuthCallback() {
       // hasRedirected ref ensures this fires at most once even if the effect re-runs.
       if (!hasRedirected.current) {
         hasRedirected.current = true;
-        window.location.replace(`/portal-v2${messageJobQuery}`);
+        if (callbackDestination === "/team-leaderboard") {
+          window.location.replace(callbackDestination);
+        } else {
+          window.location.replace(`/portal-v2${messageJobQuery}`);
+        }
       }
     } else if (meQuery.isError || (!meQuery.isLoading && !meQuery.data)) {
       // Session not found even after verification — something went wrong
       setErrorMsg("Session could not be confirmed. Please try the link again or contact your manager.");
       setState("error");
     }
-  }, [state, meQuery.data, meQuery.isLoading, meQuery.isError, messageJobQuery]);
+  }, [state, meQuery.data, meQuery.isLoading, meQuery.isError, messageJobQuery, callbackDestination]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">

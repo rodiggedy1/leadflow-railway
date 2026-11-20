@@ -7,6 +7,7 @@ import data from "@emoji-mart/data";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { motion, AnimatePresence } from "framer-motion";
+import { TeamLeaderboardShare } from "@/components/TeamLeaderboardShare";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -3679,6 +3680,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         }
                         Copy magic link
                       </Button>
+                      <TeamLeaderboardShare
+                        key={`leaderboard:${selected.id}:${cleanerProfile?.id ?? "none"}`}
+                        profile={cleanerProfile}
+                        conversationPhone={selected.phone}
+                        sessionId={selected.id}
+                        sendMessage={input => sendMessage.mutateAsync(input)}
+                      />
                       {!cleanerProfile?.id && (
                         <p className="text-xs text-slate-400 text-center">
                           No cleaner profile found for this number

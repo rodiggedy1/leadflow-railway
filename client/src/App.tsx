@@ -42,6 +42,7 @@ const TrackerFlow = lazy(() => import("./pages/TrackerFlow"));
 const FieldManagement = lazy(() => import("./pages/FieldManagement"));
 const ReactivationEngine = lazy(() => import("./pages/ReactivationEngine"));
 const CleanerAuthCallback = lazy(() => import("./pages/CleanerAuthCallback"));
+const TeamLeaderboard = lazy(() => import("./pages/TeamLeaderboard"));
 const LiveCallAssist = lazy(() => import("./pages/LiveCallAssist"));
 const ReviewTracker = lazy(() => import("./pages/ReviewTracker"));
 const SseTest = lazy(() => import("./pages/SseTest"));
@@ -270,6 +271,7 @@ function Router() {
         <Route path={"/cleaner"} component={() => { window.location.replace("/portal-v2"); return null; }} />
         <Route path={"/portal-v2"} component={CleanerPortalV2} />
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
+        <Route path={"/team-leaderboard"} component={TeamLeaderboard} />
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/widget-config"} component={AdminSettingsReviewRoute} />
         <Route path={"/admin/bookings"} component={AdminBookingsCRMExactReviewRoute} />
@@ -344,6 +346,7 @@ function PollingInstrumentation() {
 
 function DayBoardSafePollingInstrumentation() {
   const [location] = useLocation();
+  if (location === "/team-leaderboard") return null;
   if (location.startsWith("/invoice/") || location === "/admin/invoices/collect") return null;
   if (location === "/admin/customer-intelligence") return null;
   if (isDayBoardExactLiveRoute(location)) return null;
@@ -352,6 +355,7 @@ function DayBoardSafePollingInstrumentation() {
 
 function DayBoardSafeRuntimeWatchers() {
   const [location] = useLocation();
+  if (location === "/team-leaderboard") return null;
   if (location.startsWith("/invoice/") || location === "/admin/invoices/collect") return null;
   if (location === "/admin/customer-intelligence") return null;
   if (isDayBoardExactLiveRoute(location)) return null;

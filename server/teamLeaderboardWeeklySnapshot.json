@@ -1,0 +1,936 @@
+{
+  "publication": {
+    "weekLabel": "November 15–21, 2026",
+    "nextWeekLabel": "",
+    "publishedLabel": "Week-to-date results",
+    "teams": [
+      {
+        "id": "300001",
+        "name": "Augustus Alma",
+        "eligibleJobs": 1,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 1,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 1,
+            "complete": false
+          },
+          "eta": {
+            "successful": 1,
+            "eligible": 1,
+            "complete": true
+          },
+          "photos": {
+            "successful": 0,
+            "eligible": 1,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "2",
+        "name": "BZA Cleaning",
+        "eligibleJobs": 0,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "eta": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": true
+          },
+          "photos": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "120001",
+        "name": "Consuelo Alba",
+        "eligibleJobs": 5,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 5,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 5,
+            "complete": false
+          },
+          "eta": {
+            "successful": 1,
+            "eligible": 5,
+            "complete": true
+          },
+          "photos": {
+            "successful": 0,
+            "eligible": 5,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "510002",
+        "name": "Dessire Delgado",
+        "eligibleJobs": 4,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 4,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 4,
+            "complete": false
+          },
+          "eta": {
+            "successful": 0,
+            "eligible": 4,
+            "complete": true
+          },
+          "photos": {
+            "successful": 2,
+            "eligible": 4,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "4",
+        "name": "GoGreen",
+        "eligibleJobs": 11,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 11,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 11,
+            "complete": false
+          },
+          "eta": {
+            "successful": 5,
+            "eligible": 11,
+            "complete": true
+          },
+          "photos": {
+            "successful": 11,
+            "eligible": 11,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "5",
+        "name": "JessiCleaning Team",
+        "eligibleJobs": 7,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 7,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 7,
+            "complete": false
+          },
+          "eta": {
+            "successful": 1,
+            "eligible": 7,
+            "complete": true
+          },
+          "photos": {
+            "successful": 0,
+            "eligible": 7,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "510001",
+        "name": "Johanna Torres",
+        "eligibleJobs": 9,
+        "metrics": {
+          "ratings": {
+            "successful": 1,
+            "eligible": 1,
+            "complete": true
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 9,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 9,
+            "complete": false
+          },
+          "eta": {
+            "successful": 8,
+            "eligible": 9,
+            "complete": true
+          },
+          "photos": {
+            "successful": 8,
+            "eligible": 9,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "7",
+        "name": "MaidsPlus",
+        "eligibleJobs": 17,
+        "metrics": {
+          "ratings": {
+            "successful": 2,
+            "eligible": 2,
+            "complete": true
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 17,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 17,
+            "complete": false
+          },
+          "eta": {
+            "successful": 17,
+            "eligible": 17,
+            "complete": true
+          },
+          "photos": {
+            "successful": 0,
+            "eligible": 17,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "360001",
+        "name": "Martha Calderon",
+        "eligibleJobs": 8,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 8,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 8,
+            "complete": false
+          },
+          "eta": {
+            "successful": 7,
+            "eligible": 8,
+            "complete": true
+          },
+          "photos": {
+            "successful": 8,
+            "eligible": 8,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "8",
+        "name": "OnildaVillalobos",
+        "eligibleJobs": 6,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 6,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 6,
+            "complete": false
+          },
+          "eta": {
+            "successful": 4,
+            "eligible": 6,
+            "complete": true
+          },
+          "photos": {
+            "successful": 6,
+            "eligible": 6,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "9",
+        "name": "Team Alba M",
+        "eligibleJobs": 14,
+        "metrics": {
+          "ratings": {
+            "successful": 0,
+            "eligible": 0,
+            "complete": false
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 14,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 14,
+            "complete": false
+          },
+          "eta": {
+            "successful": 0,
+            "eligible": 14,
+            "complete": true
+          },
+          "photos": {
+            "successful": 0,
+            "eligible": 14,
+            "complete": true
+          }
+        }
+      },
+      {
+        "id": "12",
+        "name": "Team Yolanda",
+        "eligibleJobs": 1,
+        "metrics": {
+          "ratings": {
+            "successful": 1,
+            "eligible": 1,
+            "complete": true
+          },
+          "complaints": {
+            "successful": 0,
+            "eligible": 1,
+            "complete": false
+          },
+          "recovery": {
+            "successful": 0,
+            "eligible": 1,
+            "complete": false
+          },
+          "eta": {
+            "successful": 1,
+            "eligible": 1,
+            "complete": true
+          },
+          "photos": {
+            "successful": 1,
+            "eligible": 1,
+            "complete": true
+          }
+        }
+      }
+    ],
+    "ownIncidents": [
+      {
+        "teamId": "9",
+        "date": "Reported 2026-11-15 · Service 2026-11-15",
+        "summary": "Ali Kelly: Customer reported that the team arrived earlier than scheduled without enough notice. She asked for at least 30 minutes' advance notice in future so she can take her dog out.",
+        "outcome": "Customer reported that the team arrived earlier than scheduled without enough notice. She asked for at least 30 minutes' advance notice in future so she can take her dog out. Service/team match: Corroborated current service: original customer arrival message plus stored assigned team; completion flag absent.",
+        "sourceLabel": "Reviewed SMS",
+        "id": "leaderboard-incident-1"
+      },
+      {
+        "teamId": "120001",
+        "date": "Reported 2026-11-15 · Service 2026-11-15",
+        "summary": "James Head: Customer said customer service and quality of service/control have declined significantly over the last few years. They said they are looking elsewhere.",
+        "outcome": "Customer said customer service and quality of service/control have declined significantly over the last few years. They said they are looking elsewhere. Service/team match: Existing deterministic service/team matcher.",
+        "sourceLabel": "Reviewed SMS",
+        "id": "leaderboard-incident-2"
+      },
+      {
+        "teamId": "2",
+        "date": "Reported 2026-11-17 · Service 2026-10-05",
+        "summary": "Tamesha Newman: Customer reports that baseboards and sweeping beside the stove and under furniture have been overlooked. Customer asks that the team see the comments on their bookings.",
+        "outcome": "Customer reports that baseboards and sweeping beside the stove and under furniture have been overlooked. Customer asks that the team see the comments on their bookings. Service/team match: Existing deterministic service/team matcher.",
+        "sourceLabel": "Reviewed SMS",
+        "id": "leaderboard-incident-3"
+      },
+      {
+        "teamId": "120001",
+        "date": "Reported 2026-11-17 · Service 2026-11-14",
+        "summary": "SBA Operations: Customer reports that the recurring bi-weekly booking is for 2 maids for 3 hours, but it seems only one maid worked for about an hour. Customer asks to confirm the service being received.",
+        "outcome": "Customer reports that the recurring bi-weekly booking is for 2 maids for 3 hours, but it seems only one maid worked for about an hour. Customer asks to confirm the service being received. Service/team match: Existing deterministic service/team matcher.",
+        "sourceLabel": "Reviewed SMS",
+        "id": "leaderboard-incident-4"
+      },
+      {
+        "teamId": "4",
+        "date": "Reported 2026-11-18, 2026-11-19 · Service 2026-11-18",
+        "summary": "Blessing Anyiam (booking: Laura Leigh): late arrival and missed upstairs vacuuming",
+        "outcome": "Customer reported a late arrival, a short cleaning visit and upstairs not vacuumed, and requested a discount or partial refund. Linked to GoGreen. This is feedback received today about yesterday’s service. Repeated observations/messages are grouped as one affected service.",
+        "sourceLabel": "Reviewed SMS",
+        "id": "leaderboard-incident-5"
+      },
+      {
+        "teamId": "5",
+        "date": "Reported 2026-11-19 · Service 2026-11-19",
+        "summary": "Shukri Husary: ovens missed and incomplete cleaning",
+        "outcome": "Customer reported late arrival and ovens not cleaned as agreed, and requested a partial refund. Linked to JessiCleaning Team. One affected service, not two penalties. Repeated observations/messages are grouped as one affected service.",
+        "sourceLabel": "Reviewed SMS",
+        "id": "leaderboard-incident-6"
+      },
+      {
+        "teamId": "360001",
+        "date": "Reported 2026-11-19 · Service 2026-11-19",
+        "summary": "Ammani Nagesh: different team, late arrival and poor cleaning",
+        "outcome": "Customer reported the wrong requested team, language concerns, poor cleaning and streaky tables. Linked to Martha Calderon. Four observations grouped into one affected service. Repeated observations/messages are grouped as one affected service.",
+        "sourceLabel": "Reviewed SMS",
+        "id": "leaderboard-incident-7"
+      },
+      {
+        "teamId": "9",
+        "date": "Reported 2026-11-19 · Service 2026-11-14",
+        "summary": "Chasseny Lewis: move-out cleaning not done and refund requested",
+        "outcome": "Customer reported the apartment was not cleaned, declined a reclean and requested a refund. Team Alba M attribution confirmed by Rohan despite no completion flag. Feedback received today about the November 14 service. Repeated observations/messages are grouped as one affected service.",
+        "sourceLabel": "Reviewed SMS",
+        "id": "leaderboard-incident-8"
+      }
+    ]
+  },
+  "details": {
+    "300001": {
+      "complaintCases": 0,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "0",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "1 / 1",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "0 / 1",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "2": {
+      "complaintCases": 1,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "1",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "0 / 0",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "0 / 0",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "120001": {
+      "complaintCases": 2,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "2",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "1 / 5",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "0 / 5",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "510002": {
+      "complaintCases": 0,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "0",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "0 / 4",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "2 / 4",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "4": {
+      "complaintCases": 1,
+      "refundRequests": 1,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "1",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "5 / 11",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "11 / 11",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "5": {
+      "complaintCases": 1,
+      "refundRequests": 1,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "1",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "1 / 7",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "0 / 7",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "510001": {
+      "complaintCases": 0,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "1 / 1",
+          "unit": "five-star / received ratings",
+          "note": "1 actual customer rating(s) recorded. Only received ratings are used."
+        },
+        "complaints": {
+          "value": "0",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "8 / 9",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "8 / 9",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "1 actual customer rating(s) recorded. Only received ratings are used.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "7": {
+      "complaintCases": 0,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "2 / 2",
+          "unit": "five-star / received ratings",
+          "note": "2 actual customer rating(s) recorded. Only received ratings are used."
+        },
+        "complaints": {
+          "value": "0",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "17 / 17",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "0 / 17",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "2 actual customer rating(s) recorded. Only received ratings are used.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "360001": {
+      "complaintCases": 1,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "1",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "7 / 8",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "8 / 8",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "8": {
+      "complaintCases": 0,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "0",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "4 / 6",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "6 / 6",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "9": {
+      "complaintCases": 2,
+      "refundRequests": 1,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "Not available",
+          "unit": "five-star / received ratings",
+          "note": "No customer rating received in the returned service records. N/A, not full marks or zero."
+        },
+        "complaints": {
+          "value": "2",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "0 / 14",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "0 / 14",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "No customer rating received in the returned service records. N/A, not full marks or zero.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    },
+    "12": {
+      "complaintCases": 0,
+      "refundRequests": 0,
+      "confirmedRecoveryCases": 0,
+      "metricDisplay": {
+        "ratings": {
+          "value": "1 / 1",
+          "unit": "five-star / received ratings",
+          "note": "1 actual customer rating(s) recorded. Only received ratings are used."
+        },
+        "complaints": {
+          "value": "0",
+          "unit": "complaint-affected services",
+          "note": "One count per affected service, not one per message."
+        },
+        "recovery": {
+          "value": "0",
+          "unit": "recorded recleans/refunds",
+          "note": "No completed reclean/refund recorded in this test review. Requests are separate."
+        },
+        "eta": {
+          "value": "1 / 1",
+          "unit": "jobs with ETA submitted",
+          "note": "Persisted portal ETA; no punctuality test."
+        },
+        "photos": {
+          "value": "1 / 1",
+          "unit": "jobs with photos submitted",
+          "note": "At least one saved photo per job; no quality or minimum-count test."
+        }
+      },
+      "metricNotes": {
+        "ratings": "1 actual customer rating(s) recorded. Only received ratings are used.",
+        "complaints": "One count per affected service, not one per message.",
+        "recovery": "No completed reclean/refund recorded in this test review. Requests are separate.",
+        "eta": "Persisted portal ETA; no punctuality test.",
+        "photos": "At least one saved photo per job; no quality or minimum-count test."
+      }
+    }
+  },
+  "period": {
+    "weekStart": "2026-11-15",
+    "weekEnd": "2026-11-21",
+    "weekConvention": "Sunday-start",
+    "coverageStart": "2026-11-15",
+    "coverageEnd": "2026-11-19"
+  }
+}

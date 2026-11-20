@@ -64,6 +64,8 @@ describe("private team evidence routes", () => {
   });
   it("does not connect the private admin evidence API to the team page", () => {
     const page = readFileSync(resolve("client/src/pages/TeamLeaderboard.tsx"), "utf8");
-    expect(page).not.toContain("teamEvidence"); expect(page).toContain("publication={null}");
+    expect(page).not.toContain("teamEvidence");
+    expect(page).toContain("trpc.leadflowJobs.leaderboard.forMe.useQuery");
+    expect(page).toContain("publication={results.publication}");
   });
 });

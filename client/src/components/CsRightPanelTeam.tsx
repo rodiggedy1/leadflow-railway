@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { TeamLeaderboardShare } from "@/components/TeamLeaderboardShare";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,7 @@ export default function CsRightPanelTeam({ selected }: Props) {
     onError: (err) => toast.error(err.message || "Failed to send message"),
   });
 
+  const sendLeaderboardMessage = trpc.leads.sendMessage.useMutation();
   const { data: cleanerProfile } = trpc.leads.getCleanerProfileByPhone.useQuery(
     { phone: selected.phone },
     { enabled: !!selected.phone, refetchOnWindowFocus: false }
@@ -266,6 +268,13 @@ export default function CsRightPanelTeam({ selected }: Props) {
                 }
                 Copy magic link
               </Button>
+              <TeamLeaderboardShare
+                key={`leaderboard:${selected.id}:${cleanerProfile?.id ?? "none"}`}
+                profile={cleanerProfile}
+                conversationPhone={selected.phone}
+                sessionId={selected.id}
+                sendMessage={sendLeaderboardMessage.mutateAsync}
+              />
               {!cleanerProfile?.id && (
                 <p className="text-xs text-slate-400 text-center">No cleaner profile found for this number</p>
               )}
