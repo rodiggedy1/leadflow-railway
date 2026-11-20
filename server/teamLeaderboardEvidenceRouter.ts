@@ -7,17 +7,21 @@ import { createTeamLeaderboardBatchService } from "./teamLeaderboardBatch";
 import type { TeamBatchManifest, TeamBatchReceipt } from "../shared/teamLeaderboardBatch";
 import type { TeamEvidence } from "../shared/teamLeaderboardEvidence";
 import type { TeamEvidenceAuditRead } from "./teamLeaderboardEvidenceService";
+import { createTeamWeeklyReviewService } from "./teamWeeklyReviewService";
 
 /** Admin-only evidence. This is deliberately NOT the cleaner/team publication
  * API; raw customer text must never be returned to team-session callers. */
 export function createTeamLeaderboardEvidenceRouter(options: {
   resolveService?: () => TeamEvidenceService;
   resolveBatchService?: () => ReturnType<typeof createTeamLeaderboardBatchService>;
+  resolveWeeklyService?: () => ReturnType<typeof createTeamWeeklyReviewService>;
 } = {}) {
   let current: TeamEvidenceService | undefined;
   const service = () => options.resolveService?.() ?? (current ??= createTeamEvidenceService());
   let currentBatch: ReturnType<typeof createTeamLeaderboardBatchService> | undefined;
   const batch = () => options.resolveBatchService?.() ?? (currentBatch ??= createTeamLeaderboardBatchService({ readWeek: input => service().readWeek(input) }));
+  let currentWeekly: ReturnType<typeof createTeamWeeklyReviewService> | undefined;
+  const weekly = () => options.resolveWeeklyService?.() ?? (currentWeekly ??= createTeamWeeklyReviewService({ readWeek: input => service().readWeek(input) }));
   const object = (value: unknown) => !!value && typeof value === "object" && !Array.isArray(value);
   const manifest = z.custom<TeamBatchManifest>(object);
   const receipt = z.custom<TeamBatchReceipt>(object);
@@ -42,6 +46,11 @@ export function createTeamLeaderboardEvidenceRouter(options: {
     materializeBatch: adminAgentProcedure.input(z.object({
       mode: z.literal("unpublished_candidates"), manifest, read: z.custom<TeamEvidenceAuditRead>(object), receipts: z.array(receipt),
     }).strict()).mutation(({ ctx, input }) => safeBatch(() => batch().materialize(ctx.agent.agentId, input))),
+    startWeeklyReview: adminAgentProcedure.input(teamEvidenceWeekInputSchema.extend({
+      mode: z.literal("unpublished_candidates"),
+    }).strict()).mutation(({ ctx, input }) => safeBatch(() => weekly().start(ctx.agent.agentId, input))),
+    weeklyReviewStatus: adminAgentProcedure.input(z.object({ reviewId: z.string().uuid() }).strict())
+      .query(({ ctx, input }) => safeBatch(() => weekly().status(ctx.agent.agentId, input.reviewId))),
   });
 }
 export const teamLeaderboardEvidenceRouter = createTeamLeaderboardEvidenceRouter();

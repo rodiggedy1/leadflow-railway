@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "table": "team_review_runs",
+  "columns": [
+    { "name": "id", "columnType": "char(36)", "nullable": false },
+    { "name": "weekStart", "columnType": "char(10)", "nullable": false },
+    { "name": "ownerId", "columnType": "int unsigned", "nullable": false },
+    { "name": "createdAtMs", "columnType": "bigint unsigned", "nullable": false },
+    { "name": "updatedAtMs", "columnType": "bigint unsigned", "nullable": false },
+    { "name": "status", "columnType": "varchar(32)", "nullable": false },
+    { "name": "progress", "columnType": "json", "nullable": true },
+    { "name": "payload", "columnType": "json", "nullable": false },
+    { "name": "publication", "columnType": "json", "nullable": true },
+    { "name": "publishedAtMs", "columnType": "bigint unsigned", "nullable": true },
+    { "name": "publishedBy", "columnType": "int unsigned", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "idx_team_review_runs_week_created", "columns": ["weekStart", "createdAtMs", "id"], "unique": false }
+  ]
+}

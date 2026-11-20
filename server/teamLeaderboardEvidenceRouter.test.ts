@@ -65,7 +65,14 @@ describe("private team evidence routes", () => {
   it("does not connect the private admin evidence API to the team page", () => {
     const page = readFileSync(resolve("client/src/pages/TeamLeaderboard.tsx"), "utf8");
     expect(page).not.toContain("teamEvidence");
-    expect(page).toContain("trpc.leadflowJobs.leaderboard.forMe.useQuery");
-    expect(page).toContain("publication={results.publication}");
+    expect(Array.from(page.matchAll(/trpc\.leadflowJobs\.leaderboard\.history\.(\w+)\.(useQuery|useMutation)/g), match => [match[1], match[2]]))
+      .toEqual([["weeksForMe", "useQuery"], ["forMe", "useQuery"]]);
+    expect(page).toContain("publication={results?.publication ?? null}");
+    expect(page).toContain("ownTeamId={results?.ownTeamId ?? null}");
+    expect(page).toContain("weeksQuery.data?.cleanerProfileId === meQuery.data?.id");
+    expect(page).toContain("resultsQuery.data?.cleanerProfileId === meQuery.data.id");
+    expect(page).toContain("resultsQuery.data.selectionKey === selectionKey");
+    for (const forbidden of ["useMutation", "weeksForAdmin", "forAdmin", "startReview", "publishReview", "reviewRuns", "reviewDraft", "TeamLeaderboardAdminReviewControls", "TeamLeaderboardReviewDraft", "Run review", "Publish reviewed results", "Saved review", "getMagicLink"])
+      expect(page).not.toContain(forbidden);
   });
 });

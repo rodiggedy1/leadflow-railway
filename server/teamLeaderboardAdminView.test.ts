@@ -8,11 +8,18 @@ import ReviewWorkspaceNav from "../client/src/components/ReviewWorkspaceNav";
 import OriginalDashboardWorkspaceNav from "../client/src/components/OriginalDashboardWorkspaceNav";
 import type { TeamLeaderboardPublication } from "../shared/teamLeaderboard";
 
-const state = vi.hoisted(() => ({ me: {} as any, results: {} as any, generated: vi.fn(), refetch: vi.fn(), options: {} as any }));
+const state = vi.hoisted(() => ({ me: {} as any, results: {} as any, generated: vi.fn(), refetch: vi.fn(), options: {} as any, input: {} as any, weeks: {} as any, runs: {} as any, draft: {} as any, started: vi.fn(), published: vi.fn() }));
 vi.mock("@/lib/trpc", () => ({ trpc: {
-  agents: { me: { useQuery: () => state.me } },
+  agents: { me: { useQuery: () => ({ ...state.me, refetch: vi.fn() }) } },
   cleaner: { getMagicLink: { useMutation: () => ({ mutateAsync: state.generated }) } },
-  leadflowJobs: { leaderboard: { forAdmin: { useQuery: (_: unknown, options: any) => { state.options = options; return { ...state.results, refetch: state.refetch }; } } } },
+  leadflowJobs: { leaderboard: { history: {
+    forAdmin: { useQuery: (input: unknown, options: any) => { state.input = input; state.options = options; return { ...state.results, refetch: state.refetch }; } },
+    weeksForAdmin: { useQuery: () => ({ ...state.weeks, refetch: vi.fn() }) },
+    reviewRuns: { useQuery: () => ({ ...state.runs, refetch: vi.fn() }) },
+    reviewDraft: { useQuery: () => ({ ...state.draft, refetch: vi.fn() }) },
+    startReview: { useMutation: () => ({ mutateAsync: state.started }) },
+    publishReview: { useMutation: () => ({ mutateAsync: state.published }) },
+  } } },
 } }));
 vi.mock("wouter", () => ({ useLocation: () => ["/admin/team-leaderboard", vi.fn()] }));
 const publication: TeamLeaderboardPublication = {
@@ -24,8 +31,11 @@ function adminMarkup() { return renderToStaticMarkup(React.createElement(AdminTe
 beforeEach(() => {
   vi.stubGlobal("React", React);
   vi.clearAllMocks();
+  state.weeks = { data: { agentId: 44, weeks: [{ id: "synthetic-baseline", weekStart: "2026-11-15", weekEnd: "2026-11-21", coverageEnd: "2026-11-19", publishedAtMs: 0 }] }, isLoading: false, isError: false };
+  state.runs = { data: { agentId: 44, runs: [] }, isLoading: false, isError: false };
+  state.draft = { data: null, isLoading: false, isError: false };
   state.me = { data: { id: 44, isAdmin: true }, isLoading: false, isError: false };
-  state.results = { data: { publication, details: {}, agentId: 44, teamAccounts: { "710": { cleanerProfileId: 13 }, "920": { cleanerProfileId: null, reason: "No active linked team account" } } }, isLoading: false, isError: false };
+  state.results = { data: { publication, details: {}, agentId: 44, selectionKey: "2026-11-15", teamAccounts: { "710": { cleanerProfileId: 13 }, "920": { cleanerProfileId: null, reason: "No active linked team account" } } }, isLoading: false, isError: false };
 });
 
 describe("admin leaderboard usability — synthetic SSR only", () => {
@@ -42,6 +52,12 @@ describe("admin leaderboard usability — synthetic SSR only", () => {
     expect(html).toContain('href="/admin/dashboard"');
     expect(state.generated).not.toHaveBeenCalled();
     expect(state.refetch).not.toHaveBeenCalled();
+    expect(state.started).not.toHaveBeenCalled();
+    expect(state.published).not.toHaveBeenCalled();
+    expect(state.input).toEqual({ weekStart: "2026-11-15" });
+    expect(html).toContain("Published history");
+    expect(html).toContain("Run review");
+    expect(html).toContain(">Summary</button>");
   });
   it.each([
     ["Staff sign-in required", { data: null, isLoading: false, isError: false }],
@@ -61,6 +77,21 @@ describe("admin leaderboard usability — synthetic SSR only", () => {
     const html = adminMarkup();
     expect(html).toContain("Loading the team leaderboard…");
     expect(html).not.toContain("data-team-admin-link");
+  });
+  it("rejects a cached publication for another selected week", () => {
+    state.results.data.selectionKey = "2026-11-08";
+    const html = adminMarkup();
+    expect(html).toContain("Loading the team leaderboard…");
+    expect(html).not.toContain("data-team-admin-link");
+  });
+  it("rejects another staff identity's saved weeks without hiding the explicit Run surface", () => {
+    state.weeks.data.agentId = 45;
+    const html = adminMarkup();
+    expect(html).not.toContain("Synthetic Team 710");
+    expect(html).not.toContain("data-team-admin-link");
+    expect(html).toContain("Manual weekly review");
+    expect(state.options.enabled).toBe(false);
+    expect(state.started).not.toHaveBeenCalled();
   });
   it("rejects cached standings when the admin read failed", () => {
     state.results.isError = true;

@@ -1,0 +1,22 @@
+.tl-history-controls{margin:0 0 28px;padding:22px 24px;border:1px solid #e9e4df;border-radius:14px;background:#fffdfb;color:#282624;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.tl-history-controls *{box-sizing:border-box}
+.tl-history-controls h2,.tl-history-controls h3,.tl-history-controls h4,.tl-history-controls p{margin:0 0 8px}
+.tl-history-controls h2{font-size:18px;letter-spacing:-.3px}.tl-history-controls h3{font-size:15px}.tl-history-controls h4{font-size:13px}
+.tl-history-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}.tl-history-heading p{color:#77716c}
+.tl-history-controls label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;min-width:0}
+.tl-history-controls select,.tl-history-controls input[type=text],.tl-history-controls textarea{width:100%;min-width:0;max-width:100%;border:1px solid #dfd8cf;border-radius:8px;background:#fff;padding:10px 12px;color:#282624;font:inherit}
+.tl-history-controls textarea{min-height:86px;resize:vertical}.tl-history-controls select{height:auto;min-height:43px}
+.tl-history-controls input:focus-visible,.tl-history-controls textarea:focus-visible{outline:3px solid #d6684f;outline-offset:3px}
+.tl-history-fields{max-width:560px}.tl-history-week-form{display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:10px 16px;margin-top:18px;align-items:end}.tl-history-week-form>p{grid-column:1/-1}
+.tl-history-buttons{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:12px 0}
+.tl-history-controls button{border:1px solid #dfd8cf;border-radius:8px;background:#f8f6f3;color:#494237;padding:9px 12px;line-height:1.4;font:inherit;font-weight:600;max-width:100%}
+.tl-history-controls .tl-history-primary{background:#302e2b;border-color:#302e2b;color:#fffbf5}.tl-history-controls button:disabled{cursor:not-allowed;opacity:.5}
+.tl-history-controls .tl-history-error{color:#a94331;background:#fff0e9;border:1px solid #ebcabf;padding:10px 12px;border-radius:8px;margin:12px 0}
+.tl-history-admin{border-top:1px solid #e9e4df;margin-top:20px;padding-top:20px}.tl-history-admin>label{max-width:100%;margin-top:18px}
+.tl-history-draft{border-top:1px solid #e9e4df;padding-top:22px;margin-top:22px}.tl-history-tag{font-size:10px;font-weight:700;white-space:nowrap;border:1px solid #dfd8cf;border-radius:5px;padding:3px 8px;background:#f8f6f3}.tl-history-id{color:#77716c;font-size:11px}
+.tl-history-warnings{background:#faf5ed;border:1px solid #e8dcca;border-radius:10px;padding:16px;margin:16px 0}.tl-history-warnings ul,.tl-history-error ul{padding-left:20px;margin:8px 0}.tl-history-warnings article{margin-top:10px;padding-top:10px;border-top:1px solid #e8dcca}
+.tl-history-group{border:1px solid #e9e4df;border-radius:10px;padding:16px;margin:16px 0;min-width:0}.tl-history-group legend{padding:0 6px;font-weight:700;max-width:100%}.tl-history-group>div{border-bottom:1px solid #e9e4df;padding-bottom:12px;margin-bottom:12px}.tl-history-group small{color:#77716c}
+.tl-history-controls .tl-history-check{display:flex;flex-direction:row;align-items:flex-start;gap:10px;font-weight:400;margin:12px 0}.tl-history-check input{flex:none;margin:5px 0 0;width:16px;height:16px;accent-color:#d6684f}.tl-history-controls .tl-history-ack{padding:14px;border:1px solid #e9e4df;border-radius:8px;background:#f8f6f3}.tl-history-draft form>button{margin-bottom:12px}
+.tl-page:has(.tl-history-controls) .tl-tabs{flex-wrap:wrap;column-gap:22px;row-gap:12px}
+@media(max-width:600px){.tl-history-controls{padding:18px 16px;font-size:11px}.tl-history-week-form{grid-template-columns:1fr}.tl-history-buttons{gap:7px}.tl-history-controls button{font-size:11px}.tl-history-group,.tl-history-warnings{padding:13px}.tl-history-heading{flex-wrap:wrap}.tl-page:has(.tl-history-controls) .tl-tabs{column-gap:16px}}
+.tl-history-counts{margin:18px 0}.tl-history-counts article{border:1px solid #e9e4df;border-radius:8px;padding:14px;margin:10px 0}.tl-history-counts dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:10px 0 0}.tl-history-counts dt{color:#77716c;font-size:10px}.tl-history-counts dd{margin:3px 0 0;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}@media(max-width:600px){.tl-history-counts dl{grid-template-columns:repeat(2,minmax(0,1fr))}}

@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { TeamLeaderboardView } from "@/components/TeamLeaderboardView";
+import { TeamLeaderboardHistoryControls } from "@/components/TeamLeaderboardHistoryControls";
 
 function AccessState({ title, message, loading = false }: { title: string; message: string; loading?: boolean }) {
   return (
@@ -14,12 +16,24 @@ function AccessState({ title, message, loading = false }: { title: string; messa
 }
 
 export default function TeamLeaderboard() {
+  const [selectedWeek, setSelectedWeek] = useState("");
+  const [overall, setOverall] = useState(false);
   // Reuse the existing cookie identity; no new login, tokens or authentication flow.
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false, throwOnError: false });
-  const resultsQuery = trpc.leadflowJobs.leaderboard.forMe.useQuery(undefined, {
-    enabled: Boolean(meQuery.data) && !meQuery.isError,
+  const allowed = Boolean(meQuery.data) && !meQuery.isError && !meQuery.isLoading;
+  const weeksQuery = trpc.leadflowJobs.leaderboard.history.weeksForMe.useQuery(undefined, {
+    enabled: allowed, retry: false, throwOnError: false, staleTime: 0, refetchOnWindowFocus: false,
+  });
+  const weeksReady = allowed && !weeksQuery.isError && !weeksQuery.isLoading && weeksQuery.data?.cleanerProfileId === meQuery.data?.id;
+  const weeks = weeksReady ? weeksQuery.data!.weeks : [];
+  const weekStart = selectedWeek || weeks[0]?.weekStart || "";
+  const selection = overall ? { summary: true } : weekStart ? { weekStart } : {};
+  const selectionKey = overall ? "summary" : weekStart || "latest";
+  const resultsQuery = trpc.leadflowJobs.leaderboard.history.forMe.useQuery(selection, {
+    enabled: allowed && weeksReady,
     retry: false,
     throwOnError: false,
+    staleTime: 0,
     refetchOnWindowFocus: false,
   });
 
@@ -32,12 +46,10 @@ export default function TeamLeaderboard() {
   if (!meQuery.data) {
     return <AccessState title="Sign-in required" message="Open the login link provided by your manager to view the team leaderboard. An active team account is required." />;
   }
-  if (resultsQuery.isError) {
-    return <AccessState title="Unable to load team results" message="We could not load results for your linked team. Please contact your manager." />;
-  }
-  const results = resultsQuery.data;
-  if (resultsQuery.isLoading || !results || results.cleanerProfileId !== meQuery.data.id) {
-    return <AccessState title="Loading your team results…" message="Please wait while we load the results for your signed-in team." loading />;
-  }
-  return <TeamLeaderboardView publication={results.publication} ownTeamId={results.ownTeamId} details={results.details} />;
+  const results = !resultsQuery.isError && !resultsQuery.isLoading && weeksReady && resultsQuery.data?.cleanerProfileId === meQuery.data.id && resultsQuery.data.selectionKey === selectionKey ? resultsQuery.data : null;
+  const controls = <TeamLeaderboardHistoryControls key={`${meQuery.data.id}:${weekStart}`} weeks={weeks} weekStart={weekStart} overall={overall} onWeekChange={week => { setSelectedWeek(week); setOverall(false); }} loading={weeksQuery.isLoading || (!weeksReady && !weeksQuery.isError)} error={weeksQuery.isError ? "Unable to load published history. Please contact your manager; no cached team history is shown." : null}>
+    {resultsQuery.isError ? <p className="tl-history-error" role="alert">Unable to load team results for the selected view. Please contact your manager.</p> : !results ? <p role="status">Loading your team results… Please wait while we load the selected published results for your signed-in team.</p> : null}
+    <div className="tl-history-buttons"><button type="button" onClick={() => { void weeksQuery.refetch(); void resultsQuery.refetch(); }}>Refresh published history</button></div>
+  </TeamLeaderboardHistoryControls>;
+  return <TeamLeaderboardView publication={results?.publication ?? null} ownTeamId={results?.ownTeamId ?? null} details={results?.details ?? {}} period={results?.period} overall={overall} onOverallChange={setOverall} controls={controls} />;
 }

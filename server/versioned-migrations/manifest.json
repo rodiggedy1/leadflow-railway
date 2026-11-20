@@ -599,6 +599,22 @@
       "sha256": "d3e2a5659b6f517e80a7fc6121aee1318a020c5d9dc9eb020277531daea1c7f0",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0078_add_booking_manual_amount_overrides.postconditions.json"
+    },
+    {
+      "id": "0079_create_team_review_runs",
+      "mode": "create-table",
+      "sqlFile": "0079_create_team_review_runs.sql",
+      "sha256": "3fbbb4683cab45d8f9a3fe633bad950888b324657feab81444e15f9f52de9d46",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0079_create_team_review_runs.postconditions.json"
+    },
+    {
+      "id": "0080_create_team_review_weeks",
+      "mode": "create-table",
+      "sqlFile": "0080_create_team_review_weeks.sql",
+      "sha256": "0a53b79bd63608bbd8c592120731dde270bd14bd37d4f34954cf8cdc0eadfc9d",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0080_create_team_review_weeks.postconditions.json"
     }
   ]
 }

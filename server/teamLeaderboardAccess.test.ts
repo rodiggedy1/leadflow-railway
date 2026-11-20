@@ -168,21 +168,48 @@ describe("preserve released authentication and all other App paths", () => {
 });
 
 describe("actual leaderboard wrapper with synthetic identity only", () => {
-  function render(query: Record<string, unknown>, results: Record<string, unknown> = { isLoading: true, isError: false, data: undefined }) {
+  const week = { id: "synthetic-publication", weekStart: "2026-11-22", weekEnd: "2026-11-28", coverageEnd: "2026-11-26", publishedAtMs: 100 };
+  function render(query: Record<string, any>, results: Record<string, any> = { isLoading: true, isError: false, data: undefined }, weeks: Record<string, any> = {
+    isLoading: false, isError: false, data: { cleanerProfileId: query.data?.id, weeks: [week] },
+  }) {
     const useQuery = vi.fn(() => query);
-    const resultsQuery = vi.fn(() => results);
-    const view = vi.fn((_props: Record<string, unknown>) => null);
+    const refetch = vi.fn();
+    const weeksQuery = vi.fn((_input: unknown, _options: unknown) => ({ ...weeks, refetch }));
+    const resultsQuery = vi.fn((_input: unknown, _options: unknown) => ({ ...results, refetch }));
+    // Render the real wrapper's controls/children, but never load staff review controls or a provider.
+    const controls = vi.fn((props: { children?: React.ReactNode }) => React.createElement(React.Fragment, null, props.children));
+    const view = vi.fn((props: Record<string, any>) => props.controls ?? null);
     const page = execute(read("client/src/pages/TeamLeaderboard.tsx"), {
-      "@/lib/trpc": { trpc: { cleaner: { me: { useQuery } }, leadflowJobs: { leaderboard: { forMe: { useQuery: resultsQuery } } } } },
+      react: React,
+      "@/lib/trpc": { trpc: { cleaner: { me: { useQuery } }, leadflowJobs: { leaderboard: { history: {
+        weeksForMe: { useQuery: weeksQuery },
+        forMe: { useQuery: resultsQuery },
+      } } } } },
       "@/components/TeamLeaderboardView": { TeamLeaderboardView: view },
+      "@/components/TeamLeaderboardHistoryControls": { TeamLeaderboardHistoryControls: controls },
     }).default;
     const markup = renderToStaticMarkup(React.createElement(page));
+    const allowed = Boolean(query.data) && !query.isError && !query.isLoading;
+    const weeksReady = allowed && !weeks.isError && !weeks.isLoading && weeks.data?.cleanerProfileId === query.data?.id;
     expect(useQuery).toHaveBeenCalledTimes(1);
     expect(useQuery).toHaveBeenCalledWith(undefined, { retry: false, throwOnError: false });
-    expect(resultsQuery).toHaveBeenCalledWith(undefined, {
-      enabled: Boolean(query.data) && !query.isError, retry: false, throwOnError: false, refetchOnWindowFocus: false,
+    expect(weeksQuery).toHaveBeenCalledTimes(1);
+    expect(weeksQuery).toHaveBeenCalledWith(undefined, {
+      enabled: allowed, retry: false, throwOnError: false, staleTime: 0, refetchOnWindowFocus: false,
     });
-    return { markup, view };
+    expect(resultsQuery).toHaveBeenCalledTimes(1);
+    expect(resultsQuery).toHaveBeenCalledWith(weeksReady ? { weekStart: week.weekStart } : {}, {
+      enabled: weeksReady, retry: false, throwOnError: false, staleTime: 0, refetchOnWindowFocus: false,
+    });
+    expect(refetch).not.toHaveBeenCalled();
+    return { markup, view, controls };
+  }
+  function expectNoPublication(view: ReturnType<typeof vi.fn>) {
+    expect(view).toHaveBeenCalledTimes(1);
+    expect(view.mock.calls[0][0]).toEqual({
+      publication: null, ownTeamId: null, details: {}, period: undefined,
+      overall: false, onOverallChange: expect.any(Function), controls: expect.any(Object),
+    });
   }
   it("shows loading without any publication view", () => {
     const { markup, view } = render({ isLoading: true, isError: false, data: undefined });
@@ -207,26 +234,57 @@ describe("actual leaderboard wrapper with synthetic identity only", () => {
     const publication = { weekLabel: "Synthetic week", teams: [], ownIncidents: [] };
     const details = {};
     const { markup, view } = render({ isLoading: false, isError: false, data: { id: 7, name: "Synthetic Cleaner" } }, {
-      isLoading: false, isError: false, data: { cleanerProfileId: 7, ownTeamId: "900", publication, details },
+      isLoading: false, isError: false, data: { cleanerProfileId: 7, selectionKey: week.weekStart, ownTeamId: "900", publication, details },
     });
     expect(markup).not.toContain("not connected");
     expect(view).toHaveBeenCalledTimes(1);
-    expect(view.mock.calls[0][0]).toEqual({ publication, ownTeamId: "900", details });
+    expect(view.mock.calls[0][0]).toEqual({
+      publication, ownTeamId: "900", details, period: undefined,
+      overall: false, onOverallChange: expect.any(Function), controls: expect.any(Object),
+    });
+    expect(view.mock.calls[0][0].publication).toBe(publication);
+    expect(view.mock.calls[0][0].details).toBe(details);
   });
   it("rejects stale previous-account results instead of rendering another team's cached feedback", () => {
     const { markup, view } = render({ isLoading: false, isError: false, data: { id: 7 } }, {
-      isLoading: false, isError: false, data: { cleanerProfileId: 99, ownTeamId: "99", publication: { ownIncidents: [{ summary: "PRIVATE OTHER TEAM" }] }, details: {} },
+      isLoading: false, isError: false, data: { cleanerProfileId: 99, selectionKey: week.weekStart, ownTeamId: "99", publication: { ownIncidents: [{ summary: "PRIVATE OTHER TEAM" }] }, details: {} },
     });
     expect(markup).toContain("Loading your team results");
     expect(markup).not.toContain("PRIVATE OTHER TEAM");
-    expect(view).not.toHaveBeenCalled();
+    expectNoPublication(view);
+    expect(JSON.stringify(view.mock.calls[0][0])).not.toContain("PRIVATE OTHER TEAM");
   });
   it("renders a generic results failure with no stale content or error payload", () => {
     const { markup, view } = render({ isLoading: false, isError: false, data: { id: 7 } }, {
-      isLoading: false, isError: true, data: { cleanerProfileId: 7 }, error: new Error(`secret ${token}`),
+      isLoading: false, isError: true, data: { cleanerProfileId: 7, selectionKey: week.weekStart, ownTeamId: "900", publication: { ownIncidents: [{ summary: "PRIVATE STALE RESULTS" }] }, details: {} }, error: new Error(`secret ${token}`),
     });
     expect(markup).toContain("Unable to load team results");
     expect(markup).not.toContain(token);
-    expect(view).not.toHaveBeenCalled();
+    expect(markup).not.toContain("PRIVATE STALE RESULTS");
+    expectNoPublication(view);
+    expect(JSON.stringify(view.mock.calls[0][0])).not.toMatch(new RegExp(`${token}|PRIVATE STALE RESULTS`));
+  });
+  it("rejects a cached publication for a different selected week even when the profile matches", () => {
+    const { markup, view } = render({ isLoading: false, isError: false, data: { id: 7 } }, {
+      isLoading: false, isError: false, data: { cleanerProfileId: 7, selectionKey: "2026-11-15", ownTeamId: "900", publication: { ownIncidents: [{ summary: "PRIVATE PREVIOUS WEEK" }] }, details: {} },
+    });
+    expect(markup).toContain("Loading your team results");
+    expect(markup).not.toContain("PRIVATE PREVIOUS WEEK");
+    expectNoPublication(view);
+    expect(JSON.stringify(view.mock.calls[0][0])).not.toContain("PRIVATE PREVIOUS WEEK");
+  });
+  it.each(["identity", "error", "loading"])("hides cached publication and week options during published-history %s mismatch/failure", kind => {
+    const { markup, view, controls } = render({ isLoading: false, isError: false, data: { id: 7 } }, {
+      isLoading: false, isError: false, data: { cleanerProfileId: 7, selectionKey: week.weekStart, ownTeamId: "900", publication: { ownIncidents: [{ summary: "PRIVATE CACHED HISTORY" }] }, details: {} },
+    }, {
+      isLoading: kind === "loading", isError: kind === "error",
+      data: { cleanerProfileId: kind === "identity" ? 99 : 7, weeks: [week] }, error: new Error(`secret ${token}`),
+    });
+    expectNoPublication(view);
+    expect(controls).toHaveBeenCalledTimes(1);
+    expect(controls.mock.calls[0][0]).toMatchObject({ weeks: [], weekStart: "" });
+    expect(markup).not.toContain(token);
+    expect(markup).not.toContain("PRIVATE CACHED HISTORY");
+    expect(JSON.stringify(view.mock.calls[0][0])).not.toMatch(new RegExp(`${token}|PRIVATE CACHED HISTORY`));
   });
 });

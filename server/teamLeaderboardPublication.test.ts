@@ -214,10 +214,29 @@ describe("forMe actual cleaner cookie authorization with mocked database only", 
     await expect((await caller(9)).forMe()).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
     expect(reads).toEqual([]);
   });
-  it("has only a no-input query and no legacy operational dependency in any new scoped file", () => {
-    expect(Object.keys(teamLeaderboardPublicationRouter._def.procedures)).toEqual(["forMe", "forAdmin"]);
-    expect(teamLeaderboardPublicationRouter._def.procedures.forMe._def.type).toBe("query");
-    expect(teamLeaderboardPublicationRouter._def.procedures.forMe._def.inputs).toEqual([]);
+  it("preserves both original no-input queries with only the explicitly allowed nested history procedures and no legacy operational dependency", () => {
+    const procedures = teamLeaderboardPublicationRouter._def.procedures;
+    expect(Object.keys(procedures)).toEqual([
+      "history.weeksForAdmin", "history.forAdmin", "history.weeksForMe", "history.forMe",
+      "history.startReview", "history.reviewRuns", "history.reviewDraft", "history.publishReview",
+      "forMe", "forAdmin",
+    ]);
+    expect(Object.keys(procedures).filter(name => !name.startsWith("history."))).toEqual(["forMe", "forAdmin"]);
+    for (const name of ["forMe", "forAdmin"] as const) {
+      expect(procedures[name]._def.type).toBe("query");
+      expect(procedures[name]._def.inputs).toEqual([]);
+    }
+    const historyMethods = {
+      "history.weeksForAdmin": "query", "history.forAdmin": "query",
+      "history.weeksForMe": "query", "history.forMe": "query",
+      "history.startReview": "mutation", "history.reviewRuns": "query",
+      "history.reviewDraft": "query", "history.publishReview": "mutation",
+    } as const;
+    for (const [name, type] of Object.entries(historyMethods)) {
+      expect(procedures[name as keyof typeof historyMethods]._def.type).toBe(type);
+    }
+    expect(procedures["history.weeksForAdmin"]._def.inputs).toEqual([]);
+    expect(procedures["history.weeksForMe"]._def.inputs).toEqual([]);
     const forbidden = new RegExp(["cleaner", "[_]?", "[jJ]obs"].join(""));
     for (const path of ["../shared/teamLeaderboardPublication.ts", "./teamLeaderboardPublication.ts", "./teamLeaderboardPublicationRouter.ts", "./teamLeaderboardWeeklySnapshot.json", "./teamLeaderboardPublication.test.ts"]) {
       expect(readFileSync(new URL(path, import.meta.url), "utf8")).not.toMatch(forbidden);

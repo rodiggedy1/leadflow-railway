@@ -537,3 +537,35 @@ export function runInitialLeadDraft(options: InitialLeadDraftOptions): Promise<R
     systemOverride: options.systemPrompt, allowEmptyTools: true,
     signal: options.signal, onEvent: options.onEvent, onTrace: options.onTrace });
 }
+
+export interface WeeklyCommunicationReviewOptions {
+  readonly reviewOnly: true;
+  readonly backend: Backend;
+  readonly systemPrompt: string;
+  readonly reviewPayload: string;
+  readonly signal?: AbortSignal;
+  readonly onEvent?: RunOptions["onEvent"];
+  readonly onTrace?: RunOptions["onTrace"];
+}
+/** Dedicated weekly evidence review through the same saved agent/model/session
+ * transport. Only immutable in-memory communication snapshot reads are exposed;
+ * no customer-response drafting, business dispatch, sending or saved-agent edits. */
+export function runWeeklyCommunicationReview(options: WeeklyCommunicationReviewOptions): Promise<RunResult> {
+  const allowed = new Set(["get_weekly_review_manifest", "read_weekly_sms", "read_weekly_human_calls", "read_weekly_ai_calls", "read_weekly_emails"]);
+  if (options.reviewOnly !== true || typeof options.systemPrompt !== "string" ||
+      !options.backend || !Array.isArray(options.backend.tools) || options.backend.tools.length !== allowed.size ||
+      new Set(options.backend.tools.map(tool => tool.name)).size !== allowed.size ||
+      options.backend.tools.some(tool => !allowed.has(tool.name))) {
+    throw new ManagedAgentDemoError("INVALID_BACKEND", undefined, undefined, "not_started");
+  }
+  const backend: Backend = {
+    tools: options.backend.tools,
+    callTool(name, input, providerEventId) {
+      if (!allowed.has(name)) throw new ManagedAgentDemoError("UNSAFE_TOOL");
+      return options.backend.callTool(name, input, providerEventId);
+    },
+  };
+  return runManagedAgentSession({ backend, simulatedPayload: options.reviewPayload,
+    systemOverride: options.systemPrompt, signal: options.signal,
+    onEvent: options.onEvent, onTrace: options.onTrace });
+}

@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "table": "team_review_weeks",
+  "columns": [
+    { "name": "weekStart", "columnType": "char(10)", "nullable": false },
+    { "name": "latestPublicationId", "columnType": "char(36)", "nullable": true },
+    { "name": "updatedAtMs", "columnType": "bigint unsigned", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["weekStart"], "unique": true }
+  ]
+}

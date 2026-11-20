@@ -6,8 +6,10 @@ import { getDb } from "./db";
 import { findCleanerPortalTeam } from "./cleanerPortalOwnership";
 import { readTeamLeaderboardAdminPublication, readTeamLeaderboardPublication } from "./teamLeaderboardPublication";
 import { readTeamLeaderboardAdminAccounts } from "./teamLeaderboardAdminAccounts";
+import { teamLeaderboardHistoryRouter } from "./teamLeaderboardHistoryRouter";
 
 export const teamLeaderboardPublicationRouter = router({
+  history: teamLeaderboardHistoryRouter,
   forMe: cleanerProcedure.query(async ({ ctx }) => {
     const cleanerProfileId = ctx.cleaner.cleanerId;
     if (!Number.isSafeInteger(cleanerProfileId) || cleanerProfileId <= 0) {
