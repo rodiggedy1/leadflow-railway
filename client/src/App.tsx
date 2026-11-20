@@ -43,6 +43,7 @@ const FieldManagement = lazy(() => import("./pages/FieldManagement"));
 const ReactivationEngine = lazy(() => import("./pages/ReactivationEngine"));
 const CleanerAuthCallback = lazy(() => import("./pages/CleanerAuthCallback"));
 const TeamLeaderboard = lazy(() => import("./pages/TeamLeaderboard"));
+const AdminTeamLeaderboard = lazy(() => import("./pages/AdminTeamLeaderboard"));
 const LiveCallAssist = lazy(() => import("./pages/LiveCallAssist"));
 const ReviewTracker = lazy(() => import("./pages/ReviewTracker"));
 const SseTest = lazy(() => import("./pages/SseTest"));
@@ -216,6 +217,10 @@ function AdminTeamExactLiveRoute() {
   return <AdminPageGuard pageId="agents"><ReviewWorkspaceFrame navActivePath="/review/team"><TeamExactLive /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
 
+function AdminTeamLeaderboardRoute() {
+  return <div className="review-nav-host tl-admin-workspace-host"><ReviewWorkspaceNav activePath="/review/reviews-quality" /><AdminTeamLeaderboard /></div>;
+}
+
 function AdminLeadsCRMExactLiveRoute() {
   const tab = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("tab");
   if (tab && tab !== "leads") return <AdminDashboard />;
@@ -268,6 +273,7 @@ function Router() {
         <Route path={"/admin/revenue"} component={RevenueAttribution} />
         <Route path={"/admin/revenue-agent"} component={RevenueAgent} />
         <Route path={"/admin/quality"} component={CleanerDashboard} />
+        <Route path={"/admin/team-leaderboard"} component={AdminTeamLeaderboardRoute} />
         <Route path={"/cleaner"} component={() => { window.location.replace("/portal-v2"); return null; }} />
         <Route path={"/portal-v2"} component={CleanerPortalV2} />
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
@@ -332,7 +338,7 @@ function Router() {
 
 function isDayBoardExactLiveRoute(location: string) {
   const isCommandChatWorkspace = location === "/admin/command-chat";
-  const isOperationsDashboardWorkspace = location === "/admin/dashboard";
+  const isOperationsDashboardWorkspace = location === "/admin/dashboard" || location === "/admin/team-leaderboard";
   const isTeamWorkspace = location === "/admin/team";
   const isHiringWorkspace = location === "/admin/hiring";
   const isSettingsWorkspace = location === "/admin/settings" || location === "/admin/widget-config";

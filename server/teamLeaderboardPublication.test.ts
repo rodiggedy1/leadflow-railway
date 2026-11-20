@@ -215,7 +215,7 @@ describe("forMe actual cleaner cookie authorization with mocked database only", 
     expect(reads).toEqual([]);
   });
   it("has only a no-input query and no legacy operational dependency in any new scoped file", () => {
-    expect(Object.keys(teamLeaderboardPublicationRouter._def.procedures)).toEqual(["forMe"]);
+    expect(Object.keys(teamLeaderboardPublicationRouter._def.procedures)).toEqual(["forMe", "forAdmin"]);
     expect(teamLeaderboardPublicationRouter._def.procedures.forMe._def.type).toBe("query");
     expect(teamLeaderboardPublicationRouter._def.procedures.forMe._def.inputs).toEqual([]);
     const forbidden = new RegExp(["cleaner", "[_]?", "[jJ]obs"].join(""));

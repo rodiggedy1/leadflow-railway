@@ -1,10 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { cleanerProfiles } from "../drizzle/schema";
-import { cleanerProcedure, router } from "./_core/trpc";
+import { agentPageProcedure, cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { findCleanerPortalTeam } from "./cleanerPortalOwnership";
-import { readTeamLeaderboardPublication } from "./teamLeaderboardPublication";
+import { readTeamLeaderboardAdminPublication, readTeamLeaderboardPublication } from "./teamLeaderboardPublication";
+import { readTeamLeaderboardAdminAccounts } from "./teamLeaderboardAdminAccounts";
 
 export const teamLeaderboardPublicationRouter = router({
   forMe: cleanerProcedure.query(async ({ ctx }) => {
@@ -27,5 +28,15 @@ export const teamLeaderboardPublicationRouter = router({
       throw new TRPCError({ code: "FORBIDDEN", message: "Your cleaner account has no mapped scheduling team." });
     }
     return readTeamLeaderboardPublication(team, cleanerProfileId);
+  }),
+  forAdmin: agentPageProcedure("quality").query(async ({ ctx }) => {
+    if (!ctx.agent.isAdmin) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+    }
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Team results are temporarily unavailable." });
+    const result = readTeamLeaderboardAdminPublication();
+    const teamAccounts = await readTeamLeaderboardAdminAccounts(db, result.publication.teams.map(team => team.id));
+    return { ...result, agentId: ctx.agent.agentId, teamAccounts };
   }),
 });

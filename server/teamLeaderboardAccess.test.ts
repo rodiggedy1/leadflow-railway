@@ -119,12 +119,16 @@ describe("preserve released authentication and all other App paths", () => {
     expect(source).toContain('const messageJobQuery = /^leadflow:\\d+$/.test(requestedJob)');
     expect(source).toContain('window.location.replace(`/portal-v2${messageJobQuery}`)');
   });
-  it("adds only the lazy exact route and two exact runtime bypasses to App", () => {
+  it("adds only the approved team/admin routes, admin workspace frame and exact runtime bypasses to App", () => {
     const source = read("client/src/App.tsx");
     expect(source.match(/if \(location === "\/team-leaderboard"\) return null;/g)).toHaveLength(2);
     const normalized = source
       .replace('const TeamLeaderboard = lazy(() => import("./pages/TeamLeaderboard"));\n', "")
+      .replace('const AdminTeamLeaderboard = lazy(() => import("./pages/AdminTeamLeaderboard"));\n', "")
+      .replace('function AdminTeamLeaderboardRoute() {\n  return <div className="review-nav-host tl-admin-workspace-host"><ReviewWorkspaceNav activePath="/review/reviews-quality" /><AdminTeamLeaderboard /></div>;\n}\n\n', "")
       .replace('        <Route path={"/team-leaderboard"} component={TeamLeaderboard} />\n', "")
+      .replace('        <Route path={"/admin/team-leaderboard"} component={AdminTeamLeaderboardRoute} />\n', "")
+      .replace('location === "/admin/dashboard" || location === "/admin/team-leaderboard"', 'location === "/admin/dashboard"')
       .replaceAll('  if (location === "/team-leaderboard") return null;\n', "");
     expect(normalized).toBe(original("client/src/App.tsx"));
   });

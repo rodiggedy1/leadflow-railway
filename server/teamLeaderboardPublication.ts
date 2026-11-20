@@ -72,3 +72,49 @@ export function restrictTeamLeaderboardPublication(
 export function readTeamLeaderboardPublication(team: CleanerPortalTeam, cleanerProfileId: number): TeamLeaderboardPublishedResponse {
   return restrictTeamLeaderboardPublication(weeklySnapshot, team, cleanerProfileId);
 }
+
+/** Admin results contain public reviewed data only, without a fabricated own team. */
+export function restrictTeamLeaderboardAdminPublication(snapshot: TeamLeaderboardSnapshot): TeamLeaderboardSnapshot {
+  const publication = snapshot.publication;
+  const teams = publication.teams.map(row => ({
+    id: row.id, name: row.name, eligibleJobs: row.eligibleJobs,
+    metrics: Object.fromEntries(TEAM_SCORE_METRICS.map(({ key }) => {
+      const evidence = row.metrics[key];
+      return [key, { successful: evidence.successful, eligible: evidence.eligible, complete: evidence.complete }];
+    })) as typeof row.metrics,
+  }));
+  const details: TeamLeaderboardDetails = {};
+  for (const row of teams) {
+    const detail = snapshot.details[row.id];
+    if (!detail) continue;
+    details[row.id] = {
+      complaintCases: detail.complaintCases,
+      refundRequests: detail.refundRequests,
+      confirmedRecoveryCases: detail.confirmedRecoveryCases,
+      metricDisplay: Object.fromEntries(TEAM_SCORE_METRICS.map(({ key }) => {
+        const display = detail.metricDisplay[key];
+        return [key, { value: display.value, unit: display.unit, note: display.note }];
+      })) as typeof detail.metricDisplay,
+      metricNotes: Object.fromEntries(TEAM_SCORE_METRICS.map(({ key }) => [key, detail.metricNotes[key]])) as typeof detail.metricNotes,
+    };
+  }
+  const result: TeamLeaderboardSnapshot = {
+    publication: {
+      weekLabel: publication.weekLabel,
+      nextWeekLabel: publication.nextWeekLabel,
+      publishedLabel: publication.publishedLabel,
+      teams,
+      ownIncidents: [],
+    },
+    details,
+  };
+  if (snapshot.period) {
+    const { weekStart, weekEnd, weekConvention, coverageStart, coverageEnd } = snapshot.period;
+    result.period = { weekStart, weekEnd, weekConvention, coverageStart, coverageEnd };
+  }
+  return result;
+}
+
+export function readTeamLeaderboardAdminPublication(): TeamLeaderboardSnapshot {
+  return restrictTeamLeaderboardAdminPublication(weeklySnapshot);
+}
