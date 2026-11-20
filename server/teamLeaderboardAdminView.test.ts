@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminTeamLeaderboard from "../client/src/pages/AdminTeamLeaderboard";
 import { TeamLeaderboardView } from "../client/src/components/TeamLeaderboardView";
 import ReviewWorkspaceNav from "../client/src/components/ReviewWorkspaceNav";
@@ -28,7 +28,10 @@ const publication: TeamLeaderboardPublication = {
     metrics: { ratings: { successful: 1, eligible: 1, complete: true }, complaints: { successful: 2, eligible: 2, complete: true }, recovery: { successful: 2, eligible: 2, complete: true }, eta: { successful: 2, eligible: 2, complete: true }, photos: { successful: 1, eligible: 2, complete: true } } })),
 };
 function adminMarkup() { return renderToStaticMarkup(React.createElement(AdminTeamLeaderboard)); }
+afterEach(() => vi.useRealTimers());
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-20T17:00:00Z"));
   vi.stubGlobal("React", React);
   vi.clearAllMocks();
   state.weeks = { data: { agentId: 44, weeks: [{ id: "synthetic-baseline", weekStart: "2026-11-15", weekEnd: "2026-11-21", coverageEnd: "2026-11-19", publishedAtMs: 0 }] }, isLoading: false, isError: false };
@@ -55,7 +58,7 @@ describe("admin leaderboard usability — synthetic SSR only", () => {
     expect(state.started).not.toHaveBeenCalled();
     expect(state.published).not.toHaveBeenCalled();
     expect(state.input).toEqual({ weekStart: "2026-11-15" });
-    expect(html).toContain("Published history");
+    expect(html).toContain("Change week");
     expect(html).toContain("Run review");
     expect(html).toContain(">Summary</button>");
   });
@@ -89,7 +92,7 @@ describe("admin leaderboard usability — synthetic SSR only", () => {
     const html = adminMarkup();
     expect(html).not.toContain("Synthetic Team 710");
     expect(html).not.toContain("data-team-admin-link");
-    expect(html).toContain("Manual weekly review");
+    expect(html).toContain("Run review");
     expect(state.options.enabled).toBe(false);
     expect(state.started).not.toHaveBeenCalled();
   });

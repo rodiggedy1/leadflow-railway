@@ -186,7 +186,7 @@ describe("actual leaderboard wrapper with synthetic identity only", () => {
         forMe: { useQuery: resultsQuery },
       } } } } },
       "@/components/TeamLeaderboardView": { TeamLeaderboardView: view },
-      "@/components/TeamLeaderboardHistoryControls": { TeamLeaderboardHistoryControls: controls },
+      "@/components/TeamLeaderboardHistoryControls": { TeamLeaderboardHistoryControls: controls, currentSundayWeek: () => week.weekStart },
     }).default;
     const markup = renderToStaticMarkup(React.createElement(page));
     const allowed = Boolean(query.data) && !query.isError && !query.isLoading;
@@ -198,7 +198,7 @@ describe("actual leaderboard wrapper with synthetic identity only", () => {
       enabled: allowed, retry: false, throwOnError: false, staleTime: 0, refetchOnWindowFocus: false,
     });
     expect(resultsQuery).toHaveBeenCalledTimes(1);
-    expect(resultsQuery).toHaveBeenCalledWith(weeksReady ? { weekStart: week.weekStart } : {}, {
+    expect(resultsQuery).toHaveBeenCalledWith({ weekStart: week.weekStart }, {
       enabled: weeksReady, retry: false, throwOnError: false, staleTime: 0, refetchOnWindowFocus: false,
     });
     expect(refetch).not.toHaveBeenCalled();
@@ -282,7 +282,7 @@ describe("actual leaderboard wrapper with synthetic identity only", () => {
     });
     expectNoPublication(view);
     expect(controls).toHaveBeenCalledTimes(1);
-    expect(controls.mock.calls[0][0]).toMatchObject({ weeks: [], weekStart: "" });
+    expect(controls.mock.calls[0][0]).toMatchObject({ weeks: [], weekStart: week.weekStart });
     expect(markup).not.toContain(token);
     expect(markup).not.toContain("PRIVATE CACHED HISTORY");
     expect(JSON.stringify(view.mock.calls[0][0])).not.toMatch(new RegExp(`${token}|PRIVATE CACHED HISTORY`));

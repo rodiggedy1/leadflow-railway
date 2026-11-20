@@ -1,11 +1,11 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminTeamLeaderboard from "../client/src/pages/AdminTeamLeaderboard";
 import TeamLeaderboard from "../client/src/pages/TeamLeaderboard";
 import { TeamLeaderboardView } from "../client/src/components/TeamLeaderboardView";
-import { TeamLeaderboardHistoryControls, TeamLeaderboardAdminReviewControls, isSundayWeek, shiftSundayWeek } from "../client/src/components/TeamLeaderboardHistoryControls";
+import { TeamLeaderboardHistoryControls, TeamLeaderboardAdminReviewControls, isSundayWeek, shiftSundayWeek, currentSundayWeek } from "../client/src/components/TeamLeaderboardHistoryControls";
 import { TeamLeaderboardReviewDraft } from "../client/src/components/TeamLeaderboardReviewDraft";
 // SSR controls hook values only; no browser, live query, provider or real link generation.
 const state = vi.hoisted(() => ({ values: [], index: 0, me: {}, cleaner: {},
@@ -70,7 +70,10 @@ function render(node, values = []) {
     return renderToStaticMarkup(node);
 }
 const noWrites = () => { expect(state.started).not.toHaveBeenCalled(); expect(state.published).not.toHaveBeenCalled(); expect(state.generated).not.toHaveBeenCalled(); expect(state.refetched).not.toHaveBeenCalled(); };
+afterEach(() => vi.useRealTimers());
 beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-26T17:00:00Z"));
     vi.stubGlobal("React", React);
     vi.clearAllMocks();
     state.values = [];
@@ -129,24 +132,36 @@ describe("weekly history UI — offline synthetic SSR only", () => {
         expect(shiftSundayWeek("2027-01-03", -1)).toBe("2026-12-27");
         expect(shiftSundayWeek("invalid", 1)).toBe("");
     });
-    it("renders saved weeks in a select and an ordinary validated admin text field, never a native calendar", () => {
-        const html = render(React.createElement(TeamLeaderboardHistoryControls, { weeks: [week], weekStart: week.weekStart, overall: false, onWeekChange: vi.fn(), admin: true }));
-        expect(html).toContain('aria-label="Published week"');
-        expect(html).toContain('value="2026-11-22" selected=""');
-        expect(html).toContain('type="text"');
-        expect(html).toContain("Previous week");
-        expect(html).toContain("Next week");
-        expect(html).not.toContain('type="date"');
-        expect(html).not.toContain("showPicker");
-        const invalid = render(React.createElement(TeamLeaderboardHistoryControls, { weeks: [week], weekStart: week.weekStart, overall: false, onWeekChange: vi.fn(), admin: true }), ["2026-11-23", true]);
-        expect(invalid).toContain("Use a valid Sunday date");
-        expect(invalid).toContain('aria-invalid="true"');
+    it("keeps only the selected week and Change week visible until explicitly opened", () => {
+        const props = { weeks: [week], weekStart: week.weekStart, overall: false, onWeekChange: vi.fn(), admin: true };
+        const closed = render(React.createElement(TeamLeaderboardHistoryControls, props));
+        expect(closed).toContain("Current week"); expect(closed).toContain("Nov 22 – Nov 28, 2026");
+        expect(closed).toContain('aria-expanded="false"'); expect(closed).toContain("Change week");
+        expect(closed).not.toContain("Published history"); expect(closed).not.toContain("Previous week");
+        expect(closed).not.toContain('type="text"'); expect(closed).not.toContain('aria-label="Published week"');
+        const opened = render(React.createElement(TeamLeaderboardHistoryControls, props), [week.weekStart, false, true]);
+        expect(opened).toContain('aria-label="Published week"'); expect(opened).toContain('type="text"');
+        expect(opened).toContain("Show week"); expect(opened).not.toContain('type="date"');
+        const invalid = render(React.createElement(TeamLeaderboardHistoryControls, props), ["2026-11-23", true, true]);
+        expect(invalid).toContain("Use a valid Sunday date"); expect(invalid).toContain('aria-invalid="true"');
         noWrites();
+    });
+    it("defaults to the current Eastern Sunday rather than the latest stored week", () => {
+        expect(currentSundayWeek(new Date("2026-11-22T04:59:59Z"))).toBe("2026-11-15");
+        expect(currentSundayWeek(new Date("2026-11-22T05:00:00Z"))).toBe("2026-11-22");
+        expect(currentSundayWeek(new Date("2027-01-01T17:00:00Z"))).toBe("2026-12-27");
+        expect(currentSundayWeek(new Date("2026-03-08T07:00:00Z"))).toBe("2026-03-08");
+        state.weeksAdmin.data.weeks = [{ ...week, weekStart: "2026-11-15" }];
+        state.resultsAdmin.isError = true;
+        const html = render(React.createElement(AdminTeamLeaderboard));
+        expect(state.inputs.resultsAdmin).toEqual({ weekStart: "2026-11-22" });
+        expect(html).toContain("Current week"); expect(html).toContain("Run review");
+        expect(html).not.toContain("Synthetic Current Team"); noWrites();
     });
     it("keeps team history published-only with no draft, staff links, Run or Publish controls", () => {
         const html = render(React.createElement(TeamLeaderboard, null));
         expect(html).toContain("Synthetic Current Team");
-        expect(html).toContain("Published history");
+        expect(html).toContain("Change week");
         expect(html).toContain(">Summary</button>");
         expect(state.inputs.resultsMe).toEqual({ weekStart: week.weekStart });
         expect(html).not.toContain("Saved review");
@@ -208,9 +223,9 @@ describe("weekly history UI — offline synthetic SSR only", () => {
     it("retains Run and saved-review controls when the selected week has not been published", () => {
         state.resultsAdmin = { ...state.resultsAdmin, isError: true };
         const html = render(React.createElement(AdminTeamLeaderboard, null), ["2026-11-29", false]);
-        expect(html).toContain("No published results for Sunday 2026-11-29 yet");
+        expect(html).toContain("No published results for this week yet");
         expect(html).toContain("Run review");
-        expect(html).toContain("Saved review");
+        expect(html).not.toContain('aria-label="Saved review"');
         expect(html).not.toContain("Synthetic Current Team");
         expect(html).not.toContain("data-team-admin-link");
         expect(html).not.toContain("November 15–19");
@@ -219,10 +234,10 @@ describe("weekly history UI — offline synthetic SSR only", () => {
     });
     it("lists persisted runs after reload without restarting interrupted work", () => {
         state.runs.data.runs = [{ id: "22222222-2222-4222-8222-222222222222", weekStart: week.weekStart, status: "reviewing", createdAtMs: 100, publishedAtMs: null, runningHere: false }];
-        const html = render(React.createElement(TeamLeaderboardAdminReviewControls, { agentId: 44, weekStart: week.weekStart, accessReady: true, onPublished: vi.fn() }));
-        expect(html).toContain("22222222-2222-4222-8222-222222222222");
+        const html = render(React.createElement(TeamLeaderboardAdminReviewControls, { agentId: 44, weekStart: week.weekStart, accessReady: true, onPublished: vi.fn() }), ["", null, null, null, false, true]);
+        expect(html).toContain("Saved review");
         expect(html).toContain("not running here");
-        expect(html).toContain("Run new review / re-run");
+        expect(html).toContain("Run review");
         noWrites();
     });
     it.each(["identity", "week", "error"])("does not expose stale saved runs on %s mismatch", kind => {
@@ -231,7 +246,8 @@ describe("weekly history UI — offline synthetic SSR only", () => {
             state.runs.data.agentId = 99;
         if (kind === "error")
             state.runs.isError = true;
-        const html = render(React.createElement(TeamLeaderboardAdminReviewControls, { agentId: 44, weekStart: week.weekStart, accessReady: true, onPublished: vi.fn() }));
+        const html = render(React.createElement(TeamLeaderboardAdminReviewControls, { agentId: 44, weekStart: week.weekStart, accessReady: true, onPublished: vi.fn() }), ["", null, null, null, false, true]);
+        expect(html).toContain("Review results");
         expect(html).not.toContain("PRIVATE OTHER RUN");
         noWrites();
     });

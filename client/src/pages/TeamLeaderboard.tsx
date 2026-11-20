@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { TeamLeaderboardView } from "@/components/TeamLeaderboardView";
-import { TeamLeaderboardHistoryControls } from "@/components/TeamLeaderboardHistoryControls";
+import { TeamLeaderboardHistoryControls, currentSundayWeek } from "@/components/TeamLeaderboardHistoryControls";
 
 function AccessState({ title, message, loading = false }: { title: string; message: string; loading?: boolean }) {
   return (
@@ -16,7 +16,7 @@ function AccessState({ title, message, loading = false }: { title: string; messa
 }
 
 export default function TeamLeaderboard() {
-  const [selectedWeek, setSelectedWeek] = useState("");
+  const [selectedWeek, setSelectedWeek] = useState(currentSundayWeek);
   const [overall, setOverall] = useState(false);
   // Reuse the existing cookie identity; no new login, tokens or authentication flow.
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false, throwOnError: false });
@@ -26,7 +26,7 @@ export default function TeamLeaderboard() {
   });
   const weeksReady = allowed && !weeksQuery.isError && !weeksQuery.isLoading && weeksQuery.data?.cleanerProfileId === meQuery.data?.id;
   const weeks = weeksReady ? weeksQuery.data!.weeks : [];
-  const weekStart = selectedWeek || weeks[0]?.weekStart || "";
+  const weekStart = selectedWeek || currentSundayWeek();
   const selection = overall ? { summary: true } : weekStart ? { weekStart } : {};
   const selectionKey = overall ? "summary" : weekStart || "latest";
   const resultsQuery = trpc.leadflowJobs.leaderboard.history.forMe.useQuery(selection, {
@@ -47,9 +47,10 @@ export default function TeamLeaderboard() {
     return <AccessState title="Sign-in required" message="Open the login link provided by your manager to view the team leaderboard. An active team account is required." />;
   }
   const results = !resultsQuery.isError && !resultsQuery.isLoading && weeksReady && resultsQuery.data?.cleanerProfileId === meQuery.data.id && resultsQuery.data.selectionKey === selectionKey ? resultsQuery.data : null;
-  const controls = <TeamLeaderboardHistoryControls key={`${meQuery.data.id}:${weekStart}`} weeks={weeks} weekStart={weekStart} overall={overall} onWeekChange={week => { setSelectedWeek(week); setOverall(false); }} loading={weeksQuery.isLoading || (!weeksReady && !weeksQuery.isError)} error={weeksQuery.isError ? "Unable to load published history. Please contact your manager; no cached team history is shown." : null}>
-    {resultsQuery.isError ? <p className="tl-history-error" role="alert">Unable to load team results for the selected view. Please contact your manager.</p> : !results ? <p role="status">Loading your team results… Please wait while we load the selected published results for your signed-in team.</p> : null}
-    <div className="tl-history-buttons"><button type="button" onClick={() => { void weeksQuery.refetch(); void resultsQuery.refetch(); }}>Refresh published history</button></div>
+  const unpublished = !overall && weeksReady && !weeks.some(week => week.weekStart === weekStart);
+  const controls = <TeamLeaderboardHistoryControls key={`${meQuery.data.id}:${weekStart}`} weeks={weeks} weekStart={weekStart} overall={overall} coverageEnd={results?.period?.coverageEnd} onWeekChange={week => { setSelectedWeek(week); setOverall(false); }} loading={weeksQuery.isLoading || (!weeksReady && !weeksQuery.isError)} error={weeksQuery.isError ? "Unable to load saved weeks. Please contact your manager." : null}
+    onRefresh={() => { void weeksQuery.refetch(); void resultsQuery.refetch(); }}>
+    {unpublished ? <p role="status">This week's results have not been published yet. Change week to view earlier results.</p> : resultsQuery.isError ? <p className="tl-history-error" role="alert">Unable to load team results for the selected view. Please contact your manager.</p> : !results && !weeksQuery.isLoading ? <p role="status">Loading your team results…</p> : null}
   </TeamLeaderboardHistoryControls>;
   return <TeamLeaderboardView publication={results?.publication ?? null} ownTeamId={results?.ownTeamId ?? null} details={results?.details ?? {}} period={results?.period} overall={overall} onOverallChange={setOverall} controls={controls} />;
 }
