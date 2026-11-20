@@ -276,10 +276,10 @@ describe("snapshot scheduling team to stable Launch27 cleaner account mapping", 
   });
 });
 
-describe("public-only admin projection and exact existing cleaner boundary", () => {
-  it("preserves approved teams/details/period and unchanged scores without private incidents or fake own identity", async () => {
+describe("admin complaint visibility and exact existing cleaner boundary", () => {
+  it("preserves approved teams/details/period and unchanged scores with every team's reviewed complaints and no fake own identity", async () => {
     const result = await invoke();
-    expect(result.publication).toEqual({ ...snapshot.publication, ownIncidents: [] });
+    expect(result.publication).toEqual(snapshot.publication);
     expect(result.details).toEqual(snapshot.details);
     expect(result.period).toEqual(snapshot.period);
     expect(rankAssessedScores(result.publication.teams, result.details)).toEqual(rankAssessedScores(snapshot.publication.teams, snapshot.details));
@@ -287,18 +287,20 @@ describe("public-only admin projection and exact existing cleaner boundary", () 
     expect(result).not.toHaveProperty("cleanerProfileId");
     const serialized = JSON.stringify(result);
     for (const incident of snapshot.publication.ownIncidents) {
-      expect(serialized).not.toContain(incident.summary);
-      expect(serialized).not.toContain(incident.outcome);
+      expect(serialized).toContain(incident.summary);
+      expect(serialized).toContain(incident.outcome);
     }
     expect(serialized).not.toMatch(/"(?:phone|passwordHash|payPercent|token|url|quotes|evidenceId|rejectedCandidates)"/);
   });
-  it("copies explicit public fields without private review metadata, mutation or sharing references", () => {
+  it("copies allowed complaint fields without extra review metadata, mutation or sharing references", () => {
     const source = structuredClone(snapshot) as TeamLeaderboardSnapshot & Row;
     const secret = "SYNTHETIC_PRIVATE_REVIEW";
     source.unresolved = secret;
     (source.publication as any).token = secret;
     (source.publication.teams[0] as any).private = secret;
     (source.publication.teams[0].metrics.eta as any).quotes = secret;
+    (source.publication.ownIncidents[0] as any).token = secret;
+    (source.publication.ownIncidents[0] as any).quotes = secret;
     (source.details["4"] as any).quotes = secret;
     (source.details["4"].metricDisplay.eta as any).private = secret;
     source.details["unpublished"] = { ...source.details["4"], metricNotes: secret } as any;
@@ -311,9 +313,11 @@ describe("public-only admin projection and exact existing cleaner boundary", () 
     result.details["4"].metricDisplay.eta.value = "changed";
     result.details["4"].metricNotes.eta = "changed";
     result.period!.coverageEnd = "changed";
+    expect(Object.keys(result.publication.ownIncidents[0]).sort()).toEqual(["date", "id", "outcome", "sourceLabel", "summary", "teamId"]);
+    result.publication.ownIncidents[0].summary = "changed";
     result.publication.ownIncidents.push({ id: "synthetic", teamId: "4", date: "2026-11-20", summary: "synthetic", outcome: "synthetic", sourceLabel: "synthetic" });
     expect(source).toEqual(before);
-    expect(readTeamLeaderboardAdminPublication()).toEqual({ ...snapshot, publication: { ...snapshot.publication, ownIncidents: [] } });
+    expect(readTeamLeaderboardAdminPublication()).toEqual(snapshot);
   });
   it("omits optional period and does not invent missing public team details", () => {
     const source = structuredClone(snapshot) as TeamLeaderboardSnapshot;
@@ -331,6 +335,10 @@ describe("public-only admin projection and exact existing cleaner boundary", () 
     expect(result).not.toHaveProperty("teamAccounts");
     expect(result).not.toHaveProperty("agentId");
     expect(result.publication.ownIncidents).toEqual(snapshot.publication.ownIncidents.filter(row => row.teamId === "4"));
+    for (const incident of snapshot.publication.ownIncidents.filter(row => row.teamId !== "4")) {
+      expect(JSON.stringify(result)).not.toContain(incident.summary);
+      expect(JSON.stringify(result)).not.toContain(incident.outcome);
+    }
     expect(boundary.getAgentById).not.toHaveBeenCalled();
   });
   it("adds only a no-input read query; scoped sources have no writes, sends, link generation or forbidden legacy references", () => {

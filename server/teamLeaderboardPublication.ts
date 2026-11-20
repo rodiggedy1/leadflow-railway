@@ -73,7 +73,7 @@ export function readTeamLeaderboardPublication(team: CleanerPortalTeam, cleanerP
   return restrictTeamLeaderboardPublication(weeklySnapshot, team, cleanerProfileId);
 }
 
-/** Admin results contain public reviewed data only, without a fabricated own team. */
+/** Authenticated admins can review every team's incidents, without a fabricated own team. */
 export function restrictTeamLeaderboardAdminPublication(snapshot: TeamLeaderboardSnapshot): TeamLeaderboardSnapshot {
   const publication = snapshot.publication;
   const teams = publication.teams.map(row => ({
@@ -104,7 +104,8 @@ export function restrictTeamLeaderboardAdminPublication(snapshot: TeamLeaderboar
       nextWeekLabel: publication.nextWeekLabel,
       publishedLabel: publication.publishedLabel,
       teams,
-      ownIncidents: [],
+      ownIncidents: publication.ownIncidents
+        .map(({ id, teamId, date, summary, outcome, sourceLabel }) => ({ id, teamId, date, summary, outcome, sourceLabel })),
     },
     details,
   };
