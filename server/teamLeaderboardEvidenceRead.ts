@@ -53,7 +53,7 @@ async function pages(port: SelectPort, statement: string, params: readonly SqlVa
   } catch (error) {
     coverage.status = "unavailable";
     coverage.exhausted = false;
-    coverage.limitations.push(error instanceof Error && /^(NONADVANCING_SOURCE_CURSOR|INVALID_SOURCE_ROW_ID|INVALID_SOURCE_PAGE)$/.test(error.message) ? error.message : safeReadDbError(error).reason);
+    coverage.limitations.push(error instanceof Error && /^(NONADVANCING_SOURCE_CURSOR|INVALID_SOURCE_ROW_ID|INVALID_SOURCE_PAGE|INVALID_TEAM_ROW|INVALID_VISIT_ROW|INVALID_ASSIGNMENT_ROW)$/.test(error.message) ? error.message : safeReadDbError(error).reason);
   }
 }
 function make(store: string, row: SqlRow, suffix: string, raw: unknown, values: Partial<TeamEvidence> = {}): TeamEvidence {
@@ -282,10 +282,21 @@ export async function readTeamEvidenceWeek(port: SelectPort, input: TeamEvidence
   await family("call_log", CALL_LOG_SQL, [startMs, endMs, 0, captured], row => aiEvidence("call_log", row, window));
   await family("field_mgmt_calls", FIELD_SQL, [start, end, captured], row => aiEvidence("field_mgmt_calls", row, window));
   await family("confirmation_calls", CONFIRM_SQL, [startMs, endMs, 0, captured], row => aiEvidence("confirmation_calls", row, window));
+  // Old/current snippets still expose unresolved weekly coverage. Index the
+  // retained originals once rather than filtering all evidence for every row.
+  const emailIdsByThread = new Map<string | null, Set<string | null>>();
+  const emailContactsByProvider = new Map<string | null, Set<string | null>>();
+  for (const item of evidence) {
+    if (item.sourceKind !== "email" || item.bodyBasis !== "original") continue;
+    const ids = emailIdsByThread.get(item.threadId) ?? new Set<string | null>();
+    ids.add(item.providerId); emailIdsByThread.set(item.threadId, ids);
+    const contacts = emailContactsByProvider.get(item.providerId) ?? new Set<string | null>();
+    contacts.add(item.customerEmail); emailContactsByProvider.set(item.providerId, contacts);
+  }
   await family("gmail_thread_meta", META_SQL, [captured], row => {
-    const originals = evidence.filter(item => item.sourceKind === "email" && item.threadId === row.threadId && item.bodyBasis === "original");
+    const ids = emailIdsByThread.get(row.threadId as string | null);
     const at = sourceInstant(row.lastMessageAt), count = number(row.messageCount);
-    if (count !== null && count <= new Set(originals.map(item => item.providerId)).size && originals.length) return [];
+    if (count !== null && ids?.size && count <= ids.size) return [];
     return [make("gmail_thread_meta", row, "partial", { snippet: row.snippet, lastMessageAt: row.lastMessageAt, messageCount: row.messageCount }, {
       sourceKind: "email", threadId: text(row.threadId), originalText: text(row.snippet), customerEmail: email(row.senderEmail), customerName: text(row.senderName),
       occurredAtUtc: null, observedAtUtc: at ?? sourceInstant(row.updatedAt) ?? sourceInstant(row.createdAt), timeBasis: "stored", bodyBasis: text(row.snippet) ? "snippet" : "missing",
@@ -293,7 +304,7 @@ export async function readTeamEvidenceWeek(port: SelectPort, input: TeamEvidence
     })];
   });
   await family("madison_email_drafts", DRAFT_SQL, [start, end], row => {
-    if (evidence.some(item => item.sourceKind === "email" && item.providerId === row.inboundMessageId && item.bodyBasis === "original" && item.customerEmail === email(row.fromEmail))) return [];
+    if (emailContactsByProvider.get(row.inboundMessageId as string | null)?.has(email(row.fromEmail))) return [];
     return [make("madison_email_drafts", row, "partial", row.originalMessage, { sourceKind: "email", providerId: text(row.inboundMessageId), threadId: text(row.threadId),
       originalText: text(row.originalMessage), customerEmail: email(row.fromEmail), customerName: text(row.senderName), sessionId: row.sessionId == null ? null : String(row.sessionId),
       bodyBasis: text(row.originalMessage) ? "snapshot" : "missing", timeBasis: "stored", limitations: ["Draft-stored inbound snapshot is partial coverage, not a verified original email; original headers/mailbox/date are missing"],
@@ -305,8 +316,9 @@ export async function readTeamEvidenceWeek(port: SelectPort, input: TeamEvidence
 }
 
 const TEAMS_SQL = "SELECT `id`, `name`, `launch27TeamId` FROM `scheduling_teams` WHERE `id` > ? ORDER BY `id` ASC LIMIT ?";
-const VISITS_SQL = "SELECT j.`id`, j.`origin`, j.`bookingId`, j.`launch27BookingId`, j.`jobDate`, j.`serviceDateTime`, j.`bookingStatus`, j.`customerName`, j.`customerPhone`, j.`customerEmail`, j.`jobAddress`, j.`teamId`, j.`teamName`, j.`updatedAt`, j.`customerRating`, p.`jobStatus` AS `progressStatus`, p.`teamId` AS `progressTeamId`, p.`updatedAt` AS `progressUpdatedAt`, p.`etaTimestamp`, s.`teamId` AS `signoffTeamId`, s.`signedOffAt`, b.`publicBookingNumber`, b.`status` AS `canonicalBookingStatus`, b.`requestedLocalDate` AS `canonicalRequestedLocalDate`, b.`customerPhone` AS `bookingCustomerPhone`, b.`customerEmail` AS `bookingCustomerEmail` FROM `leadflow_jobs` j LEFT JOIN `cleaner_portal_job_progress` p ON p.`leadflowJobId` = j.`id` LEFT JOIN `cleaner_portal_job_signoffs` s ON s.`leadflowJobId` = j.`id` LEFT JOIN `bookings` b ON b.`id` = j.`bookingId` WHERE j.`id` > ? AND j.`jobDate` <= ? AND ((? IS NOT NULL AND (REGEXP_REPLACE(COALESCE(j.`customerPhone`, ?), ?, ?) LIKE ? OR REGEXP_REPLACE(COALESCE(b.`customerPhone`, ?), ?, ?) LIKE ?)) OR (? IS NOT NULL AND (LOWER(TRIM(j.`customerEmail`)) = ? OR LOWER(TRIM(b.`customerEmail`)) = ?))) ORDER BY j.`id` ASC LIMIT ?";
-const ASSIGNMENTS_SQL = "SELECT `id`, `bookingId`, `teamId`, `teamName`, `status`, `assignedAt`, `unassignedAt` FROM `booking_assignments` WHERE `id` > ? AND `bookingId` = ? AND `assignedAt` <= ? ORDER BY `id` ASC LIMIT ?";
+const VISITS_SQL = "SELECT j.`id`, j.`origin`, j.`bookingId`, j.`launch27BookingId`, j.`jobDate`, j.`serviceDateTime`, j.`bookingStatus`, j.`customerName`, j.`customerPhone`, j.`customerEmail`, j.`jobAddress`, j.`teamId`, j.`teamName`, j.`updatedAt`, j.`customerRating`, p.`jobStatus` AS `progressStatus`, p.`teamId` AS `progressTeamId`, p.`updatedAt` AS `progressUpdatedAt`, p.`etaTimestamp`, s.`teamId` AS `signoffTeamId`, s.`signedOffAt`, b.`publicBookingNumber`, b.`status` AS `canonicalBookingStatus`, b.`requestedLocalDate` AS `canonicalRequestedLocalDate`, b.`customerPhone` AS `bookingCustomerPhone`, b.`customerEmail` AS `bookingCustomerEmail` FROM `leadflow_jobs` j LEFT JOIN `cleaner_portal_job_progress` p ON p.`leadflowJobId` = j.`id` LEFT JOIN `cleaner_portal_job_signoffs` s ON s.`leadflowJobId` = j.`id` LEFT JOIN `bookings` b ON b.`id` = j.`bookingId` WHERE j.`id` > ? AND j.`jobDate` <= ?";
+const VISIT_PHONE_SQL = "(REGEXP_REPLACE(COALESCE(j.`customerPhone`, ?), ?, ?) LIKE ? OR REGEXP_REPLACE(COALESCE(b.`customerPhone`, ?), ?, ?) LIKE ?)";
+const ASSIGNMENTS_SQL = "SELECT `id`, `bookingId`, `teamId`, `teamName`, `status`, `assignedAt`, `unassignedAt` FROM `booking_assignments` WHERE `id` > ? AND `bookingId` IN";
 
 /** Retained all-date history for exact evidence contacts, never name grouping.
  * Returned team IDs use scheduling-team identity; imported and portal IDs are
@@ -315,7 +327,14 @@ export async function readTeamEvidenceVisitHistory(port: SelectPort, evidence: r
   const result: TeamEvidenceVisitHistory = { visits: [], teams: [], assignments: [], complete: true, limitations: [] };
   const contacts = new Map<string, { phone: string | null; email: string | null }>();
   for (const item of evidence) {
+    // Coverage gaps stay in the evidence read, but cannot support a dated
+    // customer lookup. Keep receipt-time SMS and speaker-unverified calls.
+    const at = sourceInstant(item.occurredAtUtc) ?? (item.timeBasis === "received" ? sourceInstant(item.observedAtUtc) : null);
+    if (!text(item.originalText) || item.bodyBasis === "snippet" || item.bodyBasis === "missing" || item.speakerBasis === "non_customer"
+      || item.bodyBasis === "snapshot" && item.limitations.some(reason => /translation|non-original variant/i.test(reason))
+      || !["original", "received"].includes(item.timeBasis) || !inWindow(at, window)) continue;
     const contact = { phone: normalizePhone(item.customerPhone), email: email(item.customerEmail) };
+    if (contact.phone && contact.phone === normalizePhone(item.businessLine) || contact.email && contact.email === email(item.mailboxEmail)) continue;
     if (contact.phone || contact.email) contacts.set(hash(contact), contact);
   }
   if (!contacts.size) return result;
@@ -337,13 +356,26 @@ export async function readTeamEvidenceVisitHistory(port: SelectPort, evidence: r
   };
   const visits = new Map<number, TeamEvidenceVisit>();
   const cutoff = window.endExclusiveUtc < window.capturedAtUtc ? window.endExclusiveUtc : window.capturedAtUtc;
-  for (const contact of Array.from(contacts.values())) {
+  const contactList = Array.from(contacts.values());
+  for (let offset = 0; offset < contactList.length; offset += BATCH) {
+    const chunk = contactList.slice(offset, offset + BATCH);
+    const phones = new Set(chunk.map(contact => contact.phone).filter((value): value is string => value !== null));
+    const emails = new Set(chunk.map(contact => contact.email).filter((value): value is string => value !== null));
     // SQL is only a coarse superset. Final matching always uses the existing canonical utility.
-    const suffix = contact.phone ? `%${contact.phone.slice(2)}` : null;
-    await scan("leadflow_jobs", VISITS_SQL, [window.throughDate, contact.phone, "", "[^0-9]", "", suffix, "", "[^0-9]", "", suffix, contact.email, contact.email, contact.email], row => {
+    const predicates: string[] = [], params: SqlValue[] = [window.throughDate];
+    for (const phone of Array.from(phones)) {
+      const suffix = `%${phone.slice(2)}`;
+      predicates.push(VISIT_PHONE_SQL); params.push("", "[^0-9]", "", suffix, "", "[^0-9]", "", suffix);
+    }
+    if (emails.size) {
+      const placeholders = Array.from(emails, () => "?").join(", ");
+      predicates.push(`(LOWER(TRIM(j.\`customerEmail\`)) IN (${placeholders}) OR LOWER(TRIM(b.\`customerEmail\`)) IN (${placeholders}))`);
+      params.push(...Array.from(emails), ...Array.from(emails));
+    }
+    await scan("leadflow_jobs", `${VISITS_SQL} AND (${predicates.join(" OR ")}) ORDER BY j.\`id\` ASC LIMIT ?`, params, row => {
       const jobPhone = normalizePhone(text(row.customerPhone)), bookingPhone = normalizePhone(text(row.bookingCustomerPhone));
       const jobEmail = email(row.customerEmail), bookingEmail = email(row.bookingCustomerEmail);
-      if (!(contact.phone && (jobPhone === contact.phone || bookingPhone === contact.phone) || contact.email && (jobEmail === contact.email || bookingEmail === contact.email))) return;
+      if (!(jobPhone && phones.has(jobPhone) || bookingPhone && phones.has(bookingPhone) || jobEmail && emails.has(jobEmail) || bookingEmail && emails.has(bookingEmail))) return;
       const id = number(row.id), jobDate = dateDay(row.jobDate);
       if (id === null || id <= 0 || !jobDate) throw new Error("INVALID_VISIT_ROW");
       if (jobDate > window.throughDate) return;
@@ -375,13 +407,17 @@ export async function readTeamEvidenceVisitHistory(port: SelectPort, evidence: r
     });
   }
   result.visits = Array.from(visits.values()).sort((a, b) => a.jobDate.localeCompare(b.jobDate) || a.id - b.id);
-  for (const bookingId of Array.from(new Set(result.visits.map(visit => visit.bookingId).filter((id): id is number => id !== null))).sort((a, b) => a - b)) {
-    await scan("booking_assignments", ASSIGNMENTS_SQL, [bookingId, sqlDate(cutoff)], row => {
-      const id = number(row.id), actualBookingId = number(row.bookingId); if (id === null || actualBookingId !== bookingId) throw new Error("INVALID_ASSIGNMENT_ROW");
+  const bookingIds = Array.from(new Set(result.visits.map(visit => visit.bookingId).filter((id): id is number => id !== null))).sort((a, b) => a - b);
+  for (let offset = 0; offset < bookingIds.length; offset += BATCH) {
+    const chunk = bookingIds.slice(offset, offset + BATCH), membership = new Set(chunk);
+    const placeholders = chunk.map(() => "?").join(", ");
+    await scan("booking_assignments", `${ASSIGNMENTS_SQL} (${placeholders}) AND \`assignedAt\` <= ? ORDER BY \`id\` ASC LIMIT ?`, [...chunk, sqlDate(cutoff)], row => {
+      const id = number(row.id), bookingId = number(row.bookingId); if (id === null || bookingId === null || !membership.has(bookingId)) throw new Error("INVALID_ASSIGNMENT_ROW");
       result.assignments.push({ id, bookingId, teamId: number(row.teamId), teamName: text(row.teamName), status: text(row.status) ?? "unknown",
         assignedAtUtc: sourceInstant(row.assignedAt), unassignedAtUtc: sourceInstant(row.unassignedAt) });
     });
   }
+  result.assignments.sort((a, b) => a.bookingId - b.bookingId || a.id - b.id);
   result.limitations = Array.from(new Set(["Retained states only: progress update, ETA, signoff and job update are not manufactured completion timestamps", "Historical assignments use scheduling IDs; portal/import IDs are uniquely mapped from Launch27 IDs", "Current SELECT history is not a transactional snapshot or proof of historical fault", ...result.limitations]));
   return result;
 }

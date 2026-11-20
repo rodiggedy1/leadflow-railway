@@ -28,16 +28,20 @@ class FakePort implements SelectPort {
   failures = new Set<string>();
   calls: { sql: string; params: readonly SqlValue[] }[] = [];
   nonadvancing = new Set<string>();
+  failureAt = new Map<string, number>();
+  errors = new Map<string, unknown>();
+  returned = new Map<string, number>();
   async select(sql: string, params: readonly SqlValue[] = []): Promise<SqlRow[]> {
     assertTeamEvidenceSelect(sql);
     expect(sql).not.toMatch(/SELECT\s+(?:\w+\.)?\*|\b(?:INSERT|UPDATE|DELETE|BEGIN|COMMIT|ROLLBACK|FOR|LOCK|SET)\b/i);
+    expect(sql.match(/\?/g)?.length ?? 0).toBe(params.length);
     this.calls.push({ sql, params });
     const table = sourceTable(sql), family = key(sql, params);
-    if (this.failures.has(table) || this.failures.has(family)) throw Object.assign(new Error("secret connection details"), { code: "ER_NO_SUCH_TABLE" });
+    if (this.failures.has(table) || this.failures.has(family) || this.failureAt.get(table) === this.calls.filter(call => sourceTable(call.sql) === table).length)
+      throw this.errors.get(table) ?? Object.assign(new Error("secret connection details"), { code: "ER_NO_SUCH_TABLE" });
     const raw = this.tables[family] ?? this.tables[table] ?? [];
     if (/WHERE `id` = \?/.test(sql)) return raw.filter(row => String(row.id) === String(params[0]));
     let rows = [...raw];
-    if (table === "booking_assignments") rows = rows.filter(row => Number(row.bookingId) === Number(params[1]));
     const instant = (value: unknown): number | null => value instanceof Date ? value.getTime() : typeof value === "number" ? value : typeof value === "string" ? /^\d+$/.test(value) ? Number(value) : Date.parse(value.replace(" ", "T") + (value.includes(" ") ? "Z" : "")) : null;
     const range = (value: unknown, start: SqlValue, end: SqlValue) => {
       const at = instant(value), first = instant(start), last = instant(end);
@@ -54,9 +58,36 @@ class FakePort implements SelectPort {
     if (table === "call_log" || table === "confirmation_calls") rows = rows.filter(row => range(row.firedAt, params[1], params[2]) || (row.firedAt == null || Number(row.firedAt) <= Number(params[3])) && before(row.createdAt, params[4], true));
     if (table === "field_mgmt_calls") rows = rows.filter(row => range(row.completedAt, params[1], params[2]) || before(row.createdAt, params[3], true));
     if (table === "madison_email_drafts") rows = rows.filter(row => range(row.createdAt, params[1], params[2]));
+    if (table === "leadflow_jobs") {
+      expect(sql).toContain("j.`jobDate` <= ?");
+      const phoneCount = (sql.match(/LIKE \?/g)?.length ?? 0) / 2;
+      const suffixes: string[] = [];
+      let offset = 2;
+      for (let i = 0; i < phoneCount; i++, offset += 8) {
+        expect(params.slice(offset, offset + 3)).toEqual(["", "[^0-9]", ""]);
+        expect(params.slice(offset + 4, offset + 7)).toEqual(["", "[^0-9]", ""]);
+        expect(params[offset + 3]).toBe(params[offset + 7]);
+        suffixes.push(String(params[offset + 3]).slice(1));
+      }
+      const emailIn = /LOWER\(TRIM\(j\.`customerEmail`\)\) IN \(([^)]+)\)/.exec(sql);
+      const emailCount = emailIn?.[1].match(/\?/g)?.length ?? 0;
+      const emails = params.slice(offset, offset + emailCount);
+      expect(params.slice(offset + emailCount, -1)).toEqual(emails);
+      const coarsePhone = (value: unknown) => typeof value === "string" && suffixes.some(suffix => value.replace(/[^0-9]/g, "").endsWith(suffix));
+      const exactEmail = (value: unknown) => typeof value === "string" && emails.includes(value.trim().toLowerCase());
+      rows = rows.filter(row => typeof row.jobDate === "string" && row.jobDate <= String(params[1])
+        && (coarsePhone(row.customerPhone) || coarsePhone(row.bookingCustomerPhone) || exactEmail(row.customerEmail) || exactEmail(row.bookingCustomerEmail)));
+    }
+    if (table === "booking_assignments") {
+      expect(sql).toMatch(/`bookingId` IN \((?:\?,?\s*)+\) AND `assignedAt` <= \?/);
+      const ids = params.slice(1, -2).map(Number);
+      rows = rows.filter(row => ids.includes(Number(row.bookingId)) && before(row.assignedAt, params.at(-2)!, true));
+    }
     if (!this.nonadvancing.has(table)) rows = rows.filter(row => BigInt(String(row.id)) > BigInt(String(params[0])));
     rows.sort((a, b) => Number(a.id) - Number(b.id));
-    return rows.slice(0, Number(params.at(-1)));
+    const page = rows.slice(0, Number(params.at(-1)));
+    this.returned.set(table, (this.returned.get(table) ?? 0) + page.length);
+    return page;
   }
 }
 const session = (id: number, history: unknown[], overrides: Record<string, unknown> = {}): SqlRow => ({ id, leadPhone: phone, leadName: "Customer", messageHistory: JSON.stringify(history), createdAt: date(old), updatedAt: date(late), ...overrides });
@@ -306,7 +337,7 @@ describe("retained visit history reader (offline)", () => {
     port.tables.leadflow_jobs = [visit(1, { customerPhone: "+1 (703) 555-1234" }), visit(2, { customerPhone: "+17035550000", customerEmail: "other@example.test" }), visit(3, { customerPhone: null, customerEmail: "CUSTOMER@EXAMPLE.TEST" })];
     const result = await readTeamEvidenceVisitHistory(port, [evidence(), evidence({ id: "email1", customerPhone: null, customerEmail: "CUSTOMER@EXAMPLE.TEST" })], window);
     expect(result.visits.map(v => v.id)).toEqual([1, 3]);
-    expect(port.calls.filter(c => sourceTable(c.sql) === "leadflow_jobs")).toHaveLength(4);
+    expect(port.calls.filter(c => sourceTable(c.sql) === "leadflow_jobs")).toHaveLength(2);
   });
   it("ambiguous imported map is a limitation instead of a name-based guess; history failure is incomplete", async () => {
     const port = new FakePort(); port.tables.scheduling_teams = [{ id: 2, name: "Same name", launch27TeamId: 70 }, { id: 3, name: "Same name", launch27TeamId: 70 }]; port.tables.leadflow_jobs = [visit(1, { bookingId: 5 })]; port.failures.add("booking_assignments");
@@ -317,6 +348,124 @@ describe("retained visit history reader (offline)", () => {
   it("makes no contact/name-wide visit reads when evidence has no usable contact", async () => {
     const port = new FakePort(); const result = await readTeamEvidenceVisitHistory(port, [evidence({ customerPhone: null, customerEmail: null })], window);
     expect(result).toEqual({ visits: [], teams: [], assignments: [], complete: true, limitations: [] }); expect(port.calls).toHaveLength(0);
+  });
+  it("uses two visit and two assignment SELECTs for three contacts/bookings, not per-contact/per-booking scans", async () => {
+    const port = new FakePort(); port.tables.scheduling_teams = [{ id: 2, name: "Local", launch27TeamId: 70 }];
+    const contacts = [phone, "+17035552222", "+17035553333"];
+    port.tables.leadflow_jobs = contacts.map((customerPhone, index) => visit(index + 1, { customerPhone, bookingId: index + 1, customerEmail: null }));
+    port.tables.leadflow_jobs.push(visit(4, { customerPhone: "+17035554444", customerEmail: null, bookingId: 4 }));
+    port.tables.booking_assignments = [1, 2, 3, 4].map(id => ({ id, bookingId: id, teamId: 2, status: "unassigned", assignedAt: date(old), unassignedAt: date(monday) }));
+    port.tables.booking_assignments.push({ id: 5, bookingId: 1, teamId: 2, assignedAt: date(late) });
+    const result = await readTeamEvidenceVisitHistory(port, contacts.map((customerPhone, index) => evidence({ id: `contact-${index}`, customerPhone })), window);
+    expect(result.complete).toBe(true); expect(result.visits.map(v => v.id)).toEqual([1, 2, 3]); expect(result.assignments.map(a => a.id)).toEqual([1, 2, 3]);
+    expect(result.assignments.every(a => a.assignedAtUtc === old && a.unassignedAtUtc === monday)).toBe(true);
+    expect(port.calls.filter(c => sourceTable(c.sql) === "leadflow_jobs").map(c => c.params[0])).toEqual(["0", "3"]);
+    const assignments = port.calls.filter(c => sourceTable(c.sql) === "booking_assignments");
+    expect(assignments.map(c => c.params[0])).toEqual(["0", "3"]); expect(assignments[0].params.slice(1, -2)).toEqual([1, 2, 3]);
+    expect(port.calls).toHaveLength(6); expect(port.returned.get("leadflow_jobs")).toBe(3); expect(port.returned.get("booking_assignments")).toBe(3);
+  });
+  it.each([100, 237])("exhausts %i distinct contacts and booking IDs in 100-item chunks, including empty confirmations", async count => {
+    const port = new FakePort(); port.tables.scheduling_teams = [{ id: 2, name: "Local", launch27TeamId: 70 }];
+    const contacts = Array.from({ length: count }, (_, index) => ({ customerPhone: `+1703555${String(index).padStart(4, "0")}`, customerEmail: `customer-${index}@example.test` }));
+    port.tables.leadflow_jobs = contacts.map((contact, index) => visit(index + 1, { ...contact, bookingId: index + 1 }));
+    port.tables.booking_assignments = contacts.map((_contact, index) => ({ id: index + 1, bookingId: index + 1, teamId: 2, status: "assigned", assignedAt: date(old), unassignedAt: null }));
+    const sources = contacts.map((contact, index) => evidence({ id: `contact-${index}`, ...contact }));
+    const result = await readTeamEvidenceVisitHistory(port, [...sources, sources[0]], window);
+    expect(result.complete).toBe(true); expect(result.visits).toHaveLength(count); expect(result.assignments).toHaveLength(count);
+    const visits = port.calls.filter(c => sourceTable(c.sql) === "leadflow_jobs"), assignments = port.calls.filter(c => sourceTable(c.sql) === "booking_assignments");
+    const cursors = count === 100 ? ["0", "100"] : ["0", "100", "0", "200", "0", "237"];
+    expect(visits.map(c => c.params[0])).toEqual(cursors); expect(assignments.map(c => c.params[0])).toEqual(cursors);
+    expect(assignments.filter(c => c.params[0] === "0").map(c => c.params.slice(1, -2).length)).toEqual(count === 100 ? [100] : [100, 100, 37]);
+    expect(visits.map(c => (c.sql.match(/LIKE \?/g)?.length ?? 0) / 2)).toEqual(count === 100 ? [100, 100] : [100, 100, 100, 100, 37, 37]);
+    expect(port.calls).toHaveLength(count === 100 ? 6 : 14);
+  });
+  it("rejects coarse phone suffix and email-prefix collisions while retaining canonical contacts and explicit conflicts", async () => {
+    const port = new FakePort(); port.tables.scheduling_teams = [{ id: 2, name: "Local", launch27TeamId: 70 }];
+    port.tables.leadflow_jobs = [visit(1, { customerPhone: "+44 7035551234", customerEmail: null }),
+      visit(2, { customerPhone: "2 7035551234", customerEmail: null }),
+      visit(3, { customerPhone: null, bookingCustomerPhone: "1 (703) 555-1234", customerEmail: null }),
+      visit(4, { customerPhone: null, customerEmail: "  CUSTOMER@EXAMPLE.TEST  " }),
+      visit(5, { customerPhone: null, customerEmail: "customer@example.test.evil" }),
+      visit(6, { customerPhone: "+17035550000", bookingCustomerPhone: phone, customerEmail: "other@example.test", bookingCustomerEmail: "customer@example.test" })];
+    const result = await readTeamEvidenceVisitHistory(port, [evidence({ customerPhone: "(703) 555-1234" }), evidence({ customerPhone: null, customerEmail: " CUSTOMER@EXAMPLE.TEST " })], window);
+    expect(port.returned.get("leadflow_jobs")).toBe(5); // Both non-US/invalid suffix collisions reach the exact JS check.
+    expect(result.visits.map(v => v.id)).toEqual([3, 4, 6]);
+    expect(result.visits[0].customerPhone).toBe(phone); expect(result.visits[1].customerEmail).toBe("customer@example.test");
+    expect(result.visits[2]).toMatchObject({ customerPhone: "+17035550000", customerEmail: "other@example.test" });
+    expect(result.limitations.join(" ")).toContain("Visit 6: operational/canonical contact conflict");
+    expect(port.calls.filter(c => sourceTable(c.sql) === "leadflow_jobs")).toHaveLength(2);
+  });
+  it("retains 237 old/unrelated snippet gaps and undated/non-customer evidence without any history SELECT", async () => {
+    const port = new FakePort();
+    port.tables.gmail_thread_meta = Array.from({ length: 237 }, (_, index) => ({ id: index + 1, threadId: `old-${index}`, senderEmail: `old-${index}@example.test`,
+      snippet: `Old partial ${index}`, lastMessageAt: index % 2 ? null : ms(old), messageCount: 9, createdAt: date(old), updatedAt: date(old) }));
+    port.tables.conversation_sessions = [session(1, [{ role: "user", content: "Undated withheld" }]), session(2, [{ role: "staff", content: "Known staff original", ts: ms(monday) }])];
+    port.tables.inbound_sms = [sms(1, "Undated SMS withheld", { receivedAt: 0 })];
+    const read = await readTeamEvidenceWeek(port, input, now), before = port.calls.length;
+    expect(read.collectionComplete).toBe(true); expect(read.evidence.filter(e => e.store === "gmail_thread_meta")).toHaveLength(237);
+    expect(read.limitations.join(" ")).toContain("weekly original coverage unresolved"); expect(read.limitations.join(" ")).toContain("missing/invalid original timestamps");
+    expect(port.calls.filter(c => sourceTable(c.sql) === "gmail_thread_meta").map(c => c.params[0])).toEqual(["0", "100", "200", "237"]);
+    const history = await readTeamEvidenceVisitHistory(port, read.evidence, read.window);
+    expect(port.calls).toHaveLength(before); expect(history).toEqual({ visits: [], teams: [], assignments: [], complete: true, limitations: [] });
+    expect(read.evidence.find(e => e.originalText === "Known staff original")?.speakerBasis).toBe("non_customer");
+    expect(read.evidence.some(e => e.originalText === "Undated withheld" || e.originalText === "Undated SMS withheld")).toBe(false);
+  });
+  it("keeps weekly originals through late session/receipt activity, receipt-time SMS and unverified call snapshots for prior visits", async () => {
+    const port = new FakePort(); port.tables.scheduling_teams = [{ id: 2, name: "Local", launch27TeamId: 70 }];
+    port.tables.conversation_sessions = [session(1, [{ role: "user", content: "Weekly original", ts: ms(sunday) }])];
+    port.tables.inbound_sms = [sms(1, "Receipt-time original", { fromPhone: "+17035552222" })];
+    port.tables["ops_chat_messages:claude_customer_email_receipt"] = [emailReceipt(1, [emailTurn("m1", monday), emailTurn("m2", late)])];
+    port.tables.openphone_call_recordings = [{ id: 7, openphoneCallId: "AC-call", callerPhone: "+17035553333", direction: "incoming", callStartedAt: date(monday), createdAt: date(late), transcript: JSON.stringify([{ content: "Unattributed original" }]) }];
+    port.tables["ops_chat_messages:claude_staff_call_receipt"] = [staffReceipt(1, { callerPhone: "+17035553333" })];
+    port.tables.gmail_thread_meta = [{ id: 1, threadId: "unrelated", senderEmail: "unrelated@example.test", snippet: "Old partial", createdAt: date(old), lastMessageAt: ms(old), messageCount: 3 }];
+    port.tables.leadflow_jobs = [visit(1, { customerEmail: null }), visit(2, { customerPhone: "+17035552222", customerEmail: null }),
+      visit(3, { customerPhone: null }), visit(4, { customerPhone: "+17035553333", customerEmail: null }), visit(5, { customerPhone: null, customerEmail: "unrelated@example.test" })];
+    const read = await readTeamEvidenceWeek(port, input, now), history = await readTeamEvidenceVisitHistory(port, read.evidence, read.window);
+    expect(read.evidence.some(e => e.providerId === "m1" && e.occurredAtUtc === monday && e.observedAtUtc === late)).toBe(true);
+    expect(read.evidence.some(e => e.providerId === "m2")).toBe(false);
+    expect(read.evidence.some(e => e.sourceKind === "human_call" && e.speakerBasis === "unverified" && e.bodyBasis === "snapshot")).toBe(true);
+    expect(history.complete).toBe(true); expect(history.visits.map(v => v.id)).toEqual([1, 2, 3, 4]); expect(history.visits.every(v => v.jobDate < window.weekStart)).toBe(true);
+    expect(port.calls.filter(c => sourceTable(c.sql) === "leadflow_jobs")).toHaveLength(2); expect(port.calls.filter(c => sourceTable(c.sql) === "booking_assignments")).toHaveLength(0);
+  });
+  it.each([
+    evidence({ occurredAtUtc: old }), evidence({ occurredAtUtc: null, timeBasis: "unknown" }), evidence({ originalText: null, bodyBasis: "missing" }),
+    evidence({ bodyBasis: "snippet" }), evidence({ speakerBasis: "non_customer" }), evidence({ bodyBasis: "snapshot", limitations: ["Stored English translation is a non-original variant"] }),
+    evidence({ customerPhone: line }), evidence({ customerPhone: null, customerEmail: "office@example.test", mailboxEmail: "office@example.test" }),
+  ])("does not scan history for a source that cannot support matching ($bodyBasis/$timeBasis/$speakerBasis)", async source => {
+    const port = new FakePort(); expect((await readTeamEvidenceVisitHistory(port, [source], window)).visits).toEqual([]); expect(port.calls).toHaveLength(0);
+  });
+  it.each(["scheduling_teams", "leadflow_jobs", "booking_assignments"])("retains successfully read history but marks partial %s failure incomplete with safe details", async table => {
+    const port = new FakePort(); port.tables.scheduling_teams = [{ id: 2, name: "Local", launch27TeamId: 70 }];
+    port.tables.leadflow_jobs = [visit(1, { bookingId: 5 })]; port.tables.booking_assignments = [{ id: 1, bookingId: 5, teamId: 2, assignedAt: date(old), unassignedAt: date(monday) }];
+    port.failureAt.set(table, 2); port.errors.set(table, new Error("HTTP request failed: secret transport URL", { cause: Object.assign(new Error("private driver details"), { code: "ETIMEDOUT" }) }));
+    const result = await readTeamEvidenceVisitHistory(port, [evidence()], window);
+    expect(result.complete).toBe(false); expect(result.visits).toHaveLength(1); expect(result.assignments).toHaveLength(1);
+    expect(result.limitations.join(" ")).toContain(`${table}: DB_TIMEOUT`); expect(result.limitations.join(" ")).not.toMatch(/secret|private|HTTP|transport URL/);
+    expect(port.calls.filter(c => sourceTable(c.sql) === table)).toHaveLength(2);
+  });
+  it("does not infer a cause from generic HTTP failures or hide incomplete contact chunks", async () => {
+    const port = new FakePort(); port.tables.scheduling_teams = [{ id: 2, name: "Local", launch27TeamId: 70 }];
+    const contacts = Array.from({ length: 237 }, (_, index) => ({ customerPhone: `+1703555${String(index).padStart(4, "0")}` }));
+    port.tables.leadflow_jobs = contacts.map((contact, index) => visit(index + 1, { ...contact, customerEmail: null }));
+    port.failureAt.set("leadflow_jobs", 3); port.errors.set("leadflow_jobs", new Error("HTTP transport failure: secret host/token"));
+    const result = await readTeamEvidenceVisitHistory(port, contacts.map(contact => evidence(contact)), window);
+    expect(result.complete).toBe(false); expect(result.visits).toHaveLength(137); expect(result.visits.at(-1)?.id).toBe(237);
+    expect(result.limitations.join(" ")).toContain("leadflow_jobs: DB_READ_FAILED"); expect(result.limitations.join(" ")).not.toMatch(/HTTP|secret|DB_TIMEOUT|DB_UNAVAILABLE/);
+    expect(port.calls.filter(c => sourceTable(c.sql) === "leadflow_jobs").map(c => c.params[0])).toEqual(["0", "100", "0", "0", "237"]);
+  });
+  it.each([
+    ["scheduling_teams", { id: 1, name: null }, "INVALID_TEAM_ROW"],
+    ["leadflow_jobs", visit(1, { jobDate: "2026-11-00" }), "INVALID_VISIT_ROW"],
+    ["booking_assignments", { id: 1, bookingId: 5.5, assignedAt: date(old) }, "INVALID_ASSIGNMENT_ROW"],
+  ] as const)("captures allowlisted %s validation failures without raw row/error details", async (table, row, reason) => {
+    const port = new FakePort(); port.tables.scheduling_teams = [{ id: 2, name: "Local", launch27TeamId: 70 }]; port.tables.leadflow_jobs = [visit(1, { bookingId: 5 })];
+    if (table === "booking_assignments") {
+      // Deliberately corrupt a selected assignment after SQL filtering, testing the closed membership guard.
+      port.tables.booking_assignments = [{ id: 1, bookingId: 5, assignedAt: date(old) }];
+      const select = port.select.bind(port); port.select = async (sql, params) => (await select(sql, params)).map(item => sourceTable(sql) === table ? row : item);
+    } else port.tables[table] = [row];
+    const result = await readTeamEvidenceVisitHistory(port, [evidence()], window);
+    expect(result.complete).toBe(false); expect(result.limitations.join(" ")).toContain(`${table}: ${reason}`);
   });
   it("new reader imports only passive helpers, uses literal read-only projections and no legacy dependency", () => {
     const source = readFileSync(new URL("./teamLeaderboardEvidenceRead.ts", import.meta.url), "utf8");
