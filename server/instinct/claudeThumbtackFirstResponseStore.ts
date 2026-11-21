@@ -15,11 +15,13 @@ const header = (result: unknown): { insertId: number; affectedRows: number } => 
 const json = (value: unknown): any => typeof value === "string" ? JSON.parse(value) : value;
 const payloadHash = (lead: EligibleLead) => createHash("sha256").update(lead.capture.rawPayload).digest("hex");
 const stop = (text: unknown) => typeof text === "string" && /^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(text);
-const instant = (value: unknown): number | null => {
-  const time = value instanceof Date ? value.getTime() : typeof value === "number" ? value
-    : typeof value === "string" && value.trim() ? (/^\d+$/.test(value) ? Number(value) : Date.parse(value)) : NaN;
-  return Number.isFinite(time) ? time : null;
-};
+function isPhoneReceiptDuplicate(error: unknown): boolean {
+  // Drizzle wraps the MySQL insertion error in cause; only this receipt index is an expected race.
+  for (let current: any = error, depth = 0; current && depth < 5; current = current.cause, depth++) {
+    if (current.code === "ER_DUP_ENTRY" && /\buq_sms_draft_inbound\b/.test(`${current.sqlMessage ?? ""} ${current.message ?? ""}`)) return true;
+  }
+  return false;
+}
 const binding = (claim: FirstResponseClaim) => ({ source: "thumbtack", account: THUMBTACK_ACCOUNT, negotiationId: claim.lead.native.negotiationId,
   captureId: claim.lead.capture.id, payloadHash: payloadHash(claim.lead), sessionId: claim.sessionId, key: claim.lead.key,
   phone: claim.lead.phone, fromNumberId: claim.fromNumberId, originalConversation: [] });
@@ -43,37 +45,14 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
     const [capture] = rows(await tx.execute(sql`SELECT source, event_type, raw_payload FROM webhook_events WHERE id = ${claim.lead.capture.id}`));
     if (!capture || capture.source !== "thumbtack" || capture.event_type !== "NegotiationCreatedV4" || capture.raw_payload !== claim.lead.capture.rawPayload) return false;
     if (rows(await tx.execute(sql`SELECT id FROM sms_opt_outs WHERE phone = ${claim.lead.phone}`)).length) return false;
-    // Phone only arbitrates destination activity after this NEW lead; old customer history is not identity.
-    const afterLead = (value: unknown) => (instant(value) ?? -Infinity) > claim.lead.createdAt;
+    // Preserve global consent checks without using previous conversations/messages to reject a lead.
     const phone10 = claim.lead.phone.slice(-10);
-    const otherSessions = rows(await tx.execute(sql`SELECT * FROM conversation_sessions
+    const otherSessions = rows(await tx.execute(sql`SELECT leadPhone, smsOptOut FROM conversation_sessions
       WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = ${phone10} AND id <> ${claim.sessionId}`));
-    for (const other of otherSessions) {
-      if (normalizePhone(other.leadPhone) !== claim.lead.phone) continue;
-      let history: unknown;
-      try { history = json(other.messageHistory); } catch { /* untimed old history is not evidence of new destination activity */ }
-      if (Number(other.smsOptOut) || (Array.isArray(history) && history.some(message =>
-        ["user", "assistant", "note"].includes(message?.role) && afterLead(message.ts)))
-        || [other.lastCalledAt, other.respondedAt, other.bookedAt, other.lastCustomerReplyAt, other.lastCustomerMessageTs].some(afterLead)) return false;
-    }
+    if (otherSessions.some(other => normalizePhone(other.leadPhone) === claim.lead.phone && Number(other.smsOptOut))) return false;
     if (rows(await tx.execute(sql`SELECT id FROM ops_chat_messages WHERE
       (sessionId = ${claim.sessionId} OR (JSON_VALID(metadata) = 1 AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.sessionId')) = ${String(claim.sessionId)}))
       AND id <> ${claim.cardId} AND (authorRole <> 'system' OR quickAction = 'madison_sms_dismissed')`)).length) return false;
-    const nativeMessages = rows(await tx.execute(sql`SELECT raw_payload, created_at FROM webhook_events WHERE source = 'thumbtack' AND event_type = 'MessageCreatedV4'
-      AND JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.data.negotiationID')) = ${claim.lead.native.negotiationId}`));
-    for (const event of nativeMessages) {
-      const payload = json(event.raw_payload);
-      if (afterLead(instant(payload?.data?.createdAt) ?? instant(payload?.event?.triggeredAt) ?? event.created_at)) return false;
-    }
-    const events = rows(await tx.execute(sql`SELECT raw_payload, created_at FROM webhook_events WHERE source = 'openphone' AND
-      (RIGHT(REGEXP_REPLACE(from_phone, '[^0-9]', ''), 10) = ${phone10} OR RIGHT(REGEXP_REPLACE(to_phone, '[^0-9]', ''), 10) = ${phone10})`));
-    for (const event of events) {
-      const payload = json(event.raw_payload), message = payload?.data?.object;
-      // Provider creation wins over a delayed delivery of an old event; capture time is the fallback.
-      if (!afterLead(instant(message?.createdAt) ?? event.created_at)) continue;
-      if (normalizePhone(message?.from) === claim.lead.phone || (Array.isArray(message?.to) ? message.to : [message?.to])
-        .some((to: unknown) => typeof to === "string" && normalizePhone(to) === claim.lead.phone)) return false;
-    }
     return !stop(claim.lead.facts.description) && !claim.lead.facts.nativeDetails.some(detail => stop(detail.answer));
   }
   return {
@@ -86,16 +65,16 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
         console.warn("[ThumbtackClaude] retained native capture has no usable negotiation identity; intake claim unavailable", id);
         return null;
       }
-      const [earliest] = rows(await db.execute(sql`SELECT id, created_at FROM webhook_events WHERE source = 'thumbtack' AND event_type = 'NegotiationCreatedV4'
-        AND TRIM(JSON_UNQUOTE(JSON_EXTRACT(raw_payload, '$.data.negotiationID'))) = ${negotiationId.trim()} ORDER BY id ASC LIMIT 1`));
-      if (!earliest) return null;
-      return { id: Number(row.id), source: row.source, eventType: row.event_type, receivedAt: new Date(row.created_at), rawPayload: row.raw_payload,
-        earliestId: Number(earliest.id), earliestReceivedAt: new Date(earliest.created_at) } satisfies CapturedLead;
+      return { id: Number(row.id), source: row.source, eventType: row.event_type, receivedAt: new Date(row.created_at),
+        rawPayload: row.raw_payload } satisfies CapturedLead;
     },
     async claim(lead, config) {
       try {
         return await db.transaction(async tx => {
-          if (rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${lead.key}`)).length) return null;
+          if (rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1`)).length) return null;
+          // Older native receipts used negotiation/attempt hashes but persisted the same canonical phone.
+          if (lead.phone && rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE fromPhone = ${lead.phone}
+            AND capability = ${capability} AND inboundOpenPhoneId LIKE 'tt-first:v1:%' LIMIT 1`)).length) return null;
           const price = quote(lead), now = new Date();
           const phone = lead.phone ?? `no-phone-tt-${lead.capture.id}`;
           const sessionId = Number(header(await tx.insert(conversationSessions).values({ leadPhone: phone, leadName: lead.facts.name,
@@ -123,7 +102,9 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
           return claim;
         });
       } catch (error) {
-        if ((error as any)?.code === "ER_DUP_ENTRY") return null; // transaction rollback includes the competing session/card
+        // The existing unique receipt index arbitrates simultaneous first arrivals for the same phone.
+        if (isPhoneReceiptDuplicate(error) && rows(await db.execute(sql`SELECT id FROM madison_sms_drafts
+          WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1`)).length) return null;
         throw error;
       }
     },

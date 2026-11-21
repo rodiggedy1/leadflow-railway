@@ -8,7 +8,7 @@ const cfg = thumbtackFirstResponseConfig({ THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABL
 function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: string) {
   const raw = rawOverride ?? JSON.stringify({ event: { eventType: "NegotiationCreatedV4", triggeredAt: "2026-11-16T17:00:02Z" }, data: { negotiationID: "n1", createdAt,
     customer: { firstName: "Jane", phone: "+17035551234" }, request: { description: "Clean kitchen", details: [{ question: "Extra requests", answer: "oven" }] } } });
-  const capture = { id: 7, source: "thumbtack", eventType: "NegotiationCreatedV4", receivedAt: new Date("2026-11-16T17:01:00Z"), rawPayload: raw, earliestId: 7, earliestReceivedAt: new Date("2026-11-16T17:01:00Z") };
+  const capture = { id: 7, source: "thumbtack", eventType: "NegotiationCreatedV4", receivedAt: new Date("2026-11-16T17:01:00Z"), rawPayload: raw };
   const lead = capturedThumbtackLead(capture, cfg)!;
   let state: any = { sessions: [], drafts: [], cards: [], next: 100 };
   const queries: Array<{ sql: string; params: unknown[] }> = [];
@@ -25,7 +25,12 @@ function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: s
       const tableName = getTableName(table), id = ++state.next;
       if (fail === tableName) throw new Error("insert failed");
       if (tableName === "madison_sms_drafts") {
-        if (state.drafts.some((row: any) => row.inboundOpenPhoneId === values.inboundOpenPhoneId)) throw Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" });
+        if (fail === "duplicate") throw Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" });
+        if (fail === "unrelated-duplicate") throw Object.assign(new Error("duplicate for key 'other_unique_index'"), { code: "ER_DUP_ENTRY" });
+        if (state.drafts.some((row: any) => row.inboundOpenPhoneId === values.inboundOpenPhoneId)) {
+          const error = Object.assign(new Error("Duplicate entry for key 'madison_sms_drafts.uq_sms_draft_inbound'"), { code: "ER_DUP_ENTRY" });
+          throw extra.wrappedDuplicate ? Object.assign(new Error("Failed query"), { cause: error }) : error;
+        }
         state.drafts.push({ id, ...values });
       } else if (tableName === "conversation_sessions") state.sessions.push({ id, aiMode: 0, smsOptOut: 0, isBooked: 0, messageCount: 0, ...values });
       else state.cards.push({ id, ...values });
@@ -35,7 +40,14 @@ function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: s
       const q = new MySqlDialect().sqlToQuery(query); queries.push(q); const s = q.sql.replace(/\s+/g, " "), p = q.params;
       if (fail && s.includes(fail)) throw new Error("SQL save failure");
       if (s.startsWith("SELECT")) {
-        if (s.includes("FROM madison_sms_drafts WHERE inboundOpenPhoneId")) return [state.drafts.filter((d: any) => d.inboundOpenPhoneId === p[0])];
+        if (s.includes("FROM madison_sms_drafts WHERE inboundOpenPhoneId") || (s.includes("FROM madison_sms_drafts") && s.includes("WHERE inboundOpenPhoneId"))) {
+          if (extra.hideClaims > 0) { extra.hideClaims--; return [[]]; }
+          return [state.drafts.filter((d: any) => d.inboundOpenPhoneId === p[0] && (p[1] === undefined || d.capability === p[1]))];
+        }
+        if (s.includes("FROM madison_sms_drafts WHERE fromPhone")) {
+          if (extra.hideClaims > 0) { extra.hideClaims--; return [[]]; }
+          return [state.drafts.filter((d: any) => d.fromPhone === p[0] && d.capability === p[1] && d.inboundOpenPhoneId.startsWith("tt-first:v1:"))];
+        }
         if (s.includes("FROM madison_sms_drafts WHERE capability")) return [state.drafts.filter((d: any) => s.includes("sessionId =") ? d.sessionId === p[1] : d.fromPhone === p[1])];
         if (s.includes("FROM madison_sms_drafts WHERE id")) return [state.drafts.filter((d: any) => d.id === p[0])];
         if (s.includes("FROM conversation_sessions WHERE id")) return [state.sessions.filter((d: any) => d.id === p[0])];
@@ -45,7 +57,6 @@ function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: s
         if (s.includes("FROM sms_opt_outs")) return [extra.optout];
         if (s.includes("source = 'openphone'")) return [extra.openphone];
         if (s.includes("event_type = 'MessageCreatedV4'")) return [extra.messages];
-        if (s.includes("ORDER BY id ASC")) return [[{ id: capture.earliestId, created_at: capture.earliestReceivedAt }]];
         if (s.includes("FROM webhook_events WHERE id")) return [[{ id: 7, source: "thumbtack", event_type: "NegotiationCreatedV4", created_at: capture.receivedAt, raw_payload: raw }]];
       }
       if (s.includes("UPDATE conversation_sessions SET messageHistory")) {
@@ -74,14 +85,62 @@ function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: s
   return { db, lead, store, result, extra, queries, state: () => state, fail: (value: string) => { fail = value; } };
 }
 describe("native first response real store offline transactions", () => {
-  it("reloads durable original and earliest negotiation; atomically creates exact session/card/claim only once", async () => {
+  it("reloads the exact capture and atomically creates only one introduction receipt for a phone", async () => {
     const h = port(); expect(await h.store.loadCapture(7)).toEqual(h.lead.capture);
     const [a, b] = await Promise.all([h.store.claim(h.lead, cfg), h.store.claim(h.lead, cfg)]);
     expect([a, b].filter(Boolean)).toHaveLength(1); expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1);
+    expect(h.state().drafts).toHaveLength(1);
     expect(h.state().sessions[0].messageHistory).toBe("[]"); expect(h.state().sessions[0].bedrooms).toBeNull();
     expect(h.state().cards[0].quickAction).toBe("new_lead"); expect(JSON.parse(h.state().cards[0].metadata).sessionId).toBe(a!.sessionId);
     expect(JSON.parse(h.state().cards[0].metadata)).not.toHaveProperty("draftId");
     for (const status of ["DISMISSED", "SENT", "SENDING", "FAILED"]) { h.state().drafts[0].status = status; expect(await h.store.claim(h.lead, cfg)).toBeNull(); }
+    expect(h.queries.some(q => q.sql.includes("ORDER BY id ASC LIMIT 1"))).toBe(false);
+  });
+  it("same phone under a different negotiation and formatting cannot create a second introduction", async () => {
+    const h = port(); await h.store.claim(h.lead, cfg); const payload = JSON.parse(h.lead.capture.rawPayload);
+    payload.data.negotiationID = "n2"; payload.data.customer.phone = "(703) 555-1234";
+    const lead = capturedThumbtackLead({ ...h.lead.capture, id: 8, rawPayload: JSON.stringify(payload) }, cfg)!;
+    expect(lead.key).toBe(h.lead.key); expect(await h.store.claim(lead, cfg)).toBeNull();
+    expect(h.state().drafts).toHaveLength(1); expect(h.state().sessions).toHaveLength(1);
+  });
+  it("different phones sharing negotiation/webhook identity each receive an introduction claim", async () => {
+    const h = port(); const payload = JSON.parse(h.lead.capture.rawPayload); payload.data.customer.phone = "+12025559876";
+    const other = capturedThumbtackLead({ ...h.lead.capture, id: 8, rawPayload: JSON.stringify(payload) }, cfg)!;
+    const [a, b] = await Promise.all([h.store.claim(h.lead, cfg), h.store.claim(other, cfg)]);
+    expect(a).not.toBeNull(); expect(b).not.toBeNull(); expect(a!.lead.key).not.toBe(b!.lead.key);
+    expect(h.state().drafts).toHaveLength(2);
+  });
+  it.each([false, true])("the existing unique index resolves competing phone claims after missed reads (wrapped error: %s)", async wrapped => {
+    const h = port(); h.extra.hideClaims = 4; h.extra.wrappedDuplicate = wrapped;
+    const results = await Promise.all([h.store.claim(h.lead, cfg), h.store.claim(h.lead, cfg)]);
+    expect(results.filter(Boolean)).toHaveLength(1); expect(h.state().drafts).toHaveLength(1);
+    expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1);
+  });
+  it.each(["SENT", "SENDING", "DISMISSED", "FAILED", "TOOLS_RUNNING"])("older negotiation/attempt receipt keys suppress the same phone across %s status", async status => {
+    for (const key of ["tt-first:v1:" + "a".repeat(64), "tt-first:v1:" + "b".repeat(64)]) {
+      const h = port(); const prior = { id: 1, inboundOpenPhoneId: key, fromPhone: h.lead.phone,
+        capability: "claude_thumbtack_first_response_v1", status };
+      h.state().drafts.push(prior); expect(await h.store.claim(h.lead, cfg)).toBeNull();
+      expect(h.state().drafts).toEqual([prior]); expect(h.state().sessions).toHaveLength(0); expect(h.state().cards).toHaveLength(0);
+    }
+  });
+  it.each([
+    { fromPhone: "+12025559876", capability: "claude_thumbtack_first_response_v1", inboundOpenPhoneId: "tt-first:v1:old" },
+    { fromPhone: "+17035551234", capability: "claude_customer_reply_v1", inboundOpenPhoneId: "tt-first:v1:old" },
+    { fromPhone: "+17035551234", capability: "claude_thumbtack_first_response_v1", inboundOpenPhoneId: "ordinary-sms" },
+    { fromPhone: "no-phone-tt-6", capability: "claude_thumbtack_first_response_v1", inboundOpenPhoneId: "tt-first:v1:no-phone:6" },
+  ])("unrelated receipt %j cannot block this phone's first introduction", async prior => {
+    const h = port(); h.state().drafts.push({ id: 1, status: "SENT", ...prior });
+    expect(await h.store.claim(h.lead, cfg)).not.toBeNull(); expect(h.state().sessions).toHaveLength(1);
+  });
+  it("an unrelated duplicate index error is not swallowed even when a matching phone receipt exists after missed reads", async () => {
+    const h = port(); await h.store.claim(h.lead, cfg); h.extra.hideClaims = 4; h.fail("unrelated-duplicate");
+    await expect(h.store.claim(h.lead, cfg)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
+    expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1); expect(h.state().drafts).toHaveLength(1);
+  });
+  it("does not silently swallow an unexpected duplicate database error; the transaction rolls back", async () => {
+    const h = port(); h.fail("duplicate"); await expect(h.store.claim(h.lead, cfg)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
+    expect(h.state().sessions).toHaveLength(0); expect(h.state().drafts).toHaveLength(0); expect(h.state().cards).toHaveLength(0);
   });
   it.each(["madison_sms_drafts", "ops_chat_messages"])("rolls back new conversation on %s insert failure", async table => {
     const h = port(); h.fail(table); await expect(h.store.claim(h.lead, cfg)).rejects.toThrow();
@@ -91,10 +150,10 @@ describe("native first response real store offline transactions", () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!; expect(await h.store.fresh(c)).toBe(true);
     h.extra.optout = [{ id: 1 }]; expect(await h.store.fresh(c)).toBe(false); h.extra.optout = [];
     for (const change of [{ leadPhone: "+12025559876" }, { leadSource: "email" }, { smsOptOut: 1 }, { assignedAgentName: "Staff" }, { aiMode: 1 }, { messageHistory: '[{"role":"user","content":"STOP"}]' }]) {
-      const before = { ...h.state().sessions[0] }; Object.assign(h.state().sessions[0], change); expect(await h.store.fresh(c)).toBe(false); Object.assign(h.state().sessions[0], before);
+      const before = { ...h.state().sessions[0] }; Object.assign(h.state().sessions[0], change); expect(await h.store.fresh(c)).toBe(false); h.state().sessions[0] = before;
     }
-    h.extra.sibling = [{ leadPhone: c.lead.phone, messageHistory: JSON.stringify([{ role: "assistant", content: "staff text", ts: c.lead.createdAt + 1 }]) }]; expect(await h.store.fresh(c)).toBe(false); h.extra.sibling = [];
-    h.extra.messages = [{ raw_payload: "{}", created_at: new Date(c.lead.createdAt + 1) }]; expect(await h.store.fresh(c)).toBe(false); h.extra.messages = [];
+    h.extra.sibling = [{ leadPhone: c.lead.phone, messageHistory: JSON.stringify([{ role: "assistant", content: "staff text", ts: c.lead.createdAt + 1 }]) }]; expect(await h.store.fresh(c)).toBe(true); h.extra.sibling = [];
+    h.extra.messages = [{ raw_payload: "{}", created_at: new Date(c.lead.createdAt + 1) }]; expect(await h.store.fresh(c)).toBe(true); h.extra.messages = [];
     h.extra.activity = [{ id: 9 }]; expect(await h.store.fresh(c)).toBe(false); h.extra.activity = [];
     h.state().drafts[0].resolvedContext.negotiationId = "different"; expect(await h.store.fresh(c)).toBe(false);
   });
@@ -111,37 +170,39 @@ describe("native first response real store offline transactions", () => {
     h.extra.sibling[0].smsOptOut = 1; expect(await h.store.fresh(c)).toBe(false);
     expect(h.state().sessions).toHaveLength(1); expect(c.sessionId).not.toBe(h.extra.sibling[0].id);
   });
-  it.each(["user", "assistant", "note"])("only timestamped post-lead %s history blocks (not same instant/system data)", async role => {
+  it.each(["user", "assistant", "note"])("previous %s history does not reject an arriving lead at any timestamp", async role => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
     h.extra.sibling = [{ leadPhone: c.lead.phone, messageHistory: JSON.stringify([{ role, ts: c.lead.createdAt }]) }];
     expect(await h.store.fresh(c)).toBe(true);
-    h.extra.sibling[0].messageHistory = JSON.stringify([{ role, ts: c.lead.createdAt + 1 }]); expect(await h.store.fresh(c)).toBe(false);
+    h.extra.sibling[0].messageHistory = JSON.stringify([{ role, ts: c.lead.createdAt + 1 }]); expect(await h.store.fresh(c)).toBe(true);
     h.extra.sibling[0].messageHistory = JSON.stringify([{ role: "system", ts: c.lead.createdAt + 1 }]); expect(await h.store.fresh(c)).toBe(true);
   });
-  it.each(["lastCalledAt", "respondedAt", "bookedAt", "lastCustomerReplyAt", "lastCustomerMessageTs"])("post-lead sibling %s blocks and older activity allows", async field => {
+  it.each(["lastCalledAt", "respondedAt", "bookedAt", "lastCustomerReplyAt", "lastCustomerMessageTs"])("sibling %s activity never rejects an arriving lead", async field => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
     const dateField = field === "lastCalledAt" || field === "bookedAt";
     h.extra.sibling = [{ leadPhone: c.lead.phone, messageHistory: "[]", [field]: dateField ? new Date(c.lead.createdAt - 1) : String(c.lead.createdAt - 1) }];
     expect(await h.store.fresh(c)).toBe(true);
-    h.extra.sibling[0][field] = dateField ? new Date(c.lead.createdAt + 1) : String(c.lead.createdAt + 1); expect(await h.store.fresh(c)).toBe(false);
+    h.extra.sibling[0][field] = dateField ? new Date(c.lead.createdAt + 1) : String(c.lead.createdAt + 1); expect(await h.store.fresh(c)).toBe(true);
   });
-  it("old OpenPhone activity and delayed old delivery allow; post-lead inbound/outbound activity blocks with capture fallback", async () => {
+  it("previous OpenPhone inbound/outbound messages no longer reject an arriving lead", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
     const event = (createdAt: number | undefined, incoming: boolean, receivedAt: number) => ({ created_at: new Date(receivedAt),
       raw_payload: JSON.stringify({ data: { object: { createdAt: createdAt === undefined ? undefined : new Date(createdAt).toISOString(),
         from: incoming ? c.lead.phone : "+12025550000", to: incoming ? ["+12025550000"] : [c.lead.phone] } } }) });
     for (const incoming of [true, false]) {
       h.extra.openphone = [event(c.lead.createdAt - 1, incoming, c.lead.createdAt + 10)]; expect(await h.store.fresh(c)).toBe(true);
-      h.extra.openphone = [event(c.lead.createdAt + 1, incoming, c.lead.createdAt + 10)]; expect(await h.store.fresh(c)).toBe(false);
+      h.extra.openphone = [event(c.lead.createdAt + 1, incoming, c.lead.createdAt + 10)]; expect(await h.store.fresh(c)).toBe(true);
       h.extra.openphone = [event(undefined, incoming, c.lead.createdAt - 1)]; expect(await h.store.fresh(c)).toBe(true);
-      h.extra.openphone = [event(undefined, incoming, c.lead.createdAt + 1)]; expect(await h.store.fresh(c)).toBe(false);
+      h.extra.openphone = [event(undefined, incoming, c.lead.createdAt + 1)]; expect(await h.store.fresh(c)).toBe(true);
     }
+    expect(h.queries.some(q => q.sql.includes("source = 'openphone'"))).toBe(false);
   });
-  it("old native message allows even on delayed capture; post-lead message blocks", async () => {
+  it("native lead conversation messages never reject its introduction", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
     h.extra.messages = [{ raw_payload: JSON.stringify({ data: { createdAt: new Date(c.lead.createdAt - 1).toISOString() } }), created_at: new Date(c.lead.createdAt + 1) }];
     expect(await h.store.fresh(c)).toBe(true);
-    h.extra.messages[0].raw_payload = JSON.stringify({ data: { createdAt: new Date(c.lead.createdAt + 1).toISOString() } }); expect(await h.store.fresh(c)).toBe(false);
+    h.extra.messages[0].raw_payload = JSON.stringify({ data: { createdAt: new Date(c.lead.createdAt + 1).toISOString() } }); expect(await h.store.fresh(c)).toBe(true);
+    expect(h.queries.some(q => q.sql.includes("event_type = 'MessageCreatedV4'"))).toBe(false);
   });
   it.each(["{", '{"data":{}}', '{"data":{"negotiationID":12}}', '{"data":{"negotiationID":"  "}}'])("retained malformed identity %s cannot invent a claim or mutate its capture", async raw => {
     const h = port(null, raw); expect(await h.store.loadCapture(7)).toBeNull();
@@ -160,6 +221,24 @@ describe("native first response real store offline transactions", () => {
     expect(generated).toBe(0); expect(sent).toBe(0);
     const c = { draftId: h.state().drafts[0].id, sessionId: h.state().sessions[0].id, cardId: h.state().cards[0].id, lead: h.lead, fromNumberId: cfg.fromNumberId };
     expect(await h.store.beginSend(c, h.result)).toBe(false); expect(await h.store.claim({ ...h.lead, sendEligible: true }, cfg)).toBeNull();
+  });
+  it("same-second fractional trigger completes the first introduction receipt rather than poisoning its phone slot", async () => {
+    const raw = JSON.stringify({ event: { eventType: "NegotiationCreatedV4", triggeredAt: "2026-11-16T17:01:00.500Z" },
+      data: { negotiationID: "precision-case", createdAt: "2026-11-16T17:00:59.999Z", customer: { firstName: "Jane", phone: "(703) 555-1234" },
+        request: { description: "Clean the home" } } });
+    const h = port(null, raw); let generated = 0, sent = 0;
+    const run = createClaudeThumbtackFirstResponseService({ config: () => cfg, store: h.store,
+      generate: async input => { generated++; return { ...h.result, kind: "initial_lead", requestId: input.requestId, sessionId: input.sessionId,
+        customerPhone: input.customerPhone, contextHash: "a".repeat(64), mode: "review_only", smsSent: false, actionsExecuted: false,
+        agentSessionId: "offline-agent-session" }; },
+      send: async input => { sent++; expect(h.state().drafts[0].status).toBe("SENDING");
+        expect(input).toEqual({ to: "+17035551234", content: h.result.replyText, fromNumberId: cfg.fromNumberId });
+        return { success: true, messageId: "offline-precision-receipt" }; } });
+    await run(7); await run(7);
+    expect(generated).toBe(1); expect(sent).toBe(1); expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1);
+    expect(h.state().drafts).toHaveLength(1); expect(h.state().drafts[0]).toMatchObject({ status: "SENT", errorCode: null,
+      inboundOpenPhoneId: h.lead.key, outboundOpenPhoneId: "offline-precision-receipt" });
+    expect(JSON.parse(h.state().sessions[0].messageHistory)).toHaveLength(1);
   });
   it("human dismissal or manual claim wins before send; SENDING cannot be reset", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;

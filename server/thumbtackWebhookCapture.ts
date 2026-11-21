@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { handleNativeThumbTackLead, type ThumbTackNativePayload } from "./thumbtackWebhook";
 import { thumbtackFirstResponseConfig } from "./instinct/claudeThumbtackFirstResponse";
+import { relayClaudeThumbtackFirstResponse, thumbtackFirstResponseIsRelay } from "./instinct/claudeThumbtackFirstResponseRelay";
 
 export type ThumbTackWebhookCapture = {
   eventType: string | null;
@@ -115,6 +116,30 @@ export function summarizeThumbTackWebhook(body: unknown): ThumbTackWebhookCaptur
  * trigger the existing Thumbtack lead lifecycle after durable persistence.
  */
 export function registerThumbTackWebhookCaptureRoute(app: Express): void {
+  app.post("/api/webhooks/thumbtack-capture/first-response", async (req, res) => {
+    if (!isStatusAuthorized(req)) {
+      res.status(403).json({ error: "Unauthorized" });
+      return;
+    }
+    if (process.env.RAILWAY_ENVIRONMENT_NAME !== "production" || thumbtackFirstResponseIsRelay() || !thumbtackFirstResponseConfig()) {
+      res.status(503).json({ error: "Native first-response owner unavailable" });
+      return;
+    }
+    const captureId = req.body?.captureId;
+    if (!Number.isSafeInteger(captureId) || captureId <= 0) {
+      res.status(400).json({ error: "Invalid capture ID" });
+      return;
+    }
+    try {
+      const { dispatchClaudeThumbtackFirstResponse } = await import("./instinct/claudeThumbtackFirstResponseApplication");
+      await dispatchClaudeThumbtackFirstResponse(captureId);
+      res.status(200).json({ dispatched: true });
+    } catch (error) {
+      console.error("[ThumbTackCapture] native first-response handoff failed", error);
+      res.status(500).json({ error: "Native first-response handoff failed" });
+    }
+  });
+
   app.get("/api/webhooks/thumbtack-capture/events", async (req, res) => {
     if (!isStatusAuthorized(req)) {
       res.status(403).json({ error: "Unauthorized" });
@@ -222,13 +247,17 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
       console.log("[ThumbTackCapture] persisted payload summary", JSON.stringify(summary));
       res.status(200).json({ received: true, summary, persisted: true });
 
-      if (thumbtackFirstResponseConfig()) {
+      if (thumbtackFirstResponseIsRelay() || thumbtackFirstResponseConfig()) {
         // Active mode has one native owner; no legacy fallback after rejection/failure.
         if (eventType === "NegotiationCreatedV4") {
           const captureId = Number((persisted as any)[0]?.insertId);
           if (!Number.isSafeInteger(captureId) || captureId <= 0) throw new Error("THUMBTACK_CAPTURE_ID_MISSING");
-          const { dispatchClaudeThumbtackFirstResponse } = await import("./instinct/claudeThumbtackFirstResponseApplication");
-          await dispatchClaudeThumbtackFirstResponse(captureId).catch(error => console.error("[ThumbTackCapture] native first response stopped", error));
+          if (thumbtackFirstResponseIsRelay()) {
+            await relayClaudeThumbtackFirstResponse(captureId);
+          } else {
+            const { dispatchClaudeThumbtackFirstResponse } = await import("./instinct/claudeThumbtackFirstResponseApplication");
+            await dispatchClaudeThumbtackFirstResponse(captureId).catch(error => console.error("[ThumbTackCapture] native first response stopped", error));
+          }
           await db.execute(sql`UPDATE webhook_events SET processed = 1, processed_at = NOW() WHERE id = ${captureId}`);
         }
         return;
@@ -237,21 +266,15 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
       // Native Lead details are now the active Thumbtack trigger. Keep this
       // after the response so Thumbtack receives a fast acknowledgement, and
       // only process the full lead event—not message/status notifications.
-      if (eventType === "NegotiationCreatedV4" && eventId) {
-        const prior = await db.execute(
-          sql`SELECT id FROM webhook_events WHERE source = ${"thumbtack"} AND event_id = ${eventId} ORDER BY id ASC LIMIT 2`
-        );
-        const priorRows = (prior as any)[0] as any[];
-        if (priorRows.length === 1) {
-          await handleNativeThumbTackLead(req.body as ThumbTackNativePayload);
-          await db.execute(sql`UPDATE webhook_events SET processed = 1, processed_at = NOW() WHERE id = ${priorRows[0].id}`);
-        } else {
-          console.log(`[ThumbTackCapture] skipped duplicate native lead event ${eventId}`);
-        }
+      if (eventType === "NegotiationCreatedV4") {
+        const captureId = Number((persisted as any)[0]?.insertId);
+        if (!Number.isSafeInteger(captureId) || captureId <= 0) throw new Error("THUMBTACK_CAPTURE_ID_MISSING");
+        await handleNativeThumbTackLead(req.body as ThumbTackNativePayload);
+        await db.execute(sql`UPDATE webhook_events SET processed = 1, processed_at = NOW() WHERE id = ${captureId}`);
       }
     } catch (error) {
       console.error("[ThumbTackCapture] failed to persist payload:", error);
-      res.status(500).json({ received: false, persisted: false });
+      if (!res.headersSent) res.status(500).json({ received: false, persisted: false });
     }
   });
 

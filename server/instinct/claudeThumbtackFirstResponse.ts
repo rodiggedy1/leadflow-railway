@@ -20,22 +20,27 @@ export function thumbtackFirstResponseConfig(env: NodeJS.ProcessEnv = process.en
   return env.THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED === "true" && startAt !== null && fromNumberId
     ? { startAt, fromNumberId } : null;
 }
-export const thumbtackFirstResponseKey = (negotiationId: string) => "tt-first:v1:" + createHash("sha256")
-  .update(JSON.stringify(["thumbtack", THUMBTACK_ACCOUNT, negotiationId])).digest("hex");
-export type CapturedLead = { id: number; source: string; eventType: string; receivedAt: Date; rawPayload: string; earliestId: number; earliestReceivedAt: Date };
+// The introduction belongs to the phone number, not the shared webhook or negotiation.
+export function thumbtackFirstResponseKey(phone: string): string {
+  const normalized = normalizePhone(phone);
+  if (!normalized) throw new Error("THUMBTACK_FIRST_RESPONSE_PHONE_INVALID");
+  return "tt-first:v1:" + createHash("sha256").update(JSON.stringify(["thumbtack", THUMBTACK_ACCOUNT, normalized])).digest("hex");
+}
+export type CapturedLead = { id: number; source: string; eventType: string; receivedAt: Date; rawPayload: string };
 export type EligibleLead = { capture: CapturedLead; native: ThumbtackNativeLead; payload: ThumbtackNativeLeadPayload;
   facts: ClaudeInitialLeadFacts; key: string; phone: string | null; createdAt: number; sendEligible: boolean };
-/** Intake is first capture only; missing/old native dates suppress SMS, not the new session/card. */
+/** Every incoming lead is eligible for intake; missing/old native dates still suppress SMS. */
 export function capturedThumbtackLead(capture: CapturedLead, config: FirstResponseConfig): EligibleLead | null {
-  if (!Number.isFinite(capture.receivedAt.getTime()) || !Number.isFinite(capture.earliestReceivedAt.getTime())
-    || capture.source !== "thumbtack" || capture.eventType !== "NegotiationCreatedV4" || capture.id !== capture.earliestId
-    || capture.receivedAt.getTime() < config.startAt || capture.earliestReceivedAt.getTime() < config.startAt) return null;
+  if (!Number.isFinite(capture.receivedAt.getTime()) || capture.source !== "thumbtack" || capture.eventType !== "NegotiationCreatedV4"
+    || capture.receivedAt.getTime() < config.startAt) return null;
   try {
     const payload = JSON.parse(capture.rawPayload) as ThumbtackNativeLeadPayload;
     if (payload.event?.eventType !== "NegotiationCreatedV4") return null;
     const createdAt = fixedInstant(payload.data?.createdAt), triggeredAt = fixedInstant(payload.event.triggeredAt);
+    // Capture INSERT uses NOW() at whole-second precision; native milliseconds in that same second are not future dates.
+    const receivedSecond = Math.floor(capture.receivedAt.getTime() / 1000);
     const sendEligible = createdAt !== null && triggeredAt !== null && createdAt >= config.startAt && triggeredAt >= config.startAt
-      && createdAt <= capture.receivedAt.getTime() && triggeredAt <= capture.receivedAt.getTime();
+      && Math.floor(createdAt / 1000) <= receivedSecond && Math.floor(triggeredAt / 1000) <= receivedSecond;
     const native = projectThumbtackNativeLead(payload);
     if (!native) return null;
     // Native-only UI projection leaves rooms/propertyType/summary absent. Do not substitute email/extraction defaults.
@@ -44,7 +49,8 @@ export function capturedThumbtackLead(capture: CapturedLead, config: FirstRespon
       bathrooms: native.bathrooms, homeSize: native.homeSize, rooms: null, propertyType: null, frequency: native.frequency,
       extras: native.extras, pets: native.pets, description: native.description, summary: null, travelPreferences: native.travelPreferences,
       proposedTimes: native.proposedTimes, nativeDetails: native.nativeDetails });
-    return { capture, native, payload, facts, key: thumbtackFirstResponseKey(native.negotiationId), phone: normalizePhone(native.phone),
+    const phone = normalizePhone(native.phone);
+    return { capture, native, payload, facts, key: phone ? thumbtackFirstResponseKey(phone) : `tt-first:v1:no-phone:${capture.id}`, phone,
       createdAt: sendEligible ? createdAt! : capture.receivedAt.getTime(), sendEligible };
   } catch { return null; }
 }
