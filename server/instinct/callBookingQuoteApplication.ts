@@ -51,7 +51,7 @@ export function createCallBookingQuoteHandler(deps: CallBookingQuoteDependencies
       if (request.name === "getBookingQuote") return previewCallBookingQuote(request.args);
       const parsed = callBookingQuoteSendInputSchema.safeParse(request.args);
       if (!parsed.success) return rejected("INCOMPLETE_QUOTE", "Ask the caller for the missing or invalid quote details before creating or texting a link.", { missing: parsed.error.issues.map(issue => issue.path.join(".")) });
-      const { extrasConfirmed: _extras, smsNumberConfirmed: _confirmed, ...raw } = parsed.data;
+      const { extrasConfirmed: _extras, smsNumberConfirmed: _confirmed, customerNameConfirmed: _name, city: _city, addressConfirmed: _address, ...raw } = parsed.data;
       const phone = normalizePhone(raw.customerPhone);
       if (!phone || internalPhones.has(phone)) return rejected("INVALID_SMS_RECIPIENT", "Confirm the customer's personal SMS number; do not text an internal business number.");
       const input: CreateCustomerBookingLinkInput = { ...raw, customerName: raw.customerName.trim().replace(/\s+/g, " "), customerPhone: phone,

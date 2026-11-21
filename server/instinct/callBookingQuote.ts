@@ -53,7 +53,10 @@ const callBookingQuoteInputSchema = z.object({
   extrasConfirmed: z.literal(true),
 }).strict();
 
-/** Calendar validation only: workflow-time past-date/recipient checks belong to the application owner. */
+const identityWords = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const identityPlaceholders = new Set(["valued customer", "customer", "unknown", "n a", "na", "not provided", "not available", "tbd", "anonymous", "no name"]);
+
+/** Call-only identity/address/calendar validation; shared booking inputs remain unchanged. */
 export const callBookingQuoteSendInputSchema = createCustomerBookingLinkInputSchema
   .pick({
     customerName: true,
@@ -66,6 +69,12 @@ export const callBookingQuoteSendInputSchema = createCustomerBookingLinkInputSch
     notes: true,
   })
   .extend({
+    customerName: createCustomerBookingLinkInputSchema.shape.customerName.refine(value => !identityPlaceholders.has(identityWords(value)),
+      "Ask for the caller's real name; do not use a placeholder."),
+    customerNameConfirmed: z.literal(true),
+    city: z.string().trim().min(1).max(500).refine(value => /\p{L}/u.test(value) && !identityPlaceholders.has(identityWords(value)),
+      "Ask the caller for the service city; do not guess it."),
+    addressConfirmed: z.literal(true),
     requestedLocalDate: createCustomerBookingLinkInputSchema.shape.requestedLocalDate.refine(value => {
       const date = new Date(`${value}T00:00:00.000Z`);
       return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
@@ -75,7 +84,16 @@ export const callBookingQuoteSendInputSchema = createCustomerBookingLinkInputSch
     extrasConfirmed: z.literal(true),
     smsNumberConfirmed: z.literal(true),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    const city = identityWords(input.city);
+    const [street, ...components] = input.address.split(",");
+    // A city word in the street name is not a city component of the saved address.
+    if (city && /\p{L}/u.test(input.city) && !identityPlaceholders.has(city)
+      && (!identityWords(street) || !components.some(component => identityWords(component) === city))) {
+      context.addIssue({ code: "custom", path: ["address"], message: "Include a street and the caller-confirmed city as a separate comma-delimited address component after it." });
+    }
+  });
 
 export type CallBookingQuotePricing = z.infer<typeof callBookingQuotePricingSchema>;
 export type CallBookingQuoteSendInput = z.infer<typeof callBookingQuoteSendInputSchema>;
@@ -219,6 +237,26 @@ export function buildCallBookingQuoteToolDefinitions(webhookUrl: string, authori
   const sendJson = z.toJSONSchema(callBookingQuoteSendInputSchema, { io: "input" });
   previewJson.properties!.pricing = pricingJson;
   sendJson.properties!.pricing = pricingJson;
+  sendJson.properties!.customerName = {
+    ...schemaObject(sendJson.properties!.customerName),
+    description: "Actual name supplied or confirmed by the caller. Never invent a name or use Valued Customer, Customer, Unknown or another placeholder.",
+  };
+  sendJson.properties!.customerNameConfirmed = {
+    ...schemaObject(sendJson.properties!.customerNameConfirmed),
+    description: "True only after the caller confirms the name read back to them. Ask for spelling when collecting it; never assert confirmation without their answer.",
+  };
+  sendJson.properties!.city = {
+    ...schemaObject(sendJson.properties!.city),
+    description: "Service city explicitly supplied or confirmed by the caller; ask if only a street was provided. Must also appear as its own comma-delimited component after the street in address. Never infer it from phone number or street name.",
+  };
+  sendJson.properties!.address = {
+    ...schemaObject(sendJson.properties!.address),
+    description: "Complete caller-confirmed service address, formatted as street, city, followed by any caller-provided state/ZIP/unit. Keep city as its own comma-delimited component after the street. Never invent missing address details.",
+  };
+  sendJson.properties!.addressConfirmed = {
+    ...schemaObject(sendJson.properties!.addressConfirmed),
+    description: "True only after reading back the full service address including city and receiving the caller's confirmation. Reconfirm if the caller changes the address.",
+  };
   sendJson.properties!.customerPhone = {
     ...schemaObject(sendJson.properties!.customerPhone),
     description: "Best text number explicitly confirmed by the caller. May be a different number from forwarded caller ID. The application must reject its own business line and verify the provider artifact downstream.",
@@ -246,7 +284,7 @@ export function buildCallBookingQuoteToolDefinitions(webhookUrl: string, authori
       type: "function" as const,
       function: {
         name: "textBookingQuote",
-        description: "Only when the customer requests a NEW cleaning quote by text: persist the personalized canonical quote and send its server-created /book/<token> link to their explicitly confirmed best text number. Collect their preferred date, time and address first. Not for rescheduling, cancellation, or confirming a booking/reservation. Never supply a price, sender, SMS body, token, or URL. Downstream application must verify the provider artifact before reporting sent. Do not also call createLead or sendSms for this quote.",
+        description: "Only when the customer requests a NEW cleaning quote by text: persist the personalized canonical quote and send its server-created /book/<token> link to their explicitly confirmed best text number. Collect their preferred date and time, real confirmed name and complete confirmed address including city first. Not for rescheduling, cancellation, or confirming a booking/reservation. Never supply a price, sender, SMS body, token, or URL. Downstream application must verify the provider artifact before reporting sent. Do not also call createLead or sendSms for this quote.",
         parameters: nativeToolSchema(sendJson),
       },
       server: { url: webhookUrl, headers: { "X-Instinct-Call-Quote-Token": authorizationToken } },
@@ -262,13 +300,13 @@ const callQuoteInstructions = [
   "For Office Cleaning, use pricingMode hourly only when the caller supplies the maid count and hour count and all other canonical fields are known. Do not invent office pricing, hours, maids, room counts or home type to force a quote. If the canonical contract cannot represent the request, explain that the team must advise using the existing human-help flow.",
   "",
   "## Booking qualification flow",
-  '1. Collect the caller\'s name conversationally. Ask "Could you spell that out for me so I get it right?" Read the spelling back and ask "is that correct?" Wait for confirmation.',
+  '1. Collect the caller\'s real name conversationally. Ask "Could you spell that out for me so I get it right?" Read the spelling back and ask "is that correct?" Wait for confirmation. Set customerNameConfirmed: true only after the caller confirms it. If an existing customer name is available, confirm that name with the caller rather than inventing a new one. Never substitute Valued Customer, Customer, Unknown or another placeholder, and do not skip name collection when lookupCustomer finds no match. Reconfirm if the caller corrects the name.',
   "2. Collect the actual home bedroom and bathroom counts, service (standard/deep/moveout), homeType (House/Apartment/Townhome/Condo), condition (1–10: 1 = already clean; 5 = light / normal; 10 = severe buildup / needs a serious reset) and pricingMode (home/hourly). Explain that higher condition scores mean more cleaning work, not a cleaner home. For a home quote, use the existing Command Chat structural values maidCount: 1 and hourCount: 1; they are ignored by home pricing and are not customer facts or staffing promises. Ask for maidCount and hourCount only for hourly pricing. Never guess the actual price-affecting customer facts.",
   `3. Ask about extras conversationally before quoting. Only these public extras are supported: ${Object.entries(PUBLIC_BOOKING_PRICED_EXTRAS).map(([id, extra]) => `${id} (${extra.label}${extra.quantityUnit ? `; quantity in ${extra.quantityUnit}s` : ""})`).join(", ")}. Collect the explicit quantity for each selected extra. Confirm the complete extras selection; use extras: [] only after the caller confirms none, and extrasConfirmed: true only after confirmation. No guessed pets/green-product fees or legacy add-on keys.`,
   "4. Ask their recurrence preference (one-time, weekly, biweekly or monthly). Do not assume one-time or a recurring frequency. Call getBookingQuote with {pricing, extrasConfirmed: true}; if it reports missing/invalid fields, ask the caller for those exact facts. Do not state a complete quote while extras are unconfirmed. Re-run getBookingQuote if any pricing fact changes before stating the revised price.",
-  "5. If the caller requests a NEW cleaning quote by text, collect their preferred local calendar date AND time and service address before texting. Resolve spoken relative dates from the latest getBookingQuote currentLocalDate/currentLocalTime and confirm ambiguity with the caller, not the assistant boot-time date/callback morning. Ask if date or time is missing; no arbitrary tomorrow or 12pm. These are requested preferences, not confirmed availability. The workflow validates against the current time; do not reject a same-day future preference just because it is today.",
+  "5. If the caller requests a NEW cleaning quote by text, collect their preferred local calendar date AND time and complete service address including city before texting. If they give only a street, ask for the city; never infer it from the phone number, street or another customer's record. Read back the full address including city and wait for confirmation. Set addressConfirmed: true only after the caller confirms it; reconfirm if they change the address. Set city to that caller-confirmed city and format address with the city as its own comma-delimited component after the street, preserving any caller-provided state/ZIP/unit. Resolve spoken relative dates from the latest getBookingQuote currentLocalDate/currentLocalTime and confirm ambiguity with the caller, not the assistant boot-time date/callback morning. Ask if date or time is missing; no arbitrary tomorrow or 12pm. These are requested preferences, not confirmed availability. The workflow validates against the current time; do not reject a same-day future preference just because it is today.",
   "6. Before textBookingQuote, explicitly confirm the best text number just as in the existing voice flow. If {{customer.number}} is present, read it digit by digit and ask if it is the best number to text. It may be forwarded. If the caller provides an alternate number, confirm and use that number, not caller ID. If blank, ask for the best number and confirm it. Set customerPhone to that confirmed number and smsNumberConfirmed: true only after confirmation. Never use the Maids in Black business line (202-888-5362); the application owner must enforce that recipient check. Do not re-ask an already confirmed number unless the caller changes it.",
-  "7. Call textBookingQuote with customerName, customerPhone, smsNumberConfirmed: true, requestedLocalDate, requestedLocalTime, pricing, extrasConfirmed: true, address and any caller-provided notes. Email is optional only if volunteered. The new tool owns persistence and the personalized /book/<token> quote-link text. Do NOT call createLead or sendSms for this new quote flow or duplicate it afterward; never pass quotedPrice, customPriceCents, an SMS body, sender, URL or token.",
+  "7. Before textBookingQuote, ensure the caller's real name and full address including city have been collected and confirmed. Call textBookingQuote with customerName, customerNameConfirmed: true, customerPhone, smsNumberConfirmed: true, requestedLocalDate, requestedLocalTime, pricing, extrasConfirmed: true, address, city, addressConfirmed: true and any caller-provided notes. Email is optional only if volunteered. The new tool owns persistence and the personalized /book/<token> quote-link text. Do NOT call createLead or sendSms for this new quote flow or duplicate it afterward; never pass quotedPrice, customPriceCents, an SMS body, sender, URL or token.",
   "8. Say the quote was texted only when textBookingQuote returns successful downstream provider-artifact verification. Missing inputs mean ask the caller; failures do not mean it was sent, saved, booked or reserved. Do not invent a fallback quote, link or successful follow-up. Keep the close conversational and explain that the requested cleaning is not a confirmed booking or reservation.",
   "",
   "",

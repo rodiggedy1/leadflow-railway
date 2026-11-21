@@ -28,6 +28,7 @@ const pricing: CallBookingQuotePricing = {
 const quote = { pricing, extrasConfirmed: true };
 const send = {
   ...quote, address: "123 Synthetic Street, Washington, DC 20001", customerName: "Sarah Johnson", customerPhone: "+13029816191", smsNumberConfirmed: true,
+  customerNameConfirmed: true, city: "Washington", addressConfirmed: true,
   requestedLocalDate: "2036-02-29", requestedLocalTime: "10:30",
 };
 const pricingKeys = Object.keys(pricing);
@@ -157,7 +158,7 @@ describe("call quote send input", () => {
   it("keeps canonical contact fields and defaults only notes", () => {
     expect(callBookingQuoteSendInputSchema.parse(send)).toEqual({ ...send, notes: [] });
     expect(callBookingQuoteSendInputSchema.shape.customerPhone).toBe(createCustomerBookingLinkInputSchema.shape.customerPhone);
-    expect(callBookingQuoteSendInputSchema.shape.customerName).toBe(createCustomerBookingLinkInputSchema.shape.customerName);
+    expect(callBookingQuoteSendInputSchema.shape.customerName.safeParse("Valued Customer").success).toBe(false);
     expect(callBookingQuoteSendInputSchema.shape.customerEmail).toBe(createCustomerBookingLinkInputSchema.shape.customerEmail);
     expect(callBookingQuoteSendInputSchema.shape.address).toBe(createCustomerBookingLinkInputSchema.shape.address.unwrap());
     expect(callBookingQuoteSendInputSchema.shape.requestedLocalTime).toBe(createCustomerBookingLinkInputSchema.shape.requestedLocalTime);
@@ -170,7 +171,7 @@ describe("call quote send input", () => {
     expect(callBookingQuoteSendInputSchema.safeParse(input).success).toBe(createCustomerBookingLinkInputSchema.safeParse(input).success);
   });
 
-  it.each(["requestedLocalDate", "requestedLocalTime", "smsNumberConfirmed", "extrasConfirmed"])("requires %s without a fabricated value", key => {
+  it.each(["requestedLocalDate", "requestedLocalTime", "smsNumberConfirmed", "extrasConfirmed", "customerNameConfirmed", "city", "addressConfirmed"])("requires %s without a fabricated value", key => {
     const raw: Record<string, unknown> = { ...send };
     delete raw[key];
     const result = callBookingQuoteSendInputSchema.safeParse(raw);
@@ -179,7 +180,7 @@ describe("call quote send input", () => {
     expect(result.error.issues.map(issue => issue.path.join("."))).toEqual([key]);
   });
 
-  it.each(["smsNumberConfirmed", "extrasConfirmed"])("rejects false %s", key => {
+  it.each(["smsNumberConfirmed", "extrasConfirmed", "customerNameConfirmed", "addressConfirmed"])("rejects false %s", key => {
     expect(callBookingQuoteSendInputSchema.safeParse({ ...send, [key]: false }).success).toBe(false);
   });
 
@@ -205,11 +206,65 @@ describe("call quote send input", () => {
   });
 
   it("retains existing character/array bounds without new usage caps", () => {
-    const input = { ...send, customerName: "N".repeat(255), customerPhone: "P".repeat(40), address: "A".repeat(500), notes: Array.from({ length: 20 }, () => "n".repeat(1000)) };
+    const input = { ...send, customerName: "N".repeat(255), customerPhone: "P".repeat(40), address: "A".repeat(488) + ", Washington", notes: Array.from({ length: 20 }, () => "n".repeat(1000)) };
     expect(callBookingQuoteSendInputSchema.safeParse(input).success).toBe(true);
     expect(callBookingQuoteSendInputSchema.safeParse({ ...input, notes: [...input.notes, "extra"] }).success).toBe(false);
     expect(callBookingQuoteSendInputSchema.safeParse({ ...send, customerEmail: "not-email", address: "123" }).success).toBe(false);
     expect(callBookingQuoteSendInputSchema.safeParse({ ...send, pricing: { ...pricing, customPriceCents: 123 } }).success).toBe(false);
+  });
+});
+
+describe("call-only name and city guards", () => {
+  it("rejects the observed placeholder/street-only request before any confirmation fields were added", () => {
+    const { customerNameConfirmed: _name, city: _city, addressConfirmed: _address, ...legacy } = send;
+    expect(callBookingQuoteSendInputSchema.safeParse({ ...legacy, customerName: "Valued Customer", address: "4033 Mansion Drive" }).success).toBe(false);
+  });
+  it.each(["Valued Customer", " valued   customer ", "VALUED-CUSTOMER", "Customer", "Unknown", "N/A", "Not provided", "Anonymous"])("rejects placeholder name %s even with asserted confirmations", customerName => {
+    const result = callBookingQuoteSendInputSchema.safeParse({ ...send, customerName });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.map(issue => issue.path.join("."))).toContain("customerName");
+  });
+  it.each(["Li", "María García", "Anne-Marie O'Neill", "José", "李明"])("accepts a confirmed real name without inventing a surname: %s", customerName => {
+    expect(callBookingQuoteSendInputSchema.safeParse({ ...send, customerName }).success).toBe(true);
+  });
+  it.each(["customerNameConfirmed", "addressConfirmed"])("requires the caller's explicit %s", field => {
+    for (const value of [undefined, false, "true", 1, null]) {
+      const result = callBookingQuoteSendInputSchema.safeParse({ ...send, [field]: value });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error.issues.map(issue => issue.path.join("."))).toContain(field);
+    }
+  });
+  it.each([undefined, "", " ", "Unknown", "N/A", "Not provided", "12345"])("requires an actual city instead of %s", city => {
+    const result = callBookingQuoteSendInputSchema.safeParse({ ...send, city });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.map(issue => issue.path.join("."))).toContain("city");
+  });
+  it.each([
+    ["4033 Mansion Drive", "Washington"],
+    ["4033 Mansion Drive, Alexandria", "Washington"],
+    ["4033 Mansion Drive, Alexandria Bay", "Alex"],
+    ["123 Washington Street", "Washington"],
+    ["123 Main Street, Washington Avenue", "Washington"],
+    [", Washington, DC", "Washington"],
+    ["   , Washington, DC", "Washington"],
+    ["4033 Mansion Drive\nWashington\nDC", "Washington"],
+  ])("requires declared city %s / %s in the saved address", (address, city) => {
+    const result = callBookingQuoteSendInputSchema.safeParse({ ...send, address, city });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.map(issue => issue.path.join("."))).toContain("address");
+  });
+  it.each([
+    ["4033 Mansion Drive, Washington, DC", "washington"],
+    ["42 Calle del Niño, San José", " San   José "],
+    ["42 Main Street, St. Louis, MO", "St Louis"],
+    ["42 Main Street, Winston-Salem, NC", "Winston-Salem"],
+  ])("accepts caller-confirmed city in a complete address: %s / %s", (address, city) => {
+    expect(callBookingQuoteSendInputSchema.safeParse({ ...send, address, city }).success).toBe(true);
+  });
+  it("does not add these call-only gates to shared booking or pricing-only preview", () => {
+    const { customerNameConfirmed: _name, city: _city, addressConfirmed: _address, ...shared } = send;
+    expect(createCustomerBookingLinkInputSchema.safeParse({ ...shared, customerName: "Valued Customer", address: "4033 Mansion Drive" }).success).toBe(true);
+    expect(previewCallBookingQuote(quote).success).toBe(true);
   });
 });
 
@@ -252,6 +307,11 @@ describe("native call quote tools and scoped authorization", () => {
     expect(text.required).not.toContain("customerEmail");
     expect(text.required).toContain("address");
     expect(text.required).not.toContain("notes");
+    expect(text.required).toEqual(expect.arrayContaining(["customerNameConfirmed", "city", "addressConfirmed"]));
+    expect(objectSchema(text.properties!.customerNameConfirmed).description).toContain("Must be true");
+    expect(objectSchema(text.properties!.addressConfirmed).description).toContain("Must be true");
+    expect(objectSchema(text.properties!.customerName).description).toContain("Valued Customer");
+    expect(objectSchema(text.properties!.city).description).toContain("caller");
     expect(objectSchema(text.properties!.smsNumberConfirmed).description).toContain("Must be true");
     expect(objectSchema(text.properties!.requestedLocalDate).format).toBe("date");
     expect(objectSchema(text.properties!.requestedLocalTime).pattern).toBe(z.toJSONSchema(createCustomerBookingLinkInputSchema.shape.requestedLocalTime).pattern);
@@ -327,6 +387,10 @@ describe("narrow call quote prompt replacement", () => {
     expect(result).toContain("all other canonical fields are known");
     expect(result).toContain("before texting");
     expect(result).toContain("smsNumberConfirmed: true only after confirmation");
+    expect(result).toContain("customerNameConfirmed: true only after");
+    expect(result).toContain("addressConfirmed: true only after");
+    expect(result).toContain("Valued Customer");
+    expect(result).toContain("ask for the city");
     expect(result).toContain("successful downstream provider-artifact verification");
     for (const id of publicExtraIds) expect(result).toContain(id);
   });

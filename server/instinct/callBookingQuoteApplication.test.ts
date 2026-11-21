@@ -27,13 +27,14 @@ const SENDER = "synthetic-sender-id";
 const verifiedCall = () => ({ id: CALL, type: "inboundPhoneCall", status: "in-progress", assistantId: "customer-assistant", customer: { number: "+17035559876" } });
 function input(): any {
   return { customerName: "María García", customerPhone: PHONE, smsNumberConfirmed: true,
+    customerNameConfirmed: true, city: "Washington", addressConfirmed: true,
     requestedLocalDate: "2026-11-20", requestedLocalTime: "10:00",
     pricing: { pricingMode: "home", serviceId: "deep", bedrooms: 3, bathrooms: 2, homeType: "House", condition: 5,
       maidCount: 1, hourCount: 1, extras: [{ id: "inside-oven", quantity: 1 }], recurrence: "one-time" },
     extrasConfirmed: true, address: "123 Synthetic Street, Washington, DC 20001", notes: [] };
 }
 function canonical(raw = input()): CreateCustomerBookingLinkInput {
-  const { smsNumberConfirmed: _sms, extrasConfirmed: _extras, ...value } = raw;
+  const { smsNumberConfirmed: _sms, extrasConfirmed: _extras, customerNameConfirmed: _name, city: _city, addressConfirmed: _address, ...value } = raw;
   return value;
 }
 function request(args: unknown = input(), toolCallId = "synthetic-tool-id") {
@@ -200,7 +201,7 @@ describe("call-only booking quote — actual canonical engine, helper and durabl
     expect(h.send.mock.calls[0][0].content).toContain("No add-ons selected");
   });
   it("does not truncate long SMS, full URL or any canonical extras; Spanish Unicode facts persist", async () => {
-    const h = harness(), raw = input(); raw.customerName = "Ángela Muñoz"; raw.address = "Calle del Niño, número 42";
+    const h = harness(), raw = input(); raw.customerName = "Ángela Muñoz"; raw.address = "Calle del Niño, número 42, San José"; raw.city = "San José";
     raw.notes = ["Por favor, limpiar el horno y las ventanas; ¡gracias!"];
     raw.pricing.extras = [{ id: "inside-cabinets", quantity: 1 }, { id: "inside-fridge", quantity: 1 }, { id: "inside-oven", quantity: 1 },
       { id: "interior-windows", quantity: 8 }, { id: "organizing-hour", quantity: 2 }, { id: "laundry-load", quantity: 3 }];
@@ -274,7 +275,7 @@ describe("source verification, exact-phone STOP and input gates", () => {
     expect((await h.run(request())).code).toBe("SMS_OPTED_OUT"); expect(h.state().funnels).toHaveLength(1);
     expect(receiptState(h).phase).toBe("prepared"); expect(h.send).not.toHaveBeenCalled(); expect(h.onLinkCreated).toHaveBeenCalledTimes(1);
   });
-  it.each(["customerName", "customerPhone", "requestedLocalDate", "requestedLocalTime", "pricing", "extrasConfirmed", "smsNumberConfirmed"])("asks for missing %s without guessed data", async key => {
+  it.each(["customerName", "customerPhone", "requestedLocalDate", "requestedLocalTime", "pricing", "extrasConfirmed", "smsNumberConfirmed", "customerNameConfirmed", "city", "addressConfirmed"])("asks for missing %s without guessed data", async key => {
     const h = harness(), raw = input(); delete raw[key];
     expect(await h.run(request(raw))).toMatchObject({ success: false, code: "INCOMPLETE_QUOTE" }); expectNoEffects(h);
   });
@@ -282,7 +283,7 @@ describe("source verification, exact-phone STOP and input gates", () => {
     const h = harness(), raw = input(); delete raw.pricing[key];
     expect((await h.run(request(raw))).success).toBe(false); expectNoEffects(h);
   });
-  it.each(["extrasConfirmed", "smsNumberConfirmed"])("rejects false %s, including unconfirmed empty extras", async key => {
+  it.each(["extrasConfirmed", "smsNumberConfirmed", "customerNameConfirmed", "addressConfirmed"])("rejects false %s, including unconfirmed empty extras", async key => {
     const h = harness(), raw = input(); raw[key] = false; raw.pricing.extras = [];
     expect((await h.run(request(raw))).success).toBe(false); expectNoEffects(h);
   });
@@ -308,6 +309,56 @@ describe("source verification, exact-phone STOP and input gates", () => {
     for (const patch of [{ callId: "" }, { toolCallId: "" }, { name: "unknown" }]) {
       const h = harness(); expect((await h.run({ ...request(), ...patch })).success).toBe(false); expectNoEffects(h); expect(h.readCall).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("call-only name and city acceptance", () => {
+  it("rejects the observed Valued Customer and street-only request with no link or SMS", async () => {
+    const h = harness(), raw = input();
+    raw.customerName = "Valued Customer"; raw.address = "4033 Mansion Drive";
+    delete raw.customerNameConfirmed; delete raw.city; delete raw.addressConfirmed;
+    const result = await h.run(request(raw));
+    expect(result).toMatchObject({ success: false, code: "INCOMPLETE_QUOTE" });
+    expectNoEffects(h);
+  });
+  it.each([
+    ["customerName", "Valued Customer", "customerName"],
+    ["customerNameConfirmed", false, "customerNameConfirmed"],
+    ["city", undefined, "city"], ["city", " ", "city"], ["city", "Unknown", "city"],
+    ["address", "4033 Mansion Drive", "address"],
+    ["address", "4033 Mansion Drive, Alexandria", "address"],
+    ["address", ", Washington, DC", "address"],
+    ["address", "   , Washington, DC", "address"],
+    ["address", "4033 Mansion Drive\nWashington\nDC", "address"],
+    ["addressConfirmed", false, "addressConfirmed"],
+  ])("returns exact missing %s for %s without a link or SMS", async (field, value, missing) => {
+    const h = harness(), raw = input(); raw[field] = value;
+    const result = await h.run(request(raw));
+    expect(result).toMatchObject({ success: false, code: "INCOMPLETE_QUOTE", missing: expect.arrayContaining([missing]) });
+    expectNoEffects(h);
+  });
+  it("asks for missing identity first, then sends only the caller-corrected complete details", async () => {
+    const h = harness(), incomplete = input();
+    incomplete.customerName = "Valued Customer"; incomplete.address = "4033 Mansion Drive";
+    delete incomplete.customerNameConfirmed; delete incomplete.city; delete incomplete.addressConfirmed;
+    expect((await h.run(request(incomplete))).success).toBe(false); expectNoEffects(h);
+    const corrected = { ...input(), customerName: "Anne-Marie O'Neill", address: "4033 Mansion Drive, Washington, DC" };
+    expect(await h.run(request(corrected, "caller-corrected-details"))).toMatchObject({ success: true, alreadySent: false });
+    expect(h.state().funnels).toHaveLength(1); expect(h.send).toHaveBeenCalledOnce();
+    expect(h.state().funnels[0]).toMatchObject({ customerName: corrected.customerName, address: corrected.address });
+    expect(h.send.mock.calls[0][0].content).toContain("Anne-Marie");
+    expect(h.send.mock.calls[0][0].content).not.toContain("Valued");
+    const savedInput = canonical(corrected);
+    const expected = createPublicBookingPriceSnapshot(corrected.pricing);
+    expect(h.state().funnels[0].priceSnapshot).toEqual(expected);
+    expect(h.send.mock.calls[0][0].content).toBe(buildCallBookingQuoteSms(savedInput, receiptState(h).link, CALL_QUOTE_BOOKING_ORIGIN));
+    for (const field of ["customerNameConfirmed", "city", "addressConfirmed"]) {
+      expect(h.state().funnels[0]).not.toHaveProperty(field);
+      expect(receiptState(h)).not.toHaveProperty(field);
+    }
+    const before = structuredClone(h.state());
+    expect(await h.restart()(request({ ...corrected, city: " washington " }, "repeat-confirmed-input"))).toMatchObject({ success: true, alreadySent: true });
+    expect(h.state().funnels).toEqual(before.funnels); expect(h.send).toHaveBeenCalledOnce();
   });
 });
 

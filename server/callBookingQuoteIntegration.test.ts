@@ -38,6 +38,7 @@ function quoteArgs(name: string) {
   return name === "getBookingQuote" ? structuredClone(retainedQuote) : {
     ...structuredClone(retainedQuote), customerName: "Synthetic Test Customer", customerPhone: "+13015550123",
     address: "123 Synthetic Test Street, Washington, DC", requestedLocalDate: "2099-12-15", requestedLocalTime: "14:30", smsNumberConfirmed: true,
+    customerNameConfirmed: true, city: "Washington", addressConfirmed: true,
   };
 }
 const envelopes = ["openai-object", "openai-json", "native-object"] as const;
@@ -89,6 +90,7 @@ describe("call-only canonical quote integration — offline", () => {
     const captured = mock.execute.mock.calls[0][0].args;
     expect(captured.pricing).toEqual(retainedQuote.pricing);
     expect(captured.extrasConfirmed).toBe(true);
+    if (name === "textBookingQuote") expect(captured).toMatchObject({ customerNameConfirmed: true, city: "Washington", addressConfirmed: true });
     if (envelope !== "openai-json") expect(captured).toBe(args);
     expect(result.results[0].toolCallId).toBe(tool.id);
     expect(JSON.parse(result.results[0].result).success).toBe(true);
