@@ -99,6 +99,7 @@ const AiTeamReview = lazy(() => import("./pages/AiTeamReview"));
 const AiActionsControlCenter = lazy(() => import("./pages/AiActionsControlCenter"));
 const LiveTextMonitor = lazy(() => import("./pages/LiveTextMonitor"));
 const InstinctCustomerIntelligence = lazy(() => import("./pages/InstinctCustomerIntelligence"));
+const ReviewResponses = lazy(() => import("./pages/ReviewResponses"));
 
 /**
  * DebriefRedirect — /admin/madison-debrief is now /admin/madison-focus.
@@ -204,6 +205,9 @@ function LiveTextMonitorRoute() {
 function InstinctCustomerIntelligenceRoute() {
   return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/admin/live-text-monitor"><InstinctCustomerIntelligence /></ReviewWorkspaceFrame></AdminPageGuard>;
 }
+function ReviewResponsesRoute() {
+  return <AdminPageGuard pageId="ai-actions"><ReviewWorkspaceFrame navActivePath="/review/ai-actions"><ReviewResponses /></ReviewWorkspaceFrame></AdminPageGuard>;
+}
 
 function AdminPayrollSummaryExactLiveRoute() {
   return <ReviewWorkspaceFrame navActivePath="/review/payroll-summary"><PayrollSummaryExactLive /></ReviewWorkspaceFrame>;
@@ -262,6 +266,7 @@ function Router() {
         <Route path={"/admin/daily-action-audit"} component={LiveTextMonitorRoute} />
         <Route path={"/admin/live-text-monitor"} component={LiveTextMonitorRoute} />
         <Route path={"/admin/customer-intelligence"} component={InstinctCustomerIntelligenceRoute} />
+        <Route path={"/admin/review-responses"} component={ReviewResponsesRoute} />
         <Route path={"/admin/ops-chat"} component={OpsChatRedirect} />
         <Route path={"/agent"} component={AgentDashboard} />
         <Route path={"/admin/campaigns"} component={ReactivationCampaigns} />

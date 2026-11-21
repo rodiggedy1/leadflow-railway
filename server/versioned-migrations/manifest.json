@@ -615,6 +615,14 @@
       "sha256": "0a53b79bd63608bbd8c592120731dde270bd14bd37d4f34954cf8cdc0eadfc9d",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0080_create_team_review_weeks.postconditions.json"
+    },
+    {
+      "id": "0081_create_public_review_responses",
+      "mode": "create-table",
+      "sqlFile": "0081_create_public_review_responses.sql",
+      "sha256": "4d981433a8f015af8a96ad2e1b417574848add03fbe0dc3822f5766cd3cca2cb",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0081_create_public_review_responses.postconditions.json"
     }
   ]
 }

@@ -5,6 +5,7 @@ import { getDb } from "./db";
 import { dailyActionAuditRouter } from "./dailyActionAuditRouter";
 import { liveTextMonitorRouter } from "./liveTextMonitorRouter";
 import { instinctRouter } from "./instinct/router";
+import { reviewResponsesRouter } from "./reviewResponses/router";
 
 const policyMode = z.enum(["approval_required", "suggest_only", "automatic"]);
 const merchantId = "default";
@@ -34,6 +35,7 @@ export const aiActionsRouter = router({
   dailyAudit: dailyActionAuditRouter,
   liveText: liveTextMonitorRouter,
   instinct: instinctRouter,
+  reviewResponses: reviewResponsesRouter,
   listPolicies: adminAgentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];

@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "table": "public_review_responses",
+  "columns": [
+    { "name": "key", "columnType": "char(64)", "nullable": false },
+    { "name": "revision", "columnType": "int unsigned", "nullable": false },
+    { "name": "entry", "columnType": "json", "nullable": false },
+    { "name": "updatedAtMs", "columnType": "bigint unsigned", "nullable": false }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["key"], "unique": true },
+    { "name": "idx_public_review_responses_updated", "columns": ["updatedAtMs", "key"], "unique": false }
+  ]
+}
