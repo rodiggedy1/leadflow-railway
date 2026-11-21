@@ -49,8 +49,10 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
         const read = options.readCallRecordingUrl ?? (await import("./instinct/claudeCustomerCallRecording")).readCustomerCallRecordingUrl;
         return { url: await read(task.call.providerCallId) };
       })),
-    claim: opsChatProcedure.input(idInput).output(customerTaskSchema)
-      .mutation(({ input, ctx }) => write(store => store.claimTask(input.id, actor(ctx.opsCaller)))),
+    claim: opsChatProcedure.input(idInput.extend({ expectedOwnerId: z.string().min(1).optional() })).output(customerTaskSchema)
+      .mutation(({ input, ctx }) => write(store => input.expectedOwnerId === undefined
+        ? store.claimTask(input.id, actor(ctx.opsCaller))
+        : store.claimTask(input.id, actor(ctx.opsCaller), input.expectedOwnerId))),
     completeItem: opsChatProcedure.input(z.object({ id, itemId: z.string().min(1) }).strict()).output(customerTaskSchema)
       .mutation(({ input, ctx }) => write(store => store.completeItem(input.id, input.itemId, actor(ctx.opsCaller)))),
     complete: opsChatProcedure.input(z.object({ id, note: z.string().trim().min(1, "Add a completion note before marking this task done.") }).strict()).output(customerTaskSchema)

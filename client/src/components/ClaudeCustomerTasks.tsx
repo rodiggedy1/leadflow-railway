@@ -8,7 +8,7 @@ import "./claude-customer-tasks.css";
 
 export type CustomerTaskView = "open" | "mine" | "done";
 export type CustomerTaskActions = {
-  claim: (id: number) => Promise<void>;
+  claim: (id: number, expectedOwnerId?: string) => Promise<void>;
   completeItem: (id: number, itemId: string) => Promise<void>;
   complete: (id: number, note: string) => Promise<void>;
 };
@@ -118,7 +118,9 @@ export function ClaudeCustomerTasksProvider({ callerId, children, onOpenConversa
     }
   };
   const actions: CustomerTaskActions = {
-    claim: (id) => run(id, () => claim.mutateAsync({ id })),
+    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined
+      ? claim.mutateAsync({ id })
+      : claim.mutateAsync({ id, expectedOwnerId })),
     completeItem: (id, itemId) => run(id, () => completeItem.mutateAsync({ id, itemId })),
     complete: (id, note) => run(id, () => complete.mutateAsync({ id, note: note.trim() })),
   };
@@ -253,6 +255,9 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
       <span>{task.status === "done" ? `Confirmed by ${task.completedBy?.name || "Staff"}` : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
       {task.status === "unclaimed" && <button type="button" className="cct-primary" disabled={busy || !callerId}
         onClick={() => void update(() => actions.claim(task.id))}>{busy ? <><Loader2 aria-hidden="true" />Claiming…</> : "Claim"}</button>}
+      {task.status === "claimed" && !mine && task.owner && <button type="button" className="cct-primary" disabled={busy || !callerId}
+        title={`Take over from ${task.owner.name}`} onClick={() => void update(() => actions.claim(task.id, task.owner!.id))}>
+        {busy ? <><Loader2 aria-hidden="true" />Taking over…</> : "Take over"}</button>}
       {editable && <button type="button" disabled={busy || !canComplete} title="Confirm all actions in this task are complete"
         onClick={() => { if (!canComplete || busy) return; setError(""); setNote(""); setConfirmOpen(true); }}>Mark done</button>}
     </div>

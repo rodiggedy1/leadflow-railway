@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { withoutApprovedSmsBookingQuote } from "./smsBookingQuoteSourceControl";
-import { withoutApprovedStaffCallFeature } from "./staffCallSourceControl";
+import { withoutApprovedStaffCallFeature, withoutApprovedTaskTakeover } from "./staffCallSourceControl";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const baseline = "b1bf3cff91be631ec7a38e2675a28993ebd3e1d6";
@@ -11,12 +11,22 @@ const current = (file: string) => readFileSync(new URL(`../${file}`, import.meta
 const before = (file: string) => execFileSync("git", ["show", `${baseline}:${file}`], { cwd: root, encoding: "utf8", maxBuffer: 5_000_000 });
 
 describe("SMS booking quote additive boundaries — offline source control", () => {
+  it.each(["server/instinct/claudeCustomerTasksStore.ts", "server/claudeCustomerTasksRouter.ts", "client/src/components/ClaudeCustomerTasks.tsx"])("allows only the exact task takeover hunks against its release baseline: %s", file => {
+    const original = execFileSync("git", ["show", `5031e432:${file}`], { cwd: root, encoding: "utf8", maxBuffer: 5_000_000 });
+    expect(withoutApprovedTaskTakeover(file, current(file))).toBe(original);
+    expect(withoutApprovedTaskTakeover(file, current(file) + "\n// UNAUTHORIZED_CHANGE\n")).not.toBe(original);
+    const mutated = file.endsWith("Store.ts") ? current(file).replace('task.owner.id !== expectedOwnerId', 'task.owner.id === expectedOwnerId')
+      : file.endsWith("Router.ts") ? current(file).replace('actor(ctx.opsCaller), input.expectedOwnerId', 'actor(ctx.opsCaller), "incorrect-owner"')
+      : current(file).replace('actions.claim(task.id, task.owner!.id)', 'actions.claim(task.id, "incorrect-owner")');
+    expect(mutated).not.toBe(current(file)); expect(withoutApprovedTaskTakeover(file, mutated)).not.toBe(original);
+  });
+
   it.each([
     "server/instinct/claudeCustomerSms.ts", "server/instinct/claudeCustomerSmsApplication.ts",
     "server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeCustomerTasksStore.ts",
   ])("allows only the fixed authorized SMS hunks and preserves every other byte: %s", file => {
-    expect(withoutApprovedSmsBookingQuote(file, current(file))).toBe(before(file));
-    expect(withoutApprovedSmsBookingQuote(file, current(file) + "\n// UNAUTHORIZED_CHANGE\n")).not.toBe(before(file));
+    expect(withoutApprovedSmsBookingQuote(file, withoutApprovedTaskTakeover(file, current(file)))).toBe(before(file));
+    expect(withoutApprovedSmsBookingQuote(file, withoutApprovedTaskTakeover(file, current(file) + "\n// UNAUTHORIZED_CHANGE\n"))).not.toBe(before(file));
   });
 
   it.each([
@@ -75,7 +85,7 @@ describe("SMS booking quote additive boundaries — offline source control", () 
   });
 
   it("preserves existing task persistence, claim, checklist, required-note completion and acceptance exactly", () => {
-    const file = "server/instinct/claudeCustomerTasksStore.ts", now = current(file), old = before(file);
+    const file = "server/instinct/claudeCustomerTasksStore.ts", now = withoutApprovedTaskTakeover(file, current(file)), old = before(file);
     const prefix = (source: string) => source.slice(source.indexOf("export function createClaudeCustomerTaskPersistence()"), source.indexOf("/** Passive factory:"));
     expect(prefix(now)).toBe(prefix(old));
     const tail = (source: string) => source.slice(source.indexOf("    recordAcceptance: (claim, providerMessageId)"));

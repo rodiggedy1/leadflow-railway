@@ -42,6 +42,38 @@ describe("customer task authenticated router — offline", () => {
     await h.caller.complete({ id: 77, note: "Handled manually" }); expect(h.store.completeTask).toHaveBeenCalledWith(77, "Handled manually", actor);
     expect(h.broadcast).toHaveBeenCalledTimes(3);
   });
+  it("takeover reuses claim and the existing broadcast with authenticated staff identity and displayed owner precondition", async () => {
+    const h = harness();
+    vi.mocked(getAgentFromRequest).mockResolvedValue({ agentId: 42, agentName: "Verified Staff", agentEmail: "staff@example.test", isAdmin: false } as any);
+    const taken = { ...task, status: "claimed" as const, owner: { id: "42", name: "Verified Staff" }, claimedAt: 200 };
+    vi.mocked(h.store.claimTask).mockResolvedValue(taken);
+    const result = await h.router.createCaller(context(false)).claim({ id: 77, expectedOwnerId: "17" });
+    expect(result).toEqual(taken);
+    expect(h.store.claimTask).toHaveBeenCalledWith(77, { id: "42", name: "Verified Staff" }, "17");
+    expect(h.broadcast).toHaveBeenCalledTimes(1);
+  });
+  it.each(["", null, 17, {}, false])("rejects an invalid takeover owner precondition before store access: %s", async expectedOwnerId => {
+    const h = harness();
+    await expect((h.caller.claim as any)({ id: 77, expectedOwnerId })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(h.getStore).not.toHaveBeenCalled(); expect(h.broadcast).not.toHaveBeenCalled();
+  });
+  it("rejects anonymous takeover and client-supplied identity before store access", async () => {
+    const h = harness();
+    await expect(h.router.createCaller(context(false)).claim({ id: 77, expectedOwnerId: "17" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect((h.caller.claim as any)({ id: 77, expectedOwnerId: "17", actor: { id: "attacker", name: "Other" } })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(h.getStore).not.toHaveBeenCalled(); expect(h.broadcast).not.toHaveBeenCalled();
+  });
+  it("stale takeover conflicts refresh through the existing error contract without broadcasting a failed write", async () => {
+    const h = harness();
+    vi.mocked(h.store.claimTask).mockRejectedValue(new CustomerTaskStoreError("CONFLICT", "The task owner changed."));
+    await expect(h.caller.claim({ id: 77, expectedOwnerId: "17" })).rejects.toMatchObject({ code: "CONFLICT", message: "The task owner changed." });
+    expect(h.broadcast).not.toHaveBeenCalled();
+  });
+  it("an unavailable broadcast cannot turn a committed takeover into a failed action", async () => {
+    const h = harness(); h.broadcast.mockRejectedValue(new Error("listener unavailable"));
+    expect(await h.caller.claim({ id: 77, expectedOwnerId: "17" })).toEqual(task);
+    expect(h.store.claimTask).toHaveBeenCalledTimes(1);
+  });
   it("authenticated agent id is authoritative even when display names collide", async () => {
     const h = harness(); vi.mocked(getAgentFromRequest).mockResolvedValue({ agentId: 42, agentName: "Verified Owner", agentEmail: "staff@example.test", isAdmin: false } as any);
     await h.router.createCaller(context(false)).claim({ id: 77 });

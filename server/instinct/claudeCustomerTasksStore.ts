@@ -65,7 +65,7 @@ export interface ClaudeCustomerTasksStore {
   suppressBeforeSubmission(claim: CustomerSmsClaim, code: string): Promise<void>;
   list(): Promise<CustomerTask[]>;
   get(id: number): Promise<CustomerTask | null>;
-  claimTask(id: number, actor: TaskActor): Promise<CustomerTask>;
+  claimTask(id: number, actor: TaskActor, expectedOwnerId?: string): Promise<CustomerTask>;
   completeItem(id: number, itemId: string, actor: TaskActor): Promise<CustomerTask>;
   completeTask(id: number, note: string | undefined, actor: TaskActor): Promise<CustomerTask>;
 }
@@ -326,7 +326,18 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
       const [row] = rows(await db.execute(sql`SELECT * FROM ops_chat_messages WHERE id = ${id} AND quickAction = ${action}`));
       return row ? parseTask(row) : null;
     },
-    claimTask: (id, actor) => mutateTask(id, actor, (task, staff) => {
+    claimTask: (id, actor, expectedOwnerId) => mutateTask(id, actor, (task, staff) => {
+      // Only an explicit takeover may replace an owner; compare the rendered owner
+      // while holding the existing task row lock so stale clicks cannot steal it.
+      if (expectedOwnerId !== undefined) {
+        if (task.status !== "claimed" || !task.owner || task.owner.id !== expectedOwnerId)
+          return fail("CONFLICT", "This task's owner or status changed. Refresh it before taking over.");
+        if (task.owner.id === staff.id) return false;
+        const previous = task.owner, now = Date.now();
+        task.owner = staff; task.claimedAt = now;
+        task.activity.push({ action: "claimed", actor: staff, at: now, note: `Took over from ${previous.name} (${previous.id}).` });
+        return true;
+      }
       if (task.owner) {
         if (task.owner.id !== staff.id) return fail("CONFLICT", `This task is already claimed by ${task.owner.name}.`);
         return false;

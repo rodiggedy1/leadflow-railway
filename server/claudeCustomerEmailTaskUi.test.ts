@@ -45,7 +45,22 @@ function withoutApprovedStreamRefresh(value: string) {
   const current = node(value), released = node(releasedTaskSource);
   return value.slice(0, current.statement.getStart(current.parsed)) + released.statement.getText(released.parsed) + value.slice(current.statement.end);
 }
+// Test-only: restore exactly the approved takeover hunks for historical byte guards.
+// Behavioral harnesses continue to execute the actual, unnormalized source.
+function withoutApprovedTaskTakeover(value: string) {
+  const approved: Array<[string, string]> = [
+    ['  claim: (id: number, expectedOwnerId?: string) => Promise<void>;\n', '  claim: (id: number) => Promise<void>;\n'],
+    ['    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined\n      ? claim.mutateAsync({ id })\n      : claim.mutateAsync({ id, expectedOwnerId })),\n', '    claim: (id) => run(id, () => claim.mutateAsync({ id })),\n'],
+    ['      {task.status === "claimed" && !mine && task.owner && <button type="button" className="cct-primary" disabled={busy || !callerId}\n        title={`Take over from ${task.owner.name}`} onClick={() => void update(() => actions.claim(task.id, task.owner!.id))}>\n        {busy ? <><Loader2 aria-hidden="true" />Taking over…</> : "Take over"}</button>}\n', ''],
+  ];
+  for (const [current, original] of approved) {
+    expect(value.split(current)).toHaveLength(2);
+    value = value.replace(current, original);
+  }
+  return value;
+}
 function withoutCallComponent(value: string) {
+  value = withoutApprovedTaskTakeover(value);
   return withoutApprovedStreamRefresh(withoutApprovedStaffCallFeature(componentPath, value))
     .replace(', DialogTrigger } from "@/components/ui/dialog"', ' } from "@/components/ui/dialog"')
     .replace('    case "not_applicable": return "Not applicable · AI call";\n', '')

@@ -1,5 +1,28 @@
 /** Test-only: remove only the fixed approved staff-call feature hunks.
  * All unrelated bytes remain subject to the original historical comparisons. */
+const takeoverHunks: Record<string, Array<[string, string, number]>> = {
+  "client/src/components/ClaudeCustomerTasks.tsx": [
+    ['  claim: (id: number, expectedOwnerId?: string) => Promise<void>;', '  claim: (id: number) => Promise<void>;', 1],
+    ['    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined\n      ? claim.mutateAsync({ id })\n      : claim.mutateAsync({ id, expectedOwnerId })),', '    claim: (id) => run(id, () => claim.mutateAsync({ id })),', 1],
+    ['      {task.status === "claimed" && !mine && task.owner && <button type="button" className="cct-primary" disabled={busy || !callerId}\n        title={`Take over from ${task.owner.name}`} onClick={() => void update(() => actions.claim(task.id, task.owner!.id))}>\n        {busy ? <><Loader2 aria-hidden="true" />Taking over…</> : "Take over"}</button>}\n', '', 1],
+  ],
+  "server/claudeCustomerTasksRouter.ts": [
+    ['    claim: opsChatProcedure.input(idInput.extend({ expectedOwnerId: z.string().min(1).optional() })).output(customerTaskSchema)\n      .mutation(({ input, ctx }) => write(store => input.expectedOwnerId === undefined\n        ? store.claimTask(input.id, actor(ctx.opsCaller))\n        : store.claimTask(input.id, actor(ctx.opsCaller), input.expectedOwnerId))),', '    claim: opsChatProcedure.input(idInput).output(customerTaskSchema)\n      .mutation(({ input, ctx }) => write(store => store.claimTask(input.id, actor(ctx.opsCaller)))),', 1],
+  ],
+  "server/instinct/claudeCustomerTasksStore.ts": [
+    ['  claimTask(id: number, actor: TaskActor, expectedOwnerId?: string): Promise<CustomerTask>;', '  claimTask(id: number, actor: TaskActor): Promise<CustomerTask>;', 1],
+    ['    claimTask: (id, actor, expectedOwnerId) => mutateTask(id, actor, (task, staff) => {\n      // Only an explicit takeover may replace an owner; compare the rendered owner\n      // while holding the existing task row lock so stale clicks cannot steal it.\n      if (expectedOwnerId !== undefined) {\n        if (task.status !== "claimed" || !task.owner || task.owner.id !== expectedOwnerId)\n          return fail("CONFLICT", "This task\'s owner or status changed. Refresh it before taking over.");\n        if (task.owner.id === staff.id) return false;\n        const previous = task.owner, now = Date.now();\n        task.owner = staff; task.claimedAt = now;\n        task.activity.push({ action: "claimed", actor: staff, at: now, note: `Took over from ${previous.name} (${previous.id}).` });\n        return true;\n      }', '    claimTask: (id, actor) => mutateTask(id, actor, (task, staff) => {', 1],
+  ],
+};
+/** Strip only the fixed takeover additions, never arbitrary ownership or UI code. */
+export function withoutApprovedTaskTakeover(path: string, source: string): string {
+  for (const [current, original, occurrences] of takeoverHunks[path] ?? []) {
+    const count = source.split(current).length - 1;
+    if (count !== 0 && count !== occurrences) throw new Error(`Unexpected task takeover preservation hunk: ${path}`);
+    source = source.split(current).join(original);
+  }
+  return source;
+}
 const repairHunks: Record<string, Array<[string, string, number]>> = {
   "server/webhooks.ts": [
     ['import { dispatchClaudeStaffCallEvent, dispatchClaudeStaffCallTranscriptReady } from "./instinct/claudeStaffCallsApplication";\n', 'import { dispatchClaudeStaffCallEvent } from "./instinct/claudeStaffCallsApplication";\n', 1],
@@ -18,6 +41,7 @@ const repairHunks: Record<string, Array<[string, string, number]>> = {
   ],
 };
 export function withoutApprovedStaffCallRepair(path: string, source: string): string {
+  source = withoutApprovedTaskTakeover(path, source);
   for (const [current, original, occurrences] of repairHunks[path] ?? []) {
     const count = source.split(current).length - 1;
     if (count !== 0 && count !== occurrences) throw new Error(`Unexpected staff-call repair hunk: ${path}`);

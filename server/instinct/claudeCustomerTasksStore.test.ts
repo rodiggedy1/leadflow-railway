@@ -219,6 +219,161 @@ describe("customer task store — offline transactional SQL port", () => {
     expect(h.state().sessions[0]).not.toHaveProperty("assignedAgentName");
     expect(h.queries.filter(q => q.sql.includes("FROM ops_chat_messages WHERE id") && q.sql.includes("FOR UPDATE")).length).toBeGreaterThan(1);
   });
+  it.each(["sms", "email", "vapi", "openphone"] as const)("%s takeover preserves the source/reply/checklist audit and lets only the new owner close", async source => {
+    const h = port(); await h.prepared(); const row = h.state().cards[0], envelope = JSON.parse(row.metadata), task = envelope.task;
+    if (source === "email") {
+      Object.assign(task, { sessionId: null, customerPhone: null, receivingPhoneNumberId: null, receivingPhoneNumber: null,
+        email: { mailboxEmail: "support@example.com", threadId: "thread-1", fromEmail: "jane@example.com", replyToEmail: null,
+          recipientEmail: "support@example.com", subject: "Please update my visit", rfcMessageId: "<inbound-1@example.com>", bodyFormat: "text" } });
+      row.sessionId = null;
+    } else if (source === "vapi" || source === "openphone") {
+      Object.assign(task, { receivingPhoneNumberId: null, receivingPhoneNumber: null,
+        reply: { text: "", status: "not_applicable", providerMessageId: null },
+        call: source === "vapi"
+          ? { provider: "vapi", providerCallId: "vapi-call-1", voiceCallId: 1, transcript: task.sourceText, recordingUrl: null, callbackTaskIds: [201] }
+          : { provider: "openphone", providerCallId: "AC-call-1", recordingId: 1, transcript: task.sourceText, recordingUrl: null,
+            businessPhoneNumberId: "PN-cs", businessPhoneNumber: h.binding.receivingPhoneNumber, staffUserId: "US-staff-1",
+            direction: "incoming", transcriptSource: "saved", evidenceScope: "call_transcript" } });
+    }
+    row.metadata = JSON.stringify(envelope);
+    const id = task.id; await h.store.claimTask(id, owner); await h.store.completeItem(id, "item-1", owner);
+    const before = h.task(), stateBefore = structuredClone(h.state()), queriesBefore = h.queries.length, takeoverAt = before.claimedAt + 1000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(takeoverAt);
+    let transferred;
+    try { transferred = await h.store.claimTask(id, other, owner.id); } finally { clock.mockRestore(); }
+    expect(transferred).toEqual({ ...before, owner: other, claimedAt: takeoverAt,
+      activity: [...before.activity, { action: "claimed", actor: other, at: takeoverAt, note: "Took over from Sam (17)." }] });
+    expect(await h.store.get(id)).toEqual(transferred); expect(await h.store.list()).toEqual([transferred]);
+    const done = await h.store.completeTask(id, " Finished the remaining change manually. ", other);
+    expect(done).toMatchObject({ status: "done", owner: other, completedBy: other, completionNote: "Finished the remaining change manually." });
+    expect(done.items[0]).toEqual(before.items[0]); expect(done.items[1].completedBy).toEqual(other);
+    expect(done.activity.slice(0, before.activity.length + 1)).toEqual(transferred!.activity);
+    expect(done.activity.slice(before.activity.length + 1)).toEqual([
+      { action: "item_completed", actor: other, at: done.completedAt, note: "item-2" },
+      { action: "completed", actor: other, at: done.completedAt, note: done.completionNote },
+    ]);
+    const saved = structuredClone(h.state()), queriesAfterCompletion = h.queries.length;
+    expect(await h.store.completeTask(id, "Do not overwrite the original completion audit", other)).toEqual(done);
+    expect(h.state()).toEqual(saved); expect(h.queries.slice(queriesAfterCompletion).some(q => /^UPDATE/.test(q.sql))).toBe(false);
+    expect(h.state().sessions).toEqual(stateBefore.sessions); expect(h.state().drafts).toEqual(stateBefore.drafts);
+    expect(h.state().cards).toHaveLength(1); expect(h.state().cards[0]).toEqual({ ...stateBefore.cards[0],
+      metadata: JSON.stringify({ taskId: id, task: done }), lastActivityAt: h.state().cards[0].lastActivityAt });
+    expect(h.queries.slice(queriesBefore).every(q => q.sql.includes("ops_chat_messages"))).toBe(true);
+    expect(h.queries.slice(queriesBefore).filter(q => /^UPDATE/.test(q.sql))).toHaveLength(2);
+  });
+  it("id-only claims never steal before or after transfer and remain idempotent for the current owner", async () => {
+    const h = port(); await h.prepared(); const id = h.task().id; const claimed = await h.store.claimTask(id, owner);
+    const before = structuredClone(h.state()), queriesBefore = h.queries.length;
+    expect(await h.store.claimTask(id, owner)).toEqual(claimed);
+    await expect(h.store.claimTask(id, other)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(h.state()).toEqual(before); expect(h.queries.slice(queriesBefore).some(q => /^UPDATE/.test(q.sql))).toBe(false);
+    const transferred = await h.store.claimTask(id, other, owner.id), after = structuredClone(h.state()), queriesAfter = h.queries.length;
+    expect(await h.store.claimTask(id, other)).toEqual(transferred);
+    await expect(h.store.claimTask(id, owner)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(h.state()).toEqual(after); expect(h.queries.slice(queriesAfter).some(q => /^UPDATE/.test(q.sql))).toBe(false);
+  });
+  it("same-actor takeover is unchanged only when its expected owner matches, including after a transfer", async () => {
+    const h = port(); await h.prepared(); const id = h.task().id; const claimed = await h.store.claimTask(id, owner);
+    const before = structuredClone(h.state()), queriesBefore = h.queries.length;
+    expect(await h.store.claimTask(id, owner, owner.id)).toEqual(claimed);
+    await expect(h.store.claimTask(id, owner, other.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(h.state()).toEqual(before); expect(h.queries.slice(queriesBefore).some(q => /^UPDATE/.test(q.sql))).toBe(false);
+    const transferred = await h.store.claimTask(id, other, owner.id), after = structuredClone(h.state()), queriesAfter = h.queries.length;
+    expect(await h.store.claimTask(id, other, other.id)).toEqual(transferred);
+    await expect(h.store.claimTask(id, other, owner.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(h.state()).toEqual(after); expect(h.queries.slice(queriesAfter).some(q => /^UPDATE/.test(q.sql))).toBe(false);
+  });
+  it.each(["unclaimed", "claimed"] as const)("rejects an explicit stale-owner takeover of a %s task without writes", async status => {
+    const h = port(); await h.prepared(); const id = h.task().id;
+    if (status === "claimed") await h.store.claimTask(id, owner);
+    const before = structuredClone(h.state()), queriesBefore = h.queries.length;
+    await expect(h.store.claimTask(id, other, status === "claimed" ? "missing-owner" : owner.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(h.state()).toEqual(before); expect(h.queries.slice(queriesBefore)).toHaveLength(1);
+    expect(h.queries.at(-1)?.sql).toContain("FROM ops_chat_messages"); expect(h.queries.at(-1)?.sql).toContain("FOR UPDATE");
+  });
+  it("concurrent takeovers expecting the original owner have exactly one winner and one audit entry", async () => {
+    const h = port(); await h.prepared(); const id = h.task().id; await h.store.claimTask(id, owner);
+    const before = h.task(), stateBefore = structuredClone(h.state()), queriesBefore = h.queries.length, third = { id: "19", name: "Sam" };
+    const results = await Promise.allSettled([h.store.claimTask(id, other, owner.id), h.store.claimTask(id, third, owner.id)]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(r => r.status === "rejected")).toEqual([expect.objectContaining({ reason: expect.objectContaining({ code: "CONFLICT" }) })]);
+    const winner = results.find(r => r.status === "fulfilled");
+    if (!winner || winner.status !== "fulfilled") throw new Error("Expected one takeover winner");
+    expect(h.task()).toEqual(winner.value); expect([other.id, third.id]).toContain(winner.value.owner?.id);
+    expect(winner.value.activity).toEqual([...before.activity,
+      { action: "claimed", actor: winner.value.owner, at: winner.value.claimedAt, note: "Took over from Sam (17)." }]);
+    expect(h.state().sessions).toEqual(stateBefore.sessions); expect(h.state().drafts).toEqual(stateBefore.drafts);
+    expect(h.queries.slice(queriesBefore).filter(q => q.sql.includes("FOR UPDATE"))).toHaveLength(2);
+    expect(h.queries.slice(queriesBefore).filter(q => /^UPDATE/.test(q.sql))).toHaveLength(1);
+    expect(h.queries.slice(queriesBefore).every(q => q.sql.includes("ops_chat_messages"))).toBe(true);
+  });
+  it("the old owner cannot confirm even previously completed items after transfer and the new owner still needs a note", async () => {
+    const h = port(); await h.prepared(); const id = h.task().id; await h.store.claimTask(id, owner);
+    await h.store.completeItem(id, "item-1", owner); await h.store.claimTask(id, other, owner.id);
+    const before = structuredClone(h.state()), queriesBefore = h.queries.length;
+    await expect(h.store.completeItem(id, "item-1", owner)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(h.store.completeItem(id, "item-2", owner)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(h.store.completeTask(id, "Old owner confirmation", owner)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(h.store.completeTask(id, " \t\n ", other)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(h.state()).toEqual(before); expect(h.queries.slice(queriesBefore).some(q => /^UPDATE/.test(q.sql))).toBe(false);
+  });
+  it.each(["completion-first", "takeover-first"] as const)("completion versus takeover respects the locked %s outcome", async order => {
+    const h = port(); await h.prepared(); const id = h.task().id; await h.store.claimTask(id, owner);
+    const before = h.task(), stateBefore = structuredClone(h.state()), queriesBefore = h.queries.length;
+    const complete = () => h.store.completeTask(id, "Original owner completed both changes.", owner);
+    const takeover = () => h.store.claimTask(id, other, owner.id);
+    const results = await Promise.allSettled(order === "completion-first" ? [complete(), takeover()] : [takeover(), complete()]);
+    expect(results[0]).toMatchObject({ status: "fulfilled" });
+    expect(results[1]).toMatchObject({ status: "rejected", reason: { code: order === "completion-first" ? "CONFLICT" : "FORBIDDEN" } });
+    const task = h.task(); expect(task.activity.slice(0, before.activity.length)).toEqual(before.activity);
+    if (order === "completion-first") {
+      expect(task).toMatchObject({ status: "done", owner, completedBy: owner, completionNote: "Original owner completed both changes." });
+      expect(task.claimedAt).toBe(before.claimedAt); expect(task.items.every((item: any) => item.completedBy.id === owner.id)).toBe(true);
+      expect(task.activity.map((entry: any) => entry.action)).toEqual(["created", "claimed", "item_completed", "item_completed", "completed"]);
+    } else {
+      expect(task).toMatchObject({ status: "claimed", owner: other, completedBy: null, completedAt: null, completionNote: null });
+      expect(task.items).toEqual(before.items); expect(task.activity.map((entry: any) => entry.action)).toEqual(["created", "claimed", "claimed"]);
+      expect(task.activity.at(-1)).toMatchObject({ actor: other, note: "Took over from Sam (17)." });
+    }
+    expect(h.state().sessions).toEqual(stateBefore.sessions); expect(h.state().drafts).toEqual(stateBefore.drafts);
+    expect(h.queries.slice(queriesBefore).filter(q => q.sql.includes("FOR UPDATE"))).toHaveLength(2);
+    expect(h.queries.slice(queriesBefore).filter(q => /^UPDATE/.test(q.sql))).toHaveLength(1);
+    expect(h.queries.slice(queriesBefore).every(q => q.sql.includes("ops_chat_messages"))).toBe(true);
+  });
+  it("explicit takeover rejects done tasks even for the matching current owner while ordinary claim stays idempotent", async () => {
+    const h = port(); await h.prepared(); const id = h.task().id; await h.store.claimTask(id, owner);
+    const done = await h.store.completeTask(id, "Completed manually.", owner), before = structuredClone(h.state()), queriesBefore = h.queries.length;
+    await expect(h.store.claimTask(id, other, owner.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(h.store.claimTask(id, owner, owner.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await h.store.claimTask(id, owner)).toEqual(done);
+    expect(h.state()).toEqual(before); expect(h.queries.slice(queriesBefore).some(q => /^UPDATE/.test(q.sql))).toBe(false);
+  });
+  it.each(["missing", "wrong-kind", "unknown-version"] as const)("explicit takeover rejects a %s task without writes", async kind => {
+    const h = port(); await h.prepared(); const id = h.task().id;
+    if (kind === "wrong-kind") h.state().cards[0].quickAction = "new_lead";
+    if (kind === "unknown-version") {
+      const envelope = JSON.parse(h.state().cards[0].metadata); envelope.task.version = 2; h.state().cards[0].metadata = JSON.stringify(envelope);
+    }
+    const before = structuredClone(h.state()), queriesBefore = h.queries.length;
+    await expect(h.store.claimTask(kind === "missing" ? id + 1000 : id, other, owner.id))
+      .rejects.toMatchObject({ code: kind === "unknown-version" ? "PRECONDITION_FAILED" : "NOT_FOUND" });
+    expect(h.state()).toEqual(before); expect(h.queries.slice(queriesBefore)).toHaveLength(1);
+    expect(h.queries.at(-1)?.sql).toContain("FOR UPDATE");
+  });
+  it("takeover UPDATE failure rolls back ownership, timestamps and audit before a single successful retry", async () => {
+    const h = port(); await h.prepared(); const id = h.task().id; await h.store.claimTask(id, owner);
+    await h.store.completeItem(id, "item-1", owner); const before = structuredClone(h.state()), taskBefore = h.task(), queriesBefore = h.queries.length;
+    h.fail("UPDATE ops_chat_messages");
+    await expect(h.store.claimTask(id, other, owner.id)).rejects.toThrow("offline SQL failure");
+    expect(h.state()).toEqual(before); expect(h.task()).toEqual(taskBefore);
+    h.fail(""); const transferred = await h.store.claimTask(id, other, owner.id);
+    expect(transferred.owner).toEqual(other); expect(transferred.items).toEqual(taskBefore.items);
+    expect(transferred.activity).toEqual([...taskBefore.activity,
+      { action: "claimed", actor: other, at: transferred.claimedAt, note: "Took over from Sam (17)." }]);
+    expect(h.state().sessions).toEqual(before.sessions); expect(h.state().drafts).toEqual(before.drafts);
+    expect(h.queries.slice(queriesBefore).every(q => q.sql.includes("ops_chat_messages"))).toBe(true);
+    expect(h.queries.slice(queriesBefore).filter(q => /^UPDATE/.test(q.sql))).toHaveLength(2);
+  });
   it("claim and item confirmation keep the same task claimed and listed until explicit whole-task completion", async () => {
     const h = port(); await h.prepared(); const id = h.task().id;
     const claimed = await h.store.claimTask(id, owner);

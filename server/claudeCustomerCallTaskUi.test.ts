@@ -17,7 +17,22 @@ const pagePath = "client/src/pages/CommandChatExactLive.tsx";
 const source = readFileSync(componentPath, "utf8");
 const page = readFileSync(pagePath, "utf8");
 const baseline = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
+// Test-only: restore exactly the approved takeover hunks for historical byte guards.
+// Behavioral harnesses continue to execute the actual, unnormalized source.
+function withoutApprovedTaskTakeover(value: string) {
+  const approved: Array<[string, string]> = [
+    ['  claim: (id: number, expectedOwnerId?: string) => Promise<void>;\n', '  claim: (id: number) => Promise<void>;\n'],
+    ['    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined\n      ? claim.mutateAsync({ id })\n      : claim.mutateAsync({ id, expectedOwnerId })),\n', '    claim: (id) => run(id, () => claim.mutateAsync({ id })),\n'],
+    ['      {task.status === "claimed" && !mine && task.owner && <button type="button" className="cct-primary" disabled={busy || !callerId}\n        title={`Take over from ${task.owner.name}`} onClick={() => void update(() => actions.claim(task.id, task.owner!.id))}>\n        {busy ? <><Loader2 aria-hidden="true" />Taking over…</> : "Take over"}</button>}\n', ''],
+  ];
+  for (const [current, original] of approved) {
+    expect(value.split(current)).toHaveLength(2);
+    value = value.replace(current, original);
+  }
+  return value;
+}
 function withoutApprovedTaskReads(value: string) {
+  value = withoutApprovedTaskTakeover(value);
   const classifier = `  const transientFailure = [identity.error, query.error].every(error => {
     const code = error?.data?.code;
     const httpStatus = error?.data?.httpStatus;

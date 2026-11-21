@@ -17,7 +17,7 @@ const pageSource = readFileSync(new URL("../client/src/pages/CommandChatExactLiv
 const css = readFileSync(new URL("../client/src/components/claude-customer-tasks.css", import.meta.url), "utf8");
 const NOW = 1800000000000;
 const actor = { id: "17", name: "Synthetic staff" };
-const actions = () => ({ claim: vi.fn(async (_id: number) => {}), completeItem: vi.fn(async (_id: number, _itemId: string) => {}), complete: vi.fn(async (_id: number, _note?: string) => {}) });
+const actions = () => ({ claim: vi.fn(async (_id: number, _expectedOwnerId?: string) => {}), completeItem: vi.fn(async (_id: number, _itemId: string) => {}), complete: vi.fn(async (_id: number, _note?: string) => {}) });
 function fixture(overrides: Partial<CustomerTask> = {}): CustomerTask {
   return contract.customerTaskSchema.parse({
     id: 101, version: 1, kind: "claude_customer_task", sessionId: 42,
@@ -181,12 +181,15 @@ describe("Customer task compact queue and exact canonical identity", () => {
     expect(rendered).not.toContain('class="cct-log"'); expect(rendered).toContain("Task prepared");
   });
 
-  it("preserves all existing button JSX and task mutation/state logic while adding only the conversation link", () => {
+  it("preserves every pre-existing button and completion/cache lifecycle around the explicit takeover additions", () => {
     const buttons = (source: string) => {
       const ast = ts.createSourceFile("card.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
       const result: string[] = [];
       const visit = (node: ts.Node) => {
         if (ts.isFunctionDeclaration(node) && node.name?.text === "CustomerTaskCallRecording") return;
+        // The new takeover button is tested independently below; retain the exact
+        // historical byte guard for all existing Claim/Mark done/item controls.
+        if (ts.isJsxElement(node) && node.openingElement.getText(ast).includes('title={`Take over from ')) return;
         if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "button" && !node.openingElement.getText(ast).includes('className="cct-conversation-link"')) result.push(node.getText(ast).replace('onClick={() => void context.refresh()}', 'onClick={() => void query.refetch()}'));
         ts.forEachChild(node, visit);
       };
@@ -194,7 +197,10 @@ describe("Customer task compact queue and exact canonical identity", () => {
       visit(ast); return [...new Set(result)];
     };
     expect(hash(JSON.stringify(buttons(componentSource)))).toBe("a252f9ab6d7d4b78ca48c4d339a8e4c57eed7332b415730eaeb991efe5732411");
-    expect(hash(componentSource.slice(componentSource.indexOf('  const run ='), componentSource.indexOf('  return <TaskContext.Provider')))).toBe("ce3e4148342bb5aa0dcc7289c8177f32d92c8c84729f05c46d71c7c0a6154c07");
+    const baselineActions = componentSource.replace(
+      '    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined\n      ? claim.mutateAsync({ id })\n      : claim.mutateAsync({ id, expectedOwnerId })),',
+      '    claim: (id) => run(id, () => claim.mutateAsync({ id })),');
+    expect(hash(baselineActions.slice(baselineActions.indexOf('  const run ='), baselineActions.indexOf('  return <TaskContext.Provider')))).toBe("ce3e4148342bb5aa0dcc7289c8177f32d92c8c84729f05c46d71c7c0a6154c07");
     expect(hash(componentSource.slice(componentSource.indexOf('  const [confirmOpen'), componentSource.indexOf('  return <article')))).toBe("7804809679708c1360153b78dddaf31f418ac8edc0d81d96b33d55ea3d00614f");
     expect(hash(componentSource.slice(componentSource.indexOf('{error && !confirmOpen')))).toBe("2693e4f9f82fe9fb3659260f70de3baf74eb24e224b8bff31dda9237f5a78587");
   });
@@ -239,6 +245,74 @@ describe("Customer task human completion and authoritative updates", () => {
     const saving = button(harness.render("TaskCard", props), "Claiming…"); expect(saving).toBeDefined(); expect(saving.props.disabled).toBe(true);
     resolve(); await flush();
     expect(button(harness.render("TaskCard", props), "Claim").props.disabled).toBe(false);
+  });
+
+  it.each(["queue", "stream"] as const)("shows takeover only for another owner's unfinished %s card, without bypassing owner-only completion", placement => {
+    const other = { id: "18", name: actor.name };
+    for (const status of ["unclaimed", "claimed", "done"] as const) for (const owner of [actor, other]) {
+      const task = fixture({ status, owner: status === "unclaimed" ? null : owner });
+      const tree = stateHarness().render("TaskCard", { task, callerId: actor.id, actions: actions(), placement, now: NOW });
+      expect(Boolean(button(tree, "Take over"))).toBe(status === "claimed" && owner.id === other.id);
+      expect(Boolean(button(tree, "Mark done"))).toBe(status === "claimed" && owner.id === actor.id);
+      expect(Boolean(button(tree, "Claim"))).toBe(status === "unclaimed");
+    }
+    const task = fixture({ status: "claimed", owner: other });
+    for (const props of [{ callerId: "", pending: false }, { callerId: actor.id, pending: true }]) {
+      const tree = stateHarness().render("TaskCard", { task, ...props, actions: actions(), placement, now: NOW });
+      expect(button(tree, props.pending ? "Taking over…" : "Take over").props.disabled).toBe(true);
+    }
+  });
+
+  it.each(["queue", "stream"] as const)("takes over %s with the displayed owner id, coalesces clicks, and enables the normal completion popup only after canonical update", async placement => {
+    const previous = { id: "18", name: "Original staff" };
+    const original = fixture();
+    const task = fixture({ status: "claimed", owner: previous, claimedAt: NOW - 1000,
+      items: original.items.map((item, index) => index ? item : { ...item, completedBy: previous, completedAt: NOW - 500 }) });
+    let resolve!: () => void;
+    const a = actions(); a.claim.mockImplementation(() => new Promise<void>(done => { resolve = done; }));
+    const harness = stateHarness(); const props = { task, callerId: actor.id, actions: a, placement, now: NOW };
+    const take = button(harness.render("TaskCard", props), "Take over");
+    expect(take.props.title).toBe("Take over from Original staff");
+    take.props.onClick(); take.props.onClick();
+    expect(a.claim).toHaveBeenCalledTimes(1); expect(a.claim).toHaveBeenCalledWith(101, previous.id);
+    expect(task.owner).toEqual(previous); expect(button(harness.render("TaskCard", props), "Mark done")).toBeUndefined();
+    expect(button(harness.render("TaskCard", props), "Taking over…").props.disabled).toBe(true);
+    resolve(); await flush();
+    const saved = { ...task, owner: actor, claimedAt: NOW };
+    const nextProps = { ...props, task: saved };
+    let tree = harness.render("TaskCard", nextProps);
+    expect(button(tree, "Take over")).toBeUndefined();
+    expect(text(tree)).toContain("Human-confirmed by Original staff");
+    button(tree, "Mark done").props.onClick(); tree = harness.render("TaskCard", nextProps);
+    const confirm = elements(tree).find(node => node.type === harness.ui.TaskCompletionConfirm)!;
+    expect(confirm.props.allowed).toBe(true);
+    confirm.props.onConfirm(); await flush(); expect(a.complete).not.toHaveBeenCalled();
+    confirm.props.onNote("  Finished the remaining action.  "); tree = harness.render("TaskCard", nextProps);
+    elements(tree).find(node => node.type === harness.ui.TaskCompletionConfirm)!.props.onConfirm(); await flush();
+    expect(a.complete).toHaveBeenCalledWith(101, "Finished the remaining action.");
+    expect(a.completeItem).not.toHaveBeenCalled(); expect(saved.items[0].completedBy).toEqual(previous);
+  });
+
+  it("a stale takeover handler retains the owner seen when clicked rather than substituting a newer owner", async () => {
+    const a = actions(); const harness = stateHarness();
+    const original = fixture({ status: "claimed", owner: { id: "18", name: "Original staff" } });
+    const props = { task: original, callerId: actor.id, actions: a, now: NOW };
+    const stale = button(harness.render("TaskCard", props), "Take over").props.onClick;
+    harness.render("TaskCard", { ...props, task: { ...original, owner: { id: "19", name: "New owner" } } });
+    stale(); await flush(); expect(a.claim).toHaveBeenCalledWith(101, "18");
+    expect(original.owner?.id).toBe("18");
+  });
+
+  it("a failed takeover does not grant local completion rights or expose private backend details", async () => {
+    const a = actions(); a.claim.mockRejectedValue(new Error("PRIVATE synthetic conflict"));
+    const harness = stateHarness();
+    const task = fixture({ status: "claimed", owner: { id: "18", name: "Other staff" } });
+    const props = { task, callerId: actor.id, actions: a, now: NOW };
+    button(harness.render("TaskCard", props), "Take over").props.onClick(); await flush();
+    const tree = harness.render("TaskCard", props);
+    expect(text(tree)).toContain("Task update failed"); expect(text(tree)).not.toContain("PRIVATE");
+    expect(button(tree, "Mark done")).toBeUndefined(); expect(button(tree, "Take over")).toBeDefined();
+    expect(task.owner?.id).toBe("18");
   });
 
   it("permits the whole-task popup before checking each item and completes only after explicit confirmation", async () => {
@@ -356,6 +430,33 @@ describe("Customer task human completion and authoritative updates", () => {
     expect(rows[0].status).toBe("done");
   });
 
+  it("takeover uses the same list/get caches and conflict invalidation without sending staff identity", async () => {
+    const previous = { id: "18", name: "Previous staff" };
+    let rows = [fixture({ status: "claimed", owner: previous, claimedAt: NOW - 1000 })];
+    const saved = fixture({ status: "claimed", owner: actor, claimedAt: NOW });
+    const gets = new Map<number, CustomerTask>(); const invalidate = vi.fn(async () => {});
+    const claim = vi.fn(async (_input: unknown) => saved);
+    const api = { useUtils: () => ({ claudeCustomerTasks: { invalidate,
+      get: { cancel: vi.fn(async () => {}), setData: (input: { id: number }, task: CustomerTask) => gets.set(input.id, task) },
+      list: { cancel: vi.fn(async () => {}), setData: (_input: unknown, update: (current: CustomerTask[]) => CustomerTask[]) => { rows = update(rows); } },
+    } }), claudeCustomerTasks: {
+      identity: { useQuery: () => ({ data: actor, isLoading: false, isError: false }) },
+      list: { useQuery: () => ({ data: rows, isLoading: false, isError: false }) },
+      claim: { useMutation: () => ({ mutateAsync: claim }) },
+      complete: { useMutation: () => ({}) }, completeItem: { useMutation: () => ({}) },
+    } };
+    const harness = stateHarness(api); const props = { callerId: "IGNORED_DISPLAY_ID", children: null };
+    const context = harness.render("ClaudeCustomerTasksProvider", props).props.value;
+    await context.actions.claim(101, previous.id);
+    expect(claim).toHaveBeenCalledWith({ id: 101, expectedOwnerId: previous.id });
+    expect(rows[0]).toEqual(saved); expect(gets.get(101)).toEqual(saved); expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(context.callerId).toBe(actor.id);
+    claim.mockRejectedValueOnce(new Error("Synthetic stale takeover"));
+    await expect(context.actions.claim(101, previous.id)).rejects.toThrow("Synthetic stale takeover");
+    expect(invalidate).toHaveBeenCalledTimes(2); expect(rows[0]).toEqual(saved);
+    expect(harness.render("ClaudeCustomerTasksProvider", props).props.value.pendingIds.size).toBe(0);
+  });
+
   it("uses exact authenticated OAuth owner id when Ops auth prefers it over the agent cookie", () => {
     const api = { useUtils: () => ({}),
       claudeCustomerTasks: { identity: { useQuery: () => ({ data: { id: "synthetic-owner-openid", name: "Synthetic owner" }, isLoading: false, isError: false }) },
@@ -422,7 +523,7 @@ describe("Customer task additive integration and style contract", () => {
     expect(pageSource).toContain("onConnected: () => { void utils.claudeCustomerTasks.invalidate(); void utils.opsChat.listChannelMessages.invalidate({ channel }); }");
     expect(pageSource).toContain("message.quickAction === CLAUDE_CUSTOMER_TASK_ACTION");
     expect(pageSource).toContain("taskId={customerTaskIdFromMessage(message)}");
-    for (const forbidden of ["EventSource", "useOpsStream", "setInterval", "setTimeout", "getClientProfile", "customerProfile", "newest", "cleaner_jobs", "cleanerJobs", "sendMessage", "sendWorkspaceMessage", "bookingFunnel", ".slice(0,"]) expect(componentSource).not.toContain(forbidden);
+    for (const forbidden of ["EventSource", "useOpsStream", "refetchInterval", "setInterval", "setTimeout", "getClientProfile", "customerProfile", "newest", "cleaner_jobs", "cleanerJobs", "sendMessage", "sendWorkspaceMessage", "bookingFunnel", ".slice(0,"]) expect(componentSource).not.toContain(forbidden);
     expect(componentSource.match(/dangerouslySetInnerHTML=/g)).toHaveLength(2);
     for (const value of ["task.sourceText", "item.evidenceQuote"]) expect(componentSource).toContain(`dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(${value}, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }}`);
     expect(componentSource).not.toMatch(/\bfetch\(/);
