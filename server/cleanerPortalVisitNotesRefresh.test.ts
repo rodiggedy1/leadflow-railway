@@ -20,6 +20,7 @@ type Job = Record<string, any>;
 const job = (overrides: Job = {}): Job => ({
   portalJobKey: "leadflow:701", customerName: "Synthetic Customer", customerPhone: "+12025550701",
   address: "701 Test Street", time: "12:30 PM", jobDate: "2026-11-13", serviceDateTime: "2026-11-13T17:30:00Z",
+  serviceName: null,
   bedrooms: 2, bathrooms: 1, extras: [], checklistItems: [], bookingStatus: "assigned", jobStatus: "assigned",
   jobIndex: 1, totalJobsToday: 1, basePay: 80, customerNotes: null, staffNotes: null, ...overrides,
 });
@@ -200,6 +201,22 @@ function portal(day: "today" | "tomorrow" = "today", automatic = false) {
 }
 
 describe("open cleaner portal visit notes follow actual refreshed query data", () => {
+  it.each(["today", "tomorrow"] as const)("shows the stored hourly service in the open %s drawer instead of inferring it from extras", async day => {
+    const p = portal(day);
+    const opening = p.drawer().props.job;
+    await p.refresh([{ ...opening, serviceName: "Hourly cleaning", customerNotes: "Use side entrance", staffNotes: "Two cleaners for three hours", extras: ["move_in_move_out"] }]);
+    expect(p.drawer().props.job.serviceName).toBe("Hourly cleaning");
+    const markup = p.markup();
+    expect(markup).toContain("Hourly cleaning");
+    expect(markup).not.toContain("Move-out cleaning");
+    expect(markup).toContain("Customer:");
+    expect(markup).toContain("Use side entrance");
+    expect(markup).toContain("Staff:");
+    expect(markup).toContain("Two cleaners for three hours");
+    expect(p.drawer().props.job.basePay).toBe(opening.basePay);
+    expect(p.drawer().props.job.time).toBe(opening.time);
+    for (const mutation of Object.values(p.mutations)) expect(mutation.mutate).not.toHaveBeenCalled();
+  });
   it("reproduces the two unrelated source-contract failures against the untouched released control", () => {
     const releasedRead = (absolute: string) => {
       const relative = absolute.slice(root.length + 1);

@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { getCompletedBookingsForDate, type Launch27Booking } from "./launch27";
 import { businessLocalDateTimeToUtcMs } from "./utils/businessTime";
 import { effectiveNativeFutureAmount } from "../shared/nativeBookingManualAmounts";
+import { saveLaunch27StaffNotes } from "./leadflowLaunch27VisitNotes";
 
 export const LEADFLOW_JOB_IMPORT_DAYS = 30;
 export const LEADFLOW_JOB_ORIGIN_LAUNCH27 = "launch27_import";
@@ -187,8 +188,9 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
     const sourceIsActive = isActiveLaunch27Booking(booking);
     if (sourceIsActive) active++;
     const existing = await db.select({ id: leadflowJobs.id }).from(leadflowJobs).where(eq(leadflowJobs.launch27BookingId, booking.id)).limit(1);
+    const { staffNotes, ...jobValues } = launch27BookingToLeadflowJob(booking, date);
     const values = {
-      ...launch27BookingToLeadflowJob(booking, date),
+      ...jobValues,
       ...(sourceIsActive ? {} : { nextOccurrenceCreatedAt: new Date() }),
     };
     const placeholder = sourceIsActive
@@ -199,6 +201,7 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
       : null;
     if (existing.length > 0) {
       await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, existing[0].id));
+      await saveLaunch27StaffNotes(db, [{ launch27BookingId: booking.id, staffNotes }]);
       if (placeholder && options.mergeExistingDuplicates) {
         consumedPlaceholderIds.add(placeholder.id);
         await mergeRecurringPlaceholderIntoImportedJob(db, placeholder.id, existing[0].id);
@@ -209,6 +212,7 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
     if (placeholder) {
       consumedPlaceholderIds.add(placeholder.id);
       await db.update(leadflowJobs).set(values).where(eq(leadflowJobs.id, placeholder.id));
+      await saveLaunch27StaffNotes(db, [{ launch27BookingId: booking.id, staffNotes }]);
       updated++;
       continue;
     }
@@ -226,6 +230,7 @@ export async function importLaunch27JobsForDate(date: string, options: { markMis
       }
       updated++;
     }
+    await saveLaunch27StaffNotes(db, [{ launch27BookingId: booking.id, staffNotes }]);
   }
 
   if (options.markMissing) {

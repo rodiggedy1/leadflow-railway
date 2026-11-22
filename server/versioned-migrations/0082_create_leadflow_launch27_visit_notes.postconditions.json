@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "table": "leadflow_launch27_visit_notes",
+  "columns": [
+    { "name": "launch27BookingId", "columnType": "int", "nullable": false },
+    { "name": "staffNotes", "columnType": "text", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["launch27BookingId"], "unique": true }
+  ]
+}

@@ -78,6 +78,7 @@ type WorkspaceRow = {
   recurrence: string | null;
   extras: NativeExtra[];
   specialRequestNotes: string[];
+  staffNotes?: string | null;
   assignmentStatus: string;
   assignedTeamId?: number | null;
   assignedTeamName: string | null;
@@ -887,6 +888,7 @@ export default function NativeBookingsWorkspace({
           recurrence: job.frequency,
           extras: importedExtrasFrom(job.extras),
           specialRequestNotes: job.customerNotes ? [job.customerNotes] : [],
+          staffNotes: job.staffNotes ?? null,
           assignmentStatus: job.teamName ? "assigned" : "unassigned",
           assignedTeamId: job.teamId,
           assignedTeamName: job.teamName,

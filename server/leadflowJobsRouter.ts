@@ -14,6 +14,7 @@ import { calculateEffectivePayroll } from "./payrollCalculator";
 import { summarizeDashboardServices, summarizeDashboardSources } from "./dashboardAnalyticsPresentation";
 import { bookingRescheduleDateSchema, bookingRescheduleModeSchema, bookingRescheduleTimeSchema } from "../shared/bookingReschedule";
 import { operationalBookingLocalTime, rescheduleOperationalBooking } from "./bookingRescheduleService";
+import { withLaunch27StaffNotes } from "./leadflowLaunch27VisitNotes";
 
 const listInput = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -1075,7 +1076,8 @@ export const leadflowJobsRouter = router({
       .from(leadflowJobs)
       .where(eq(leadflowJobs.jobDate, input.date))
       .orderBy(asc(leadflowJobs.serviceDateTime), asc(leadflowJobs.id));
-    return rows.filter((row) => !search || `${row.customerName} ${row.customerPhone ?? ""} ${row.customerEmail ?? ""} ${row.jobAddress ?? ""} ${row.launch27BookingId ?? ""}`.toLowerCase().includes(search));
+    const filtered = rows.filter((row) => !search || `${row.customerName} ${row.customerPhone ?? ""} ${row.customerEmail ?? ""} ${row.jobAddress ?? ""} ${row.launch27BookingId ?? ""}`.toLowerCase().includes(search));
+    return withLaunch27StaffNotes(db, filtered);
   }),
 
   staffPhotos: bookingsAgentProcedure.input(bookingPhotoReferenceInput).query(async ({ input }) => {

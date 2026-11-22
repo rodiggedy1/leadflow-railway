@@ -6,6 +6,7 @@ import { isValidAuditDate } from "./dailyActionAuditEngine";
 import type { Launch27Booking } from "./launch27";
 import { launch27BookingToLeadflowJob } from "./leadflowJobsService";
 import { runLiveTextSyncTransaction } from "./liveTextMonitorSyncTransaction";
+import { saveLaunch27StaffNotes } from "./leadflowLaunch27VisitNotes";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type PersistenceResult = Pick<
@@ -196,7 +197,8 @@ export async function persistLiveTextSyncDate(
       complete: true,
       refreshedJobIds: [],
     };
-    for (const values of mapped) {
+    const staffNotesToSave: Array<{ launch27BookingId: number; staffNotes: string | null }> = [];
+    for (const { staffNotes, ...values } of mapped) {
       const existing = bySourceId.get(values.launch27BookingId);
       if (existing) {
         if (existing.origin !== SOURCE_ORIGIN || existing.bookingId !== null) {
@@ -219,6 +221,7 @@ export async function persistLiveTextSyncDate(
             bedrooms: values.bedrooms,
             bathrooms: values.bathrooms,
             extras: values.extras,
+            customerNotes: values.customerNotes,
             bookingStatus: values.bookingStatus,
             teamName: values.teamName,
             teamId: values.teamId,
@@ -251,7 +254,9 @@ export async function persistLiveTextSyncDate(
         result.created++;
         result.refreshedJobIds.push(insertedId);
       }
+      staffNotesToSave.push({ launch27BookingId: values.launch27BookingId, staffNotes });
     }
+    await saveLaunch27StaffNotes(tx, staffNotesToSave);
     // The owner returns this receipt only after an acknowledged in-budget COMMIT.
     return result;
   });

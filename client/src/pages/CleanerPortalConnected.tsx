@@ -20,6 +20,7 @@ type PortalJob = {
   time: string;
   jobDate: string;
   serviceDateTime: string;
+  serviceName?: string | null;
   bedrooms: number | null;
   bathrooms: number;
   extras: string[];
@@ -36,7 +37,7 @@ type PortalJob = {
 function withCurrentVisitDetails(job: PortalJob, currentJobs: PortalJob[] | undefined): PortalJob {
   const current = currentJobs?.find(item => item.portalJobKey === job.portalJobKey);
   if (!current) return job;
-  return { ...job, customerNotes: current.customerNotes, staffNotes: current.staffNotes, extras: current.extras };
+  return { ...job, serviceName: current.serviceName, customerNotes: current.customerNotes, staffNotes: current.staffNotes, extras: current.extras };
 }
 
 type WeekJob = {
@@ -46,6 +47,7 @@ type WeekJob = {
   time: string;
   jobDate: string;
   dateLabel: string;
+  serviceName?: string | null;
   bathrooms: number;
   extras: string[];
   jobStatus: string;
@@ -106,6 +108,8 @@ function ordinal(index: number) {
 }
 
 function serviceLabel(job: PortalJob | WeekJob) {
+  const serviceName = job.serviceName?.trim();
+  if (serviceName) return serviceName;
   if ((job.extras ?? []).includes("move_in_move_out")) return "Move-out cleaning";
   if ((job.extras ?? []).length > 0) return "Home cleaning with extras";
   return "Home cleaning";

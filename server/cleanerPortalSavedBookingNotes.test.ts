@@ -19,6 +19,7 @@ vi.mock("../drizzle/schema", () => {
   return Object.fromEntries(["bookings", "leadflowJobs", "cleanerPortalJobProgress", "cleanerProfiles", "schedulingTeams", "teamWorkSchedule"].map(name => [name, table(name)]));
 });
 vi.mock("../drizzle/leadflowPayrollAdjustments", () => ({ leadflowJobPayrollAdjustments: { name: "adjustments", leadflowJobId: { field: "leadflowJobId" }, amountCents: { field: "amountCents" } } }));
+vi.mock("../drizzle/leadflowLaunch27VisitNotes", () => ({ leadflowLaunch27VisitNotes: { name: "visitNotes", launch27BookingId: { field: "launch27BookingId" }, staffNotes: { field: "staffNotes" } } }));
 vi.mock("drizzle-orm", () => ({
   and: (...conditions: unknown[]) => ({ conditions }), asc: vi.fn(), eq: vi.fn(), gte: vi.fn(), lte: vi.fn(), ne: vi.fn(), gt: vi.fn(),
   inArray: (column: { field: string }, values: number[]) => ({ column, values }),
@@ -29,11 +30,12 @@ import { cleanerPortalReadOnlyRouter } from "./cleanerPortalReadOnlyRouter";
 type Row = Record<string, any>;
 let canonical: Row[];
 let rows: Row[];
+let visitNotes: Row[];
 let selections: Array<{ table: string; fields: string[]; values: number[] }>;
 const operational = (overrides: Row = {}): Row => ({
   id: 701, bookingId: 7, customerName: "Synthetic Customer", customerPhone: "+12025550701", jobAddress: "701 Test Street",
   jobDate: "2026-11-13", serviceDateTime: "2026-11-13T17:30:00Z", bedrooms: 2, bathrooms: 1, extras: "[]", bookingStatus: "assigned",
-  jobTotalCents: 19000, customerNotes: "Stale operational note", teamId: 3, ...overrides,
+  jobTotalCents: 19000, customerNotes: "Stale operational note", teamId: 3, origin: "native_booking", launch27BookingId: null, serviceName: "Hourly Cleaning", ...overrides,
 });
 const procedures = ["getMyJobsToday", "getMyJobsTomorrow", "getMyJobsWeek"] as const;
 const caller = () => cleanerPortalReadOnlyRouter.createCaller({ cleaner: { cleanerId: 9 } });
@@ -41,6 +43,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   canonical = [{ id: 7, specialRequestNotes: ["Ring the bell", "Dog stays upstairs"], companyNotes: " Use the side entrance ", extras: [] }];
   rows = [{ job: operational(), progress: { jobStatus: "in_progress" }, payPercent: "0.5" }];
+  visitNotes = [];
   selections = [];
   const db = { select(fields: Record<string, { field: string }>) {
     let table: string;
@@ -48,6 +51,7 @@ beforeEach(() => {
       async where(condition: { column: { field: string }; values: number[] }) {
         selections.push({ table, fields: Object.keys(fields), values: condition.values });
         if (table === "adjustments") return [];
+        if (table === "visitNotes") return visitNotes.filter(row => condition.values.includes(row.launch27BookingId)).map(row => Object.fromEntries(Object.entries(fields).map(([name, column]) => [name, row[column.field]])));
         if (table !== "bookings") throw new Error("Unexpected notes query");
         return canonical.filter(row => condition.values.includes(row.id)).map(row => Object.fromEntries(Object.entries(fields).map(([name, column]) => [name, row[column.field]])));
       },
@@ -103,6 +107,27 @@ describe("cleaner portal reads the same saved notes as Booking CRM (offline)", (
     await expect(cleanerPortalReadOnlyRouter.createCaller({}).getMyJobsToday()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     expect(mocks.list).not.toHaveBeenCalled();
     expect(selections).toEqual([]);
+  });
+  it.each(procedures)("%s batches imported staff notes by exact stable ID and exposes the actual service without changing native notes", async procedure => {
+    rows.push({ job: operational({ id: 702, bookingId: null, origin: "launch27_import", launch27BookingId: 502, customerNotes: "Imported customer instructions" }), progress: null, payPercent: "0.5" });
+    rows.push({ job: operational({ id: 703, bookingId: null, origin: "launch27_import", launch27BookingId: 503 }), progress: null, payPercent: "0.5" });
+    visitNotes = [{ launch27BookingId: 502, staffNotes: "Exact visit staff note" }, { launch27BookingId: 503, staffNotes: "Other owned visit note" }, { launch27BookingId: 999, staffNotes: "Unowned household note" }];
+    const before = structuredClone(rows);
+    const result = await caller()[procedure]();
+    expect(result[0]).toMatchObject({ serviceName: "Hourly Cleaning", customerNotes: "Ring the bell\nDog stays upstairs\nUse the side entrance", staffNotes: null });
+    expect(result[1]).toMatchObject({ serviceName: "Hourly Cleaning", customerNotes: "Imported customer instructions", staffNotes: "Exact visit staff note", basePay: 80 });
+    expect(result[2].staffNotes).toBe("Other owned visit note");
+    expect(selections.filter(query => query.table === "visitNotes")).toEqual([{ table: "visitNotes", fields: ["launch27BookingId", "staffNotes"], values: [502, 503] }]);
+    expect(JSON.stringify(result)).not.toContain("Unowned household note");
+    expect(rows).toEqual(before);
+    visitNotes[0].staffNotes = null;
+    expect((await caller()[procedure]())[1].staffNotes).toBeNull();
+  });
+  it("does not add any staff-note query to range payout or earnings", async () => {
+    rows = [{ job: operational({ bookingId: null, origin: "launch27_import", launch27BookingId: 502 }), progress: null, payPercent: "0.5" }];
+    await caller().myJobsRange({ from: "2026-11-13", to: "2026-11-20" });
+    await caller().getMyEarnings();
+    expect(selections.some(query => query.table === "visitNotes")).toBe(false);
   });
   it.each(procedures)("%s reads added, replaced and cleared saved extras without changing payout or job progress", async procedure => {
     const before = structuredClone(rows);

@@ -102,6 +102,7 @@ function fixture(options: { uniqueStableIds?: boolean } = {}) {
   CREATE TABLE booking_assignments (id INTEGER PRIMARY KEY, bookingId INTEGER, teamId INTEGER);
   CREATE TABLE leadflow_job_payroll_adjustments (id INTEGER PRIMARY KEY, leadflowJobId INTEGER, amountCents INTEGER);
   CREATE TABLE cleaner_portal_job_progress (id INTEGER PRIMARY KEY, leadflowJobId INTEGER, jobStatus TEXT);
+  CREATE TABLE leadflow_launch27_visit_notes (launch27BookingId INTEGER PRIMARY KEY, staffNotes TEXT);
   CREATE TABLE leadflow_booking_messages (id INTEGER PRIMARY KEY, leadflowJobId INTEGER, message TEXT);
   INSERT INTO bookings VALUES (201, 'paid', 12345);
   INSERT INTO booking_assignments VALUES (1, 201, 8);
@@ -176,10 +177,11 @@ function fixture(options: { uniqueStableIds?: boolean } = {}) {
     "leadflow_job_payroll_adjustments",
     "cleaner_portal_job_progress",
     "leadflow_booking_messages",
+    "leadflow_launch27_visit_notes",
   ];
   const snapshot = () =>
     Object.fromEntries(
-      tables.map(table => [table, read(`SELECT * FROM ${table} ORDER BY id`)])
+      tables.map(table => [table, read(`SELECT * FROM ${table} ORDER BY ${table === "leadflow_launch27_visit_notes" ? "launch27BookingId" : "id"}`)])
     );
   const trace: Trace[] = [];
   let inTransaction = false;
@@ -216,6 +218,7 @@ function fixture(options: { uniqueStableIds?: boolean } = {}) {
         throw new Error("Repository query outside single transaction");
       const localSql = sql
         .replace(/ for update$/i, "")
+        .replace(/on duplicate key update `staffNotes` = VALUES\(staffNotes\)/i, "ON CONFLICT(launch27BookingId) DO UPDATE SET staffNotes = excluded.staffNotes")
         .replace(/\bdefault\b/gi, "null");
       const statement = sqlite.prepare(localSql);
       if (/^select/i.test(sql)) {
@@ -284,7 +287,11 @@ function fixture(options: { uniqueStableIds?: boolean } = {}) {
 function assertOnlyJobWrites(h: ReturnType<typeof fixture>) {
   expect(h.writes().length).toBeGreaterThan(0);
   for (const call of h.writes()) {
-    expect(call.sql).toMatch(/^(?:insert into|update) `leadflow_jobs`/i);
+    expect(call.sql).toMatch(/^(?:insert into|update) `leadflow_(?:jobs|launch27_visit_notes)`/i);
+    if (call.sql.includes("`leadflow_launch27_visit_notes`")) {
+      expect(call.sql).toMatch(/\(`launch27BookingId`, `staffNotes`\)/);
+      expect(call.sql).toMatch(/on duplicate key update `staffNotes` = VALUES\(staffNotes\)$/);
+    }
     expect(call.inTransaction).toBe(true);
   }
   expect(h.trace.filter(call => call.sql === "begin")).toHaveLength(1);
@@ -297,6 +304,31 @@ function assertOnlyJobWrites(h: ReturnType<typeof fixture>) {
 }
 
 describe("safe selected-date local monitor persistence — actual Drizzle, offline driver", () => {
+  it("future syncs replace and clear notes only on the exact stable imported visit", async () => {
+    const h = fixture();
+    h.seed();
+    h.seed({ id: 42, launch27BookingId: 702, bookingSeriesId: 92, customerNotes: "Other visit local notes" });
+    const other = h.snapshot().leadflow_jobs[1];
+    for (const notes of [
+      { customerNotes: "First provider instructions", staffNotes: "First staff note" },
+      { customerNotes: "Replacement provider instructions", staffNotes: "Replacement staff note" },
+      { customerNotes: "", staffNotes: "" },
+    ]) {
+      await persistLiveTextSyncDate(DATE, [booking(701, notes)], h.db);
+      expect(h.snapshot().leadflow_jobs[0].customerNotes).toBe(notes.customerNotes || null);
+      expect(h.snapshot().leadflow_launch27_visit_notes).toEqual([{ launch27BookingId: 701, staffNotes: notes.staffNotes || null }]);
+      expect(h.snapshot().leadflow_jobs[1]).toEqual(other);
+    }
+  });
+  it("rolls back the job notes when separate staff note persistence fails", async () => {
+    const h = fixture();
+    h.seed();
+    const before = h.snapshot();
+    h.hook(call => { if (call.sql.startsWith("insert into `leadflow_launch27_visit_notes`")) throw new Error("Injected staff notes failure"); });
+    await expect(persistLiveTextSyncDate(DATE, [booking()], h.db)).rejects.toThrow();
+    expect(h.snapshot()).toEqual(before);
+    expect(h.trace.at(-1)?.sql).toBe("rollback");
+  });
   it("locks ALL stable-ID bindings before any write and preserves amount/card/series/review/workflow/payroll fields", async () => {
     const h = fixture();
     h.seed();
@@ -324,15 +356,20 @@ describe("safe selected-date local monitor persistence — actual Drizzle, offli
       bedrooms: 2,
       bathrooms: 1,
       extras: '["clean_inside_oven"]',
+      customerNotes: "Source notes",
       bookingStatus: "assigned",
       teamName: "Source team",
       teamId: 12,
       missingFromLaunch27At: null,
     });
     for (const table of Object.keys(before).filter(
-      table => table !== "leadflow_jobs"
+      table => table !== "leadflow_jobs" && table !== "leadflow_launch27_visit_notes"
     ))
       expect(after[table]).toEqual(before[table]);
+    expect(after.leadflow_launch27_visit_notes).toEqual([
+      { launch27BookingId: 701, staffNotes: "Staff source notes" },
+      { launch27BookingId: 702, staffNotes: "Staff source notes" },
+    ]);
     const lock = h.trace.find(call => /^select/i.test(call.sql))!;
     expect(lock.sql).toMatch(
       /where `leadflow_jobs`\.`launch27BookingId` in \(\?, \?\) order by .* for update$/i
@@ -344,8 +381,9 @@ describe("safe selected-date local monitor persistence — actual Drizzle, offli
     expect(update).toMatch(
       /where .*`launch27BookingId` = \? and .*`origin` = \? and .*`bookingId` is null/i
     );
+    expect(update.split(" where ")[0]).toContain("`customerNotes` = ?");
     expect(update.split(" where ")[0]).not.toMatch(
-      /jobTotalCents|payment|hasStripeCard|bookingSeriesId|nextOccurrence|review|frequency|customerNotes/i
+      /jobTotalCents|payment|hasStripeCard|bookingSeriesId|nextOccurrence|review|frequency|staffNotes/i
     );
     assertOnlyJobWrites(h);
   });
@@ -374,7 +412,8 @@ describe("safe selected-date local monitor persistence — actual Drizzle, offli
         refreshedJobIds: [42],
       });
       expect(h.snapshot().leadflow_jobs[0]).toEqual(before.leadflow_jobs[0]);
-      expect(h.writes()).toHaveLength(1);
+      expect(h.writes()).toHaveLength(2);
+      expect(h.snapshot().leadflow_launch27_visit_notes).toEqual([{ launch27BookingId: 702, staffNotes: "Staff source notes" }]);
       assertOnlyJobWrites(h);
     }
   );
@@ -436,11 +475,13 @@ describe("safe selected-date local monitor persistence — actual Drizzle, offli
       paymentBrand: "visa",
       paymentLast4: "4242",
       nextOccurrenceCreatedAt: null,
+      customerNotes: "Source notes",
     });
     for (const table of Object.keys(before).filter(
-      table => table !== "leadflow_jobs"
+      table => table !== "leadflow_jobs" && table !== "leadflow_launch27_visit_notes"
     ))
       expect(h.snapshot()[table]).toEqual(before[table]);
+    expect(h.snapshot().leadflow_launch27_visit_notes).toEqual([{ launch27BookingId: 701, staffNotes: "Staff source notes" }]);
     assertOnlyJobWrites(h);
   });
 
@@ -695,9 +736,10 @@ describe("safe selected-date local monitor persistence — actual Drizzle, offli
     );
     expect(result).toMatchObject({ created: 500, updated: 0, complete: true });
     expect(result.refreshedJobIds).toHaveLength(500);
-    expect(h.writes()).toHaveLength(500);
+    expect(h.writes()).toHaveLength(501);
+    expect(h.snapshot().leadflow_launch27_visit_notes).toHaveLength(500);
     expect(h.trace.filter(call => /^select/i.test(call.sql))).toHaveLength(1);
-    expect(h.trace).toHaveLength(503); // BEGIN, SELECT, <=500 writes, COMMIT.
+    expect(h.trace).toHaveLength(504); // BEGIN, SELECT, <=500 job writes, one notes batch, COMMIT.
     assertOnlyJobWrites(h);
   });
   it.each(["select", "first-write", "last-write"])(

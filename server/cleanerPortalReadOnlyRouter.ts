@@ -10,6 +10,7 @@ import { getPayWeekStart } from "./teamPayRouter";
 import { listOwnedLeadflowJobs } from "./cleanerPortalJobResolver";
 import { findCleanerPortalTeam } from "./cleanerPortalOwnership";
 import { nativeBookingCustomerNotes, nativeBookingExtras } from "./bookingLifecycleService";
+import { withLaunch27StaffNotes } from "./leadflowLaunch27VisitNotes";
 
 function etDate(offsetDays = 0) {
   const raw = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + offsetDays * 86_400_000));
@@ -75,7 +76,7 @@ async function cleanerTeam(cleanerId: number) {
   return { db, cleaner, teamId: cleaner.launch27TeamId };
 }
 
-function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | null, progress?: typeof cleanerPortalJobProgress.$inferSelect | null, jobIndex = 1, totalJobsToday = 0, adjustmentCents = 0) {
+function portalJob(job: typeof leadflowJobs.$inferSelect & { staffNotes?: string | null }, payPercent: string | null, progress?: typeof cleanerPortalJobProgress.$inferSelect | null, jobIndex = 1, totalJobsToday = 0, adjustmentCents = 0) {
   const payroll = calculateEffectivePayroll({
     jobDate: job.jobDate,
     jobRevenue: job.jobTotalCents / 100,
@@ -90,6 +91,7 @@ function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | n
     time: timeForPortal(job.serviceDateTime),
     jobDate: job.jobDate,
     serviceDateTime: job.serviceDateTime ?? "",
+    serviceName: job.serviceName ?? null,
     bedrooms: job.bedrooms,
     bathrooms: job.bathrooms ?? 1,
     extras: extrasForPortal(job.extras),
@@ -100,7 +102,7 @@ function portalJob(job: typeof leadflowJobs.$inferSelect, payPercent: string | n
     totalJobsToday,
     basePay: payroll.finalPay,
     customerNotes: job.customerNotes ?? null,
-    staffNotes: null,
+    staffNotes: job.staffNotes ?? null,
   };
 }
 
@@ -117,7 +119,7 @@ async function adjustmentCentsByJob(db: NonNullable<Awaited<ReturnType<typeof ge
   return totals;
 }
 
-async function listOwnedImportedJobs(cleanerId: number, startDate: string, endDate: string) {
+async function listOwnedImportedJobs(cleanerId: number, startDate: string, endDate: string, includeStaffNotes = false) {
   const { db, team, jobs } = await listOwnedLeadflowJobs(cleanerId, startDate, endDate, "Cleaner Portal is temporarily unavailable.");
   const adjustmentCents = await adjustmentCentsByJob(db, jobs.map(({ job }) => job.id));
   const bookingIds = Array.from(new Set(jobs.map(({ job }) => job.bookingId).filter((id): id is number => id !== null)));
@@ -133,24 +135,25 @@ async function listOwnedImportedJobs(cleanerId: number, startDate: string, endDa
   const jobsWithSavedNotes = jobs.map(row => row.job.bookingId !== null && savedDetailsByBookingId.has(row.job.bookingId)
     ? { ...row, job: { ...row.job, ...savedDetailsByBookingId.get(row.job.bookingId)! } }
     : row);
-  return { cleaner: team, jobs: jobsWithSavedNotes, adjustmentCents };
+  const enriched = includeStaffNotes ? await withLaunch27StaffNotes(db, jobsWithSavedNotes.map(row => row.job)) : null;
+  return { cleaner: team, jobs: jobsWithSavedNotes.map((row, index) => ({ ...row, job: enriched?.[index] ?? { ...row.job, staffNotes: null } })), adjustmentCents };
 }
 
 export const cleanerPortalReadOnlyRouter = router({
   getMyJobsToday: cleanerProcedure.query(async ({ ctx }) => {
     const today = etDate();
-    const { cleaner, jobs, adjustmentCents } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, today, today);
+    const { cleaner, jobs, adjustmentCents } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, today, today, true);
     return jobs.map(({ job, progress, payPercent }, index) => portalJob(job, payPercent, progress, index + 1, jobs.length, adjustmentCents.get(job.id) ?? 0));
   }),
   getMyJobsTomorrow: cleanerProcedure.query(async ({ ctx }) => {
     const tomorrow = etDate(1);
-    const { cleaner, jobs, adjustmentCents } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, tomorrow, tomorrow);
+    const { cleaner, jobs, adjustmentCents } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, tomorrow, tomorrow, true);
     return jobs.map(({ job, progress, payPercent }, index) => portalJob(job, payPercent, progress, index + 1, jobs.length, adjustmentCents.get(job.id) ?? 0));
   }),
   getMyJobsWeek: cleanerProcedure.query(async ({ ctx }) => {
     const today = etDate();
     const tomorrow = etDate(1);
-    const { cleaner, jobs, adjustmentCents } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, today, etDate(7));
+    const { cleaner, jobs, adjustmentCents } = await listOwnedImportedJobs(ctx.cleaner.cleanerId, today, etDate(7), true);
     return jobs.map(({ job, progress, payPercent }, index) => ({ ...portalJob(job, payPercent, progress, index + 1, jobs.length, adjustmentCents.get(job.id) ?? 0), dateLabel: job.jobDate === today ? "today" : job.jobDate === tomorrow ? "tomorrow" : "week" }));
   }),
   myJobsRange: cleanerProcedure.input(z.object({ from: z.string(), to: z.string() })).query(async ({ ctx, input }) => {

@@ -1369,11 +1369,16 @@ function BookingDetailDrawer({ model }: { model: any }) {
           </section>
           <section className="bcr-editor-section">
             <small>NOTES &amp; SPECIAL REQUESTS</small>
+            {active.source === "leadflow" && <p className="bcr-home-line">Customer notes</p>}
             <textarea
               value={active.specialRequestNotes.join("\n")}
               readOnly
               placeholder="No special requests"
             />
+            {active.source === "leadflow" && <>
+              <p className="bcr-home-line">Staff notes</p>
+              <textarea value={active.staffNotes ?? ""} readOnly placeholder="No staff notes" aria-label="Launch27 staff notes" />
+            </>}
             {(["leadflow", "booking", "funnel", "portal"] as const).includes(active.source) && (
               <div className="bcr-customer-actions bcr-request-actions">
                 <div className="bcr-schedule-fields">
