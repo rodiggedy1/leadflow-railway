@@ -503,16 +503,23 @@ describe("Customer task additive integration and style contract", () => {
     expect(module.exports.alert({ ...message, quickAction: null })).toBe(true);
   });
 
-  it("preserves baseline lead/Thumbtack/draft/thread/header owning bytes and all lead queue props", () => {
+  it("preserves baseline lead/Thumbtack/task/quote/thread/header bytes after the approved World-class removal", () => {
     const hashes = [
       ["function LeadQueue(", "function ServiceAlertPanel(", "f52842376ffb2ac33d69ba754d5c8c539766e7cfb3b1dffe666d85783be5c8ec"],
-      // Released sender labels are already in actual main; this pilot preserves them.
-      ["function SmsConversationDrawer(", "function LiveThreadEntry(", "69923a8dd870c53efda032482acf723fab312bce1249cab20f38e68f9bcdb636"],
       ["function ThreadPanel(", "function SmsInboxRow(", "7ef9b1db7a5bba347acfe619c8ce38dd85112f26712e7abe3c76c3bca9d640be"],
       ["  const openSmsDrawerFromLead =", "  const addPendingOutgoingMessage =", "f71953e06a514c7088ae412fa85c4787684245595a10f39b9cf516d182bebbe6"],
       ['            <div className="ccc-reference-chat-header">', "            <>", "613c833add37ecee6d01744c826ab289b0cce2f467215e6d21d71d454f9e0b3e"],
     ];
     for (const [start, end, expected] of hashes) expect(hash(between(start, end))).toBe(expected);
+    // The full drawer hash intentionally changes when World-class code is removed.
+    // These hashes bind the untouched raw task/quote seams to the pre-removal
+    // e41c532f control, rather than blessing a new whole-drawer hash or stripping tasks.
+    const rawBetween = (start: string, end: string) => pageSource.slice(pageSource.indexOf(start), pageSource.indexOf(end, pageSource.indexOf(start)));
+    for (const [start, end, expected] of [
+      ["  const smsTaskAnchors = useMemo", "  const smsConversationContext = useMemo", "6f34ade8f1ec274eb2cc330dafcfcfec38caf281fdf8eea3fd86102d1943a4cd"],
+      ['    <div className="ccc-live-sms-messages"', "    <footer>", "0aa7912bee3d026b9ca319eedce47a252cdccd5bb4556dd33aa32357a3d5c65a"],
+      ["function QuoteAssistantModal(", "function LiveThreadEntry(", "abc43f7064cea863c3dac802dd5f5936c08492f06772d5871b671c3b80801b9f"],
+    ]) expect(hash(rawBetween(start, end))).toBe(expected);
     // Only the resolver's SMS-specific type annotation and the leading email
     // callback branch are approved; retain all original exact-session SMS bytes.
     expect(hash(between("  if (!Number.isSafeInteger(task.sessionId)", "\nfunction formatPhoneDisplay"))).toBe("8d54784afdd35a587350b6865566dabfb8f99696e9dc522c1950e461744856eb");

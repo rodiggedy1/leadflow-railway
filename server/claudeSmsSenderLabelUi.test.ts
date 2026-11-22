@@ -54,7 +54,7 @@ function workspace(options: { initial?: boolean; history?: unknown[] } = {}) {
     leads: { getCsConversation: { useQuery: () => ({ data: detail }) }, sendMessage: { useMutation: (callbacks: any) => { replyCallbacks = callbacks; return { isPending: false, mutate: send }; } }, sendWorkspaceMessage: { useMutation: (callbacks: any) => { workspaceCallbacks = callbacks; return { isPending: false, mutate: sendWorkspace }; } } },
     leadflowJobs: { customerProfile: { useQuery: () => ({ data: null }) }, teamIdentityByPhone: { useQuery: () => ({ data: null }) } },
     leadflowSchedule: { getSchedule: { useQuery: () => ({ data: null }) } },
-    opsChat: { csReply: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) } },
+    opsChat: { csReply: { useMutation: vi.fn(() => { throw new Error("Removed World-class fallback must not be mounted"); }) } },
     madison: { claudeAlternative: { generate: { useMutation: () => ({ mutateAsync: generate }) }, generateInitialLead: { useMutation: () => ({ mutateAsync: generateInitial }) } } },
     commandCenter: { prepareQuoteAssistant: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) } },
     bookingFunnel: { createCustomerLink: { useMutation: (callbacks: any) => { quoteCallbacks = callbacks; return { isPending: false, mutate: vi.fn() }; } } },
@@ -71,8 +71,7 @@ function workspace(options: { initial?: boolean; history?: unknown[] } = {}) {
     useCallback(callback: any, deps: any[]) { return hooks.useMemo(() => callback, deps); },
     useEffect(effect: () => void | (() => void), deps: any[]) { const i = cursor++; if (changed(slots[i], deps)) { const cleanup = slots[i]?.cleanup; slots[i] = { deps, cleanup }; effects.push(() => { cleanup?.(); const next = effect(); slots[i].cleanup = typeof next === "function" ? next : undefined; }); } },
   };
-  let tokenRead = false;
-  const fetchMock = vi.fn(async () => ({ ok: true, body: { getReader: () => ({ read: async () => { if (tokenRead) return { done: true }; tokenRead = true; return { done: false, value: new TextEncoder().encode('data: {"token":"Existing OpenAI draft."}\n') }; }, cancel: async () => {} }) } }));
+  const fetchMock = vi.fn(() => { throw new Error("Removed World-class stream must not be requested"); });
   const module = { exports: {} as { Drawer: (props: any) => Element } };
   const timeline = ({ children }: any) => children(() => null);
   runInNewContext(compiled, { module, exports: module.exports, React, ...hooks, trpc, ...provenance,
@@ -126,13 +125,26 @@ describe("internal sender-label actual composer provenance", () => {
     expect((initial ? w.sendWorkspace : w.send).mock.calls[0][0]).toEqual({ ...expected, claudeDraftSource: draftSource(initial ? "initial_lead" : "sms_reply") }); w.dispose();
   });
 
-  it.each(["clear", "onBeforeInput", "onPaste", "onCut", "onKeyDown", "OpenAI", "quote"])("clears assistance on %s without changing normal sending", async action => {
+  it.each(["clear", "onBeforeInput", "onPaste", "onCut", "onKeyDown", "quote"])("clears assistance on %s without changing normal sending", async action => {
     const w = workspace(); await w.select();
     if (action === "clear") { w.edit(""); w.edit("Unrelated manual reply"); }
-    else if (action === "OpenAI") w.click("Insert into reply");
     else if (action === "quote") w.quote();
     else w.replace(action, "Unrelated manual reply");
     const value = composer(w.render()).props.value.trim(); w.submit(); expect(w.send.mock.calls[0][0]).toEqual(manualReply(value)); w.dispose();
+  });
+
+  it("removed World-class generation and Insert cannot replace or clear a selected Claude draft", async () => {
+    const w = workspace(); await w.select();
+    expect(button(w.render(), "Insert into reply")).toBeUndefined();
+    expect(button(w.render(), "Regenerate")).toBeUndefined();
+    expect(w.html()).not.toContain("World-class draft");
+    w.history([inbound, { role: "user", content: "Also Saturday?", opMsgId: "OM_NEW", ts: NOW + 10 }]);
+    await w.settle();
+    expect(w.fetchMock).not.toHaveBeenCalled();
+    expect(composer(w.render()).props.value).toBe("Selected Claude draft.");
+    w.submit();
+    expect(w.send).toHaveBeenCalledWith({ ...manualReply("Selected Claude draft."), claudeDraftSource: draftSource() });
+    w.dispose();
   });
 
   it.each(["onBeforeInput", "onPaste", "onKeyDown"])("partial edits via %s preserve selected assistance", async eventName => {

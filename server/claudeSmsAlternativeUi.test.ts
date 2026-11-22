@@ -39,7 +39,6 @@ type Props = { conversation: Conversation; conversations: Conversation[]; caller
   onNotice: (message: string) => void; onOpenLeadDetails: () => void; onSessionResolved: () => void; onClose: () => void };
 type Element = React.ReactElement<Record<string, unknown>>;
 type Slot = { value?: unknown; deps?: readonly unknown[]; cleanup?: () => void };
-type PrimaryInput = { conversationContext: string; customerName: string; jobContext: string; scenario: string };
 const conversation = (overrides: Partial<Conversation> = {}): Conversation => ({
   id: 42, leadName: "Synthetic customer", leadPhone: "+13015550123", leadSource: "cs-inbound",
   lastMessageText: "Please confirm Friday.", lastMessageTs: 1800000000000, lastMsgTs: 1800000000000,
@@ -98,7 +97,7 @@ const findButton = (tree: unknown, label: string) => elements(tree).find((node) 
 const click = (node: Element | undefined) => { expect(node).toBeDefined(); (node!.props.onClick as () => void)(); };
 const textarea = (tree: unknown) => elements(tree).find((node) => node.type === "textarea")!;
 
-function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: string; history?: string; primary?: "pending" | "fallback";
+function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: string; history?: string;
   lead?: LeadSnapshot | null; snapshot?: LeadSnapshot | null; leadDraft?: Props["leadDraft"]; noDetail?: boolean; taskRows?: Record<string, string[]> } = {}) {
   let selected = conversation(options.selected);
   let detail: Detail | undefined = options.noDetail ? undefined : { sessionId: selected.id, leadPhone: selected.leadPhone, messageHistory: options.history ?? history() };
@@ -106,15 +105,9 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   let leadCardPhone = options.leadCardPhone;
   let leadDraft = options.leadDraft;
   let live = [selected];
-  let primaryCallbacks: { onSuccess: (data: { reply: string }) => void; onError: () => void };
-  const fallback = { isPending: false, mutate: vi.fn((_request: PrimaryInput) => { fallback.isPending = true; }) };
-  const primaryResponse = deferred<{ ok: boolean; body: { getReader: () => { read: () => Promise<{ done: boolean; value?: Uint8Array }>; cancel: () => Promise<void> } } | null }>();
-  let tokenRead = false;
-  const successResponse = () => ({ ok: true, body: { getReader: () => ({
-    read: async () => { if (tokenRead) return { done: true }; tokenRead = true; return { done: false, value: new TextEncoder().encode('data: {"token":"Existing primary draft."}\n') }; },
-    cancel: async () => {},
-  }) } });
-  const fetchMock = vi.fn(() => options.primary === "pending" ? primaryResponse.promise : Promise.resolve(options.primary === "fallback" ? { ok: false, body: null } : successResponse()));
+  const fallback = { isPending: true, mutate: vi.fn(() => { throw new Error("Forbidden OpenAI World-class fallback"); }) };
+  const fallbackUseMutation = vi.fn(() => fallback);
+  const fetchMock = vi.fn(() => { throw new Error("Forbidden Gemini World-class stream/network request"); });
   const claudeResponse = deferred<ClaudeSmsAlternativeResult>();
   const generate = vi.fn((_input: ClaudeSmsAlternativeGenerateInput) => claudeResponse.promise);
   const initialResponse = deferred<ClaudeInitialLeadResult>();
@@ -129,7 +122,7 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
     leads: { getCsConversation: { useQuery: vi.fn(() => ({ data: detail })) }, sendMessage: { useMutation: () => ({ isPending: false, mutate: send }) }, sendWorkspaceMessage: { useMutation: () => ({ isPending: false, mutate: workspaceSend }) } },
     leadflowJobs: { customerProfile: { useQuery: () => ({ data: null }) }, teamIdentityByPhone: { useQuery: () => ({ data: null }) } },
     leadflowSchedule: { getSchedule: { useQuery: () => ({ data: null }) } },
-    opsChat: { csReply: { useMutation: (callbacks: typeof primaryCallbacks) => { primaryCallbacks = callbacks; return fallback; } } },
+    opsChat: { csReply: { useMutation: fallbackUseMutation } },
     madison: { claudeAlternative: { generate: { useMutation: () => ({ mutateAsync: generate }) }, generateInitialLead: { useMutation: () => ({ mutateAsync: generateInitial }) } } },
     commandCenter: { prepareQuoteAssistant: { useMutation: () => noopMutation } },
     bookingFunnel: { createCustomerLink: { useMutation: () => noopMutation } },
@@ -192,6 +185,15 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
         photoMap: {}, businessDate: "2026-11-15", leadCardPhone, lead: options.lead ?? null, leadCardSnapshot: snapshot, leadDraft,
         onNotice: notice, onOpenLeadDetails: vi.fn(), onSessionResolved: vi.fn(), onClose: vi.fn() }), timeline);
       const pending = jobs; jobs = []; pending.forEach((run) => run());
+      // Check every lifecycle render, including late replies, scope changes and
+      // manual sends. Shared Claude card CSS must not be mistaken for World-class UI.
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fallbackUseMutation).not.toHaveBeenCalled();
+      expect(fallback.mutate).not.toHaveBeenCalled();
+      expect(text(tree)).not.toMatch(/World-class draft|AI is drafting a reply…|Insert into reply|Regenerate/);
+      expect(elements(tree).some(node => node.props.className === "ccc-live-sms-ai-draft-status")).toBe(false);
+      expect(elements(tree).filter(node => node.type === "article" && typeof node.props.className === "string"
+        && node.props.className.startsWith("ccc-live-sms-ai-draft-card")).every(node => node.props["aria-label"] === "Optional Claude draft")).toBe(true);
       if (!dirty) return tree;
     }
     throw new Error("Synthetic drawer did not settle");
@@ -199,30 +201,34 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   const settle = async () => { for (let turn = 0; turn < 20; turn++) { await Promise.resolve(); if (dirty) render(); } return render(); };
   const edit = (value: string) => (textarea(render()).props.onChange as (event: { target: { value: string } }) => void)({ target: { value } });
   render();
-  return { render, settle, html: () => renderToStaticMarkup(render()), edit, generate, claudeResponse, generateInitial, initialResponse, uuid, fetchMock, fallback, send, workspaceSend,
+  return { render, settle, html: () => renderToStaticMarkup(render()), edit, generate, claudeResponse, generateInitial, initialResponse, uuid, fetchMock, fallbackUseMutation, fallback, send, workspaceSend,
     setDetail: (value: Detail | undefined) => { detail = value; }, setLive: (value: Conversation[]) => { live = value; }, setSelected: (value: Conversation) => { selected = value; },
     setSnapshot: (value: LeadSnapshot | null) => { snapshot = value; }, setPhone: (value: string | undefined) => { leadCardPhone = value; },
     setLeadDraft: (value: Props["leadDraft"]) => { leadDraft = value; },
-    primaryDone: () => primaryResponse.resolve(successResponse()),
-    fallbackDone: () => { fallback.isPending = false; primaryCallbacks.onSuccess({ reply: "Existing fallback draft." }); },
     dispose: () => { slots.forEach((slot) => slot.cleanup?.()); dead = true; }, get lateWrites() { return lateWrites; },
   };
 }
 
 describe("optional Claude alternative actual SMS drawer", () => {
-  it("hash-binds the preserved primary stream/fallback/on-open generation and audited local provenance send/composer seams", () => {
-    expect(hash(between("  const smsAutoDraft = trpc.opsChat.csReply.useMutation", "  const streamSmsAutoDraft ="))).toBe("6753f185565120b1277efae066473d385095f19f26715aeea6b147f07c4147af");
-    expect(hash(between("  const streamSmsAutoDraft =", "  const regenerateSmsDraft ="))).toBe("40381e33976dbd16c581aae585c3a41675b33639df988e43b1bddc0b1a43fd63");
-    expect(hash(between("  useEffect(() => {\n    if (conversation.id > 0 && !detail", "  useEffect(() => {\n    if (!detail || (initialBottomScrollDone"))).toBe("e923f10f91c8b832f97e974c7729289d88a4c69be176f8b82a059b7c80b73dee");
+  it("removes the entire World-class transport/lifecycle/UI and hash-binds the original provenance send/composer seams", () => {
+    expect(drawerSource).not.toMatch(/smsAutoDraft|setSmsAutoDraft|autoDraftedForConversationRef|streamSmsAutoDraft|regenerateSmsDraft|insertSmsAutoDraft/);
+    expect(drawerSource).not.toMatch(/fetch\(|opsChat\.csReply|\/api\/cs-reply-stream|AbortController|World-class draft|AI is drafting a reply…|Insert into reply|>Regenerate</);
+    expect(drawerSource).not.toContain('className="ccc-live-sms-ai-draft-status"');
+    expect(drawerSource).not.toContain("ccc-live-sms-ai-draft-toggle");
+    expect(drawerSource).toContain('aria-label="Optional Claude draft"');
     expect(hash(between("  const sendReply = trpc.leads.sendMessage.useMutation", '  return <div className="ccc-live-sms-backdrop"'))).toBe("489f0ebb858b6f609a900911679158d3b22202047fd1783293e3350e1848c3eb");
-    expect(hash(source.split(/(?<=\n)/).find((line) => line.includes('<div className="ccc-live-sms-composer"><textarea'))!)).toBe("9408525778f9b572916a792f7de5e48c3b0091fe204428473d3e8c2dc19b8c07");
-    expect(between("  const regenerateSmsDraft =", "  const insertSmsAutoDraft =").replace("    if (claudeDraftBusyRef.current) return;\n", "")).toBe("  const regenerateSmsDraft = useCallback(() => {\n    autoDraftedForConversationRef.current = null;\n    void streamSmsAutoDraft();\n  }, [streamSmsAutoDraft]);\n");
+    const composer = source.split(/(?<=\n)/).find((line) => line.includes('<div className="ccc-live-sms-composer"><textarea'))!;
+    expect(composer).toContain('placeholder="Write a text reply…"');
+    expect(composer).not.toContain("smsAutoDraftLoading");
+    expect(hash(composer.replace('placeholder="Write a text reply…"', 'placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"}')))
+      .toBe("9408525778f9b572916a792f7de5e48c3b0091fe204428473d3e8c2dc19b8c07");
   });
 
-  it("keeps Claude optional and off team/lead-only drawers, invokes only the existing primary path on open", async () => {
+  it("keeps Claude optional and off team/lead-only drawers, with no Gemini or OpenAI hook/fallback on open", async () => {
     const work = workspace(); await work.settle();
-    expect(work.html()).toContain("Get Claude draft"); expect(work.html()).toContain("World-class draft");
-    expect(work.fetchMock).toHaveBeenCalledTimes(1); expect(work.generate).not.toHaveBeenCalled(); expect(work.uuid).not.toHaveBeenCalled();
+    expect(work.html()).toContain("Get Claude draft"); expect(work.html()).not.toContain("World-class draft");
+    expect(work.fetchMock).not.toHaveBeenCalled(); expect(work.fallbackUseMutation).not.toHaveBeenCalled(); expect(work.fallback.mutate).not.toHaveBeenCalled();
+    expect(work.generate).not.toHaveBeenCalled(); expect(work.generateInitial).not.toHaveBeenCalled(); expect(work.uuid).not.toHaveBeenCalled();
     for (const options of [{ selected: { personType: "team" as const } }, { selected: { id: -42 } }, { leadCardPhone: "+13015550123" }]) {
       const hidden = workspace(options); await hidden.settle(); expect(hidden.html()).not.toContain("Get Claude draft"); expect(hidden.generate).not.toHaveBeenCalled(); hidden.dispose();
     }
@@ -265,25 +271,41 @@ describe("optional Claude alternative actual SMS drawer", () => {
     expect(work.send).not.toHaveBeenCalled(); work.dispose();
   });
 
-  it("coalesces explicit requests and gates Regenerate only until Claude finishes, preserving normal primary regeneration", async () => {
+  it("coalesces explicit Claude requests without a World-class Regenerate control or provider dependency", async () => {
     const work = workspace(); await work.settle();
-    const regenerate = findButton(work.render(), "Regenerate")!;
-    expect(regenerate.props.disabled).toBe(false); click(findButton(work.render(), "Get Claude draft"));
-    expect(findButton(work.render(), "Regenerate")!.props.disabled).toBe(true); click(regenerate);
-    expect(work.fetchMock).toHaveBeenCalledTimes(1);
+    const get = findButton(work.render(), "Get Claude draft")!;
+    expect(get.props.disabled).toBe(false); expect(work.fallback.isPending).toBe(true);
+    click(get); click(get); click(get);
+    expect(work.generate).toHaveBeenCalledTimes(1); expect(work.uuid).toHaveBeenCalledTimes(1);
+    expect(findButton(work.render(), "Getting Claude draft…")!.props.disabled).toBe(true);
+    expect(findButton(work.render(), "Regenerate")).toBeUndefined();
+    expect(textarea(work.render()).props.placeholder).toBe("Write a text reply…");
     work.claudeResponse.resolve(result(work.generate.mock.calls[0][0])); await work.settle();
-    expect(findButton(work.render(), "Regenerate")!.props.disabled).toBe(false); click(findButton(work.render(), "Regenerate"));
-    expect(work.fetchMock).toHaveBeenCalledTimes(2); work.dispose();
+    expect(findButton(work.render(), "Get Claude draft")!.props.disabled).toBe(false);
+    expect(findButton(work.render(), "Use reply")).toBeDefined(); expect(findButton(work.render(), "Regenerate")).toBeUndefined();
+    expect(work.fetchMock).not.toHaveBeenCalled(); expect(work.fallbackUseMutation).not.toHaveBeenCalled(); expect(work.fallback.mutate).not.toHaveBeenCalled(); work.dispose();
   });
 
-  it("blocks Claude during the unchanged primary stream and during the unchanged tRPC fallback", async () => {
-    const streaming = workspace({ primary: "pending" }); await streaming.settle();
-    const disabled = findButton(streaming.render(), "Get Claude draft")!; expect(disabled.props.disabled).toBe(true); click(disabled);
-    expect(streaming.generate).not.toHaveBeenCalled(); streaming.primaryDone(); await streaming.settle(); expect(findButton(streaming.render(), "Get Claude draft")!.props.disabled).toBe(false); streaming.dispose();
-    const fallback = workspace({ primary: "fallback" }); await fallback.settle();
-    expect(fallback.fallback.mutate).toHaveBeenCalledTimes(1); expect(findButton(fallback.render(), "Get Claude draft")!.props.disabled).toBe(true);
-    click(findButton(fallback.render(), "Get Claude draft")); expect(fallback.generate).not.toHaveBeenCalled();
-    fallback.fallbackDone(); await fallback.settle(); expect(fallback.html()).toContain("Existing fallback draft."); expect(findButton(fallback.render(), "Get Claude draft")!.props.disabled).toBe(false); fallback.dispose();
+  it("never auto-generates on incoming/history/selected changes or loading-to-loaded transitions, and preserves human-only manual send", async () => {
+    for (const change of ["incoming", "history", "selected", "loaded"] as const) {
+      const work = workspace({ noDetail: change === "loaded" }); await work.settle(); work.edit("Human reply");
+      if (change === "incoming") work.setLive([conversation({ lastMessageText: "New incoming request", lastMessageTs: 1800000000100 })]);
+      else if (change === "history") work.setDetail({ sessionId: 42, leadPhone: "+13015550123", messageHistory: history("OM_NEW_INBOUND") });
+      else if (change === "selected") {
+        work.setSelected(conversation({ id: 43, leadPhone: "+13015550124" }));
+        work.setDetail({ sessionId: 43, leadPhone: "+13015550124", messageHistory: history() });
+      } else work.setDetail({ sessionId: 42, leadPhone: "+13015550123", messageHistory: history() });
+      await work.settle();
+      expect(work.generate).not.toHaveBeenCalled(); expect(work.generateInitial).not.toHaveBeenCalled(); expect(work.uuid).not.toHaveBeenCalled();
+      expect(work.fetchMock).not.toHaveBeenCalled(); expect(work.fallbackUseMutation).not.toHaveBeenCalled(); expect(work.fallback.mutate).not.toHaveBeenCalled();
+      expect(textarea(work.render()).props.value).toBe(change === "selected" ? "" : "Human reply");
+      expect(textarea(work.render()).props.placeholder).toBe("Write a text reply…");
+      work.edit("Human-only manual reply");
+      expect(work.send).not.toHaveBeenCalled(); expect(work.workspaceSend).not.toHaveBeenCalled();
+      click(elements(work.render()).find(node => node.props["aria-label"] === "Send text reply"));
+      expect(work.send).toHaveBeenCalledWith({ sessionId: change === "selected" ? 43 : 42, message: "Human-only manual reply", fromNumberId: "PN_SYNTHETIC_LINE", source: "cs_inbox" });
+      expect(work.workspaceSend).not.toHaveBeenCalled(); work.render(); work.dispose();
+    }
   });
 
   it("never invents an inbound ID or line and binds the original history ID rather than sorted display timestamps", async () => {
@@ -333,12 +355,15 @@ describe("optional Claude alternative actual SMS drawer", () => {
     expect(textarea(work.render()).props.value).toBe("Human reply"); expect(work.html()).not.toContain("Use reply"); expect(work.send).not.toHaveBeenCalled(); work.dispose();
   });
 
-  it("unavailable or mismatched provider results never affect composer, primary draft, or manual sending", async () => {
+  it("unavailable or mismatched provider results never affect composer or manual sending, and never activate World-class fallback", async () => {
     const unavailable = workspace(); await unavailable.settle(); unavailable.edit("Human reply"); click(findButton(unavailable.render(), "Get Claude draft"));
     unavailable.claudeResponse.reject(new Error("PRIVATE backend credential")); await unavailable.settle();
     expect(unavailable.html()).toContain("Claude draft is unavailable"); expect(unavailable.html()).not.toContain("PRIVATE");
-    expect(unavailable.html()).toContain("World-class draft"); expect(textarea(unavailable.render()).props.value).toBe("Human reply");
-    expect(findButton(unavailable.render(), "Regenerate")!.props.disabled).toBe(false); unavailable.dispose();
+    expect(unavailable.html()).not.toContain("World-class draft"); expect(textarea(unavailable.render()).props.value).toBe("Human reply");
+    expect(findButton(unavailable.render(), "Regenerate")).toBeUndefined();
+    click(elements(unavailable.render()).find(node => node.props["aria-label"] === "Send text reply"));
+    expect(unavailable.send).toHaveBeenCalledWith({ sessionId: 42, message: "Human reply", fromNumberId: "PN_SYNTHETIC_LINE", source: "cs_inbox" });
+    expect(unavailable.fallbackUseMutation).not.toHaveBeenCalled(); expect(unavailable.fallback.mutate).not.toHaveBeenCalled(); unavailable.dispose();
     const mismatch = workspace(); await mismatch.settle(); mismatch.edit("Human reply"); click(findButton(mismatch.render(), "Get Claude draft"));
     mismatch.claudeResponse.resolve(result(mismatch.generate.mock.calls[0][0], { providerMessageId: "OM_OTHER_INBOUND" })); await mismatch.settle();
     expect(mismatch.html()).toContain("could not be verified"); expect(mismatch.html()).not.toContain("Use reply"); expect(textarea(mismatch.render()).props.value).toBe("Human reply"); expect(mismatch.send).not.toHaveBeenCalled(); mismatch.dispose();
@@ -357,7 +382,7 @@ describe("optional Claude alternative actual SMS drawer", () => {
 });
 
 describe("optional Claude first lead draft in the existing workspace", () => {
-  it("preserves prompt, builder body, primary payload, and quote-assistant callbacks/JSX bytes", async () => {
+  it("preserves prompt, builder body, exact Claude draftRequest payload, and quote-assistant callbacks/JSX bytes", async () => {
     expect(hash(THUMBTACK_FIRST_RESPONSE_PROMPT)).toBe("aa2665b8f0c82ba8daae49e7f0d0d66fe5234b8ba653d6fa4eb36c3bdadc2ed4");
     const sharedSource = readFileSync(new URL("../shared/claudeInitialLead.ts", import.meta.url), "utf8");
     expect(hash(sharedSource.slice(sharedSource.indexOf("  const details = lead.nativeDetails"), sharedSource.indexOf("\n}", sharedSource.indexOf("  const details = lead.nativeDetails")))))
@@ -374,10 +399,13 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       jobContext: buildThumbtackLeadDraftContext(clicked) });
     const work = workspace({ selected: { id: 0, lastInboundPhoneNumberId: null }, snapshot: clicked, leadCardPhone: clicked.phone, leadDraft: draft, noDetail: true });
     await work.settle();
-    expect((work.fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body).toBe(JSON.stringify({
-      conversationContext: "", customerName: "Synthetic customer", jobContext: draft!.jobContext, scenario: draft!.scenario,
-    }));
     expect(work.generateInitial).not.toHaveBeenCalled(); expect(work.generate).not.toHaveBeenCalled(); expect(work.uuid).not.toHaveBeenCalled();
+    expect(work.fetchMock).not.toHaveBeenCalled(); expect(work.fallbackUseMutation).not.toHaveBeenCalled(); expect(work.fallback.mutate).not.toHaveBeenCalled();
+    click(findButton(work.render(), "Get Claude draft"));
+    expect(work.generateInitial).toHaveBeenCalledTimes(1);
+    expect(work.generateInitial.mock.calls[0][0].draftRequest).toEqual({
+      conversationContext: "", customerName: "Synthetic customer", jobContext: draft!.jobContext, scenario: draft!.scenario,
+    });
     work.dispose();
   });
 
@@ -402,7 +430,8 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       expect(work.generateInitial).toHaveBeenCalledTimes(1);
       const request = work.generateInitial.mock.calls[0][0];
       expect(request.leadDetails).toEqual(expectedFacts);
-      expect(request.draftRequest).toEqual(JSON.parse((work.fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body));
+      expect(request.draftRequest).toEqual({ conversationContext: sessionId === 0 ? "" : "Customer: Original lead request\nAgent: Original outgoing message",
+        customerName: "Synthetic customer", jobContext: draft!.jobContext, scenario: draft!.scenario });
       expect(request.draftRequest?.jobContext).toBe(draft!.jobContext);
       expect(request.draftRequest?.scenario).toBe(draft!.scenario);
       expect(claudeInitialLeadInputSchema.safeParse(request).success).toBe(true);
@@ -425,7 +454,7 @@ describe("optional Claude first lead draft in the existing workspace", () => {
     await work.settle(); work.edit("Human reply stays here");
     click(findButton(work.render(), "Get Claude draft")); await work.settle();
     expect(work.html()).toContain("Claude could not read this lead&#x27;s details. Your reply is unchanged.");
-    expect(work.html()).toContain("World-class draft");
+    expect(work.html()).not.toContain("World-class draft");
     expect(work.generateInitial).not.toHaveBeenCalled(); expect(work.generate).not.toHaveBeenCalled();
     expect(textarea(work.render()).props.value).toBe("Human reply stays here");
     expect(findButton(work.render(), "Get Claude draft")!.props.disabled).toBe(false);
@@ -445,7 +474,7 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       expect(work.generateInitial).toHaveBeenCalledTimes(1); expect(work.generate).not.toHaveBeenCalled(); expect(work.uuid).toHaveBeenCalledTimes(1);
       const request = work.generateInitial.mock.calls[0][0];
       expect(request).toEqual({ sessionId, customerPhone: clicked.phone, requestId: "00000000-0000-4000-8000-000000000001", leadDetails: leadFacts(), originalConversation: [],
-        draftRequest: JSON.parse((work.fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body) });
+        draftRequest: { conversationContext: "", customerName: "Synthetic customer", jobContext: draft!.jobContext, scenario: draft!.scenario } });
       work.initialResponse.resolve(initialResult(request)); await work.settle();
       expect(work.html()).toContain("First lead reply"); expect(work.html()).not.toContain("Reply on");
       expect(textarea(work.render()).props.value).toBe("Human first response");
@@ -478,7 +507,9 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       const request = work.generateInitial.mock.calls[0][0];
       expect(request.leadDetails).toEqual(leadFacts({ name: "Clicked B", category: "Move out", description: "B notes", bedrooms: "2" }));
       expect(request.originalConversation).toEqual(saved); expect(request.originalConversation).toHaveLength(13);
-      expect(request.draftRequest).toEqual(JSON.parse((work.fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body));
+      expect(request.draftRequest).toEqual({ conversationContext: saved.filter(turn => turn.content.trim()).slice(-5)
+        .map(turn => `${turn.role === "user" ? "Customer" : "Agent"}: ${turn.content}`).join("\n"),
+        customerName: "Synthetic customer", jobContext: draft?.jobContext ?? "", scenario: draft?.scenario ?? "" });
       expect(request.draftRequest?.conversationContext).toBe(saved.filter(turn => turn.content.trim()).slice(-5)
         .map(turn => `${turn.role === "user" ? "Customer" : "Agent"}: ${turn.content}`).join("\n"));
       expect(work.generate).not.toHaveBeenCalled(); work.initialResponse.resolve(initialResult(request)); await work.settle(); work.dispose();
@@ -515,7 +546,7 @@ describe("optional Claude first lead draft in the existing workspace", () => {
     expect(textarea(work.render()).props.value).toBe("Human response"); expect(work.workspaceSend).not.toHaveBeenCalled(); work.dispose();
   });
 
-  it("keeps composer/primary untouched on initial failures and result identity mismatches, and drops unmounted replies", async () => {
+  it("keeps composer untouched and World-class disabled on initial failures and result identity mismatches, and drops unmounted replies", async () => {
     for (const failure of ["unavailable", "request", "session", "phone", "hash"] as const) {
       const clicked = leadSnapshot();
       const work = workspace({ selected: { id: 0, lastInboundPhoneNumberId: null }, snapshot: clicked, leadCardPhone: clicked.phone,
@@ -526,7 +557,7 @@ describe("optional Claude first lead draft in the existing workspace", () => {
       else work.initialResponse.resolve(initialResult(request, failure === "request" ? { requestId: "00000000-0000-4000-8000-000000000009" }
         : failure === "session" ? { sessionId: 1 } : failure === "phone" ? { customerPhone: "+13015550124" } : { contextHash: "invalid" }));
       await work.settle(); expect(textarea(work.render()).props.value).toBe("Human response");
-      expect(work.html()).toContain("World-class draft"); expect(work.html()).not.toContain("PRIVATE"); expect(work.html()).not.toContain("Use reply");
+      expect(work.html()).not.toContain("World-class draft"); expect(work.html()).not.toContain("PRIVATE"); expect(work.html()).not.toContain("Use reply");
       expect(work.workspaceSend).not.toHaveBeenCalled(); expect(work.send).not.toHaveBeenCalled(); work.dispose();
     }
     const clicked = leadSnapshot();
@@ -552,7 +583,7 @@ describe("SMS tasks in the actual conversation timeline — offline", () => {
       { role: "user", content: "Same customer wording", ts: 10, openPhoneMessageId: "A" },
     ];
     const taskRows = { A: ["First task — Done", "Second task — Open"], B: ["Third task — Open"], OUT_1: ["Must never attach to a reply"] };
-    const w = workspace({ history: JSON.stringify(original), primary: "pending", taskRows });
+    const w = workspace({ history: JSON.stringify(original), taskRows });
     expect(flow(w.render())).toEqual(["Same customer wording", "First task — Done", "Second task — Open", "First actual reply",
       "Same customer wording", "Third task — Open", "Second actual reply"]);
     expect(elements(w.render()).filter(node => node.props.className === "ccc-live-sms-messages")).toHaveLength(1);
@@ -570,7 +601,7 @@ describe("SMS tasks in the actual conversation timeline — offline", () => {
     [{ role: "user", content: "Request", ts: 10, opMsgId: "A" }, { role: "user", content: " ", ts: 11, opMsgId: "A" }],
     [{ role: "user", content: "Request", ts: 10, opMsgId: "A" }, { role: "assistant", content: "Outbound collision", ts: 11, opMsgId: "A" }],
   ].map(messages => ({ messages })))("does not manufacture an anchor from missing, conflicting, duplicate, hidden or outbound-colliding saved IDs %#", ({ messages }) => {
-    const w = workspace({ history: JSON.stringify(messages), primary: "pending", taskRows: { A: ["Unsafe task"] } });
+    const w = workspace({ history: JSON.stringify(messages), taskRows: { A: ["Unsafe task"] } });
     expect(elements(w.render()).filter(node => node.props["data-synthetic-task-source"])).toHaveLength(0);
     expect(text(w.render())).not.toContain("Unsafe task");
     expect(flow(w.render())[0]).toBe("Request");
@@ -578,7 +609,7 @@ describe("SMS tasks in the actual conversation timeline — offline", () => {
   });
   it("requires the loaded detail to belong to the selected exact session and does not hide normal history while loading", () => {
     const messages = [{ role: "user", content: "Request", ts: 10, opMsgId: "A" }];
-    const w = workspace({ history: JSON.stringify(messages), primary: "pending", taskRows: { A: ["Bound task"] } });
+    const w = workspace({ history: JSON.stringify(messages), taskRows: { A: ["Bound task"] } });
     expect(flow(w.render())).toEqual(["Request", "Bound task"]);
     w.setDetail({ sessionId: 43, leadPhone: "+13015550123", messageHistory: JSON.stringify(messages) });
     expect(flow(w.render())).toEqual(["Request"]);

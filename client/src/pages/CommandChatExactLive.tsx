@@ -2403,10 +2403,6 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const smsDraftAttributionRef = useRef<ReturnType<typeof createSmsDraftAttributionController> | null>(null);
   if (!smsDraftAttributionRef.current) smsDraftAttributionRef.current = createSmsDraftAttributionController();
   const smsDraftAttribution = smsDraftAttributionRef.current;
-  const [smsAutoDraftLoading, setSmsAutoDraftLoading] = useState(false);
-  const [smsAutoDraftReady, setSmsAutoDraftReady] = useState(false);
-  const [smsAutoDraftText, setSmsAutoDraftText] = useState("");
-  const [smsAutoDraftMinimized, setSmsAutoDraftMinimized] = useState(false);
   const [confirmedOutgoing, setConfirmedOutgoing] = useState<SmsInboxMessage[]>([]);
   const [quoteAssistantOpen, setQuoteAssistantOpen] = useState(false);
   const [quoteAssistantFields, setQuoteAssistantFields] = useState<QuoteAssistantFields | null>(null);
@@ -2417,9 +2413,6 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const smsComposerRef = useRef<HTMLTextAreaElement>(null);
   const initialBottomScrollDone = useRef(false);
   const scrollAfterSendRef = useRef(false);
-  const smsAutoDraftAbortRef = useRef<AbortController | null>(null);
-  const autoDraftedForConversationRef = useRef<number | null>(null);
-  const smsAutoDraftSessionIdRef = useRef<number | null>(conversation.id);
   const [claudeDraftPending, setClaudeDraftPending] = useState(false);
   const [claudeDraft, setClaudeDraft] = useState<{ result: (ClaudeSmsAlternativeResult & { kind: "sms_reply" }) | ClaudeInitialLeadResult; scopeKey: string; epoch: number } | null>(null);
   const [claudeDraftError, setClaudeDraftError] = useState("");
@@ -2552,103 +2545,10 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       claudeDraftBusyRef.current = null;
     };
   }, []);
-  const smsAutoDraft = trpc.opsChat.csReply.useMutation({
-    onSuccess: (data) => {
-      if (smsAutoDraftSessionIdRef.current !== conversation.id) return;
-      const replyText = typeof data.reply === "string" ? data.reply : "";
-      if (replyText) {
-        setSmsAutoDraftText(replyText);
-        setSmsAutoDraftReady(true);
-      }
-      setSmsAutoDraftLoading(false);
-    },
-    onError: () => {
-      if (smsAutoDraftSessionIdRef.current === conversation.id) setSmsAutoDraftLoading(false);
-    },
-  });
-  const streamSmsAutoDraft = useCallback(async () => {
-    if ((!smsConversationContext && !leadDraft?.scenario && !leadDraft?.jobContext) || autoDraftedForConversationRef.current === conversation.id) return;
-    autoDraftedForConversationRef.current = conversation.id;
-    if (smsAutoDraftAbortRef.current) smsAutoDraftAbortRef.current.abort();
-    const controller = new AbortController();
-    smsAutoDraftAbortRef.current = controller;
-    const request = { conversationContext: smsConversationContext, customerName: name, jobContext: leadDraft?.jobContext ?? "", scenario: leadDraft?.scenario ?? "" };
-    setSmsAutoDraftText("");
-    setSmsAutoDraftReady(false);
-    setSmsAutoDraftLoading(true);
-    try {
-      const response = await fetch("/api/cs-reply-stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(request),
-        signal: controller.signal,
-      });
-      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let accumulated = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (smsAutoDraftSessionIdRef.current !== conversation.id) {
-          void reader.cancel();
-          return;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          const dataString = trimmed.slice(5).trim();
-          if (dataString === "[DONE]") continue;
-          let event: { token?: string; error?: string };
-          try { event = JSON.parse(dataString); } catch { continue; }
-          if (event.error) throw new Error(event.error);
-          if (event.token) {
-            accumulated += event.token;
-            setSmsAutoDraftText(accumulated);
-          }
-        }
-      }
-      if (!accumulated.trim()) {
-        if (smsAutoDraftSessionIdRef.current !== conversation.id) return;
-        setSmsAutoDraftText("");
-        setSmsAutoDraftLoading(true);
-        smsAutoDraft.mutate(request);
-        return;
-      }
-      if (smsAutoDraftSessionIdRef.current === conversation.id) {
-        setSmsAutoDraftReady(true);
-        setSmsAutoDraftLoading(false);
-      }
-      if (smsAutoDraftAbortRef.current === controller) smsAutoDraftAbortRef.current = null;
-    } catch (error) {
-      if ((error as Error).name === "AbortError") return;
-      if (smsAutoDraftSessionIdRef.current !== conversation.id) return;
-      console.warn("[command-chat sms auto-draft] falling back to tRPC:", error);
-      setSmsAutoDraftText("");
-      setSmsAutoDraftLoading(true);
-      smsAutoDraft.mutate(request);
-    }
-  }, [conversation.id, leadDraft?.jobContext, leadDraft?.scenario, name, smsAutoDraft, smsConversationContext]);
-  const regenerateSmsDraft = useCallback(() => {
-    if (claudeDraftBusyRef.current) return;
-    autoDraftedForConversationRef.current = null;
-    void streamSmsAutoDraft();
-  }, [streamSmsAutoDraft]);
-  const insertSmsAutoDraft = useCallback(() => {
-    if (!smsAutoDraftText.trim()) return;
-    smsDraftAttribution.clear();
-    setDraft(smsAutoDraftText);
-    setSmsAutoDraftReady(false);
-  }, [smsAutoDraftText, smsDraftAttribution]);
   const generateClaudeDraft = async () => {
     // The ref coalesces repeated clicks before React renders the busy state. It
     // keeps this deliberate request's UUID until completion; there is no retry.
-    if (claudeDraftBusyRef.current || smsAutoDraftLoading || smsAutoDraft.isPending || !claudeDraftEligible
+    if (claudeDraftBusyRef.current || !claudeDraftEligible
       || claudeDraftScopeRef.current !== claudeDraftScope) return;
     if (claudeInitialLeadMode) {
       const parsed = claudeInitialLeadInputSchema.safeParse({ sessionId: conversation.id, customerPhone: leadCardPhone,
@@ -2775,14 +2675,8 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     composer.style.height = `${Math.min(composer.scrollHeight, 240)}px`;
   }, []);
   useEffect(() => {
-    smsAutoDraftSessionIdRef.current = conversation.id;
-    autoDraftedForConversationRef.current = null;
     smsDraftAttribution.clear();
     setDraft("");
-    setSmsAutoDraftReady(false);
-    setSmsAutoDraftText("");
-    setSmsAutoDraftLoading(false);
-    setSmsAutoDraftMinimized(false);
     setQuoteAssistantOpen(false);
     setQuoteAssistantFields(null);
     setQuoteAssistantMissing([]);
@@ -2791,20 +2685,10 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     setConfirmedOutgoing([]);
     initialBottomScrollDone.current = false;
     scrollAfterSendRef.current = false;
-    return () => {
-      smsAutoDraftSessionIdRef.current = null;
-      smsAutoDraftAbortRef.current?.abort();
-      smsAutoDraftAbortRef.current = null;
-    };
   }, [conversation.id]);
   useEffect(() => {
     if (smsComposerRef.current) resizeSmsComposer(smsComposerRef.current);
   }, [draft, resizeSmsComposer]);
-  useEffect(() => {
-    if (conversation.id > 0 && !detail && !leadDraft?.scenario && !leadDraft?.jobContext) return;
-    if (messages.length === 0 && !leadDraft?.scenario && !leadDraft?.jobContext) return;
-    void streamSmsAutoDraft();
-  }, [conversation.id, detail, leadDraft?.jobContext, leadDraft?.scenario, messages.length, streamSmsAutoDraft]);
   useEffect(() => {
     if (!detail || (initialBottomScrollDone.current && !scrollAfterSendRef.current)) return;
     const animationFrame = requestAnimationFrame(() => {
@@ -2875,15 +2759,13 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       return <Fragment key={`${message.ts ?? index}-${message.content}`}><article className={`ccc-live-sms-message ${outgoing ? "is-outgoing" : ""}`} key={`${message.ts ?? index}-${message.content}`}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={automaticSender ? "Claude AI" : senderName} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{senderLabel}</span> : conversation.personType === "team" ? name : "Customer"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{renderMessageBody(message.content)}</p></article>{smsTaskAnchors[index] && afterMessage(smsTaskAnchors[index]!)}</Fragment>;
     })}</ClaudeSmsConversationTasks></div>
     <footer>
-      {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
-      {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className={`ccc-live-sms-ai-draft-card ${smsAutoDraftMinimized ? "is-minimized" : ""}`}><header><span><Sparkles />World-class draft</span><small>Review before sending</small><button type="button" className="ccc-live-sms-ai-draft-toggle" aria-label={smsAutoDraftMinimized ? "Expand world-class draft" : "Minimize world-class draft"} aria-expanded={!smsAutoDraftMinimized} title={smsAutoDraftMinimized ? "Expand draft" : "Minimize draft"} onClick={() => setSmsAutoDraftMinimized((value) => !value)}><ChevronDown /></button></header>{!smsAutoDraftMinimized && <><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" disabled={claudeDraftPending} onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></>}</article>}
       {claudeDraftVisible && <article className="ccc-live-sms-ai-draft-card" aria-label="Optional Claude draft"><header><span><Sparkles />Claude alternative</span><small>Optional · review only</small></header>
         {currentClaudeDraft && <><small>{currentClaudeDraft.kind === "initial_lead" ? `First lead reply · ${currentClaudeDraft.customerPhone}` : `Reply on ${currentClaudeDraft.receivingPhoneNumber}`}</small><p>{currentClaudeDraft.replyText}</p></>}
         {claudeDraftError && <p role="status">{claudeDraftError}</p>}
-        <div><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!claudeDraftEligible || smsAutoDraftLoading || smsAutoDraft.isPending || claudeDraftPending} onClick={() => void generateClaudeDraft()}>{claudeDraftPending ? <Loader2 className="animate-spin" /> : <Sparkles />}{claudeDraftPending ? "Getting Claude draft…" : "Get Claude draft"}</button>
+        <div><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!claudeDraftEligible || claudeDraftPending} onClick={() => void generateClaudeDraft()}>{claudeDraftPending ? <Loader2 className="animate-spin" /> : <Sparkles />}{claudeDraftPending ? "Getting Claude draft…" : "Get Claude draft"}</button>
           {currentClaudeDraft && <><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!allowClaudeUse} onClick={useClaudeReply}><Pencil />Use reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={() => setClaudeDraft(null)}>Discard</button></>}
         </div></article>}
-      <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onBeforeInput={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onPaste={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onCut={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onChange={(event) => { smsDraftAttribution.edit(event.target.value); setDraft(event.target.value); }} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } else if (event.key === "Backspace" || event.key === "Delete" || (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey)) { smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd); } }} placeholder={smsAutoDraftLoading ? "" : "Write a text reply…"} /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
+      <div className="ccc-live-sms-composer"><textarea ref={smsComposerRef} value={draft} onBeforeInput={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onPaste={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onCut={(event) => smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)} onChange={(event) => { smsDraftAttribution.edit(event.target.value); setDraft(event.target.value); }} onInput={(event) => resizeSmsComposer(event.currentTarget)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } else if (event.key === "Backspace" || event.key === "Delete" || (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey)) { smsDraftAttribution.beforeReplace(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd); } }} placeholder="Write a text reply…" /><button type="button" disabled={!draft.trim() || sendReply.isPending || sendWorkspaceMessage.isPending} aria-label="Send text reply" onClick={submit}>{sendReply.isPending || sendWorkspaceMessage.isPending ? <Loader2 className="animate-spin" /> : <Send />}</button></div>
     </footer>
     {quoteAssistantOpen && quoteAssistantFields && <QuoteAssistantModal
       customerName={name}
