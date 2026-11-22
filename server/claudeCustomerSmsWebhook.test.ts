@@ -47,7 +47,14 @@ type FixtureOptions = { existing?: Record<string, any> | null; hiring?: Record<s
 function fixture(options: FixtureOptions = {}, nonCs = false) {
   const existing = options.existing === undefined ? { id: 42, leadSource: nonCs ? "bark-sms" : "cs-inbound", leadName: "Maya", stage: "OPEN", messageHistory: "[]" } : options.existing;
   const operations: Array<{ operation: string; table?: string; payload?: any; target?: any }> = [];
-  const dispatch = vi.fn(async (input: unknown) => { operations.push({ operation: "dispatch", payload: input }); if (options.dispatchThrows) throw new Error("mock failure"); return { outcome: options.dispatchOutcome ?? "accepted" }; });
+  const persistedHistories = new Map<number, string>();
+  if (existing) persistedHistories.set(existing.id, existing.messageHistory ?? "[]");
+  const dispatchSnapshots: Array<{ sessionId: number; history: any[] }> = [];
+  const dispatch = vi.fn(async (input: any) => {
+    operations.push({ operation: "dispatch", payload: input });
+    dispatchSnapshots.push({ sessionId: input.sessionId, history: JSON.parse(persistedHistories.get(input.sessionId) ?? "[]") });
+    if (options.dispatchThrows) throw new Error("mock failure"); return { outcome: options.dispatchOutcome ?? "accepted" };
+  });
   const madison = vi.fn(async (input: unknown) => { operations.push({ operation: "legacy-draft", payload: input }); });
   const broadcast = vi.fn();
   const selects: any[][] = nonCs ? [existing ? [existing] : [], ...(options.cleaner ? [[{ name: "Staff" }]] : [[]])] : [
@@ -66,11 +73,13 @@ function fixture(options: FixtureOptions = {}, nonCs = false) {
     update: vi.fn((table: any) => ({ set: (payload: any) => ({ where: async (target: any) => {
       operations.push({ operation: "update", table: table.__name, payload, target });
       if (options.failWrite && payload.messageHistory) throw new Error("mock write failed");
+      if (payload.messageHistory) persistedHistories.set(target.value, payload.messageHistory);
       return [{ affectedRows: 1 }];
     } }) })),
     insert: vi.fn((table: any) => ({ values: async (payload: any) => {
       operations.push({ operation: "insert", table: table.__name, payload });
       if (options.failWrite && payload.messageHistory) throw new Error("mock insert failed");
+      if (payload.messageHistory) persistedHistories.set(options.insertId === undefined ? 77 : options.insertId!, payload.messageHistory);
       return [{ insertId: options.insertId === undefined ? 77 : options.insertId }];
     } })),
     execute: vi.fn(async () => []),
@@ -99,7 +108,9 @@ function fixture(options: FixtureOptions = {}, nonCs = false) {
     eq: (column: any, value: any) => ({ column, value }), and: (...args: unknown[]) => args,
     or: (...args: unknown[]) => args, sql: (...args: unknown[]) => args, desc: (x: unknown) => x,
     inArray: (...args: unknown[]) => args, isNull: (...args: unknown[]) => args, ne: (...args: unknown[]) => args,
-    computeSessionSummary: () => ({}), enqueueScoring: vi.fn(), syncAllOutboundMessages: vi.fn(async () => ({})),
+    computeSessionSummary: () => ({}), enqueueScoring: vi.fn(), syncAllOutboundMessages: vi.fn(async (phone: string, sessionId: number) => {
+      operations.push({ operation: "sync-complete", payload: { phone, sessionId } }); return {};
+    }),
     tryDetectCleanerRunningLate: vi.fn(async () => undefined), tryAdvanceGetEtaMission: vi.fn(async () => undefined),
     tryStoreJobSmsReply: vi.fn(async () => undefined), tryHandleCleanerRatingReply: vi.fn(async () => undefined),
     tryHandleConfirmationSmsReply: vi.fn(async () => undefined), markReactivationContactReplied: vi.fn(async () => undefined),
@@ -116,7 +127,7 @@ function fixture(options: FixtureOptions = {}, nonCs = false) {
     }
   }
   vm.createContext(sandbox); vm.runInContext(executable, sandbox);
-  return { dispatch, madison, operations, db, testImport, sandbox,
+  return { dispatch, dispatchSnapshots, persistedHistories, madison, operations, db, testImport, sandbox,
     runCs: (msg: unknown) => sandbox.runCs(msg) as Promise<void>,
     runWebhook: (msg: unknown, type = "message.received") => sandbox.runWebhook({ body: { type, data: { object: msg } } }, { status: () => ({ json: vi.fn() }) }) as Promise<void> };
 }
@@ -286,5 +297,73 @@ describe("all-customer scope changes only existing response eligibility", () => 
     await h.runWebhook(message({ from: customer, phoneNumberId: "PN-bark" })); expect(h.dispatch).toHaveBeenCalledOnce();
     expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ sessionId: isNew ? 77 : 42, receivingPhoneNumberId: "PN-bark", fromPhone: customer }));
     expect(h.sandbox.tryStoreJobSmsReply).toHaveBeenCalledOnce(); expect(h.sandbox.tryHandleCleanerRatingReply).toHaveBeenCalledOnce(); expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
+  });
+});
+
+describe("customer history sync precedes the exact Instinct snapshot", () => {
+  const confirmation = { role: "assistant", content: "Confirming your cleaning appointment tomorrow. Reply YES to confirm. Reply FLEXIBLE or NOT FLEXIBLE.",
+    ts: receivedAt - 60_000, opMsgId: "provider-confirmation", senderName: "Dispatcher" };
+  it.each([false, true])("awaits the existing single sync for an existing/new customer row, new=%s", async isNew => {
+    const h = fixture({ allCustomers: true, existing: isNew ? null : undefined });
+    const fromPhone = "+12025559876";
+    let release!: () => void; let signalStarted!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    h.sandbox.syncAllOutboundMessages.mockImplementationOnce(async (phone: string, sessionId: number) => {
+      h.operations.push({ operation: "sync-start", payload: { phone, sessionId } }); signalStarted();
+      await gate;
+      const history = JSON.parse(h.persistedHistories.get(sessionId)!);
+      h.persistedHistories.set(sessionId, JSON.stringify([confirmation, ...history]));
+      h.operations.push({ operation: "sync-complete", payload: { phone, sessionId } });
+      return { added: 1, newestOutboundTs: confirmation.ts };
+    });
+    const result = h.runWebhook(message({ from: fromPhone, text: "Yes" })); await started;
+    expect(h.dispatch).not.toHaveBeenCalled();
+    expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce();
+    release(); await result;
+    const sessionId = isNew ? 77 : 42;
+    expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce();
+    expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledWith(fromPhone, sessionId);
+    expect(h.dispatchSnapshots).toEqual([{ sessionId, history: [confirmation,
+      expect.objectContaining({ role: "user", content: "Yes", opMsgId: "provider-original" })] }]);
+    expect(h.operations.findIndex(op => op.operation === "dispatch")).toBeGreaterThan(h.operations.findIndex(op => op.operation === "sync-complete"));
+    expect(h.sandbox.enqueueScoring).toHaveBeenCalledWith(sessionId, false);
+    expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
+    expect(h.madison).not.toHaveBeenCalled();
+  });
+  it("retains a confirmation saved by the sender when Yes reaches the customer reply/task handoff", async () => {
+    const h = fixture({ allCustomers: true, existing: { id: 42, leadSource: "cs-inbound", stage: "OPEN", messageHistory: JSON.stringify([confirmation]) } });
+    await h.runCs(message({ text: "Yes" }));
+    expect(h.dispatchSnapshots[0].history).toEqual([confirmation, expect.objectContaining({ role: "user", content: "Yes" })]);
+    expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce(); expect(h.dispatch).toHaveBeenCalledOnce();
+  });
+  it("passes the flexibility/access text unchanged with the confirmation context to the canonical application", async () => {
+    const text = "I will not be home but the door is unlocked so you are flexible to come when you want";
+    const h = fixture({ allCustomers: true, existing: { id: 42, leadSource: "cs-inbound", stage: "OPEN", messageHistory: JSON.stringify([confirmation]) } });
+    await h.runWebhook(message({ from: "+12025559876", text }));
+    expect(h.dispatch).toHaveBeenCalledOnce();
+    expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ inboundText: text, sessionId: 42, providerMessageId: "provider-original" }));
+    expect(h.dispatchSnapshots[0].history).toEqual([confirmation, expect.objectContaining({ role: "user", content: text })]);
+    expect(h.madison).not.toHaveBeenCalled(); expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
+  });
+  it("preserves nonfatal sync failure handling without an added retry or competing responder", async () => {
+    const h = fixture({ allCustomers: true }); h.sandbox.syncAllOutboundMessages.mockRejectedValueOnce(new Error("mock sync failure"));
+    await h.runCs(message({ text: "Yes" }));
+    expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce(); expect(h.dispatch).toHaveBeenCalledOnce();
+    expect(h.sandbox.console.warn).toHaveBeenCalledWith("[CS] syncAllOutboundMessages error:", expect.any(Error));
+    expect(h.madison).not.toHaveBeenCalled();
+  });
+  it.each([{ disabled: true }, { allCustomers: true, cleaner: true }, { allCustomers: true, existing: null,
+    hiring: { id: 88, leadSource: "hiring_interview", messageHistory: "[]" } }])("retains original non-Instinct sync handling %#", async options => {
+    const h = fixture(options); let release!: () => void;
+    h.sandbox.syncAllOutboundMessages.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+    await h.runCs(message());
+    expect(h.dispatch).not.toHaveBeenCalled(); expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce();
+    release();
+  });
+  it("preserves the existing single sync on the separate Bark inbound path", async () => {
+    const h = fixture({ allCustomers: true }, true); await h.runWebhook(message({ phoneNumberId: "PN-bark" }));
+    expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce();
+    expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledWith("+12025550123", 42);
   });
 });

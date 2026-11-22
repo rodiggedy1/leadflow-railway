@@ -2589,7 +2589,17 @@ async function handleCsInboundMessage(msg: any) {
     }
   }
 
+  let syncedCustomerSessionId: number | null = null;
   if (persistedCustomerSessionId !== null) {
+    if (Number.isSafeInteger(persistedCustomerSessionId) && persistedCustomerSessionId > 0
+      && isClaudeCustomerSmsPhoneEligible(normalizePhone(fromPhone))
+      && (!persistedNonCustomer || isClaudeCustomerSmsPilotCustomerOverride(normalizePhone(fromPhone)))) {
+      // Finish the existing history sync before Instinct snapshots this exact row.
+      await syncAllOutboundMessages(fromPhone, persistedCustomerSessionId).catch(err =>
+        console.warn("[CS] syncAllOutboundMessages error:", err)
+      );
+      syncedCustomerSessionId = persistedCustomerSessionId;
+    }
     claudeCustomerOwnsReply = await dispatchPersistedClaudeCustomerSms({ sessionId: persistedCustomerSessionId, providerMessageId: msg.id,
       fromPhone: normalizePhone(fromPhone), receivingPhoneNumberId: msg.phoneNumberId,
       inboundText, createdAt: msg.createdAt, receivedAt: now, isCleaner: persistedNonCustomer, direction: msg.direction });
@@ -2601,7 +2611,7 @@ async function handleCsInboundMessage(msg: any) {
 
   // Sync any outbound messages sent from OpenPhone app for this conversation
   // (OpenPhone doesn't fire webhooks for outbound messages, so we poll on each inbound)
-  const resolvedSessionId = existingSession?.id ?? (await (async () => {
+  const resolvedSessionId = syncedCustomerSessionId ?? existingSession?.id ?? (await (async () => {
     const [s] = await db
       .select({ id: conversationSessions.id })
       .from(conversationSessions)
@@ -2618,9 +2628,11 @@ async function handleCsInboundMessage(msg: any) {
   if (resolvedSessionId) {
     // Fire LLM status scoring async (non-blocking) — updates csStatusTier in real-time on new message
     enqueueScoring(resolvedSessionId, isCleaner); // concurrency-limited, deduped, fire-and-forget
-    syncAllOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
-      console.warn("[CS] syncAllOutboundMessages error:", err)
-    );
+    if (resolvedSessionId !== syncedCustomerSessionId) {
+      syncAllOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
+        console.warn("[CS] syncAllOutboundMessages error:", err)
+      );
+    }
     console.log(`[CS] Madison trigger check — messageId=${messageId ?? "MISSING"}, inboundText=${inboundText.trim() ? "present("+inboundText.length+")" : "EMPTY"}, resolvedSessionId=${resolvedSessionId}`);
     // Await the Madison SMS Draft Agent so its Shadow prediction is persisted before
     // this inbound processing path completes. Shadow is read-only and cannot change

@@ -27,7 +27,7 @@ import { conversationSessions } from "../../drizzle/schema";
 import { computeSessionSummary } from "../sessionSummary";
 
 export interface AppendCsOutboundParams {
-  db: MySql2Database<Record<string, never>>;
+  db: Pick<MySql2Database<Record<string, never>>, "select" | "insert" | "update">;
   /** Recipient phone — any format; we normalise to last 10 digits for lookup. */
   recipientPhone: string;
   /** Recipient name — used when creating a new proactive session. */
@@ -40,6 +40,8 @@ export interface AppendCsOutboundParams {
   sentAt?: number;
   /** Optional OpenPhone message ID for exact deduplication. */
   openPhoneMessageId?: string;
+  /** Match the customer inbound path's cs-inbound source; other callers retain their existing lookup. */
+  customerSessionOnly?: boolean;
 }
 
 /**
@@ -74,8 +76,11 @@ export async function appendCsOutboundMessage(
       })
       .from(conversationSessions)
       .where(
-        sql2`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) = ${phone10}
-          AND ${conversationSessions.leadSource} IN ('cs-inbound', 'cs-inbound-cleaner', 'cs_initiated')`,
+        params.customerSessionOnly
+          ? sql2`${conversationSessions.leadPhone} = ${recipientPhone}
+              AND ${conversationSessions.leadSource} = 'cs-inbound'`
+          : sql2`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) = ${phone10}
+              AND ${conversationSessions.leadSource} IN ('cs-inbound', 'cs-inbound-cleaner', 'cs_initiated')`,
       )
       .orderBy(desc(conversationSessions.updatedAt))
       .limit(1);

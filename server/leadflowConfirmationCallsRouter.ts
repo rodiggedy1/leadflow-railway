@@ -7,6 +7,7 @@ import { getDb } from "./db";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 import { normalizePhone } from "./utils/phone";
+import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 
 const dateInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const outcomeInput = z.enum(["confirmed", "reschedule", "cancel", "no_answer", "voicemail", "unknown"]);
@@ -138,10 +139,21 @@ export const leadflowConfirmationCallsRouter = router({
           ...(ENV.openPhoneCsNumberId ? { fromNumberId: ENV.openPhoneCsNumberId } : {}),
         });
         if (smsResult.success) {
+          const sentAt = Date.now();
+          await appendCsOutboundMessage({
+            db,
+            recipientPhone: calledPhone,
+            recipientName: clientName,
+            message: smsBody,
+            senderName: callerName,
+            sentAt,
+            openPhoneMessageId: smsResult.messageId,
+            customerSessionOnly: true,
+          }).catch(error => console.error("[LeadFlowConfirmationCalls] Non-fatal SMS history error", error));
           await db.update(confirmationCalls).set({
             status: "completed",
             smsFollowupSent: 1,
-            smsFollowupAt: Date.now(),
+            smsFollowupAt: sentAt,
             smsFollowupBody: smsBody,
           }).where(eq(confirmationCalls.id, confirmationCallId));
         } else {
