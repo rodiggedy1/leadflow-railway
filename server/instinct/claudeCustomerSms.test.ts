@@ -24,26 +24,27 @@ function fixture(onFailure = vi.fn(async (_detail: any) => undefined)) {
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 describe("customer replies and real human-task intent", () => {
-  it("allows the explicitly configured pilot test-customer classification without changing the saved role", async () => {
+  it("responds to a cleaner in the Teams queue without requiring an override or changing the saved role", async () => {
     const f = fixture(), session = { ...snapshot(), csQueue: "Teams", leadSource: "hiring-cleaner" };
-    f.config.mockReturnValue({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: true });
+    f.config.mockReturnValue({ startAt: at - 1000, allowedPhone: "", testCustomerOverride: false });
     f.readSession.mockResolvedValue(session); const before = JSON.stringify(session);
     expect(await f.run({ ...input, isCleaner: true })).toEqual({ outcome: "accepted" });
     expect(JSON.stringify(session)).toBe(before); expect(f.send).toHaveBeenCalledTimes(1);
   });
-  it.each([{ fromPhone: "+13029816191", isCleaner: true }, { inboundText: "STOP", isCleaner: true }, { direction: "outgoing", isCleaner: true }, { providerMessageId: "cs-fallback-bad", isCleaner: true }])("never extends the classification override beyond pilot identity and safety guards %#", async patch => {
+  it.each([{ fromPhone: "+447911123456", isCleaner: true }, { inboundText: "STOP", isCleaner: true }, { direction: "outgoing", isCleaner: true }, { providerMessageId: "cs-fallback-bad", isCleaner: true }])("preserves phone and message safety guards for cleaner events %#", async patch => {
     const f = fixture(); f.config.mockReturnValue({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: true });
     expect(await f.run({ ...input, ...patch })).toEqual({ outcome: "excluded" }); expect(f.readSession).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
   });
-  it.each([{ smsOptOut: 1 }, { lastInboundPhoneNumberId: "wrong" }, { contact: { ...snapshot().contact, sessionId: "99" } }, { messageHistory: "invalid" }])("preserves saved opt-out and exact context guards with the override %#", async patch => {
+  it.each([{ smsOptOut: 1 }, { lastInboundPhoneNumberId: "wrong" }, { contact: { ...snapshot().contact, sessionId: "99" } }, { messageHistory: "invalid" }])("preserves saved opt-out and exact context guards for cleaner sessions %#", async patch => {
     const f = fixture(); f.config.mockReturnValue({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: true });
     f.readSession.mockResolvedValue({ ...snapshot(), csQueue: "Teams", leadSource: "hiring-cleaner", ...patch });
     expect(await f.run({ ...input, isCleaner: true })).toEqual({ outcome: "excluded" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
   });
-  it("suppresses a classification exception changed after generation", async () => {
+  it("ignores an override change after generation for cleaner events", async () => {
     const f = fixture(); f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: true })
       .mockReturnValue({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false });
-    expect(await f.run({ ...input, isCleaner: true })).toEqual({ outcome: "suppressed" }); expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    expect(await f.run({ ...input, isCleaner: true })).toEqual({ outcome: "accepted" }); expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.store.suppress).not.toHaveBeenCalled(); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
   });
   it("notifies only after a durable config-stop review, with no SMS", async () => {
     const f = fixture(); f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null);
@@ -65,10 +66,10 @@ describe("customer replies and real human-task intent", () => {
     try {
       const f = fixture(); let resolve!: (plan: any) => void; f.generate.mockImplementation(() => new Promise(done => { resolve = done; }));
       const result = f.run(input); await vi.advanceTimersByTimeAsync(120_000);
-      expect(await result).toEqual({ outcome: "accepted" }); expect(f.generate).toHaveBeenCalledTimes(1);
+      expect(await result).toEqual({ outcome: "failed" }); expect(f.generate).toHaveBeenCalledTimes(1);
       resolve({ replyText: "Late original link", task: null }); await Promise.resolve();
-      expect(f.send).toHaveBeenCalledTimes(1); expect(f.send.mock.calls[0][0].content).not.toContain("Late");
-      expect(f.store.prepare.mock.calls[0][2]?.failures[0].code).toBe("CUSTOMER_REPLY_GENERATION_TIMEOUT");
+      expect(f.send).not.toHaveBeenCalled(); expect(f.store.prepare).not.toHaveBeenCalled();
+      expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", { failures: [expect.objectContaining({ phase: "generation", code: "CUSTOMER_REPLY_GENERATION_TIMEOUT" })] });
     } finally { vi.useRealTimers(); }
   });
   it("bounds a hanging SMS submission at 30 seconds and never accepts or retries its late result", async () => {
@@ -102,103 +103,89 @@ describe("customer replies and real human-task intent", () => {
     expect(f.store.claim.mock.calls[0][0]).toMatchObject({ providerMessageId: input.providerMessageId, historyHash: customerHistoryHash(snapshot().messageHistory) });
   });
   it("is completely passive when disabled", async () => { const f = fixture(); f.config.mockReturnValue(null as never); expect(await f.run(input)).toEqual({ outcome: "disabled" }); expect(f.readSession).not.toHaveBeenCalled(); expect(f.generate).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); });
-  it.each([{ createdAt: "2026-11-15T18:00:00Z" }, { receivedAt: at - 2000 }, { createdAt: "2026-11-16" }, { createdAt: "2026-11-16T18:01:00Z" }, { direction: "outgoing" }, { direction: undefined }, { isCleaner: true }, { providerMessageId: "" }, { providerMessageId: "cs-fallback-123" }, { receivingPhoneNumberId: "" }, { sessionId: -1 }, { inboundText: "STOP" }, { inboundText: "unsubscribe" }, { fromPhone: "+16505164957" }, { fromPhone: "+16506469270" }])("excludes old, malformed or noncustomer event %# before reads", async patch => { const f = fixture(); expect(await f.run({ ...input, ...patch })).toEqual({ outcome: "excluded" }); expect(f.readSession).not.toHaveBeenCalled(); expect(f.store.claim).not.toHaveBeenCalled(); });
-  it.each([{ leadSource: "hiring" }, { leadSource: "cs-inbound-cleaner" }, { leadSource: undefined }, { smsOptOut: 1 }, { csQueue: "Teams" }, { lastInboundPhoneNumberId: "wrong" }, { contact: { ...snapshot().contact, sessionId: "99" } }, { messageHistory: "invalid" }, { messageHistory: JSON.stringify([{ role: "user", content: input.inboundText }]) }])("rejects context contradiction %# without generation", async patch => { const f = fixture(); f.readSession.mockResolvedValue({ ...snapshot(), ...patch }); expect(await f.run(input)).toEqual({ outcome: "excluded" }); expect(f.generate).not.toHaveBeenCalled(); });
+  it.each([{ createdAt: "2026-11-15T18:00:00Z" }, { receivedAt: at - 2000 }, { createdAt: "2026-11-16" }, { createdAt: "2026-11-16T18:01:00Z" }, { receivedAt: NaN }, { direction: "outgoing" }, { direction: undefined }, { providerMessageId: "" }, { providerMessageId: "cs-fallback-123" }, { receivingPhoneNumberId: "" }, { sessionId: -1 }, { inboundText: "" }, { inboundText: "STOP" }, { inboundText: "unsubscribe" }, { fromPhone: "+16505164957" }, { fromPhone: "+16506469270" }, { fromPhone: "+17259009272" }])("excludes old, malformed, opted-out or system event %# before reads", async patch => { const f = fixture(); expect(await f.run({ ...input, ...patch })).toEqual({ outcome: "excluded" }); expect(f.readSession).not.toHaveBeenCalled(); expect(f.store.claim).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); });
+  it.each([{ smsOptOut: 1 }, { lastInboundPhoneNumberId: "wrong" }, { contact: { ...snapshot().contact, sessionId: "99" } }, { contact: { ...snapshot().contact, phone: "+12025550124" } }, { contact: { ...snapshot().contact, rawPhone: "+12025550124" } }, { messageHistory: "invalid" }, { messageHistory: JSON.stringify([{ role: "user", content: input.inboundText }]) }])("rejects opt-out or exact-context contradiction %# without generation", async patch => { const f = fixture(); f.readSession.mockResolvedValue({ ...snapshot(), ...patch }); expect(await f.run(input)).toEqual({ outcome: "excluded" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); });
   it("rejects an already answered source and a contradictory source ID", async () => { const f = fixture(), s = snapshot(), h = JSON.parse(s.messageHistory as string); h.push({ role: "assistant", content: "Human already answered" }); f.readSession.mockResolvedValue({ ...s, messageHistory: JSON.stringify(h) }); expect(await f.run(input)).toEqual({ outcome: "excluded" }); h.pop(); h.at(-1).providerMessageId = "conflicting-id"; f.readSession.mockResolvedValue({ ...s, messageHistory: JSON.stringify(h) }); expect(await f.run(input)).toEqual({ outcome: "excluded" }); expect(f.send).not.toHaveBeenCalled(); });
   it("skips every duplicate receipt without generating, task creation or send", async () => { const f = fixture(); f.store.claim.mockResolvedValue(null as never); expect(await f.run(input)).toEqual({ outcome: "duplicate" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); });
   it("does not send an acknowledgment if durable task persistence fails", async () => { const f = fixture(); f.store.prepare.mockRejectedValue(new Error("storage failure")); expect(await f.run(input)).toEqual({ outcome: "failed" }); expect(f.send).not.toHaveBeenCalled(); expect(f.store.suppressBeforeSubmission).toHaveBeenCalled(); });
-  it("uses a durable staff-task fallback after generation fails, without rerunning the model", async () => {
-    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE"));
-    expect(await f.run(input)).toEqual({ outcome: "accepted" });
-    expect(f.generate).toHaveBeenCalledTimes(1); expect(f.store.prepare).toHaveBeenCalledTimes(1);
-    expect(f.store.prepare).toHaveBeenCalledWith(expect.anything(), {
-      replyText: "Sorry—I couldn't finish that response. I've flagged your message for our team to review.",
-      task: { title: "Review customer message after reply failure", items: [{ title: "Review the customer's message and follow up", evidenceQuote: input.inboundText }] },
-    }, { failures: [expect.objectContaining({ phase: "generation", code: "SMS_QUOTE_MODEL_PRICE" })] });
-    expect(f.send).toHaveBeenCalledTimes(1); expect(f.order.indexOf("task-and-text-durable")).toBeLessThan(f.order.indexOf("send"));
-    expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
-  });
-  it("falls back once when quote preparation fails, using the same receipt and no new model call", async () => {
-    const f = fixture(); f.store.prepare.mockRejectedValueOnce(new Error("SMS_QUOTE_STATE_CONFLICT"));
-    expect(await f.run(input)).toEqual({ outcome: "accepted" });
+  it.each(["SMS_QUOTE_MODEL_PRICE", "SMS_QUOTE_INVALID_EVIDENCE", "UNSAFE_REPLY_CLAIM", "ACKNOWLEDGMENT_REQUIRES_TASK", "CUSTOMER_REPLY_GENERATION_TIMEOUT"])("keeps generation failure %s internal and sends no canned SMS", async code => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error(code));
+    expect(await f.run(input)).toEqual({ outcome: "failed" });
     expect(f.generate).toHaveBeenCalledTimes(1); expect(f.store.claim).toHaveBeenCalledTimes(1);
-    expect(f.store.prepare).toHaveBeenCalledTimes(2);
-    expect(f.store.prepare.mock.calls[1]).toEqual([f.store.prepare.mock.calls[0][0], expect.objectContaining({ task: expect.anything() }),
-      { failures: [expect.objectContaining({ phase: "preparation", code: "SMS_QUOTE_STATE_CONFLICT" })] }]);
-    expect(f.send).toHaveBeenCalledTimes(1);
-  });
-  it("retains both failures and sends nothing when the fallback task cannot be persisted", async () => {
-    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_INVALID_EVIDENCE"));
-    f.store.prepare.mockRejectedValue(new Error("CUSTOMER_REPLY_PREPARE_FAILED"));
-    expect(await f.run(input)).toEqual({ outcome: "failed" }); expect(f.send).not.toHaveBeenCalled();
-    expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", {
-      failures: [expect.objectContaining({ phase: "generation", code: "SMS_QUOTE_INVALID_EVIDENCE" }),
-        expect.objectContaining({ phase: "fallback_preparation", code: "CUSTOMER_REPLY_PREPARE_FAILED" })],
-    });
-  });
-  it("does not send a fallback when configuration changes during the failed generation", async () => {
-    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE"));
-    f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null);
-    expect(await f.run(input)).toEqual({ outcome: "suppressed" });
     expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
-  });
-  it("does not substitute a fallback for stale or human-won preparation", async () => {
-    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE")); f.store.prepare.mockResolvedValue(false);
-    expect(await f.run(input)).toEqual({ outcome: "suppressed" });
-    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.send).not.toHaveBeenCalled();
-  });
-  it("never replaces or retries an uncertain fallback submission", async () => {
-    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE")); f.send.mockRejectedValue(new Error("timeout"));
-    expect(await f.run(input)).toEqual({ outcome: "uncertain" });
-    expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.prepare).toHaveBeenCalledTimes(1);
-    expect(f.store.markUncertain).toHaveBeenCalledTimes(1); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
-  });
-  it("does not prepare fallback if configuration is disabled by the failed quote preparation", async () => {
-    const f = fixture(); f.store.prepare.mockImplementationOnce(async () => {
-      f.config.mockReturnValue(null); throw new Error("SMS_QUOTE_STATE_CONFLICT");
+    expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", {
+      failures: [expect.objectContaining({ phase: "generation", code })],
     });
-    expect(await f.run(input)).toEqual({ outcome: "suppressed" });
-    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.store.suppress).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED");
+    expect(f.store.reportFailure).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", false);
+    expect(f.onFailure).toHaveBeenCalledWith({ taskId: 101, code: "GENERATION_OR_PERSISTENCE_FAILED", sessionId: 71 });
+  });
+  it("does not substitute a second preparation or an error SMS after preparation fails", async () => {
+    const f = fixture(); f.store.prepare.mockRejectedValueOnce(new Error("SMS_QUOTE_STATE_CONFLICT"));
+    expect(await f.run(input)).toEqual({ outcome: "failed" });
+    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.generate).toHaveBeenCalledTimes(1);
     expect(f.send).not.toHaveBeenCalled();
+    expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", {
+      failures: [expect.objectContaining({ phase: "preparation", code: "SMS_QUOTE_STATE_CONFLICT" })],
+    });
+    expect(f.store.reportFailure).toHaveBeenCalledTimes(1);
   });
-  it("rechecks configuration after the fallback is durable and before submission", async () => {
-    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE"));
-    f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false })
-      .mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null);
-    expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.store.prepare).toHaveBeenCalledTimes(1);
-    expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED"); expect(f.send).not.toHaveBeenCalled();
+  it("still attempts an independent owner alert when internal failure persistence fails", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_INVALID_EVIDENCE"));
+    f.store.suppressBeforeSubmission.mockRejectedValue(new Error("storage offline"));
+    f.store.reportFailure.mockRejectedValue(new Error("storage offline"));
+    expect(await f.run(input)).toEqual({ outcome: "failed" }); expect(f.send).not.toHaveBeenCalled();
+    expect(f.onFailure).toHaveBeenCalledWith({ taskId: null, code: "GENERATION_OR_PERSISTENCE_FAILED", sessionId: 71 });
   });
-  it("does not resend a fallback after provider acceptance persistence fails", async () => {
-    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE"));
-    f.store.recordAcceptance.mockRejectedValue(new Error("unknown commit"));
-    expect(await f.run(input)).toEqual({ outcome: "uncertain" }); expect(f.send).toHaveBeenCalledTimes(1);
-    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.store.markUncertain).toHaveBeenCalledTimes(1);
-    expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
+  it("does not send an error SMS even if internal escalation says the message was superseded", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE")); f.store.reportFailure.mockResolvedValue(null as never);
+    expect(await f.run(input)).toEqual({ outcome: "failed" });
+    expect(f.send).not.toHaveBeenCalled(); expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.onFailure).not.toHaveBeenCalled();
+  });
+  it.each(["Yes", "Yes that's fine", "That's fine"])("keeps the valid %j acknowledgment send path unchanged", async text => {
+    const f = fixture(), event = { ...input, inboundText: text };
+    f.readSession.mockResolvedValue({ ...snapshot(), messageHistory: JSON.stringify([
+      { role: "agent", content: "The team would like to drop by tomorrow morning, if possible. Will you be available then?", ts: 1 },
+      { role: "user", content: text, opMsgId: input.providerMessageId, ts: 2 },
+    ]) });
+    f.generate.mockResolvedValue({ replyText: "Great! Thank you!", task: null } as never);
+    expect(await f.run(event)).toEqual({ outcome: "accepted" });
+    expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: "Great! Thank you!", fromNumberId: input.receivingPhoneNumberId });
+    expect(f.store.reportFailure).not.toHaveBeenCalled();
   });
   it("does not send stale or human-won claims", async () => { const f = fixture(); f.store.prepare.mockResolvedValue(false); expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.send).not.toHaveBeenCalled(); });
   it.each([{ success: false }, { success: true }, { success: true, messageId: " " }])("never treats provider result %# as confirmed acceptance", async response => { const f = fixture(); f.send.mockResolvedValue(response as never); expect(await f.run(input)).toEqual({ outcome: "uncertain" }); expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.recordAcceptance).not.toHaveBeenCalled(); expect(f.store.markUncertain).toHaveBeenCalled(); });
   it("never retries a transport timeout or post-acceptance persistence uncertainty", async () => { const f = fixture(); f.send.mockRejectedValue(new Error("timeout")); expect(await f.run(input)).toEqual({ outcome: "uncertain" }); expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled(); const other = fixture(); other.store.recordAcceptance.mockRejectedValue(new Error("unknown commit")); expect(await other.run(input)).toEqual({ outcome: "uncertain" }); expect(other.send).toHaveBeenCalledTimes(1); expect(other.store.suppress).not.toHaveBeenCalled(); expect(other.store.suppressBeforeSubmission).not.toHaveBeenCalled(); });
   it("checks enablement again after generation", async () => { const f = fixture(); f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null as never); expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); });
-  it.each(["+13029816191", "+12025550124", "", "Jane +12025550123", "+12025550123,+13029816191", "202-555-0123"])('rejects nonpilot or noncanonical sender %s before every I/O', async fromPhone => {
+  it.each(["", "Jane +12025550123", "+12025550123,+13029816191", "202-555-0123", "+447911123456", "+11029816191", "+13021816191"])('rejects malformed, non-US or noncanonical sender %s before every I/O', async fromPhone => {
     const f = fixture(); expect(await f.run({ ...input, fromPhone })).toEqual({ outcome: "excluded" });
     for (const action of [f.readSession, f.readReceivingLine, f.store.claim, f.generate, f.store.prepare, f.send]) expect(action).not.toHaveBeenCalled();
   });
-  it("does not treat an injected start-only config as unrestricted", async () => {
+  it("accepts an injected start-only config without requiring legacy pilot metadata", async () => {
     const f = fixture(); f.config.mockReturnValue({ startAt: at - 1000 } as never);
-    expect(await f.run(input)).toEqual({ outcome: "excluded" }); expect(f.readSession).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    expect(await f.run(input)).toEqual({ outcome: "accepted" }); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: (await f.generate.mock.results[0].value).replyText, fromNumberId: input.receivingPhoneNumberId });
   });
-  it.each([{ startAt: at - 2000, allowedPhone: input.fromPhone, testCustomerOverride: false }, { startAt: at - 1000, allowedPhone: "+13029816191", testCustomerOverride: false }, { startAt: at - 1000 }])("suppresses changed or incomplete config after generation %#", async changed => {
+  it.each([null, { startAt: at - 2000, allowedPhone: input.fromPhone, testCustomerOverride: false }, { startAt: at + 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }])("suppresses disablement or cutoff changes after generation %#", async changed => {
     const f = fixture(); f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(changed as never);
     expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.store.suppress).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED");
     expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
   });
-  it("retains the original phone snapshot when a config object is mutated during generation", async () => {
+  it("ignores in-place legacy metadata mutation during generation", async () => {
     const f = fixture(), config = { startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false };
     f.config.mockReturnValue(config); const generate = f.generate.getMockImplementation()!;
-    f.generate.mockImplementation(async () => { config.allowedPhone = "+13029816191"; return generate(); });
-    expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    f.generate.mockImplementation(async () => { config.allowedPhone = "+13029816191"; config.testCustomerOverride = true; return generate(); });
+    expect(await f.run(input)).toEqual({ outcome: "accepted" }); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: (await f.generate.mock.results[0].value).replyText, fromNumberId: input.receivingPhoneNumberId });
+    expect(f.store.suppress).not.toHaveBeenCalled(); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
   });
-  it.each([null, { startAt: at - 2000, allowedPhone: input.fromPhone, testCustomerOverride: false }, { startAt: at - 1000, allowedPhone: "+13029816191", testCustomerOverride: false }, { startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: true }])("rechecks cutoff, phone, and override immediately before sending %#", async changed => {
+  it("retains the original cutoff when a shared config object is mutated during generation", async () => {
+    const f = fixture(), config = { startAt: at - 1000, allowedPhone: "", testCustomerOverride: false };
+    f.config.mockReturnValue(config); const generate = f.generate.getMockImplementation()!;
+    f.generate.mockImplementation(async () => { config.startAt = at - 2000; return generate(); });
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.store.suppress).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED");
+    expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+  });
+  it.each([null, { startAt: at - 2000, allowedPhone: input.fromPhone, testCustomerOverride: false }, { startAt: at + 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }])("rechecks enablement and cutoff immediately before sending %#", async changed => {
     const f = fixture(); f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false })
       .mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(changed as never);
     expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.store.prepare).toHaveBeenCalledTimes(1);
@@ -206,7 +193,7 @@ describe("customer replies and real human-task intent", () => {
   });
 });
 const pilotEnv = { CLAUDE_CUSTOMER_SMS_ENABLED: "true", CLAUDE_CUSTOMER_SMS_START_AT: created, CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: "+13029816191" };
-describe("immutable activation cutoff and single approved phone", () => {
+describe("literal activation and immutable cutoff with narrow operational pilot helpers", () => {
   it.each([undefined, "false", "1", "TRUE", " true "])("leaves the classification exception off unless the flag is literal true: %s", flag => {
     const env = { ...pilotEnv, CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE: flag };
     expect(claudeCustomerSmsConfig(env)?.testCustomerOverride).toBe(false); expect(isClaudeCustomerSmsPilotCustomerOverride("+13029816191", env)).toBe(false);
@@ -218,14 +205,29 @@ describe("immutable activation cutoff and single approved phone", () => {
     expect(isClaudeCustomerSmsPilotCustomerOverride("+13029816191", { ...env, CLAUDE_CUSTOMER_SMS_ENABLED: "false" })).toBe(false);
     expect(isClaudeCustomerSmsPilotCustomerOverride("+13029816191", { ...env, CLAUDE_CUSTOMER_SMS_START_AT: undefined })).toBe(false);
   });
-  it("requires literal enablement, a trusted fixed ISO timestamp, and exactly one canonical phone", () => {
+  it.each(["all", "*", "ALL_CUSTOMERS", "", " all_customers "])("does not widen operational pilot bypasses for unsupported legacy scope %j", scope => {
+    const env = { ...pilotEnv, CLAUDE_CUSTOMER_SMS_SCOPE: scope, CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE: "true" };
+    expect(isClaudeCustomerSmsPhoneEligible("+13029816191", env)).toBe(true);
+    expect(isClaudeCustomerSmsPhoneEligible(input.fromPhone, env)).toBe(true);
+    expect(isClaudeCustomerSmsPilotPhone("+13029816191", env)).toBe(false);
+    expect(isClaudeCustomerSmsPilotCustomerOverride("+13029816191", env)).toBe(false);
+  });
+  it("requires only literal enablement and a trusted fixed ISO timestamp", () => {
     expect(claudeCustomerSmsConfig({})).toBeNull();
     expect(claudeCustomerSmsConfig({ ...pilotEnv, CLAUDE_CUSTOMER_SMS_ENABLED: "1" })).toBeNull();
     expect(claudeCustomerSmsConfig(pilotEnv)).toEqual({ startAt: at, allowedPhone: "+13029816191", testCustomerOverride: false });
+    expect(claudeCustomerSmsConfig({ CLAUDE_CUSTOMER_SMS_ENABLED: "true", CLAUDE_CUSTOMER_SMS_START_AT: created })).toEqual({ startAt: at, allowedPhone: "", testCustomerOverride: false });
   });
-  it.each([undefined, "", "3029816191", "302-981-6191", "13029816191", " +13029816191", "+13029816191 ", "Jane +13029816191", "+13029816191,+12025550123", "+13029816191 +12025550123", "[\"+13029816191\"]", "*", "+447911123456", "+11029816191", "+13021816191"])("rejects missing, noncanonical, invalid, or multiple configured phone %s", phone => {
+  it.each([undefined, "false", "1", "TRUE", " true ", ""])("does not activate unless enabled is literal true: %s", enabled => {
+    const env = { ...pilotEnv, CLAUDE_CUSTOMER_SMS_ENABLED: enabled };
+    expect(claudeCustomerSmsConfig(env)).toBeNull(); expect(isClaudeCustomerSmsPhoneEligible(input.fromPhone, env)).toBe(false);
+  });
+  it.each([undefined, "", "3029816191", "302-981-6191", "13029816191", " +13029816191", "+13029816191 ", "Jane +13029816191", "+13029816191,+12025550123", "+13029816191 +12025550123", "[\"+13029816191\"]", "*", "+447911123456", "+11029816191", "+13021816191"])("drops unusable pilot metadata without disabling the responder: %s", phone => {
     const env = { ...pilotEnv, CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: phone };
-    expect(claudeCustomerSmsConfig(env)).toBeNull(); expect(isClaudeCustomerSmsPilotPhone("+13029816191", env)).toBe(false);
+    expect(claudeCustomerSmsConfig(env)).toEqual({ startAt: at, allowedPhone: "", testCustomerOverride: false });
+    expect(isClaudeCustomerSmsPhoneEligible(input.fromPhone, env)).toBe(true); expect(isClaudeCustomerSmsPhoneEligible("+13029816191", env)).toBe(true);
+    expect(isClaudeCustomerSmsPilotPhone("+13029816191", env)).toBe(false);
+    expect(isClaudeCustomerSmsPilotCustomerOverride("+13029816191", { ...env, CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE: "true" })).toBe(false);
   });
   it.each(["+13029816191", "3029816191", "302-981-6191", "(302) 981-6191"])("normalizes one valid pilot destination %s", phone => expect(isClaudeCustomerSmsPilotPhone(phone, pilotEnv)).toBe(true));
   it.each([undefined, null, 13029816191, "", "+13029816192", "Jane +13029816191", "+13029816191,+12025550123", "3029816191 ext 1", "+447911123456"])("returns false rather than matching a malformed or different destination %s", phone => expect(isClaudeCustomerSmsPilotPhone(phone, pilotEnv)).toBe(false));
@@ -237,39 +239,48 @@ describe("immutable activation cutoff and single approved phone", () => {
   it.each(["now", "2026-02-30T00:00:00Z", "2026-11-16", "2026-11-16T18:00:00", "bad"])("rejects unsafe cutoff %s", value => expect(customerSmsInstant(value)).toBeNull());
 });
 describe("application entry is passive before database import", () => {
-  it("rejects a nonpilot event before importing or acquiring the database", async () => {
+  it("rejects a malformed destination before importing or acquiring the database", async () => {
     database.imported.mockClear(); database.getDb.mockClear();
     for (const [key, value] of Object.entries(pilotEnv)) vi.stubEnv(key, value);
-    expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "excluded" });
+    expect(await dispatchClaudeCustomerSms({ ...input, fromPhone: "Jane +12025550123" })).toEqual({ outcome: "excluded" });
     expect(database.imported).not.toHaveBeenCalled(); expect(database.getDb).not.toHaveBeenCalled();
   });
-  it("stays default off when the allowed phone is missing", async () => {
+  it("stays default off when literal enablement is missing", async () => {
     database.imported.mockClear(); database.getDb.mockClear();
-    vi.stubEnv("CLAUDE_CUSTOMER_SMS_ENABLED", "true"); vi.stubEnv("CLAUDE_CUSTOMER_SMS_START_AT", created); vi.stubEnv("CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE", undefined);
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_ENABLED", undefined); vi.stubEnv("CLAUDE_CUSTOMER_SMS_START_AT", created); vi.stubEnv("CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE", undefined);
+    expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "disabled" });
+    expect(database.imported).not.toHaveBeenCalled(); expect(database.getDb).not.toHaveBeenCalled();
+  });
+  it.each([undefined, "now", "2026-02-30T00:00:00Z"])("stays passive with an absent or unsafe cutoff %s", async cutoff => {
+    database.imported.mockClear(); database.getDb.mockClear();
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_ENABLED", "true"); vi.stubEnv("CLAUDE_CUSTOMER_SMS_START_AT", cutoff);
     expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "disabled" });
     expect(database.imported).not.toHaveBeenCalled(); expect(database.getDb).not.toHaveBeenCalled();
   });
 });
 
-describe("explicit future-only all-customer recipient scope", () => {
+describe("future-only SMS replies for every valid recipient and role", () => {
   const allEnv = { ...pilotEnv, CLAUDE_CUSTOMER_SMS_SCOPE: "all_customers", CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE: "true" };
   const allConfig: CustomerSmsConfig = { startAt: at - 1000, allowedPhone: "+13029816191", testCustomerOverride: true, scope: "all_customers" };
-  it("requires explicit valid scope while retaining the exact default pilot config", () => {
+  it("retains recognized operational pilot metadata without making scope an activation gate", () => {
     expect(claudeCustomerSmsConfig(allEnv)).toEqual({ startAt: at, allowedPhone: "+13029816191", testCustomerOverride: true, scope: "all_customers" });
     expect(claudeCustomerSmsConfig({ ...pilotEnv, CLAUDE_CUSTOMER_SMS_SCOPE: "pilot" })).toEqual(claudeCustomerSmsConfig(pilotEnv));
-    for (const scope of ["all", "*", "ALL_CUSTOMERS", "", " all_customers "]) {
-      expect(claudeCustomerSmsConfig({ ...allEnv, CLAUDE_CUSTOMER_SMS_SCOPE: scope })).toBeNull();
-      expect(isClaudeCustomerSmsPhoneEligible(input.fromPhone, { ...allEnv, CLAUDE_CUSTOMER_SMS_SCOPE: scope })).toBe(false);
+    for (const scope of [undefined, "all", "*", "ALL_CUSTOMERS", "", " all_customers "]) {
+      const env = { ...allEnv, CLAUDE_CUSTOMER_SMS_SCOPE: scope };
+      expect(claudeCustomerSmsConfig(env)).toEqual({ startAt: at, allowedPhone: "+13029816191", testCustomerOverride: true });
+      expect(isClaudeCustomerSmsPhoneEligible(input.fromPhone, env)).toBe(true);
     }
   });
-  it.each(["+12025550123", "202-555-0123", "+12025550124", "+17035551234"])("admits a valid nonpilot destination %s only in explicit all-customer mode", phone => {
+  it.each(["+12025550123", "202-555-0123", "(202) 555-0123", "2025550123", "12025550123", "+12025550124", "+17035551234"])("admits a valid nonpilot destination %s regardless of pilot metadata", phone => {
     expect(isClaudeCustomerSmsPhoneEligible(phone, allEnv)).toBe(true);
     expect(isClaudeCustomerSmsPilotPhone(phone, allEnv)).toBe(false);
-    expect(isClaudeCustomerSmsPhoneEligible(phone, pilotEnv)).toBe(false);
+    expect(isClaudeCustomerSmsPhoneEligible(phone, pilotEnv)).toBe(true);
+    expect(isClaudeCustomerSmsPhoneEligible(phone, { ...pilotEnv, CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: undefined, CLAUDE_CUSTOMER_SMS_SCOPE: "unknown-legacy" })).toBe(true);
     expect(isClaudeCustomerSmsPilotCustomerOverride(phone, allEnv)).toBe(false);
   });
-  it.each([undefined, null, "", "Jane +12025550123", "+12025550123,+13029816191", "*", "+447911123456"])("still rejects malformed or unsupported destination %j", phone => {
+  it.each([undefined, null, 12025550123, "", "Jane +12025550123", "+12025550123,+13029816191", "*", "+447911123456", "+11029816191", "+13021816191", "2025550123 ext 1"])("still rejects malformed or unsupported destination %j", phone => {
     expect(isClaudeCustomerSmsPhoneEligible(phone, allEnv)).toBe(false);
+    expect(isClaudeCustomerSmsPhoneEligible(phone, { ...pilotEnv, CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: undefined, CLAUDE_CUSTOMER_SMS_SCOPE: "unknown-legacy" })).toBe(false);
   });
   it("retains the approved role exception only for the actual test number", () => {
     expect(isClaudeCustomerSmsPilotCustomerOverride("302-981-6191", allEnv)).toBe(true);
@@ -281,31 +292,53 @@ describe("explicit future-only all-customer recipient scope", () => {
     expect(f.order).toEqual(["claim", "generate", "task-and-text-durable", "send", "acceptance"]);
     expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: (await f.generate.mock.results[0].value).replyText, fromNumberId: input.receivingPhoneNumberId });
   });
-  it.each([{ isCleaner: true }, { direction: "outgoing" }, { inboundText: "STOP" }, { createdAt: "2026-11-15T18:00:00Z" }, { createdAt: "2026-11-16T18:01:00Z" }, { receivedAt: at - 2000 }, { providerMessageId: "cs-fallback-old" }, { fromPhone: "+16505164957" }, { fromPhone: "+17259009272" }])("retains all pre-read exclusion guards in all-customer scope %#", async patch => {
+  it.each([{ direction: "outgoing" }, { inboundText: "STOP" }, { createdAt: "2026-11-15T18:00:00Z" }, { createdAt: "2026-11-16T18:01:00Z" }, { receivedAt: at - 2000 }, { providerMessageId: "cs-fallback-old" }, { fromPhone: "+16505164957" }, { fromPhone: "+17259009272" }])("retains all pre-read safety guards with legacy all-customer metadata %#", async patch => {
     const f = fixture(); f.config.mockReturnValue(allConfig);
     expect(await f.run({ ...input, ...patch })).toEqual({ outcome: "excluded" }); expect(f.readSession).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
   });
-  it.each([{ leadSource: "hiring" }, { leadSource: "cs-inbound-cleaner" }, { leadSource: "internal" }, { leadSource: "staff" }, { csQueue: "Teams" }, { smsOptOut: 1 }])("keeps exact saved noncustomer/opt-out flags protected %#", async patch => {
-    const f = fixture(); f.config.mockReturnValue(allConfig); f.readSession.mockResolvedValue({ ...snapshot(), ...patch });
+  it.each([{ isCleaner: false, leadSource: "cs-inbound", csQueue: "Clients" }, { isCleaner: true, leadSource: "hiring", csQueue: "Teams" }, { isCleaner: true, leadSource: "hiring-cleaner", csQueue: "Teams" }, { isCleaner: false, leadSource: "cs-inbound-cleaner", csQueue: "Teams" }, { isCleaner: false, leadSource: "internal", csQueue: "Teams" }, { isCleaner: false, leadSource: "staff", csQueue: "Teams" }, { isCleaner: true, leadSource: undefined, csQueue: undefined }, { isCleaner: false, leadSource: undefined, csQueue: "Clients" }, { isCleaner: false, leadSource: "unknown-legacy", csQueue: "unknown-legacy" }])("replies without changing any saved role or queue %#", async ({ isCleaner, ...patch }) => {
+    const f = fixture(), session = { ...snapshot(), ...patch }, before = JSON.stringify(session);
+    f.config.mockReturnValue({ startAt: at - 1000, allowedPhone: "", testCustomerOverride: false }); f.readSession.mockResolvedValue(session);
+    expect(await f.run({ ...input, isCleaner })).toEqual({ outcome: "accepted" });
+    expect(f.generate).toHaveBeenCalledTimes(1); expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.store.recordAcceptance).toHaveBeenCalledWith(expect.anything(), "accepted-provider-id");
+    expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: (await f.generate.mock.results[0].value).replyText, fromNumberId: input.receivingPhoneNumberId });
+    expect(f.send).toHaveBeenCalledTimes(1); expect(JSON.stringify(session)).toBe(before);
+    expect(f.store.reportFailure).not.toHaveBeenCalled(); expect(f.store.suppress).not.toHaveBeenCalled(); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
+  });
+  it("keeps saved opt-out protected regardless of role or all-customer metadata", async () => {
+    const f = fixture(); f.config.mockReturnValue(allConfig); f.readSession.mockResolvedValue({ ...snapshot(), leadSource: "hiring", csQueue: "Teams", smsOptOut: 1 });
     expect(await f.run(input)).toEqual({ outcome: "excluded" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
   });
-  it("does not permit all-customer scope to create another cleaner test exception", async () => {
-    const f = fixture(); f.config.mockReturnValue({ ...allConfig, allowedPhone: input.fromPhone });
-    expect(await f.run({ ...input, isCleaner: true })).toEqual({ outcome: "excluded" }); expect(f.send).not.toHaveBeenCalled();
+  it.each(["+13029816191", "+12025550124", "+17035551234"])("responds to a different valid phone %s with exact matching context and no pilot phone", async fromPhone => {
+    const f = fixture(); f.config.mockReturnValue({ ...allConfig, allowedPhone: "", testCustomerOverride: false });
+    f.readSession.mockResolvedValue({ ...snapshot(), contact: { ...snapshot().contact, phone: fromPhone, rawPhone: fromPhone }, leadSource: "hiring", csQueue: "Teams" });
+    expect(await f.run({ ...input, fromPhone, isCleaner: true })).toEqual({ outcome: "accepted" });
+    expect(f.store.claim.mock.calls[0][0]).toMatchObject({ fromPhone, sessionId: input.sessionId, providerMessageId: input.providerMessageId });
+    expect(f.send).toHaveBeenCalledWith({ to: fromPhone, content: (await f.generate.mock.results[0].value).replyText, fromNumberId: input.receivingPhoneNumberId }); expect(f.send).toHaveBeenCalledTimes(1);
   });
-  it.each(["after-generation", "before-submission"])("suppresses a scope change %s without sending", async stage => {
+  it.each(["after-generation", "before-submission"])("ignores scope, phone and override replacement %s without altering the generated SMS", async stage => {
     const f = fixture(); f.config.mockReturnValueOnce(allConfig);
     if (stage === "before-submission") f.config.mockReturnValueOnce(allConfig);
-    f.config.mockReturnValue({ ...allConfig, scope: "pilot" });
-    expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.send).not.toHaveBeenCalled();
-    expect(stage === "after-generation" ? f.store.suppress : f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED");
+    f.config.mockReturnValue({ ...allConfig, allowedPhone: "", testCustomerOverride: false, scope: "pilot" });
+    expect(await f.run(input)).toEqual({ outcome: "accepted" }); expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: (await f.generate.mock.results[0].value).replyText, fromNumberId: input.receivingPhoneNumberId });
+    expect(f.store.suppress).not.toHaveBeenCalled(); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled(); expect(f.store.reportFailure).not.toHaveBeenCalled();
+  });
+  it("ignores in-place legacy metadata mutation after preparation and before submission", async () => {
+    const f = fixture(), config = { ...allConfig }; f.config.mockReturnValue(config);
+    const prepare = f.store.prepare.getMockImplementation()!;
+    f.store.prepare.mockImplementation(async (...args) => { const result = await prepare(...args); config.allowedPhone = ""; config.testCustomerOverride = false; config.scope = "pilot"; return result; });
+    expect(await f.run({ ...input, isCleaner: true })).toEqual({ outcome: "accepted" });
+    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: (await f.generate.mock.results[0].value).replyText, fromNumberId: input.receivingPhoneNumberId });
+    expect(f.store.suppress).not.toHaveBeenCalled(); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
   });
   it("rejects duplicate all-customer claims without regeneration, task creation or resend", async () => {
     const f = fixture(); f.config.mockReturnValue(allConfig); f.store.claim.mockResolvedValue(null as never);
-    expect(await f.run(input)).toEqual({ outcome: "duplicate" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    expect(await f.run(input)).toEqual({ outcome: "duplicate" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
   });
-  it("opens the existing lazy application only for a valid explicit all-customer scope", async () => {
-    for (const [key, value] of Object.entries(allEnv)) vi.stubEnv(key, value);
+  it.each([{ CLAUDE_CUSTOMER_SMS_SCOPE: undefined }, { CLAUDE_CUSTOMER_SMS_SCOPE: "pilot" }, { CLAUDE_CUSTOMER_SMS_SCOPE: "unknown-legacy", CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: undefined }, { CLAUDE_CUSTOMER_SMS_SCOPE: "all_customers", CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: "bad" }])("opens the existing application for a valid nonpilot phone despite legacy metadata %#", async patch => {
+    for (const [key, value] of Object.entries({ ...allEnv, ...patch })) vi.stubEnv(key, value);
     database.getDb.mockClear(); database.notify.mockClear();
     expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "failed" }); expect(database.getDb).toHaveBeenCalledTimes(1);
     expect(database.notify).toHaveBeenCalledWith({ title: "Customer SMS needs staff review", content: expect.stringContaining("Staff task could not be saved; review the conversation manually.") });

@@ -20,16 +20,19 @@ export function customerSmsInstant(value: unknown): number | null {
 export function claudeCustomerSmsConfig(env: NodeJS.ProcessEnv = process.env): CustomerSmsConfig | null {
   if (env.CLAUDE_CUSTOMER_SMS_ENABLED !== "true") return null;
   const startAt = customerSmsInstant(env.CLAUDE_CUSTOMER_SMS_START_AT);
-  const scope = env.CLAUDE_CUSTOMER_SMS_SCOPE ?? "pilot";
-  const allowedPhone = env.CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE;
-  if (!["pilot", "all_customers"].includes(scope) || startAt === null || typeof allowedPhone !== "string" || !/^\+[1-9]\d{1,14}$/.test(allowedPhone)
-    || normalizePhone(allowedPhone) !== allowedPhone) return null;
+  if (startAt === null) return null;
+  // Legacy pilot metadata is used only by the existing operational-test bypass.
+  // It must never restrict the automatic SMS responder's recipient or role.
+  const candidate = env.CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE;
+  const allowedPhone = typeof candidate === "string" && /^\+[1-9]\d{1,14}$/.test(candidate)
+    && normalizePhone(candidate) === candidate ? candidate : "";
   return { startAt, allowedPhone, testCustomerOverride: env.CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE === "true",
-    ...(scope === "all_customers" ? { scope } : {}) };
+    ...(env.CLAUDE_CUSTOMER_SMS_SCOPE === "all_customers" ? { scope: "all_customers" } : {}) };
 }
 export function isClaudeCustomerSmsPilotPhone(phone: unknown, env: NodeJS.ProcessEnv = process.env): boolean {
   const config = claudeCustomerSmsConfig(env);
-  return config !== null && typeof phone === "string" && /^\+?[\d().\s-]+$/.test(phone)
+  return config !== null && ["pilot", "all_customers"].includes(env.CLAUDE_CUSTOMER_SMS_SCOPE ?? "pilot")
+    && typeof phone === "string" && /^\+?[\d().\s-]+$/.test(phone)
     && normalizePhone(phone) === config.allowedPhone;
 }
 export function isClaudeCustomerSmsPilotCustomerOverride(phone: unknown, env: NodeJS.ProcessEnv = process.env): boolean {
@@ -37,16 +40,14 @@ export function isClaudeCustomerSmsPilotCustomerOverride(phone: unknown, env: No
   return !!config && config.testCustomerOverride && isClaudeCustomerSmsPilotPhone(phone, env)
     && (config.scope !== "all_customers" || config.allowedPhone === "+13029816191");
 }
-function phoneEligible(phone: unknown, config: CustomerSmsConfig): boolean {
+function phoneEligible(phone: unknown): boolean {
   if (typeof phone !== "string" || !/^\+?[\d().\s-]+$/.test(phone)) return false;
-  const normalized = normalizePhone(phone);
-  return !!normalized && typeof config.allowedPhone === "string" && normalizePhone(config.allowedPhone) === config.allowedPhone
-    && (config.scope === "all_customers" || ((config.scope === undefined || config.scope === "pilot") && normalized === config.allowedPhone));
+  return !!normalizePhone(phone);
 }
-/** Recipient scope only; exact stored customer classification is still required. */
+/** Every valid recipient is eligible, independent of pilot or sender classification. */
 export function isClaudeCustomerSmsPhoneEligible(phone: unknown, env: NodeJS.ProcessEnv = process.env): boolean {
   const config = claudeCustomerSmsConfig(env);
-  return !!config && phoneEligible(phone, config);
+  return !!config && phoneEligible(phone);
 }
 export const customerHistoryHash = (history: unknown): string => createHash("sha256").update(typeof history === "string" ? history : JSON.stringify(history)).digest("hex");
 export interface CustomerSmsSession extends AlternativeSessionRow { leadSource?: unknown; smsOptOut?: unknown; csQueue?: unknown }
@@ -108,26 +109,17 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
     if (!initialConfig) return { outcome: "disabled" };
     const config = { ...initialConfig };
     const createdAt = customerSmsInstant(input.createdAt), phone = normalizePhone(input.fromPhone);
-    const testCustomerOverride = config.testCustomerOverride === true && phone === config.allowedPhone
-      && (config.scope !== "all_customers" || phone === "+13029816191");
-    if (input.direction !== "incoming" || (input.isCleaner && !testCustomerOverride) || !Number.isSafeInteger(input.sessionId) || input.sessionId <= 0
+    if (input.direction !== "incoming" || !Number.isSafeInteger(input.sessionId) || input.sessionId <= 0
       || typeof input.providerMessageId !== "string" || !input.providerMessageId.trim() || input.providerMessageId.startsWith("cs-fallback-")
       || typeof input.receivingPhoneNumberId !== "string" || !input.receivingPhoneNumberId.trim()
       || typeof input.inboundText !== "string" || !input.inboundText.trim() || !phone || phone !== input.fromPhone
-      || !phoneEligible(phone, config)
+      || !phoneEligible(phone)
       || excludedSenders.has(phone) || stopped(input.inboundText) || createdAt === null || !Number.isFinite(input.receivedAt)
       || createdAt < config.startAt || input.receivedAt < config.startAt || createdAt > input.receivedAt) return { outcome: "excluded" };
     let claim: CustomerSmsClaim | null = null;
     let submissionStarted = false;
     let hasTask = false;
-    let failure: CustomerSmsFailureDetails | undefined;
     let failurePhase: CustomerSmsFailure["phase"] = "pre_send";
-    const fallbackPlan = (): CustomerReplyPlan => ({
-      replyText: "Sorry—I couldn't finish that response. I've flagged your message for our team to review.",
-      task: { title: "Review customer message after reply failure", items: [
-        { title: "Review the customer's message and follow up", evidenceQuote: input.inboundText },
-      ] },
-    });
     const refreshTask = async () => {
       if (!hasTask) return;
       try { await options.onTaskChange?.(); } catch { /* A refresh is not the committed task/send outcome. */ }
@@ -153,8 +145,7 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       const session = await options.readSession(input.sessionId);
       if (!session || session.contact.sessionId !== String(input.sessionId) || session.contact.phone !== phone
         || normalizePhone(session.contact.rawPhone) !== phone || session.lastInboundPhoneNumberId !== input.receivingPhoneNumberId
-        || Number(session.smsOptOut) === 1 || (!testCustomerOverride && (session.csQueue === "Teams"
-        || typeof session.leadSource !== "string" || /cleaner|hiring|interview|internal|staff/i.test(session.leadSource)))
+        || Number(session.smsOptOut) === 1
         || !currentTurn(session, input)) return { outcome: "excluded" };
       const receivingPhoneNumber = await options.readReceivingLine(input.receivingPhoneNumberId);
       if (normalizePhone(receivingPhoneNumber) !== receivingPhoneNumber || !receivingPhoneNumber || receivingPhoneNumber === phone) return { outcome: "excluded" };
@@ -164,7 +155,8 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       claim = await options.store.claim(binding);
       if (!claim) return { outcome: "duplicate" };
       let plan: CustomerReplyPlan;
-      try {
+      failurePhase = "generation";
+      {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const controller = new AbortController();
         try {
@@ -173,33 +165,13 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
           })]);
         } finally { if (timer) clearTimeout(timer); }
       }
-      catch (error) {
-        failure = { failures: [describeCustomerSmsFailure(error, "generation")] };
-        plan = fallbackPlan();
-      }
       const currentConfig = options.config();
-      if (!currentConfig || currentConfig.startAt !== config.startAt || currentConfig.allowedPhone !== config.allowedPhone
-        || currentConfig.testCustomerOverride !== config.testCustomerOverride || currentConfig.scope !== config.scope) {
+      if (!currentConfig || currentConfig.startAt !== config.startAt) {
         await options.store.suppress(claim, "CONFIG_CHANGED"); await reportFailure("CONFIG_CHANGED"); return { outcome: "suppressed" };
       }
-      let prepared: boolean | CustomerReplyPlan;
-      if (failure) failurePhase = "fallback_preparation";
-      try {
-        prepared = failure ? await options.store.prepare(claim, plan, failure) : await options.store.prepare(claim, plan);
-      } catch (error) {
-        // One deterministic fallback, never model retries or receipt revival.
-        // prepare's existing transaction rolls back the failed quote/task first.
-        if (failure) throw error;
-        failure = { failures: [describeCustomerSmsFailure(error, "preparation")] };
-        plan = fallbackPlan();
-        const recoveryConfig = options.config();
-        if (!recoveryConfig || recoveryConfig.startAt !== config.startAt || recoveryConfig.allowedPhone !== config.allowedPhone
-          || recoveryConfig.testCustomerOverride !== config.testCustomerOverride || recoveryConfig.scope !== config.scope) {
-          await options.store.suppress(claim, "CONFIG_CHANGED"); await reportFailure("CONFIG_CHANGED"); return { outcome: "suppressed" };
-        }
-        failurePhase = "fallback_preparation";
-        prepared = await options.store.prepare(claim, plan, failure);
-      }
+      failurePhase = "preparation";
+      // Internal failures are staff-only. Never generate or submit a canned error SMS.
+      const prepared = await options.store.prepare(claim, plan);
       if (!prepared) { await reportFailure("CUSTOMER_REPLY_PREPARATION_STOPPED"); return { outcome: "suppressed" }; }
       failurePhase = "pre_send";
       // Quote links and their canonical price text commit with the existing
@@ -207,10 +179,8 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       const replyPlan = typeof prepared === "object" ? prepared : plan;
       hasTask = replyPlan.task !== null;
       await refreshTask();
-      if (failure) await reportFailure(failure.failures[0].code);
       const submissionConfig = options.config();
-      if (!submissionConfig || submissionConfig.startAt !== config.startAt || submissionConfig.allowedPhone !== config.allowedPhone
-        || submissionConfig.testCustomerOverride !== config.testCustomerOverride || submissionConfig.scope !== config.scope) {
+      if (!submissionConfig || submissionConfig.startAt !== config.startAt) {
         await options.store.suppressBeforeSubmission(claim, "CONFIG_CHANGED"); await reportFailure("CONFIG_CHANGED"); await refreshTask(); return { outcome: "suppressed" };
       }
       if (options.store.verifyBeforeSubmission && !await options.store.verifyBeforeSubmission(claim)) {
@@ -241,7 +211,7 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
         try {
           if (submissionStarted) await options.store.markUncertain(claim);
           else await options.store.suppressBeforeSubmission(claim, "GENERATION_OR_PERSISTENCE_FAILED", {
-            failures: [...(failure?.failures ?? []), describeCustomerSmsFailure(error, failurePhase)].slice(-2),
+            failures: [describeCustomerSmsFailure(error, failurePhase)],
           });
         } catch { /* Existing durable claim remains blocked, never retried. */ }
       }

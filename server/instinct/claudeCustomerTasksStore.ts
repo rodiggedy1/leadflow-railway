@@ -125,7 +125,6 @@ export function createClaudeCustomerTaskPersistence() {
 
 /** Passive factory: no application DB fetch, network, model, sender, or booking action. */
 export function createClaudeCustomerTasksStore(db: Db, options: {
-  allowTestCustomer?: (phone: string) => boolean;
   /** SMS-only opt-in. Runs after freshness, in the task/reply transaction. */
   preparePlan?: (tx: Tx, claim: CustomerSmsClaim, plan: CustomerReplyPlan) => Promise<CustomerReplyPlan | null>;
 } = {}): ClaudeCustomerTasksStore {
@@ -155,11 +154,8 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
   }
   async function fresh(tx: Tx, binding: CustomerSmsBinding, compareContext = true): Promise<boolean> {
     const [session] = rows(await tx.execute(sql`SELECT * FROM conversation_sessions WHERE id = ${binding.sessionId} FOR UPDATE`));
-    const testCustomer = options.allowTestCustomer?.(binding.fromPhone) === true;
     if (!session || normalizePhone(session.leadPhone) !== binding.fromPhone
       || session.lastInboundPhoneNumberId !== binding.receivingPhoneNumberId || Number(session.smsOptOut) !== 0
-      || typeof session.leadSource !== "string" || (!testCustomer && (/cleaner|hiring|interview|internal|staff|schedule_confirm/i.test(session.leadSource)
-        || session.csQueue === "Teams" || /^INTERVIEW_|^SCHEDULE_CONFIRM/.test(session.stage ?? "")))
       || binding.fromPhone === binding.receivingPhoneNumber || stop(binding.inboundText)
       || typeof session.messageHistory !== "string") return false;
     let history: any;

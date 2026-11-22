@@ -153,10 +153,10 @@ describe("actual webhook additive customer dispatch provenance", () => {
     expect(JSON.parse(write.payload.messageHistory)[0]).toMatchObject({ opMsgId: "provider-original", receivingPhoneNumberId: "PN-cs" });
   });
 
-  it("never treats a persisted hiring row as a customer", async () => {
+  it("dispatches the exact persisted hiring row without changing its classification", async () => {
     const h = fixture({ existing: null, hiring: { id: 88, messageHistory: "[]", leadSource: "hiring_interview" } }); await h.runCs(message());
     expect(h.operations.find(op => op.operation === "update" && op.payload.messageHistory)?.target).toMatchObject({ value: 88 });
-    expect(h.dispatch).not.toHaveBeenCalled(); expect(h.madison).not.toHaveBeenCalled();
+    expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 88, isCleaner: true })); expect(h.madison).not.toHaveBeenCalled();
   });
 
   it.each([undefined, "", null])("does not dispatch synthetic/missing provider IDs %j but preserves existing drafts", async id => {
@@ -173,14 +173,14 @@ describe("actual webhook additive customer dispatch provenance", () => {
     expect(h.madison).toHaveBeenCalledTimes(1);
   });
 
-  it("excludes trustworthy cleaner identity while retaining existing inbound behavior", async () => {
+  it("responds to a known cleaner while retaining the existing saved classification", async () => {
     const h = fixture({ cleaner: true }); await h.runCs(message());
-    expect(h.dispatch).not.toHaveBeenCalled(); expect(h.madison).not.toHaveBeenCalled();
+    expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 42, isCleaner: true })); expect(h.madison).not.toHaveBeenCalled();
   });
 
-  it.each([{ csQueue: "Teams" }, { stage: "INTERVIEW_LINK_SENT" }, { stage: "SCHEDULE_CONFIRM_SENT" }])("excludes noncustomer saved session flags %j", async flags => {
+  it.each([{ csQueue: "Teams" }, { stage: "INTERVIEW_LINK_SENT" }, { stage: "SCHEDULE_CONFIRM_SENT" }, { leadSource: "staff" }, { leadSource: "internal" }])("responds regardless of saved classification %j", async flags => {
     const h = fixture({ existing: { id: 42, leadSource: "cs-inbound", messageHistory: "[]", ...flags } });
-    await h.runCs(message()); expect(h.dispatch).not.toHaveBeenCalled();
+    await h.runCs(message()); expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).not.toHaveBeenCalled();
   });
 
   it("failed persistence never dispatches or creates a customer reply", async () => {
@@ -210,17 +210,20 @@ describe("actual webhook additive customer dispatch provenance", () => {
     const h = fixture({ dispatchThrows: true }); await h.runCs(message());
     expect(h.dispatch).toHaveBeenCalledTimes(1); expect(h.madison).not.toHaveBeenCalled();
   });
-  it.each([{ from: "+12025559876" }, { createdAt: "2026-11-15T18:00:00Z" }, { text: "STOP" }])("preserves native drafting for nonpilot, old, or opt-out input %#", async overrides => {
+  it.each([{ createdAt: "2026-11-15T18:00:00Z" }, { text: "STOP" }])("preserves existing drafting for old or opt-out input %#", async overrides => {
     const h = fixture(); await h.runCs(message(overrides));
-    if (overrides.from) expect(h.dispatch).not.toHaveBeenCalled();
-    expect(h.madison).toHaveBeenCalledTimes(1);
-  });
-  it("missing pilot phone cannot import the new application and preserves existing handling", async () => {
-    const h = fixture({ missingAllowedPhone: true }); await h.runCs(message());
     expect(h.dispatch).not.toHaveBeenCalled(); expect(h.madison).toHaveBeenCalledTimes(1);
-    expect(h.testImport.mock.calls.flat()).not.toContain("./instinct/claudeCustomerSmsApplication");
   });
-  it("only the approved test role bypass admits an exact persisted cleaner/Teams session without rewriting its role", async () => {
+  it("responds to a nonpilot phone even when legacy scope is absent", async () => {
+    const h = fixture(); await h.runCs(message({ from: "+12025559876" }));
+    expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ fromPhone: "+12025559876" })); expect(h.madison).not.toHaveBeenCalled();
+  });
+  it("a missing legacy pilot phone does not disable the responder", async () => {
+    const h = fixture({ missingAllowedPhone: true }); await h.runCs(message());
+    expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).not.toHaveBeenCalled();
+    expect(h.testImport.mock.calls.flat()).toContain("./instinct/claudeCustomerSmsApplication");
+  });
+  it("keeps an exact persisted cleaner/Teams classification unchanged while replying", async () => {
     const h = fixture({ cleaner: true, override: true, existing: { id: 42, leadSource: "cs-inbound-cleaner", csQueue: "Teams", stage: "OPEN", messageHistory: "[]" } });
     await h.runCs(message()); expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 42, isCleaner: true }));
     const update = h.operations.find(op => op.operation === "update" && op.payload.messageHistory)!;
@@ -238,9 +241,10 @@ describe("actual webhook additive customer dispatch provenance", () => {
     expect(persisted.payload.lastInboundPhoneNumberId).toBe("PN-bark");
   });
 
-  it("Bark-only line uses the staff directory before customer dispatch", async () => {
+  it("Bark-only line does not consult a staff directory to reject a sender", async () => {
     const h = fixture({ cleaner: true }, true); await h.runWebhook(message({ phoneNumberId: "PN-bark" }));
-    expect(h.dispatch).not.toHaveBeenCalled();
+    expect(h.dispatch).toHaveBeenCalledOnce();
+    expect(h.operations.filter(op => op.operation === "read" && op.table === "cleanerProfiles")).toEqual([]);
   });
 
   it.each(["message.delivered", "message.updated", "message.sent"])("delivery/system event %s never reaches the new hook", async type => {
@@ -248,7 +252,7 @@ describe("actual webhook additive customer dispatch provenance", () => {
   });
 });
 
-describe("all-customer scope changes only existing response eligibility", () => {
+describe("all-role SMS keeps existing intake and operational handling", () => {
   const customer = "+12025559876";
   it.each(["PN-cs", "PN-leads"])("opens the actual %s customer handoff and skips only the competing draft", async phoneNumberId => {
     const h = fixture({ allCustomers: true }); await h.runWebhook(message({ from: customer, phoneNumberId }));
@@ -262,22 +266,22 @@ describe("all-customer scope changes only existing response eligibility", () => 
     const h = fixture({ allCustomers: true, existing: null }); await h.runCs(message({ from: customer }));
     expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 77, fromPhone: customer })); expect(h.madison).not.toHaveBeenCalled();
   });
-  it.each(["PN-cs", "PN-bark"])("keeps cleaner handling on %s out of the customer agent", async phoneNumberId => {
+  it.each(["PN-cs", "PN-bark"])("responds to a cleaner on %s without disabling existing operational handlers", async phoneNumberId => {
     const h = fixture({ allCustomers: true, cleaner: true }, phoneNumberId === "PN-bark");
-    await h.runWebhook(message({ from: customer, phoneNumberId })); expect(h.dispatch).not.toHaveBeenCalled();
+    await h.runWebhook(message({ from: customer, phoneNumberId })); expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).not.toHaveBeenCalled();
     if (phoneNumberId === "PN-cs") {
-      expect(h.madison).toHaveBeenCalledOnce(); expect(h.sandbox.tryDetectCleanerRunningLate).toHaveBeenCalledOnce(); expect(h.sandbox.tryAdvanceGetEtaMission).toHaveBeenCalledOnce();
+      expect(h.sandbox.tryDetectCleanerRunningLate).toHaveBeenCalledOnce(); expect(h.sandbox.tryAdvanceGetEtaMission).toHaveBeenCalledOnce();
     } else {
       expect(h.sandbox.tryStoreJobSmsReply).toHaveBeenCalledOnce(); expect(h.sandbox.tryHandleCleanerRatingReply).toHaveBeenCalledOnce(); expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
     }
   });
-  it.each([{ csQueue: "Teams" }, { leadSource: "internal" }, { leadSource: "staff" }, { stage: "INTERVIEW_LINK_SENT" }, { stage: "SCHEDULE_CONFIRM_SENT" }])("preserves stored noncustomer handling %#", async flags => {
+  it.each([{ csQueue: "Teams" }, { leadSource: "internal" }, { leadSource: "staff" }, { stage: "INTERVIEW_LINK_SENT" }, { stage: "SCHEDULE_CONFIRM_SENT" }])("responds to stored team, staff, interview and scheduling flags %#", async flags => {
     const h = fixture({ allCustomers: true, existing: { id: 42, leadSource: "cs-inbound", messageHistory: "[]", ...flags } });
-    await h.runCs(message({ from: customer })); expect(h.dispatch).not.toHaveBeenCalled(); expect(h.madison).toHaveBeenCalledOnce();
+    await h.runCs(message({ from: customer })); expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).not.toHaveBeenCalled();
   });
-  it("preserves the actual hiring intake row and its existing draft path", async () => {
+  it("preserves the actual hiring intake row and lets Instinct respond", async () => {
     const h = fixture({ allCustomers: true, existing: null, hiring: { id: 88, leadSource: "hiring_interview", messageHistory: "[]" } });
-    await h.runCs(message({ from: customer })); expect(h.dispatch).not.toHaveBeenCalled(); expect(h.madison).toHaveBeenCalledOnce();
+    await h.runCs(message({ from: customer })); expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 88 })); expect(h.madison).not.toHaveBeenCalled();
     expect(h.operations.find(op => op.operation === "update" && op.payload.messageHistory)?.target).toMatchObject({ value: 88 });
   });
   it.each([{ createdAt: "2026-11-15T18:00:00Z" }, { createdAt: undefined }, { createdAt: "2026-11-16T18:01:00Z" }, { id: "cs-fallback-untrusted" }, { text: "STOP" }, { direction: "outgoing" }])("does not claim an old, replayed, opt-out or malformed customer event %#", async patch => {
@@ -353,13 +357,27 @@ describe("customer history sync precedes the exact Instinct snapshot", () => {
     expect(h.sandbox.console.warn).toHaveBeenCalledWith("[CS] syncAllOutboundMessages error:", expect.any(Error));
     expect(h.madison).not.toHaveBeenCalled();
   });
-  it.each([{ disabled: true }, { allCustomers: true, cleaner: true }, { allCustomers: true, existing: null,
-    hiring: { id: 88, leadSource: "hiring_interview", messageHistory: "[]" } }])("retains original non-Instinct sync handling %#", async options => {
+  it.each([{ disabled: true }])("retains original sync handling when Instinct is disabled %#", async options => {
     const h = fixture(options); let release!: () => void;
     h.sandbox.syncAllOutboundMessages.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
     await h.runCs(message());
     expect(h.dispatch).not.toHaveBeenCalled(); expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce();
     release();
+  });
+  it.each([{ cleaner: true }, { existing: null, hiring: { id: 88, leadSource: "hiring_interview", messageHistory: "[]" } }])("awaits the exact team/hiring history sync before dispatch %#", async options => {
+    const h = fixture(options); let release!: () => void; let signalStarted!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    h.sandbox.syncAllOutboundMessages.mockImplementationOnce(async (phone: string, sessionId: number) => {
+      signalStarted(); await gate;
+      const history = JSON.parse(h.persistedHistories.get(sessionId)!);
+      h.persistedHistories.set(sessionId, JSON.stringify([confirmation, ...history]));
+    });
+    const pending = h.runCs(message({ from: "+12025559876", text: "Yes" })); await started;
+    expect(h.dispatch).not.toHaveBeenCalled(); release(); await pending;
+    expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce();
+    expect(h.dispatchSnapshots[0].history).toEqual([confirmation, expect.objectContaining({ role: "user", content: "Yes", opMsgId: "provider-original" })]);
+    expect(h.madison).not.toHaveBeenCalled();
   });
   it("preserves the existing single sync on the separate Bark inbound path", async () => {
     const h = fixture({ allCustomers: true }, true); await h.runWebhook(message({ phoneNumberId: "PN-bark" }));

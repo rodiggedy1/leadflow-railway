@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { createClaudeCustomerSmsService, claudeCustomerSmsConfig, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride, type CustomerSmsInput } from "./claudeCustomerSms";
+import { createClaudeCustomerSmsService, claudeCustomerSmsConfig, isClaudeCustomerSmsPhoneEligible, type CustomerSmsInput } from "./claudeCustomerSms";
 
 /** Trusted, post-persistence event entrypoint. Never mounted as a public send
  * endpoint. Existing application and agents are imported only after explicit
@@ -29,7 +29,6 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
   const quoteStore = createSmsBookingQuoteStore(db);
   let linkPrepared = false;
   const taskStore = createClaudeCustomerTasksStore(db, {
-    allowTestCustomer: isClaudeCustomerSmsPilotCustomerOverride,
     preparePlan: createSmsBookingQuotePlanPreparer(quoteStore, Date.now, () => { linkPrepared = true; }),
   });
   const service = createClaudeCustomerSmsService({

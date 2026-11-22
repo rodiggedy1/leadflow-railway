@@ -312,19 +312,11 @@ function expectAcceptedHistory(h: ReturnType<typeof harness>, input: CustomerSms
   expect(draft).toMatchObject({ status: "SENT", generatedDraft: submitted.content, approvedText: submitted.content });
   expect(draft).not.toHaveProperty("deliveredAt");
 }
-function expectSafeFallback(h: ReturnType<typeof harness>, input: CustomerSmsInput) {
-  const reply = "Sorry‚ÄîI couldn't finish that response. I've flagged your message for our team to review.";
-  const task = h.tasks().find(value => value.sourceMessageId === input.providerMessageId)!;
-  expect(task).toMatchObject({ title: "Review customer message after reply failure", status: "unclaimed",
-    items: [{ id: "item-1", title: "Review the customer's message and follow up", evidenceQuote: input.inboundText, completedBy: null, completedAt: null },
-      { id: "reply-failure-review", title: "Review the customer reply failure and follow up", evidenceQuote: input.inboundText, completedBy: null, completedAt: null }],
-    reply: { text: reply, status: "sent" } });
+function expectInternalFailure(h: ReturnType<typeof harness>, input: CustomerSmsInput) {
+  expectUnsubmittedFailureReview(h, input, "GENERATION_OR_PERSISTENCE_FAILED");
   const receipt = h.state().drafts.find(value => value.inboundOpenPhoneId === input.providerMessageId)!;
-  expect(receipt.capabilityResult).toMatchObject({ phase: "submission_started", taskId: task.id, failureReviewRecorded: true });
-  expect(receipt.capabilityResult.failureReviewCode).toBe(JSON.parse(receipt.errorMessage).failures[0].code);
-  expect(receipt.generatedDraft).toBe(reply); expect(JSON.parse(receipt.errorMessage).failures).not.toHaveLength(0);
-  expect(receipt.generatedDraft).not.toMatch(/\$|https?:|\{\{|confirmed|reserved|processed your payment/i);
-  expectAcceptedHistory(h, input);
+  expect(JSON.parse(receipt.errorMessage).failures).not.toHaveLength(0);
+  expect(h.history(input.sessionId).some(turn => turn.content.includes("couldn't finish that response"))).toBe(false);
 }
 function expectUnsubmittedFailureReview(h: ReturnType<typeof harness>, input: CustomerSmsInput, code: string) {
   const matches = h.tasks().filter(value => value.sourceMessageId === input.providerMessageId);
@@ -369,23 +361,23 @@ describe("SMS new-booking quote application: real generator ‚Üí qualification ‚Ü
     expect((await h.turn("Deep home cleaning, 3 bedrooms, 2 bathrooms, House, condition 5, biweekly; no extras confirmed.", collected, "collect")).result.outcome).toBe("accepted");
     const before = structuredClone(h.quote());
     const bad = await h.turn("What is the price", {}, "quote", { replyText: "It costs $1." });
-    expect(bad.result.outcome).toBe("accepted"); expectSafeFallback(h, bad.input);
+    expect(bad.result.outcome).toBe("failed"); expectInternalFailure(h, bad.input);
     expect(h.quote()).toEqual(before); expect(h.state().funnels).toEqual([]);
     const next = await h.turn("Please tell me the actual quote price.", {}, "quote");
     expect(next.result.outcome).toBe("accepted");
     const preview = previewCallBookingQuote({ pricing, extrasConfirmed: true });
     if (!preview.success) throw Error("Expected canonical price");
-    expect(h.send.mock.calls[2][0].content).toContain(preview.priceFormatted);
-    expect(h.send.mock.calls[2][0].content).not.toContain("couldn't finish");
+    expect(h.send.mock.calls[1][0].content).toContain(preview.priceFormatted);
+    expect(h.send.mock.calls[1][0].content).not.toContain("couldn't finish");
     expect(h.tasks()).toHaveLength(1); expect(h.runner).toHaveBeenCalledTimes(3); expectAcceptedHistory(h, next.input);
   });
-  it("claims one receipt and sends one task-backed fallback for concurrent duplicate deliveries of invalid model output", async () => {
+  it("claims one receipt and records one internal failure without sending for concurrent duplicate deliveries of invalid model output", async () => {
     const h = harness(), input = h.append("What is the price"); h.queue("invalid JSON output");
     const results = await Promise.all([h.run(input), h.run(input), h.run(input)]);
-    expect(results.filter(value => value.outcome === "accepted")).toHaveLength(1);
+    expect(results.filter(value => value.outcome === "failed")).toHaveLength(1);
     expect(results.filter(value => value.outcome === "duplicate")).toHaveLength(2);
-    expectSafeFallback(h, input); expect(h.tasks()).toHaveLength(1);
-    expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
+    expectInternalFailure(h, input); expect(h.tasks()).toHaveLength(1);
+    expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).not.toHaveBeenCalled();
     expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]);
   });
   it.each(["new-inbound", "human-reply", "global-optout", "session-optout", "line-changed", "phone-changed", "config-changed"])
@@ -400,9 +392,9 @@ describe("SMS new-booking quote application: real generator ‚Üí qualification ‚Ü
         if (change === "phone-changed") h.row().leadPhone = "+17035559876";
         if (change === "config-changed") h.changeConfig({ ...h.config(), startAt: NOW - 2 });
       });
-      expect(await h.run(input)).toEqual({ outcome: "suppressed" });
+      expect(await h.run(input)).toEqual({ outcome: "failed" });
       expect(h.send).not.toHaveBeenCalled(); expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]);
-      if (change === "config-changed") expectUnsubmittedFailureReview(h, input, "CONFIG_CHANGED");
+      if (change === "config-changed") expectInternalFailure(h, input);
       else expect(h.tasks()).toEqual([]);
     });
   it("answers 'What is the price' with the canonical total before collecting date/address and continues to a valid SMS link", async () => {
@@ -842,7 +834,7 @@ describe("SMS new-booking quote application: real generator ‚Üí qualification ‚Ü
     expect(h.send.mock.calls[2][0].content).toContain(original.link!.token);
   });
 
-  it.each(["fingerprint", "input", "quote-id", "customer-phone", "url-path", "price"])("rejects a tampered historical %s quote and sends only the task-backed fallback", async corruption => {
+  it.each(["fingerprint", "input", "quote-id", "customer-phone", "url-path", "price"])("rejects a tampered historical %s quote and keeps the failure internal", async corruption => {
     const h = harness(); await h.turn();
     await h.turn("Use 4 bedrooms for this new quote and send the revised link.", { bedrooms: 4 });
     const card = h.quoteRows()[0], envelope = JSON.parse(card.metadata);
@@ -858,11 +850,11 @@ describe("SMS new-booking quote application: real generator ‚Üí qualification ‚Ü
     card.metadata = JSON.stringify(envelope);
     const before = structuredClone({ cards: h.state().cards, funnels: h.state().funnels }), input = h.append("Return to 3 bedrooms and send my new quote link.");
     h.queue(h.output(input, { bedrooms: 3 }));
-    expect(await h.run(input)).toEqual({ outcome: "accepted" });
+    expect(await h.run(input)).toEqual({ outcome: "failed" });
     expect(h.state().cards.filter(row => before.cards.some(old => old.id === row.id))).toEqual(before.cards);
     expect(h.state().funnels).toEqual(before.funnels);
-    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.send).toHaveBeenCalledTimes(3);
-    expectSafeFallback(h, input); expect(h.history().filter(turn => turn.role === "assistant")).toHaveLength(3);
+    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.send).toHaveBeenCalledTimes(2);
+    expectInternalFailure(h, input); expect(h.history().filter(turn => turn.role === "assistant")).toHaveLength(2);
   });
 
   it("a simultaneous repeated provider delivery can generate, create a link and submit only once even across fresh factories", async () => {
@@ -1013,9 +1005,9 @@ describe("SMS new-booking quote application: real generator ‚Üí qualification ‚Ü
     const value = await h.turn(FULL_TEXT, fullFields, "link", {
       quoteTextTemplate: "First cleaning: {{firstCleaningPrice}}. Review: {{bookingLink}}. Again: {{bookingLink}}.",
     });
-    expect(value.result).toEqual({ outcome: "accepted" }); expectSafeFallback(h, value.input);
+    expect(value.result).toEqual({ outcome: "failed" }); expectInternalFailure(h, value.input);
     expect(h.writes.some(write => write.table === "booking_funnel_records" || write.kind === SMS_BOOKING_QUOTE_ACTION)).toBe(false);
-    expect(h.quoteRows()).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
+    expect(h.quoteRows()).toEqual([]); expect(h.send).not.toHaveBeenCalled();
   });
 
   it("uses a Spanish server-owned summary with complete canonical facts instead of the model acknowledgement without a legacy template", async () => {
@@ -1085,10 +1077,10 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
     expect(await h.run(input)).toEqual({ outcome: "failed" }); expect(h.state().drafts).toEqual([]); expect(h.runner).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled(); expect(h.quoteRows()).toEqual([]);
   });
 
-  it.each(["customerPhone", "fromNumberId", "url", "price", "customPriceCents"])("rejects model-owned %s and sends only a safe task-backed fallback", async key => {
+  it.each(["customerPhone", "fromNumberId", "url", "price", "customPriceCents"])("rejects model-owned %s and keeps the failure internal", async key => {
     const h = harness(), input = h.append(FULL_TEXT), output = h.output(input, fullFields); (output.bookingQuote.fields as Row)[key] = "untrusted"; h.queue(output);
-    expect(await h.run(input)).toEqual({ outcome: "accepted" }); expectSafeFallback(h, input);
-    expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
+    expect(await h.run(input)).toEqual({ outcome: "failed" }); expectInternalFailure(h, input);
+    expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.send).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1112,8 +1104,8 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
     ["unknown template placeholder", { quoteTextTemplate: "{{firstCleaningPrice}} {{bookingLink}} {{customPrice}}" }],
   ])("rejects active %s rather than trusting the model with prices, links or completed-business claims", async (_label, patch) => {
     const h = harness(), input = h.append(FULL_TEXT); h.queue(h.output(input, fullFields, "link", patch as Row));
-    expect(await h.run(input)).toEqual({ outcome: "accepted" }); expectSafeFallback(h, input);
-    expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
+    expect(await h.run(input)).toEqual({ outcome: "failed" }); expectInternalFailure(h, input);
+    expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.send).not.toHaveBeenCalled();
   });
 
   it("does not make an incomplete link request bookable or invent extras while their selection is still unknown", async () => {
@@ -1140,26 +1132,21 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
       for (const evidence of Object.values(output.bookingQuote.evidence)) evidence.turnIndex = 2;
       output.bookingQuote.evidence.bedrooms = { turnIndex: 0, quote: "3 bedrooms" };
     }
-    h.queue(output); expect(await h.run(input)).toEqual({ outcome: "accepted" }); expectSafeFallback(h, input);
-    expect(h.state().funnels).toEqual([]); expect(h.quoteRows()).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
+    h.queue(output); expect(await h.run(input)).toEqual({ outcome: "failed" }); expectInternalFailure(h, input);
+    expect(h.state().funnels).toEqual([]); expect(h.quoteRows()).toEqual([]); expect(h.send).not.toHaveBeenCalled();
   });
 
   it.each(["funnel", "state-insert", "state-save", "task-insert", "task-save", "receipt-prepare", "receipt-insert"] as Fault[])("rolls back all quote/link/task effects when %s persistence fails before submission", async fault => {
     const h = harness(), input = h.append(`${FULL_TEXT} Also update my gate note to use gate 1234.`);
     h.queue(h.output(input, fullFields, "link", { task: { title: "Update the existing customer access note", items: [{ title: "Update the gate note", evidenceQuote: "use gate 1234" }] } }));
     const beforeHistory = h.row().messageHistory; h.setFault(fault);
-    const canPersistFallback = ["funnel", "state-insert", "state-save"].includes(fault);
-    expect(await h.run(input)).toEqual({ outcome: canPersistFallback ? "accepted" : "failed" });
+    expect(await h.run(input)).toEqual({ outcome: "failed" });
     expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]);
-    if (canPersistFallback) {
-      expectSafeFallback(h, input); expect(h.send).toHaveBeenCalledTimes(1); expect(h.tasks()).toHaveLength(1);
-    } else {
-      if (fault === "receipt-prepare") expectUnsubmittedFailureReview(h, input, "GENERATION_OR_PERSISTENCE_FAILED");
-      else expect(h.state().cards).toEqual([]);
-      expect(h.row().messageHistory).toBe(beforeHistory); expect(h.send).not.toHaveBeenCalled();
-      if (fault === "receipt-insert") expect(h.state().drafts).toEqual([]);
-      else expect(h.state().drafts[0]).toMatchObject({ status: "DISMISSED", errorCode: "GENERATION_OR_PERSISTENCE_FAILED" });
-    }
+    if (["funnel", "state-insert", "state-save", "receipt-prepare"].includes(fault)) expectInternalFailure(h, input);
+    else expect(h.state().cards).toEqual([]);
+    expect(h.row().messageHistory).toBe(beforeHistory); expect(h.send).not.toHaveBeenCalled();
+    if (fault === "receipt-insert") expect(h.state().drafts).toEqual([]);
+    else expect(h.state().drafts[0]).toMatchObject({ status: "DISMISSED", errorCode: "GENERATION_OR_PERSISTENCE_FAILED" });
     expect(h.events).toContain("rollback");
     expect(h.events).toContain(`fault:${fault}`);
   });
@@ -1217,6 +1204,77 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
 });
 
 describe("ordinary customer service and original human-task authority remain intact", () => {
+  it.each(["null", "valid saved"] as const)("accepts 'Yes that's fine' to a saved staff availability question exactly once with %s quote state", async stateCase => {
+    const h = harness();
+    if (stateCase === "valid saved") {
+      // Seed through the real in-memory quote store, not another runner output.
+      const seed = h.append(FULL_TEXT), binding: CustomerSmsBinding = {
+        sessionId: seed.sessionId, providerMessageId: seed.providerMessageId, fromPhone: seed.fromPhone,
+        receivingPhoneNumberId: seed.receivingPhoneNumberId, receivingPhoneNumber: BUSINESS,
+        inboundText: seed.inboundText, createdAt: NOW, receivedAt: seed.receivedAt, customerName: NAME,
+        historyHash: createHash("sha256").update(h.row().messageHistory).digest("hex"),
+      };
+      const quoteStore = h.stores().quoteStore;
+      await h.db.transaction((tx: any) => quoteStore.prepare(tx, {
+        binding, previous: null, update: h.output(seed, fullFields, "collect").bookingQuote,
+        originalConversation: h.history(), nowMs: NOW, replyText: "Thanks for those details.",
+      }));
+      expect(await quoteStore.read(binding)).toEqual(h.quote());
+      expect(h.quote()).toMatchObject({ version: 1, revision: 1, fields: fullFields, link: null });
+    } else expect(h.quote()).toBeNull();
+    const staffTurn = {
+      role: "assistant", content: "The team would like to drop by tomorrow morning, if possible. Will you be available then?",
+      ts: NOW + h.row().messageCount, opMsgId: "synthetic-staff-availability-question", sessionId: 7,
+      senderName: OWNER.name, direction: "outgoing", receivingPhoneNumberId: LINE, fromNumberId: LINE,
+      from: BUSINESS, to: [PHONE],
+    };
+    h.row().messageHistory = JSON.stringify([...h.history(), staffTurn]); h.row().messageCount++;
+    const input = h.append("Yes that's fine"), originalConversation = structuredClone(h.history());
+    const beforeHistory = h.row().messageHistory, beforeCount = h.row().messageCount;
+    const before = structuredClone({ cards: h.state().cards, funnels: h.state().funnels, quote: h.quote(), tasks: h.tasks() });
+    const writeStart = h.writes.length, eventStart = h.events.length;
+    expect(input.providerMessageId).toMatch(/^synthetic-inbound-\d+$/);
+    expect(originalConversation.at(-2)).toEqual(staffTurn);
+    expect(originalConversation.at(-1)).toMatchObject({ role: "user", content: input.inboundText, opMsgId: input.providerMessageId,
+      sessionId: input.sessionId, receivingPhoneNumberId: LINE, direction: "incoming", from: PHONE, to: [BUSINESS] });
+    const replyText = "Great! Thank you!";
+    h.queue({ replyText, task: null, bookingQuote: null });
+    const results = await Promise.all([h.run(input), h.run(input), h.run(input)]);
+    expect(results.filter(value => value.outcome === "accepted")).toHaveLength(1);
+    expect(results.filter(value => value.outcome === "duplicate")).toHaveLength(2);
+    expect(h.runner).toHaveBeenCalledTimes(1);
+    const prompt = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
+    expect(prompt.incomingMessage).toBe("Yes that's fine");
+    expect(prompt.context.originalConversation).toEqual(originalConversation.map((turn, turnIndex) => ({ ...turn, turnIndex })));
+    expect(prompt.context.binding).toMatchObject({ sessionId: input.sessionId, providerMessageId: input.providerMessageId,
+      inboundText: input.inboundText, fromPhone: PHONE, receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS,
+      historyHash: createHash("sha256").update(beforeHistory).digest("hex") });
+    expect(prompt.context.smsBookingQuote.state).toEqual(before.quote);
+    expect(prompt.context.knowledgeBase).toBe(KNOWLEDGE);
+    expect(h.readKnowledge.mock.calls).toEqual([[input.inboundText]]);
+    expect(h.send.mock.calls).toEqual([[{ to: PHONE, fromNumberId: LINE, content: replyText }]]);
+    expect(h.state().drafts).toHaveLength(1);
+    const receipt = h.state().drafts[0];
+    expect(receipt).toMatchObject({ capability, inboundOpenPhoneId: input.providerMessageId, originalMessage: input.inboundText,
+      status: "SENT", generatedDraft: replyText, approvedText: replyText, outboundOpenPhoneId: "synthetic-outbound-1",
+      sentAt: new Date(NOW), errorCode: null, errorStage: null, capabilityResult: { phase: "submission_started", taskId: null } });
+    expect(receipt.errorMessage ?? null).toBeNull();
+    expect(receipt.capabilityResult).not.toHaveProperty("failureReviewRecorded");
+    expectAcceptedHistory(h, input);
+    expect(h.history().slice(0, -1)).toEqual(originalConversation);
+    expect(h.history().at(-1)).toMatchObject({ role: "assistant", content: replyText, opMsgId: receipt.outboundOpenPhoneId });
+    expect(h.row()).toMatchObject({ messageCount: beforeCount + 1, lastMessageText: replyText, lastMessageRole: "assistant" });
+    expect(h.tasks()).toEqual([]); expect(h.tasks()).toEqual(before.tasks);
+    expect(h.state().cards).toEqual(before.cards); expect(h.quote()).toEqual(before.quote);
+    expect(h.state().funnels).toEqual(before.funnels);
+    expect(h.writes.slice(writeStart).some(write => write.table === "ops_chat_messages" || write.table === "booking_funnel_records"
+      || ["failure-detail", "failure-review", "suppress", "uncertain"].includes(write.kind))).toBe(false);
+    expect(h.events.slice(eventStart)).not.toContain("rollback");
+    const acceptedState = structuredClone(h.state());
+    expect(["excluded", "duplicate"]).toContain((await h.run(input)).outcome);
+    expect(h.state()).toEqual(acceptedState); expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves ordinary reply/checklist text, creates no quote state and still requires human claim plus a completion note without booking or resolving a session", async () => {
     const h = harness(), text = "Please move my existing visit to Friday and use gate 1234.", input = h.append(text);
     const replyText = "Thanks, Mar√≠a! We'll take care of your request and confirm once the changes are made.";

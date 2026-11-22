@@ -135,15 +135,12 @@ describe("customer task store — offline transactional SQL port", () => {
     await expect(h.store.prepare(c, { ...plan, task: { ...plan.task, items: [{ title: "Invented", evidenceQuote: "Tuesday" }] } })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(h.state().cards).toHaveLength(0); expect(h.state().drafts[0].status).toBe("TOOLS_RUNNING");
   });
-  it.each(["phone", "line", "session_optout", "global_optout", "source_kind", "queue", "interview_stage", "source_content", "source_id", "new_inbound", "human_reply"])("fresh prepare rejects %s change", async change => {
+  it.each(["phone", "line", "session_optout", "global_optout", "source_content", "source_id", "new_inbound", "human_reply"])("fresh prepare rejects %s change", async change => {
     const h = port(), c = (await h.store.claim(h.binding))!, s = h.state().sessions[0];
     if (change === "phone") s.leadPhone = "+12025559876";
     if (change === "line") s.lastInboundPhoneNumberId = "PN-other";
     if (change === "session_optout") s.smsOptOut = 1;
     if (change === "global_optout") h.state().optouts = [{ id: 1 }];
-    if (change === "source_kind") s.leadSource = "hiring";
-    if (change === "queue") s.csQueue = "Teams";
-    if (change === "interview_stage") s.stage = "INTERVIEW_READY";
     if (change === "source_content") s.messageHistory = s.messageHistory.replace("Friday", "Saturday");
     if (change === "source_id") s.messageHistory = s.messageHistory.replace("inbound-1", "inbound-2");
     if (change === "new_inbound" || change === "human_reply") s.messageHistory = JSON.stringify([...JSON.parse(s.messageHistory), { role: change === "new_inbound" ? "user" : "assistant", content: "New text", ts: 120, opMsgId: "new-1" }]);
@@ -249,16 +246,24 @@ describe("customer task store — offline transactional SQL port", () => {
     await expect(h.store.suppressBeforeSubmission(c, "CONFIG_CHANGED")).rejects.toMatchObject({ code: "CONFLICT" });
     expect(h.state().drafts[0].status).toBe("SENDING");
   });
-  it("the explicit one-number test exception permits a cleaner/Teams snapshot without changing its role records", async () => {
-    const h = port({ allowTestCustomer: phone => phone === "+17035551234" });
-    Object.assign(h.state().sessions[0], { leadSource: "cs-inbound-cleaner", csQueue: "Teams" });
+  it.each([{ leadSource: "cs-inbound-cleaner", csQueue: "Teams" }, { leadSource: "hiring", stage: "INTERVIEW_READY" },
+    { leadSource: "staff" }, { leadSource: "internal" }, { leadSource: "schedule_confirm", stage: "SCHEDULE_CONFIRM_SENT" }, { leadSource: undefined }])("allows saved sender classification %# without rewriting it", async flags => {
+    const h = port(); Object.assign(h.state().sessions[0], flags);
     const before = structuredClone(h.state().sessions[0]), c = await h.prepared();
     expect(c.binding.fromPhone).toBe("+17035551234"); expect(h.state().sessions[0]).toEqual(before);
+    expect(await h.store.verifyBeforeSubmission(c)).toBe(true);
     expect(h.task().customerPhone).toBe("+17035551234");
   });
-  it.each(["other_phone", "session_optout", "global_optout"])("the test exception cannot bypass %s", async kind => {
-    const h = port({ allowTestCustomer: phone => phone === (kind === "other_phone" ? "+13029816191" : "+17035551234") });
-    Object.assign(h.state().sessions[0], { leadSource: "cs-inbound-cleaner", csQueue: "Teams" });
+  it.each([{ leadSource: "hiring" }, { csQueue: "Teams" }, { stage: "INTERVIEW_READY" }, { stage: "SCHEDULE_CONFIRM_SENT" }, { leadSource: undefined }])("classification changes %# do not suppress an unchanged current message", async flags => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
+    Object.assign(h.state().sessions[0], flags);
+    expect(await h.store.prepare(c, plan)).toBe(true); expect(await h.store.verifyBeforeSubmission(c)).toBe(true);
+    expect(await h.store.recordAcceptance(c, "outbound-1")).toBe(true);
+    expect(h.state().drafts[0].status).toBe("SENT");
+  });
+  it.each(["other_phone", "session_optout", "global_optout"])("all-role eligibility cannot bypass %s", async kind => {
+    const h = port(); Object.assign(h.state().sessions[0], { leadSource: "cs-inbound-cleaner", csQueue: "Teams" });
+    if (kind === "other_phone") h.state().sessions[0].leadPhone = "+13029816191";
     if (kind === "session_optout") h.state().sessions[0].smsOptOut = 1;
     if (kind === "global_optout") h.state().optouts = [{ id: 1 }];
     await expect(h.store.claim(h.binding)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
@@ -269,17 +274,18 @@ describe("customer task store — offline transactional SQL port", () => {
     expect(await h.store.prepare(c, { replyText: "A grounded answer", task: null })).toBe(true);
     expect(h.state().cards).toHaveLength(0); expect(await h.store.recordAcceptance(c, "outbound-1")).toBe(true);
   });
-  it("stores the original failure atomically with a durable fallback task and preserves it after acceptance", async () => {
-    const h = port(), c = (await h.store.claim(h.binding))!;
+  it("saves original diagnostics and a suppressed internal review without outgoing history or acceptance", async () => {
+    const h = port(), c = (await h.store.claim(h.binding))!, before = h.state().sessions[0].messageHistory;
     const failure = { failures: [describeCustomerSmsFailure(new Error("SMS_QUOTE_MODEL_PRICE"), "generation")] };
-    const fallback = { replyText: "Sorry—I couldn't finish that response. I've flagged your message for our team to review.",
-      task: { title: "Review customer message after reply failure", items: [{ title: "Review and follow up", evidenceQuote: h.binding.inboundText }] } };
-    expect(await h.store.prepare(c, fallback, failure)).toBe(true);
-    expect(JSON.parse(h.state().drafts[0].errorMessage)).toEqual(failure); expect(h.task().reply.status).toBe("prepared");
-    expect(await h.store.recordAcceptance(c, "fallback-acceptance")).toBe(true);
+    await h.store.suppressBeforeSubmission(c, "GENERATION_OR_PERSISTENCE_FAILED", failure);
+    expect(await h.store.reportFailure(c, "GENERATION_OR_PERSISTENCE_FAILED")).toMatchObject({ notify: true });
     expect(JSON.parse(h.state().drafts[0].errorMessage)).toEqual(failure);
-    expect(h.state().drafts[0].status).toBe("SENT"); expect(h.task().reply.status).toBe("sent");
-    expect(await h.store.claim(h.binding)).toBeNull();
+    expect(h.task().reply).toEqual({ text: "No customer reply was submitted.", status: "suppressed", providerMessageId: null });
+    expect(h.state().drafts[0]).toMatchObject({ status: "DISMISSED", errorCode: "GENERATION_OR_PERSISTENCE_FAILED" });
+    expect(h.state().drafts[0].generatedDraft).toBeUndefined(); expect(h.state().drafts[0].outboundOpenPhoneId).toBeUndefined();
+    expect(h.state().sessions[0].messageHistory).toBe(before);
+    expect(await h.store.recordAcceptance(c, "never-submitted")).toBe(false); expect(await h.store.claim(h.binding)).toBeNull();
+    expect(await h.store.reportFailure(c, "GENERATION_OR_PERSISTENCE_FAILED")).toBeNull(); expect(h.state().cards).toHaveLength(1);
   });
   it("rolls back failure details and fallback task when durable preparation fails", async () => {
     const h = port(), c = (await h.store.claim(h.binding))!;

@@ -68,7 +68,7 @@ function isClaudeCustomerSmsPilotEvent(msg: any, phone: string, text: string): b
     && createdAt !== null && createdAt >= config.startAt && createdAt <= now && now >= config.startAt;
 }
 
-// Additive customer capability only. Disabled means no import, role lookup or I/O.
+// SMS capability only. Disabled means no import or I/O; sender role is not eligibility.
 // Callers provide the exact row whose inbound history write just succeeded.
 async function dispatchPersistedClaudeCustomerSms(input: {
   sessionId: number; providerMessageId: unknown; fromPhone: string; receivingPhoneNumberId: unknown;
@@ -82,26 +82,12 @@ async function dispatchPersistedClaudeCustomerSms(input: {
     || !input.inboundText.trim() || /^\s*(stop|unsubscribe|quit|end|remove me|opt.?out)\s*$/i.test(input.inboundText)
     || createdAt === null || !Number.isFinite(input.receivedAt) || createdAt < config.startAt
     || input.receivedAt < config.startAt || createdAt > input.receivedAt) return false;
-  const testCustomer = isClaudeCustomerSmsPilotCustomerOverride(input.fromPhone);
-  if (input.isCleaner === true && !testCustomer) return false;
   let customerOwnsReply = false;
   try {
-    let isCleaner = input.isCleaner === true;
-    // The non-CS/Bark persistence path has no role read. Use only the permitted
-    // staff directory, never operational job data or name-enrichment helpers.
-    if (input.isCleaner === undefined && !testCustomer) {
-      const db = await getDb();
-      if (!db) return false;
-      const [profile] = await db.select({ name: cleanerProfiles.name }).from(cleanerProfiles)
-        .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${input.fromPhone.replace(/[^0-9]/g, "").slice(-10)}`)
-        .limit(1);
-      isCleaner = !!profile;
-    }
-    if (isCleaner && !testCustomer) return false;
     customerOwnsReply = true;
     const { dispatchClaudeCustomerSms } = await import("./instinct/claudeCustomerSmsApplication");
     const result = await dispatchClaudeCustomerSms({ ...input, providerMessageId: input.providerMessageId,
-      receivingPhoneNumberId: input.receivingPhoneNumberId, isCleaner });
+      receivingPhoneNumberId: input.receivingPhoneNumberId, isCleaner: input.isCleaner === true });
     return result.outcome !== "disabled" && result.outcome !== "excluded";
   } catch {
     // Preserve normal intake. Once this customer capability owns the response,
@@ -2592,8 +2578,7 @@ async function handleCsInboundMessage(msg: any) {
   let syncedCustomerSessionId: number | null = null;
   if (persistedCustomerSessionId !== null) {
     if (Number.isSafeInteger(persistedCustomerSessionId) && persistedCustomerSessionId > 0
-      && isClaudeCustomerSmsPhoneEligible(normalizePhone(fromPhone))
-      && (!persistedNonCustomer || isClaudeCustomerSmsPilotCustomerOverride(normalizePhone(fromPhone)))) {
+      && isClaudeCustomerSmsPhoneEligible(normalizePhone(fromPhone))) {
       // Finish the existing history sync before Instinct snapshots this exact row.
       await syncAllOutboundMessages(fromPhone, persistedCustomerSessionId).catch(err =>
         console.warn("[CS] syncAllOutboundMessages error:", err)

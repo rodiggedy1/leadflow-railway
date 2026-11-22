@@ -45,7 +45,7 @@ describe("canonical tasks cannot be dismissed as generic alerts", () => {
 });
 
 
-describe("real one-phone manual arbitration", () => {
+describe("exact-destination manual arbitration for every eligible SMS phone", () => {
   async function fixture(sessionRows: unknown[] = [{ leadPhone: "+12025550123" }], receipts: unknown[] = []) {
     const { createClaudeCustomerReplyGuards } = await vi.importActual<typeof import("./instinct/claudeCustomerSmsManualGuard")>("./instinct/claudeCustomerSmsManualGuard");
     const execute = vi.fn(async (_query: import("drizzle-orm").SQL): Promise<unknown> => [sessionRows]);
@@ -55,40 +55,94 @@ describe("real one-phone manual arbitration", () => {
     execute.mockResolvedValueOnce([sessionRows]).mockResolvedValue([receipts]);
     return { execute, db, getDatabase, guards: createClaudeCustomerReplyGuards({ getDatabase }) };
   }
-  it.each(["+13029816191", "+12025550124", "Jane +12025550123", "+12025550123,+13029816191", "bad"])("passes nonpilot workspace destination %s without acquiring database", async phone => {
+  it.each(["Jane +12025550123", "+12025550123,+13029816191", "bad", "", "+447911123456", "+11029816191", "+13021816191"])("passes malformed or unsupported workspace destination %s without acquiring database", async phone => {
     const f = await fixture(); f.getDatabase.mockRejectedValue(new Error("no database/key"));
     await expect(f.guards.humanSend({ phone })).resolves.toBeUndefined();
-    expect(f.getDatabase).not.toHaveBeenCalled(); expect(f.db.transaction).not.toHaveBeenCalled();
+    expect(f.getDatabase).not.toHaveBeenCalled(); expect(f.db.transaction).not.toHaveBeenCalled(); expect(f.execute).not.toHaveBeenCalled(); expect(f.db.execute).not.toHaveBeenCalled();
   });
-  it.each([{ CLAUDE_CUSTOMER_SMS_ENABLED: "false" }, { CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: undefined }, { CLAUDE_CUSTOMER_SMS_START_AT: undefined }, { CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: "+12025550123,+13029816191" }])("preserves normal manual behavior when configuration is disabled/incomplete %#", async patch => {
+  it.each([{ CLAUDE_CUSTOMER_SMS_ENABLED: "false" }, { CLAUDE_CUSTOMER_SMS_ENABLED: "1" }, { CLAUDE_CUSTOMER_SMS_ENABLED: undefined }, { CLAUDE_CUSTOMER_SMS_START_AT: undefined }, { CLAUDE_CUSTOMER_SMS_START_AT: "now" }, { CLAUDE_CUSTOMER_SMS_START_AT: "2026-02-30T00:00:00Z" }])("preserves normal manual behavior when disabled or cutoff is absent/invalid %#", async patch => {
     const f = await fixture(); for (const [key, value] of Object.entries(patch)) vi.stubEnv(key, value);
     await expect(f.guards.humanSend({ sessionId: 71 })).resolves.toBeUndefined();
     await expect(f.guards.humanSend({ phone: "+12025550123" })).resolves.toBeUndefined();
-    expect(f.getDatabase).not.toHaveBeenCalled();
+    expect(f.getDatabase).not.toHaveBeenCalled(); expect(f.execute).not.toHaveBeenCalled(); expect(f.db.execute).not.toHaveBeenCalled();
   });
-  it("looks up only the exact supplied session and returns before reading receipts for a nonpilot", async () => {
+  it("looks up only the exact supplied nonpilot session and reads only that destination's receipts", async () => {
     const f = await fixture([{ leadPhone: "+13029816191" }]);
-    await f.guards.humanSend({ sessionId: 71 }); expect(f.execute).toHaveBeenCalledTimes(1);
+    await f.guards.humanSend({ sessionId: 71 }); expect(f.execute).toHaveBeenCalledTimes(2);
     const { MySqlDialect } = await import("drizzle-orm/mysql-core");
     const query = new MySqlDialect().sqlToQuery(f.execute.mock.calls[0][0]);
     expect(query.sql).toBe("SELECT leadPhone FROM conversation_sessions WHERE id = ?"); expect(query.params).toEqual([71]);
+    const receipts = new MySqlDialect().sqlToQuery(f.execute.mock.calls[1][0]);
+    expect(receipts.params).toEqual(["claude_customer_reply_v1", "+13029816191"]);
+    expect(receipts.sql).toContain("status IN ('TOOLS_RUNNING', 'SENDING') FOR UPDATE");
+    expect(f.db.execute).not.toHaveBeenCalled();
+  });
+  it.each(["+13029816191", "+12025550124", "202-555-0124", "(202) 555-0124", "2025550124"])("arbitrates only the normalized workspace destination %s without selecting a session", async phone => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE", undefined); vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "unknown-legacy");
+    const f = await fixture(); f.execute.mockReset().mockResolvedValueOnce([[{ id: 9, status: "TOOLS_RUNNING" }]]).mockResolvedValue([[]]);
+    await expect(f.guards.humanSend({ phone })).resolves.toBeUndefined();
+    expect(f.getDatabase).toHaveBeenCalledTimes(1); expect(f.db.transaction).toHaveBeenCalledTimes(1); expect(f.execute).toHaveBeenCalledTimes(2);
+    const { MySqlDialect } = await import("drizzle-orm/mysql-core");
+    const read = new MySqlDialect().sqlToQuery(f.execute.mock.calls[0][0]);
+    expect(read.sql).toContain("SELECT id, status FROM madison_sms_drafts"); expect(read.sql).not.toContain("conversation_sessions");
+    expect(read.params).toEqual(["claude_customer_reply_v1", phone === "+13029816191" ? phone : "+12025550124"]);
+    expect(read.sql).toContain("status IN ('TOOLS_RUNNING', 'SENDING') FOR UPDATE");
+    const write = new MySqlDialect().sqlToQuery(f.execute.mock.calls[1][0]);
+    expect(write.params).toEqual([9, "claude_customer_reply_v1"]);
+    expect(write.sql).toContain("WHERE id = ? AND capability = ? AND status = 'TOOLS_RUNNING'");
+    expect(f.db.execute).not.toHaveBeenCalled();
+  });
+  it.each(["+13029816191", "+12025550124", "202-555-0124"])("blocks a sending workspace receipt for %s without any update", async phone => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE", undefined);
+    const f = await fixture(); f.execute.mockReset().mockResolvedValue([[{ id: 9, status: "SENDING" }]]);
+    await expect(f.guards.humanSend({ phone })).rejects.toThrow("CUSTOMER_REPLY_IN_FLIGHT_OR_UNCERTAIN");
+    expect(f.execute).toHaveBeenCalledTimes(1); expect(f.db.execute).not.toHaveBeenCalled();
+  });
+  it("uses the exact supplied session's destination rather than a different workspace phone", async () => {
+    const f = await fixture([{ leadPhone: "+12025550124" }]);
+    await f.guards.humanSend({ sessionId: 72, phone: "+13029816191" }); expect(f.execute).toHaveBeenCalledTimes(2);
+    const { MySqlDialect } = await import("drizzle-orm/mysql-core");
+    const session = new MySqlDialect().sqlToQuery(f.execute.mock.calls[0][0]);
+    expect(session.sql).toBe("SELECT leadPhone FROM conversation_sessions WHERE id = ?"); expect(session.params).toEqual([72]);
+    const read = new MySqlDialect().sqlToQuery(f.execute.mock.calls[1][0]);
+    expect(read.params).toEqual(["claude_customer_reply_v1", "+12025550124"]); expect(f.db.execute).not.toHaveBeenCalled();
   });
   it.each([{ rows: [] }, { rows: [{ leadPhone: "+12025550123" }, { leadPhone: "+12025550124" }] }])("never picks a sibling or newest row from missing/ambiguous exact lookup %#", async ({ rows }) => {
     const f = await fixture(rows); await f.guards.humanSend({ sessionId: 71 }); expect(f.execute).toHaveBeenCalledTimes(1);
   });
-  it("protects an in-flight pilot reply with no send or automatic retry", async () => {
+  it.each([undefined, "", "Jane +12025550124", "+447911123456"])("returns before receipts for an invalid phone on the exact session: %s", async leadPhone => {
+    const f = await fixture([{ leadPhone }]); await f.guards.humanSend({ sessionId: 72 });
+    expect(f.execute).toHaveBeenCalledTimes(1); expect(f.db.execute).not.toHaveBeenCalled();
+  });
+  it("does no database work when no exact session or workspace destination is supplied", async () => {
+    const f = await fixture(); await f.guards.humanSend({});
+    expect(f.getDatabase).not.toHaveBeenCalled(); expect(f.execute).not.toHaveBeenCalled(); expect(f.db.execute).not.toHaveBeenCalled();
+  });
+  it("fails closed for an eligible nonpilot destination when receipt storage is unavailable", async () => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE", undefined);
+    const f = await fixture(); f.getDatabase.mockResolvedValue(null as never);
+    await expect(f.guards.humanSend({ phone: "+12025550124" })).rejects.toThrow("CUSTOMER_REPLY_STATUS_UNAVAILABLE");
+    expect(f.getDatabase).toHaveBeenCalledTimes(1); expect(f.execute).not.toHaveBeenCalled(); expect(f.db.execute).not.toHaveBeenCalled();
+  });
+  it("protects an in-flight reply with no receipt writes or automatic retry", async () => {
     const f = await fixture([{ leadPhone: "+12025550123" }], [{ id: 5, status: "SENDING" }]);
     await expect(f.guards.humanSend({ sessionId: 71 })).rejects.toThrow("CUSTOMER_REPLY_IN_FLIGHT_OR_UNCERTAIN");
-    expect(f.getDatabase).toHaveBeenCalledTimes(1); expect(f.execute).toHaveBeenCalledTimes(2);
+    expect(f.getDatabase).toHaveBeenCalledTimes(1); expect(f.execute).toHaveBeenCalledTimes(2); expect(f.db.execute).not.toHaveBeenCalled();
   });
-  it("lets the human win only the pilot pending receipt", async () => {
+  it("never dismisses even a pending receipt when the destination also has a sending receipt", async () => {
+    const f = await fixture([{ leadPhone: "+12025550124" }], [{ id: 9, status: "TOOLS_RUNNING" }, { id: 10, status: "SENDING" }]);
+    await expect(f.guards.humanSend({ sessionId: 72 })).rejects.toThrow("CUSTOMER_REPLY_IN_FLIGHT_OR_UNCERTAIN");
+    expect(f.execute).toHaveBeenCalledTimes(2); expect(f.db.execute).not.toHaveBeenCalled();
+  });
+  it("lets the human win only the pending receipt returned for the exact destination", async () => {
     const f = await fixture([{ leadPhone: "+12025550123" }], [{ id: 5, status: "TOOLS_RUNNING" }]);
     await f.guards.humanSend({ sessionId: 71 }); expect(f.execute).toHaveBeenCalledTimes(3);
     const { MySqlDialect } = await import("drizzle-orm/mysql-core");
     const query = new MySqlDialect().sqlToQuery(f.execute.mock.calls[2][0]);
-    expect(query.sql).toContain("HUMAN_REPLY_WON"); expect(query.params).toContain(5);
+    expect(query.sql).toContain("HUMAN_REPLY_WON"); expect(query.params).toEqual([5, "claude_customer_reply_v1"]);
+    expect(query.sql).toContain("WHERE id = ? AND capability = ? AND status = 'TOOLS_RUNNING'"); expect(f.db.execute).not.toHaveBeenCalled();
   });
-  it("keeps pilot session arbitration unchanged with the approved classification override", async () => {
+  it("keeps session arbitration unchanged when legacy override metadata is set", async () => {
     vi.stubEnv("CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE", "true");
     const f = await fixture([{ leadPhone: "+12025550123" }], [{ id: 5, status: "SENDING" }]);
     await expect(f.guards.humanSend({ sessionId: 71 })).rejects.toThrow("CUSTOMER_REPLY_IN_FLIGHT_OR_UNCERTAIN");
@@ -102,31 +156,34 @@ describe("real one-phone manual arbitration", () => {
     await expect(f.guards.taskCard(101)).rejects.toThrow("CUSTOMER_TASK_CARD_PROTECTED");
     expect(f.getDatabase).toHaveBeenCalledTimes(2);
   });
-  it("lets a human win a pending nonpilot customer's receipt only in explicit all-customer mode", async () => {
-    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all_customers");
+  it.each([{ CLAUDE_CUSTOMER_SMS_SCOPE: undefined }, { CLAUDE_CUSTOMER_SMS_SCOPE: "pilot" }, { CLAUDE_CUSTOMER_SMS_SCOPE: "all_customers" }, { CLAUDE_CUSTOMER_SMS_SCOPE: "unknown-legacy" }, { CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: undefined }, { CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: "+12025550123,+13029816191" }, { CLAUDE_CUSTOMER_SMS_SCOPE: "unknown-legacy", CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE: undefined, CLAUDE_CUSTOMER_SMS_TEST_CUSTOMER_OVERRIDE: "true" }])("lets a human win the exact pending nonpilot destination regardless of legacy metadata %#", async patch => {
+    for (const [key, value] of Object.entries(patch)) vi.stubEnv(key, value);
     const f = await fixture([{ leadPhone: "+12025550124" }], [{ id: 9, status: "TOOLS_RUNNING" }]);
     await f.guards.humanSend({ sessionId: 72 }); expect(f.execute).toHaveBeenCalledTimes(3);
     const { MySqlDialect } = await import("drizzle-orm/mysql-core");
+    const session = new MySqlDialect().sqlToQuery(f.execute.mock.calls[0][0]);
+    expect(session.sql).toBe("SELECT leadPhone FROM conversation_sessions WHERE id = ?"); expect(session.params).toEqual([72]);
     const read = new MySqlDialect().sqlToQuery(f.execute.mock.calls[1][0]);
-    expect(read.params).toContain("+12025550124"); expect(read.params).toContain("claude_customer_reply_v1");
+    expect(read.params).toEqual(["claude_customer_reply_v1", "+12025550124"]);
     const write = new MySqlDialect().sqlToQuery(f.execute.mock.calls[2][0]);
-    expect(write.params).toContain(9); expect(write.sql).toContain("HUMAN_REPLY_WON");
+    expect(write.params).toEqual([9, "claude_customer_reply_v1"]); expect(write.sql).toContain("HUMAN_REPLY_WON");
+    expect(write.sql).toContain("WHERE id = ? AND capability = ? AND status = 'TOOLS_RUNNING'"); expect(f.db.execute).not.toHaveBeenCalled();
   });
-  it("blocks only an in-flight automatic receipt for the exact all-customer destination", async () => {
-    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all_customers");
+  it.each([undefined, "pilot", "all_customers", "unknown-legacy"])("blocks an in-flight automatic receipt for the exact nonpilot destination with scope %s", async scope => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", scope); vi.stubEnv("CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE", undefined);
     const f = await fixture([{ leadPhone: "+12025550124" }], [{ id: 9, status: "SENDING" }]);
     await expect(f.guards.humanSend({ sessionId: 72 })).rejects.toThrow("CUSTOMER_REPLY_IN_FLIGHT_OR_UNCERTAIN");
-    expect(f.execute).toHaveBeenCalledTimes(2);
+    expect(f.execute).toHaveBeenCalledTimes(2); expect(f.db.execute).not.toHaveBeenCalled();
   });
-  it("retains the original staff-approved send payload in all-customer mode", async () => {
-    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all_customers");
+  it("retains the original staff-approved send payload without a pilot phone or known scope", async () => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "unknown-legacy"); vi.stubEnv("CLAUDE_CUSTOMER_SMS_ALLOWED_PHONE", undefined);
     const input = { sessionId: 72, message: "Original human message", fromNumberId: "original-business-line" };
     expect(await app.createCaller(ctx()).leads.sendMessage(input)).toEqual(input);
     expect(guardClaudeCustomerManualSend).toHaveBeenCalledWith({ sessionId: 72, phone: undefined });
   });
-  it("does not read receipts for malformed all-customer destinations or unknown scope", async () => {
-    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all_customers"); const f = await fixture();
+  it("does not read receipts for malformed destinations even with unknown scope", async () => {
+    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "unknown-legacy"); const f = await fixture();
     await f.guards.humanSend({ phone: "Jane +12025550124" }); expect(f.getDatabase).not.toHaveBeenCalled();
-    vi.stubEnv("CLAUDE_CUSTOMER_SMS_SCOPE", "all"); await f.guards.humanSend({ sessionId: 72 }); expect(f.getDatabase).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled(); expect(f.db.execute).not.toHaveBeenCalled();
   });
 });
