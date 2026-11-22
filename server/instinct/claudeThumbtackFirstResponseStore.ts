@@ -15,7 +15,13 @@ const header = (result: unknown): { insertId: number; affectedRows: number } => 
 const json = (value: unknown): any => typeof value === "string" ? JSON.parse(value) : value;
 const payloadHash = (lead: EligibleLead) => createHash("sha256").update(lead.capture.rawPayload).digest("hex");
 const stop = (text: unknown) => typeof text === "string" && /^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(text);
-function isPhoneReceiptDuplicate(error: unknown): boolean {
+const intakeCapability = "thumbtack_lead_intake_v1";
+const intakeKey = (lead: EligibleLead) => "tt-intake:v1:" + createHash("sha256")
+  .update(JSON.stringify(["thumbtack", THUMBTACK_ACCOUNT, lead.native.negotiationId, lead.phone])).digest("hex");
+function isSameNegotiation(receipt: any, lead: EligibleLead): boolean {
+  try { return json(receipt?.resolvedContext)?.negotiationId === lead.native.negotiationId; } catch { return false; }
+}
+function isReceiptDuplicate(error: unknown): boolean {
   // Drizzle wraps the MySQL insertion error in cause; only this receipt index is an expected race.
   for (let current: any = error, depth = 0; current && depth < 5; current = current.cause, depth++) {
     if (current.code === "ER_DUP_ENTRY" && /\buq_sms_draft_inbound\b/.test(`${current.sqlMessage ?? ""} ${current.message ?? ""}`)) return true;
@@ -69,12 +75,17 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
         rawPayload: row.raw_payload } satisfies CapturedLead;
     },
     async claim(lead, config) {
-      try {
-        return await db.transaction(async tx => {
-          if (rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1`)).length) return null;
+      const key = intakeKey(lead);
+      let introductionAttempted = false;
+      const attempt = (confirmedPhoneReceipt?: any) => db.transaction(async tx => {
+          if (rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${key} AND capability = ${intakeCapability} LIMIT 1`)).length) return null;
+          const [exact] = rows(await tx.execute(sql`SELECT id, resolvedContext FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1`));
           // Older native receipts used negotiation/attempt hashes but persisted the same canonical phone.
-          if (lead.phone && rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE fromPhone = ${lead.phone}
-            AND capability = ${capability} AND inboundOpenPhoneId LIKE 'tt-first:v1:%' LIMIT 1`)).length) return null;
+          const older = lead.phone ? rows(await tx.execute(sql`SELECT id, resolvedContext FROM madison_sms_drafts WHERE fromPhone = ${lead.phone}
+            AND capability = ${capability} AND inboundOpenPhoneId LIKE 'tt-first:v1:%'`)) : [];
+          const prior = confirmedPhoneReceipt ?? exact ?? older[0];
+          // Pre-fix claims already created their session/card atomically. Recognize those retries too.
+          if ([confirmedPhoneReceipt, exact, ...older].some(receipt => isSameNegotiation(receipt, lead))) return null;
           const price = quote(lead), now = new Date();
           const phone = lead.phone ?? `no-phone-tt-${lead.capture.id}`;
           const sessionId = Number(header(await tx.insert(conversationSessions).values({ leadPhone: phone, leadName: lead.facts.name,
@@ -84,12 +95,12 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
               `Thumbtack ID: ${lead.native.negotiationId}`].filter(Boolean).join(" | ") })).insertId);
           if (!Number.isSafeInteger(sessionId) || sessionId <= 0) throw new Error("SESSION_INSERT_ID_MISSING");
           const claim: FirstResponseClaim = { draftId: 0, sessionId, cardId: 0, lead, fromNumberId: config.fromNumberId };
-          claim.draftId = Number(header(await tx.insert(madisonSmsDrafts).values({ inboundOpenPhoneId: lead.key, sessionId, fromPhone: phone,
-            senderName: lead.facts.name, senderType: "customer", status: lead.sendEligible ? "TOOLS_RUNNING" : "DISMISSED", capability, capabilityVersion: 1,
-            resolvedContext: binding(claim), capabilityResult: { phase: lead.sendEligible ? "claimed" : "suppressed_native_dates", startAt: config.startAt },
-            errorStage: lead.sendEligible ? null : "GATE", errorCode: lead.sendEligible ? null : "SUPPRESSED_NATIVE_DATES",
-            originalMessage: buildOriginalMessage(lead), observations: [], suggestedActions: [], followUps: [],
-            sendPolicyMode: "automatic", sendPolicyEnabled: 1, sendPolicyEvaluatedAt: now, createdAt: now, updatedAt: now })).insertId);
+          // Terminal, non-sendable receipt: its unique key belongs to intake, never to an introduction.
+          const intakeId = Number(header(await tx.insert(madisonSmsDrafts).values({ inboundOpenPhoneId: key, sessionId, fromPhone: phone,
+            senderName: lead.facts.name, senderType: "customer", status: "DISMISSED", capability: intakeCapability, capabilityVersion: 1,
+            resolvedContext: binding(claim), capabilityResult: { phase: "intake_recorded" }, originalMessage: "",
+            observations: [], suggestedActions: [], followUps: [], sendPolicyMode: "disabled", sendPolicyEnabled: 0,
+            sendPolicyEvaluatedAt: now, createdAt: now, updatedAt: now })).insertId);
           const size = [lead.facts.bedrooms, lead.facts.bathrooms].filter(Boolean).join(" / ");
           claim.cardId = Number(header(await tx.insert(opsChatMessages).values({ channel: "command", authorName: "🎯 New Lead", authorRole: "system",
             quickAction: "new_lead", sessionId, body: `📌 **Thumbtack Lead** · ${lead.facts.name} · ${phone}\n🏠 **${lead.facts.serviceType ?? "Not provided"}**${size ? ` · ${size}` : ""}${price ? ` · **$${price}**` : ""}`,
@@ -98,13 +109,49 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
               bedrooms: lead.facts.bedrooms, bathrooms: lead.facts.bathrooms, frequency: lead.facts.frequency, summary: lead.facts.description,
               size, price, utmSource: "thumbtack", sessionId, arrivedAt: now.getTime(), negotiationId: lead.native.negotiationId,
               nativeFirstResponseKey: lead.key }) })).insertId);
-          if (![claim.draftId, claim.cardId].every(id => Number.isSafeInteger(id) && id > 0)) throw new Error("CLAIM_OR_CARD_INSERT_ID_MISSING");
+          if (![intakeId, claim.cardId].every(id => Number.isSafeInteger(id) && id > 0)) throw new Error("INTAKE_OR_CARD_INSERT_ID_MISSING");
+          // Commit the distinct lead even when its phone has already had an introduction.
+          if (prior) return null;
+          try {
+            introductionAttempted = true;
+            claim.draftId = Number(header(await tx.insert(madisonSmsDrafts).values({ inboundOpenPhoneId: lead.key, sessionId, fromPhone: phone,
+              senderName: lead.facts.name, senderType: "customer", status: lead.sendEligible ? "TOOLS_RUNNING" : "DISMISSED", capability, capabilityVersion: 1,
+              resolvedContext: binding(claim), capabilityResult: { phase: lead.sendEligible ? "claimed" : "suppressed_native_dates", startAt: config.startAt },
+              errorStage: lead.sendEligible ? null : "GATE", errorCode: lead.sendEligible ? null : "SUPPRESSED_NATIVE_DATES",
+              originalMessage: buildOriginalMessage(lead), observations: [], suggestedActions: [], followUps: [],
+              sendPolicyMode: "automatic", sendPolicyEnabled: 1, sendPolicyEvaluatedAt: now, createdAt: now, updatedAt: now })).insertId);
+          } catch (error) {
+            // A competing negotiation won this phone. Current locking read confirms it; intake still commits.
+            if (isReceiptDuplicate(error)) {
+              const [winner] = rows(await tx.execute(sql`SELECT id, resolvedContext FROM madison_sms_drafts
+                WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1 FOR UPDATE`));
+              if (winner && !isSameNegotiation(winner, lead)) return null;
+              // A pre-fix writer may have just created this same negotiation: roll back provisional intake.
+            }
+            throw error;
+          }
+          if (!Number.isSafeInteger(claim.draftId) || claim.draftId <= 0) throw new Error("CLAIM_INSERT_ID_MISSING");
           return claim;
         });
+      try {
+        return await attempt();
       } catch (error) {
-        // The existing unique receipt index arbitrates simultaneous first arrivals for the same phone.
-        if (isPhoneReceiptDuplicate(error) && rows(await db.execute(sql`SELECT id FROM madison_sms_drafts
-          WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1`)).length) return null;
+        // Same-negotiation race: the losing transaction rolls back its entire duplicate intake.
+        if (isReceiptDuplicate(error) && rows(await db.execute(sql`SELECT id FROM madison_sms_drafts
+          WHERE inboundOpenPhoneId = ${key} AND capability = ${intakeCapability} LIMIT 1`)).length) return null;
+        // Some engines detect uniqueness at COMMIT. Recover intake once, only after a committed phone winner is verified.
+        if (introductionAttempted && isReceiptDuplicate(error)) {
+          const [winner] = rows(await db.execute(sql`SELECT id, resolvedContext FROM madison_sms_drafts
+            WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1`));
+          if (winner) {
+            try { return await attempt(winner); } catch (recoveryError) {
+              // Another delivery may win intake during this one bounded, intake-only recovery.
+              if (isReceiptDuplicate(recoveryError) && rows(await db.execute(sql`SELECT id FROM madison_sms_drafts
+                WHERE inboundOpenPhoneId = ${key} AND capability = ${intakeCapability} LIMIT 1`)).length) return null;
+              throw recoveryError;
+            }
+          }
+        }
         throw error;
       }
     },

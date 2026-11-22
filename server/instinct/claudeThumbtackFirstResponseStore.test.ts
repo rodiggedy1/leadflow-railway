@@ -4,34 +4,56 @@ import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { createClaudeThumbtackFirstResponseStore, guardClaudeThumbtackManualSendInStore, guardClaudeThumbtackLegacyDraftActionInStore } from "./claudeThumbtackFirstResponseStore";
 import { capturedThumbtackLead, createClaudeThumbtackFirstResponseService, thumbtackFirstResponseConfig } from "./claudeThumbtackFirstResponse";
 import { smsSenderLabel } from "../../shared/smsSenderProvenance";
+import { NON_LEAD_SOURCES } from "../../shared/leadSources";
 const cfg = thumbtackFirstResponseConfig({ THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED: "true", THUMBTACK_CLAUDE_FIRST_RESPONSE_START_AT: "2026-11-16T17:00:00Z", OPENPHONE_PHONE_NUMBER_ID: "PN-lead" })!;
 function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: string) {
   const raw = rawOverride ?? JSON.stringify({ event: { eventType: "NegotiationCreatedV4", triggeredAt: "2026-11-16T17:00:02Z" }, data: { negotiationID: "n1", createdAt,
     customer: { firstName: "Jane", phone: "+17035551234" }, request: { description: "Clean kitchen", details: [{ question: "Extra requests", answer: "oven" }] } } });
   const capture = { id: 7, source: "thumbtack", eventType: "NegotiationCreatedV4", receivedAt: new Date("2026-11-16T17:01:00Z"), rawPayload: raw };
   const lead = capturedThumbtackLead(capture, cfg)!;
-  let state: any = { sessions: [], drafts: [], cards: [], next: 100 };
+  // Both receipt kinds share the same mocked SQL table/unique constraint; expose them separately for send assertions.
+  let state: any = { sessions: [], drafts: [], intakes: [], cards: [], next: 100 };
+  const receipts = () => [...state.drafts, ...state.intakes];
   const queries: Array<{ sql: string; params: unknown[] }> = [];
   let tail = Promise.resolve();
-  const extra: any = { optout: [], sibling: [], activity: [], messages: [], openphone: [] };
+  const extra: any = { optout: [], sibling: [], activity: [], messages: [], openphone: [], captures: { 7: capture } };
   let fail = "";
   const db: any = {
     async transaction(fn: any) {
       let release!: () => void; const previous = tail; tail = new Promise<void>(resolve => { release = resolve; }); await previous;
       const saved = structuredClone(state);
-      try { return await fn(db); } catch (error) { state = saved; throw error; } finally { release(); }
+      let concurrentWinner: any;
+      let concurrentIntake: any;
+      try {
+        const result = await fn(db);
+        if (extra.commitPhoneWinner) {
+          concurrentWinner = extra.commitPhoneWinner; extra.commitPhoneWinner = null;
+          throw Object.assign(new Error("Duplicate entry for key 'madison_sms_drafts.uq_sms_draft_inbound' at COMMIT"), { code: "ER_DUP_ENTRY" });
+        }
+        if (extra.commitIntakeWinner) {
+          extra.commitIntakeWinner = false; concurrentIntake = structuredClone(state);
+          throw Object.assign(new Error("Duplicate entry for key 'madison_sms_drafts.uq_sms_draft_inbound' at recovery COMMIT"), { code: "ER_DUP_ENTRY" });
+        }
+        return result;
+      } catch (error) {
+        state = saved; if (concurrentWinner) state.drafts.push(concurrentWinner); throw error;
+      } finally {
+        if (concurrentIntake) state = concurrentIntake; // Concurrent winner committed the same complete session/card/intake atomically.
+        release();
+      }
     },
     insert(table: any) { return { async values(values: any) {
       const tableName = getTableName(table), id = ++state.next;
       if (fail === tableName) throw new Error("insert failed");
       if (tableName === "madison_sms_drafts") {
-        if (fail === "duplicate") throw Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" });
-        if (fail === "unrelated-duplicate") throw Object.assign(new Error("duplicate for key 'other_unique_index'"), { code: "ER_DUP_ENTRY" });
-        if (state.drafts.some((row: any) => row.inboundOpenPhoneId === values.inboundOpenPhoneId)) {
+        const intake = values.capability === "thumbtack_lead_intake_v1";
+        if (!intake && fail === "duplicate") throw Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" });
+        if (!intake && fail === "unrelated-duplicate") throw Object.assign(new Error("duplicate for key 'other_unique_index'"), { code: "ER_DUP_ENTRY" });
+        if (receipts().some((row: any) => row.inboundOpenPhoneId === values.inboundOpenPhoneId)) {
           const error = Object.assign(new Error("Duplicate entry for key 'madison_sms_drafts.uq_sms_draft_inbound'"), { code: "ER_DUP_ENTRY" });
           throw extra.wrappedDuplicate ? Object.assign(new Error("Failed query"), { cause: error }) : error;
         }
-        state.drafts.push({ id, ...values });
+        (intake ? state.intakes : state.drafts).push({ id, ...values });
       } else if (tableName === "conversation_sessions") state.sessions.push({ id, aiMode: 0, smsOptOut: 0, isBooked: 0, messageCount: 0, ...values });
       else state.cards.push({ id, ...values });
       return [{ insertId: id, affectedRows: 1 }];
@@ -41,15 +63,17 @@ function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: s
       if (fail && s.includes(fail)) throw new Error("SQL save failure");
       if (s.startsWith("SELECT")) {
         if (s.includes("FROM madison_sms_drafts WHERE inboundOpenPhoneId") || (s.includes("FROM madison_sms_drafts") && s.includes("WHERE inboundOpenPhoneId"))) {
-          if (extra.hideClaims > 0) { extra.hideClaims--; return [[]]; }
-          return [state.drafts.filter((d: any) => d.inboundOpenPhoneId === p[0] && (p[1] === undefined || d.capability === p[1]))];
+          const intake = String(p[0]).startsWith("tt-intake:");
+          if (intake && extra.hideIntakes > 0) { extra.hideIntakes--; return [[]]; }
+          if (!intake && extra.hideClaims > 0 && !s.includes("FOR UPDATE")) { extra.hideClaims--; return [[]]; }
+          return [receipts().filter((d: any) => d.inboundOpenPhoneId === p[0] && (p[1] === undefined || d.capability === p[1]))];
         }
         if (s.includes("FROM madison_sms_drafts WHERE fromPhone")) {
           if (extra.hideClaims > 0) { extra.hideClaims--; return [[]]; }
           return [state.drafts.filter((d: any) => d.fromPhone === p[0] && d.capability === p[1] && d.inboundOpenPhoneId.startsWith("tt-first:v1:"))];
         }
         if (s.includes("FROM madison_sms_drafts WHERE capability")) return [state.drafts.filter((d: any) => s.includes("sessionId =") ? d.sessionId === p[1] : d.fromPhone === p[1])];
-        if (s.includes("FROM madison_sms_drafts WHERE id")) return [state.drafts.filter((d: any) => d.id === p[0])];
+        if (s.includes("FROM madison_sms_drafts WHERE id")) return [receipts().filter((d: any) => d.id === p[0])];
         if (s.includes("FROM conversation_sessions WHERE id")) return [state.sessions.filter((d: any) => d.id === p[0])];
         if (s.includes("FROM conversation_sessions")) return [extra.sibling];
         if (s.includes("FROM ops_chat_messages WHERE id")) return [state.cards.filter((d: any) => d.id === p[0])];
@@ -57,7 +81,10 @@ function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: s
         if (s.includes("FROM sms_opt_outs")) return [extra.optout];
         if (s.includes("source = 'openphone'")) return [extra.openphone];
         if (s.includes("event_type = 'MessageCreatedV4'")) return [extra.messages];
-        if (s.includes("FROM webhook_events WHERE id")) return [[{ id: 7, source: "thumbtack", event_type: "NegotiationCreatedV4", created_at: capture.receivedAt, raw_payload: raw }]];
+        if (s.includes("FROM webhook_events WHERE id")) {
+          const c = extra.captures[String(p[0])];
+          return [c ? [{ id: c.id, source: c.source, event_type: c.eventType, created_at: c.receivedAt, raw_payload: c.rawPayload }] : []];
+        }
       }
       if (s.includes("UPDATE conversation_sessions SET messageHistory")) {
         const session = state.sessions.find((r: any) => r.id === p[3]); if (!session || session.leadPhone !== p[4]) return [{ affectedRows: 0 }];
@@ -84,6 +111,14 @@ function port(createdAt: string | null = "2026-11-16T17:00:01Z", rawOverride?: s
   const result: any = { replyText: "EXACT generated text", agentId: "same-agent" };
   return { db, lead, store, result, extra, queries, state: () => state, fail: (value: string) => { fail = value; } };
 }
+function nextLead(h: ReturnType<typeof port>, negotiationId = "n2", phone = "(703) 555-1234", id = 8) {
+  const payload = JSON.parse(h.lead.capture.rawPayload);
+  payload.data.negotiationID = negotiationId; payload.data.customer.phone = phone;
+  payload.data.customer.firstName = "New customer"; payload.data.request.description = "New negotiation details";
+  const capture = { ...h.lead.capture, id, rawPayload: JSON.stringify(payload) };
+  h.extra.captures[id] = capture;
+  return capturedThumbtackLead(capture, cfg)!;
+}
 describe("native first response real store offline transactions", () => {
   it("reloads the exact capture and atomically creates only one introduction receipt for a phone", async () => {
     const h = port(); expect(await h.store.loadCapture(7)).toEqual(h.lead.capture);
@@ -96,12 +131,22 @@ describe("native first response real store offline transactions", () => {
     for (const status of ["DISMISSED", "SENT", "SENDING", "FAILED"]) { h.state().drafts[0].status = status; expect(await h.store.claim(h.lead, cfg)).toBeNull(); }
     expect(h.queries.some(q => q.sql.includes("ORDER BY id ASC LIMIT 1"))).toBe(false);
   });
-  it("same phone under a different negotiation and formatting cannot create a second introduction", async () => {
-    const h = port(); await h.store.claim(h.lead, cfg); const payload = JSON.parse(h.lead.capture.rawPayload);
-    payload.data.negotiationID = "n2"; payload.data.customer.phone = "(703) 555-1234";
-    const lead = capturedThumbtackLead({ ...h.lead.capture, id: 8, rawPayload: JSON.stringify(payload) }, cfg)!;
+  it("same phone under a different negotiation creates its own visible intake but not a second introduction", async () => {
+    const h = port(); await h.store.claim(h.lead, cfg); const lead = nextLead(h);
     expect(lead.key).toBe(h.lead.key); expect(await h.store.claim(lead, cfg)).toBeNull();
-    expect(h.state().drafts).toHaveLength(1); expect(h.state().sessions).toHaveLength(1);
+    expect(h.state().drafts).toHaveLength(1); expect(h.state().sessions).toHaveLength(2);
+    expect(h.state().intakes).toHaveLength(2); expect(h.state().cards).toHaveLength(2);
+    expect(h.state().sessions[1]).toMatchObject({ leadPhone: "+17035551234", leadName: "New customer", leadSource: "thumbtack",
+      stage: "AVAILABILITY", aiMode: 0, isBooked: 0, messageHistory: "[]", barkQA: "New negotiation details | Thumbtack ID: n2" });
+    expect(NON_LEAD_SOURCES as readonly string[]).not.toContain(h.state().sessions[1].leadSource);
+    expect(JSON.parse(h.state().cards[1].metadata)).toMatchObject({ sessionId: h.state().sessions[1].id, negotiationId: "n2", summary: "New negotiation details" });
+    expect(JSON.parse(h.state().cards[1].metadata)).not.toHaveProperty("draftId");
+    await h.store.claim(lead, cfg); await h.store.claim(nextLead(h, "n2", "+17035551234", 9), cfg);
+    expect(h.state().sessions).toHaveLength(2); expect(h.state().cards).toHaveLength(2);
+    for (const marker of h.state().intakes) {
+      expect(marker).toMatchObject({ status: "DISMISSED", sendPolicyEnabled: 0, sendPolicyMode: "disabled", suggestedActions: [], originalMessage: "" });
+      expect(marker).not.toHaveProperty("generatedDraft"); expect(marker).not.toHaveProperty("approvedText");
+    }
   });
   it("different phones sharing negotiation/webhook identity each receive an introduction claim", async () => {
     const h = port(); const payload = JSON.parse(h.lead.capture.rawPayload); payload.data.customer.phone = "+12025559876";
@@ -110,19 +155,120 @@ describe("native first response real store offline transactions", () => {
     expect(a).not.toBeNull(); expect(b).not.toBeNull(); expect(a!.lead.key).not.toBe(b!.lead.key);
     expect(h.state().drafts).toHaveLength(2);
   });
-  it.each([false, true])("the existing unique index resolves competing phone claims after missed reads (wrapped error: %s)", async wrapped => {
-    const h = port(); h.extra.hideClaims = 4; h.extra.wrappedDuplicate = wrapped;
+  it.each([false, true])("the existing unique index resolves competing intake claims after missed reads (wrapped error: %s)", async wrapped => {
+    const h = port(); h.extra.hideIntakes = 2; h.extra.hideClaims = 4; h.extra.wrappedDuplicate = wrapped;
     const results = await Promise.all([h.store.claim(h.lead, cfg), h.store.claim(h.lead, cfg)]);
     expect(results.filter(Boolean)).toHaveLength(1); expect(h.state().drafts).toHaveLength(1);
-    expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1);
+    expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1); expect(h.state().intakes).toHaveLength(1);
   });
-  it.each(["SENT", "SENDING", "DISMISSED", "FAILED", "TOOLS_RUNNING"])("older negotiation/attempt receipt keys suppress the same phone across %s status", async status => {
+  it.each([false, true])("competing distinct negotiations preserve both intakes when the phone unique index wins (wrapped: %s)", async wrapped => {
+    const h = port(); h.extra.hideClaims = 4; h.extra.wrappedDuplicate = wrapped;
+    const other = nextLead(h);
+    const results = await Promise.all([h.store.claim(h.lead, cfg), h.store.claim(other, cfg), h.store.claim(other, cfg)]);
+    expect(results.filter(Boolean)).toHaveLength(1); expect(h.state().drafts).toHaveLength(1);
+    expect(h.state().sessions).toHaveLength(2); expect(h.state().cards).toHaveLength(2); expect(h.state().intakes).toHaveLength(2);
+    expect(h.queries.some(q => q.sql.includes("LIMIT 1 FOR UPDATE"))).toBe(true);
+    const first = results.find(Boolean)!; expect(await h.store.fresh(first)).toBe(true);
+  });
+  it.each(["SENT", "SENDING", "DISMISSED", "FAILED", "TOOLS_RUNNING"])("older negotiation/attempt receipt keys suppress only introduction across %s status", async status => {
     for (const key of ["tt-first:v1:" + "a".repeat(64), "tt-first:v1:" + "b".repeat(64)]) {
       const h = port(); const prior = { id: 1, inboundOpenPhoneId: key, fromPhone: h.lead.phone,
         capability: "claude_thumbtack_first_response_v1", status };
       h.state().drafts.push(prior); expect(await h.store.claim(h.lead, cfg)).toBeNull();
-      expect(h.state().drafts).toEqual([prior]); expect(h.state().sessions).toHaveLength(0); expect(h.state().cards).toHaveLength(0);
+      expect(h.state().drafts).toEqual([prior]); expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1);
+      expect(h.state().intakes).toHaveLength(1); expect(h.state().sessions[0].leadSource).toBe("thumbtack");
+      await h.store.claim(h.lead, cfg); expect(h.state().sessions).toHaveLength(1);
     }
+  });
+  it.each(["SENT", "SENDING", "DISMISSED", "FAILED", "TOOLS_RUNNING"])("current phone receipt in %s never hides another negotiation or runs model/send", async status => {
+    const h = port(); await h.store.claim(h.lead, cfg); h.state().drafts[0].status = status;
+    nextLead(h); let generated = 0, sent = 0;
+    const run = createClaudeThumbtackFirstResponseService({ config: () => cfg, store: h.store,
+      generate: async () => { generated++; throw new Error("model must not run"); },
+      send: async () => { sent++; throw new Error("SMS must not run"); } });
+    await run(8); await run(8);
+    expect(generated).toBe(0); expect(sent).toBe(0); expect(h.state().drafts).toHaveLength(1);
+    expect(h.state().sessions).toHaveLength(2); expect(h.state().cards).toHaveLength(2); expect(h.state().intakes).toHaveLength(2);
+    expect(h.state().drafts[0].status).toBe(status);
+  });
+  it.each([false, true])("pre-fix receipt bindings recognize existing intake without creating a marker (older key: %s)", async older => {
+    const h = port(); await h.store.claim(h.lead, cfg); h.state().intakes.length = 0;
+    if (older) h.state().drafts[0].inboundOpenPhoneId = "tt-first:v1:old-native-attempt";
+    expect(await h.store.claim(h.lead, cfg)).toBeNull();
+    expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1); expect(h.state().intakes).toHaveLength(0);
+  });
+  it("any historical matching binding prevents duplicate legacy intake, not an arbitrary first phone receipt", async () => {
+    const h = port(); h.state().drafts.push(
+      { id: 1, inboundOpenPhoneId: h.lead.key, fromPhone: h.lead.phone, capability: "claude_thumbtack_first_response_v1", status: "SENT", resolvedContext: { negotiationId: "other" } },
+      { id: 2, inboundOpenPhoneId: "tt-first:v1:older-bad", fromPhone: h.lead.phone, capability: "claude_thumbtack_first_response_v1", status: "SENT", resolvedContext: "{" },
+      { id: 3, inboundOpenPhoneId: "tt-first:v1:older-match", fromPhone: h.lead.phone, capability: "claude_thumbtack_first_response_v1", status: "SENT", resolvedContext: JSON.stringify({ negotiationId: "n1" }) });
+    expect(await h.store.claim(h.lead, cfg)).toBeNull();
+    expect(h.state().sessions).toHaveLength(0); expect(h.state().cards).toHaveLength(0); expect(h.state().intakes).toHaveLength(0);
+  });
+  it("malformed historical binding still prevents a repeat introduction without suppressing new intake", async () => {
+    const h = port(); h.state().drafts.push({ id: 1, inboundOpenPhoneId: h.lead.key, fromPhone: h.lead.phone,
+      capability: "claude_thumbtack_first_response_v1", status: "SENT", resolvedContext: "{" });
+    expect(await h.store.claim(h.lead, cfg)).toBeNull();
+    expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1); expect(h.state().drafts).toHaveLength(1);
+  });
+  it.each(["another-negotiation", "n1"])("verified commit-time phone winner (%s) recovers intake once without another introduction", async negotiationId => {
+    const h = port(); const winner = { id: 1, inboundOpenPhoneId: h.lead.key, fromPhone: h.lead.phone,
+      capability: "claude_thumbtack_first_response_v1", status: "SENT", resolvedContext: { negotiationId } };
+    h.extra.commitPhoneWinner = winner;
+    expect(await h.store.claim(h.lead, cfg)).toBeNull();
+    expect(h.state().drafts).toEqual([winner]);
+    const expected = negotiationId === "n1" ? 0 : 1;
+    expect(h.state().sessions).toHaveLength(expected); expect(h.state().cards).toHaveLength(expected); expect(h.state().intakes).toHaveLength(expected);
+    await h.store.claim(h.lead, cfg); expect(h.state().sessions).toHaveLength(expected);
+  });
+  it("another delivery winning intake during bounded commit-conflict recovery is idempotent, with no third transaction", async () => {
+    const h = port(); h.extra.commitPhoneWinner = { id: 1, inboundOpenPhoneId: h.lead.key, fromPhone: h.lead.phone,
+      capability: "claude_thumbtack_first_response_v1", status: "SENT", resolvedContext: { negotiationId: "other" } };
+    h.extra.commitIntakeWinner = true;
+    expect(await h.store.claim(h.lead, cfg)).toBeNull();
+    expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1); expect(h.state().intakes).toHaveLength(1);
+    expect(h.state().drafts).toHaveLength(1); expect(h.state().drafts[0].status).toBe("SENT");
+    expect(h.queries.filter(q => q.sql.startsWith("SELECT id, resolvedContext FROM madison_sms_drafts WHERE fromPhone"))).toHaveLength(2);
+  });
+  it("mixed pre-fix writer's same-negotiation immediate phone conflict rolls back provisional intake", async () => {
+    const h = port(); await h.store.claim(h.lead, cfg); h.state().intakes.length = 0; h.extra.hideClaims = 2;
+    expect(await h.store.claim(h.lead, cfg)).toBeNull();
+    expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1);
+    expect(h.state().intakes).toHaveLength(0); expect(h.state().drafts).toHaveLength(1);
+  });
+  it("concurrent distinct negotiations and retries call the mocked model/provider once while preserving two leads", async () => {
+    const h = port(); nextLead(h); let generated = 0, sent = 0;
+    const run = createClaudeThumbtackFirstResponseService({ config: () => cfg, store: h.store,
+      generate: async input => { generated++; return { ...h.result, kind: "initial_lead", requestId: input.requestId, sessionId: input.sessionId,
+        customerPhone: input.customerPhone, contextHash: "a".repeat(64), mode: "review_only", smsSent: false, actionsExecuted: false,
+        agentSessionId: "offline-agent-session" }; },
+      send: async input => { sent++; expect(input.to).toBe(h.lead.phone); return { success: true, messageId: "offline-only-provider-id" }; } });
+    await Promise.all([run(7), run(8), run(7), run(8)]);
+    expect(generated).toBe(1); expect(sent).toBe(1); expect(h.state().drafts).toHaveLength(1);
+    expect(h.state().drafts[0].status).toBe("SENT"); expect(h.state().sessions).toHaveLength(2);
+    expect(h.state().intakes).toHaveLength(2); expect(h.state().cards).toHaveLength(2);
+    expect(JSON.parse(h.state().sessions[1].messageHistory)).toEqual([]);
+  });
+  it("missing-phone redelivery under a new capture has one intake and no model/provider call", async () => {
+    const payload = JSON.parse(port().lead.capture.rawPayload); delete payload.data.customer.phone;
+    const h = port(null, JSON.stringify(payload)); nextLead(h, "n1", "", 8); let calls = 0;
+    const run = createClaudeThumbtackFirstResponseService({ config: () => cfg, store: h.store,
+      generate: async () => { calls++; throw new Error("must not generate"); },
+      send: async () => { calls++; throw new Error("must not send"); } });
+    await Promise.all([run(7), run(8)]);
+    expect(calls).toBe(0); expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1);
+    expect(h.state().intakes).toHaveLength(1); expect(h.state().drafts).toHaveLength(1);
+  });
+  it.each(["madison_sms_drafts", "ops_chat_messages"])("repeat-phone %s insertion failure rolls back only the arriving lead and never mutates prior receipt", async table => {
+    const h = port(); await h.store.claim(h.lead, cfg); const prior = structuredClone(h.state()); h.fail(table);
+    await expect(h.store.claim(nextLead(h), cfg)).rejects.toThrow();
+    expect(h.state()).toEqual(prior);
+  });
+  it("a failed current receipt verification rolls back the competing lead rather than swallowing the error", async () => {
+    const h = port(); await h.store.claim(h.lead, cfg); const prior = structuredClone(h.state());
+    h.extra.hideClaims = 4; h.fail("LIMIT 1 FOR UPDATE");
+    await expect(h.store.claim(nextLead(h), cfg)).rejects.toThrow("SQL save failure");
+    expect(h.state()).toEqual(prior);
   });
   it.each([
     { fromPhone: "+12025559876", capability: "claude_thumbtack_first_response_v1", inboundOpenPhoneId: "tt-first:v1:old" },
@@ -135,16 +281,19 @@ describe("native first response real store offline transactions", () => {
   });
   it("an unrelated duplicate index error is not swallowed even when a matching phone receipt exists after missed reads", async () => {
     const h = port(); await h.store.claim(h.lead, cfg); h.extra.hideClaims = 4; h.fail("unrelated-duplicate");
-    await expect(h.store.claim(h.lead, cfg)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
+    await expect(h.store.claim(nextLead(h), cfg)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
     expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1); expect(h.state().drafts).toHaveLength(1);
+    expect(h.state().intakes).toHaveLength(1);
   });
   it("does not silently swallow an unexpected duplicate database error; the transaction rolls back", async () => {
     const h = port(); h.fail("duplicate"); await expect(h.store.claim(h.lead, cfg)).rejects.toMatchObject({ code: "ER_DUP_ENTRY" });
     expect(h.state().sessions).toHaveLength(0); expect(h.state().drafts).toHaveLength(0); expect(h.state().cards).toHaveLength(0);
+    expect(h.state().intakes).toHaveLength(0);
   });
   it.each(["madison_sms_drafts", "ops_chat_messages"])("rolls back new conversation on %s insert failure", async table => {
     const h = port(); h.fail(table); await expect(h.store.claim(h.lead, cfg)).rejects.toThrow();
     expect(h.state().sessions).toHaveLength(0); expect(h.state().drafts).toHaveLength(0); expect(h.state().cards).toHaveLength(0);
+    expect(h.state().intakes).toHaveLength(0);
   });
   it("checks current optouts/activity and immutable native/session/card binding", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!; expect(await h.store.fresh(c)).toBe(true);
