@@ -99,9 +99,10 @@ const click = (node: Element | undefined) => { expect(node).toBeDefined(); (node
 const textarea = (tree: unknown) => elements(tree).find((node) => node.type === "textarea")!;
 
 function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: string; history?: string;
-  lead?: LeadSnapshot | null; snapshot?: LeadSnapshot | null; leadDraft?: Props["leadDraft"]; noDetail?: boolean; taskRows?: Record<string, string[]> } = {}) {
+  lead?: LeadSnapshot | null; snapshot?: LeadSnapshot | null; leadDraft?: Props["leadDraft"]; noDetail?: boolean; taskRows?: Record<string, string[]>;
+  historyQueryState?: { isLoading?: boolean; isError?: boolean } } = {}) {
   let selected = conversation(options.selected);
-  let detail: Detail | undefined = options.noDetail ? undefined : { sessionId: selected.id, leadPhone: selected.leadPhone, messageHistory: options.history ?? history() };
+  let detail: Detail | null | undefined = options.noDetail ? undefined : { sessionId: selected.id, leadPhone: selected.leadPhone, messageHistory: options.history ?? history() };
   let snapshot = options.snapshot;
   let leadCardPhone = options.leadCardPhone;
   let leadDraft = options.leadDraft;
@@ -120,7 +121,9 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   const useUtils = () => ({ commandCenter: { listCommandChatInbox: { invalidate: vi.fn() } }, leads: { getCsConversation: { invalidate: vi.fn() } } });
   const trpc = {
     useUtils,
-    leads: { getCsConversation: { useQuery: vi.fn(() => ({ data: detail })) }, sendMessage: { useMutation: () => ({ isPending: false, mutate: send }) }, sendWorkspaceMessage: { useMutation: () => ({ isPending: false, mutate: workspaceSend }) } },
+    leads: { getCsConversation: { useQuery: vi.fn((_input: { sessionId: number }, query: { enabled: boolean }) => ({ data: detail,
+      isLoading: query.enabled && (options.historyQueryState?.isLoading ?? (detail === undefined && !options.historyQueryState?.isError)),
+      isError: query.enabled && Boolean(options.historyQueryState?.isError) })) }, sendMessage: { useMutation: () => ({ isPending: false, mutate: send }) }, sendWorkspaceMessage: { useMutation: () => ({ isPending: false, mutate: workspaceSend }) } },
     leadflowJobs: { customerProfile: { useQuery: () => ({ data: null }) }, teamIdentityByPhone: { useQuery: () => ({ data: null }) } },
     leadflowSchedule: { getSchedule: { useQuery: () => ({ data: null }) } },
     opsChat: { csReply: { useMutation: fallbackUseMutation } },
@@ -203,7 +206,8 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   const edit = (value: string) => (textarea(render()).props.onChange as (event: { target: { value: string } }) => void)({ target: { value } });
   render();
   return { render, settle, html: () => renderToStaticMarkup(render()), edit, generate, claudeResponse, generateInitial, initialResponse, uuid, fetchMock, fallbackUseMutation, fallback, send, workspaceSend,
-    setDetail: (value: Detail | undefined) => { detail = value; }, setLive: (value: Conversation[]) => { live = value; }, setSelected: (value: Conversation) => { selected = value; },
+    historyQuery: trpc.leads.getCsConversation.useQuery,
+    setDetail: (value: Detail | null | undefined) => { detail = value; }, setLive: (value: Conversation[]) => { live = value; }, setSelected: (value: Conversation) => { selected = value; },
     setSnapshot: (value: LeadSnapshot | null) => { snapshot = value; }, setPhone: (value: string | undefined) => { leadCardPhone = value; },
     setLeadDraft: (value: Props["leadDraft"]) => { leadDraft = value; },
     dispose: () => { slots.forEach((slot) => slot.cleanup?.()); dead = true; }, get lateWrites() { return lateWrites; },
@@ -677,6 +681,44 @@ describe("optional Claude first lead draft in the existing workspace", () => {
     await work.settle(); click(findButton(work.render(), "Get Claude draft")); work.dispose();
     work.initialResponse.resolve(initialResult(work.generateInitial.mock.calls[0][0])); for (let turn = 0; turn < 20; turn++) await Promise.resolve();
     expect(work.lateWrites).toBe(0); expect(work.workspaceSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("actual SMS drawer history display states — offline", () => {
+  it("shows empty history, not endless loading, for a new Thumbtack card without a saved conversation", async () => {
+    const clicked = leadSnapshot(), opened = clickedLeadDraft(clicked);
+    const work = workspace({ selected: opened.selected!, snapshot: clicked, leadCardPhone: clicked.phone, leadDraft: opened.draft, noDetail: true });
+    await work.settle();
+    expect(work.historyQuery).toHaveBeenCalledWith({ sessionId: 0 }, expect.objectContaining({ enabled: false }));
+    expect(text(work.render())).toContain("No text history yet."); expect(text(work.render())).not.toContain("Loading text history…");
+    expect(findButton(work.render(), "Get Claude draft")!.props.disabled).toBe(false);
+    expect(work.generateInitial).not.toHaveBeenCalled(); expect(work.send).not.toHaveBeenCalled(); expect(work.workspaceSend).not.toHaveBeenCalled();
+    work.dispose();
+  });
+  it("shows loading only while the existing positive-session history query is loading, then replaces it with saved texts", () => {
+    const work = workspace({ noDetail: true });
+    expect(text(work.render())).toContain("Loading text history…");
+    work.setDetail({ sessionId: 42, leadPhone: "+13015550123", messageHistory: history() });
+    expect(text(work.render())).not.toContain("Loading text history…"); expect(text(work.render())).toContain("Please confirm Friday.");
+    work.dispose();
+  });
+  it.each(["empty", "missing"] as const)("shows an empty state when a completed history read is %s", state => {
+    const work = workspace({ history: "[]" });
+    if (state === "missing") work.setDetail(null);
+    expect(text(work.render())).toContain("No text history yet."); expect(text(work.render())).not.toContain("Loading text history…");
+    work.dispose();
+  });
+  it("shows a failed history read as an error instead of a permanently spinning loader", () => {
+    const work = workspace({ noDetail: true, historyQueryState: { isError: true } });
+    expect(text(work.render())).toContain("Text history could not be loaded.");
+    expect(text(work.render())).not.toContain("Loading text history…"); expect(text(work.render())).not.toContain("No text history yet.");
+    work.dispose();
+  });
+  it.each([{ isLoading: true }, { isError: true }])("preserves already loaded texts during a query refresh or error %#", historyQueryState => {
+    const work = workspace({ historyQueryState });
+    expect(text(work.render())).toContain("Please confirm Friday.");
+    expect(text(work.render())).not.toContain("Loading text history…"); expect(text(work.render())).not.toContain("Text history could not be loaded.");
+    work.dispose();
   });
 });
 
