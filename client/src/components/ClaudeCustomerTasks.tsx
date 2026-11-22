@@ -135,6 +135,43 @@ function useCustomerTasks() {
   return value;
 }
 
+/** Exact persisted SMS session only: no phone/name matching or call/email tasks. */
+export function customerSmsConversationTasks(tasks: readonly CustomerTask[], sessionId: number): CustomerTask[] {
+  if (!Number.isSafeInteger(sessionId) || sessionId <= 0) return [];
+  return tasks.filter(task => !("call" in task) && !("email" in task) && task.sessionId === sessionId)
+    .sort((left, right) => Number(left.status === "done") - Number(right.status === "done")
+      || right.receivedAt - left.receivedAt || right.id - left.id);
+}
+
+/** Reuse the shared authenticated list and task card; opening a task is read-only. */
+export function ClaudeSmsConversationTasks({ sessionId }: { sessionId: number }) {
+  const context = useCustomerTasks();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const tasks = customerSmsConversationTasks(context.tasks, sessionId);
+  const selected = tasks.find(task => task.id === selectedId) ?? null;
+  const openCount = tasks.filter(task => task.status !== "done").length;
+  if (!tasks.length && !context.loading && !context.failed) return null;
+  return <>
+    <details className="cct-related-tasks" open key={sessionId}>
+      <summary><ClipboardList aria-hidden="true" /><strong>Related tasks</strong><span>{context.loading ? "Loading…" : context.failed && (!tasks.length || !context.transientFailure) ? "Unavailable" : `${openCount} Open · ${tasks.length - openCount} Done`}</span><ChevronDown aria-hidden="true" /></summary>
+      {context.failed && <p role="alert">Related tasks could not be refreshed. {context.transientFailure && tasks.length > 0 && "Showing the last loaded status. "}<button type="button" onClick={() => void context.refresh()}>Retry</button></p>}
+      {context.loading ? <p role="status">Loading related tasks…</p> : (!context.failed || context.transientFailure) && tasks.length > 0 && <ol className="cct-related-task-list">{tasks.map(task => <li key={task.id}>
+        <button type="button" aria-haspopup="dialog" aria-label={`View task: ${task.title} — ${task.status === "done" ? "Done" : "Open"}`} onClick={event => { opener.current = event.currentTarget; setSelectedId(task.id); }}>
+          <span className="cct-related-task-title">{task.title}</span><span className="cct-related-task-status" data-status={task.status === "done" ? "done" : "open"}>{task.status === "done" ? "Done" : "Open"}</span>
+        </button>
+      </li>)}</ol>}
+    </details>
+    <Dialog open={Boolean(selected)} onOpenChange={open => { if (!open) setSelectedId(null); }}>
+      <DialogContent className="cct-confirm-dialog cct-related-task-dialog" onCloseAutoFocus={event => { event.preventDefault(); opener.current?.focus({ preventScroll: true }); }}><DialogTitle>Task details</DialogTitle><DialogDescription>Existing task from this SMS conversation</DialogDescription>
+        <TaskContext.Provider value={{ ...context, onOpenConversation: () => setSelectedId(null) }}>
+          {selected && <ClaudeCustomerTaskStreamCard taskId={selected.id} />}
+        </TaskContext.Provider>
+      </DialogContent>
+    </Dialog>
+  </>;
+}
+
 export function ClaudeCustomerTasksQueue() {
   const context = useCustomerTasks();
   return <CustomerTaskQueue tasks={context.tasks} callerId={context.callerId} loading={context.loading}
@@ -199,10 +236,49 @@ export function CustomerTaskCallRecording({ taskId }: { taskId: number }) {
     <a href={url} target="_blank" rel="noopener noreferrer">Open call recording</a>
   </section>;
 }
+/** Display-only source slices: preserve paragraph boundaries and all original words. */
+export function phoneCallReadingParagraphs(content: string): string[] {
+  return content.split(/\r?\n[\t ]*\r?\n/).filter(paragraph => paragraph.trim()).flatMap(paragraph => {
+    const sentences = typeof Intl.Segmenter === "function"
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "sentence" }).segment(paragraph), item => item.segment)
+      : [paragraph];
+    const result: string[] = [];
+    let current = "";
+    for (const sentence of sentences) {
+      if (current && current.length + sentence.length > 350) { result.push(current); current = ""; }
+      if (sentence.length > 600) {
+        if (current) { result.push(current); current = ""; }
+        result.push(...(sentence.match(/(?:\s*\S+){1,45}\s*/g) ?? [sentence]));
+      } else current += sentence;
+    }
+    if (current) result.push(current);
+    return result;
+  });
+}
+
+export function CustomerTaskPhoneTranscript({ task }: { task: Extract<CustomerTask, { call: unknown }> }) {
+  const saved = task.call.provider === "openphone" && task.call.transcriptSource === "saved";
+  const blocks = task.call.transcript.split(saved ? /(?=^[\t ]*Unattributed:)/im : /(?=^[\t ]*(?:Caller|Staff|Unattributed):)/im).filter(block => block.trim());
+  const hasUnknownSpeaker = saved || blocks.some(block => !/^[\t ]*(?:Caller|Staff):/i.test(block));
+  return <div className="cct-phone-transcript">
+    {hasUnknownSpeaker && <p className="cct-phone-transcript-notice">Speaker not identified{saved ? " — this transcript may include both sides of the call." : " for some or all of this recording."}</p>}
+    {blocks.map((block, index) => {
+      const match = block.match(/^[\t ]*(Caller|Staff|Unattributed):([\s\S]*)$/i);
+      const labeled = match && (!saved || /^unattributed$/i.test(match[1]));
+      const content = labeled ? match[2] : block;
+      return <article className="cct-call-turn" data-speaker={labeled ? match[1].toLowerCase() : "unattributed"} key={index}>
+        {labeled && <strong className="cct-call-speaker">{match[1]}:</strong>}
+        {phoneCallReadingParagraphs(content).map((paragraph, paragraphIndex) => <p className="cct-verbatim" key={paragraphIndex}>{paragraph}</p>)}
+      </article>;
+    })}
+  </div>;
+}
+
 /** Use the AI Calls page's line/label presentation, without inventing speaker identity.
  * Saved Whisper evidence is not diarized: label-like words inside it remain prose. */
 export function CustomerTaskCallTranscript({ task }: { task: Extract<CustomerTask, { call: unknown }> }) {
-  const unattributed = task.call.provider === "openphone" && task.call.transcriptSource === "saved";
+  if (task.call.provider === "openphone") return <CustomerTaskPhoneTranscript task={task} />;
+  const unattributed = false; // The existing AI-call line/label presentation is unchanged.
   return <div className="cct-call-transcript">{task.call.transcript.split(/\r?\n/).filter(line => line.trim()).map((line, index) => {
     const match = line.match(/^\s*(Assistant|AI|User|Caller|Customer|Client|Staff|Unattributed):([\s\S]*)$/i);
     const labeled = match && (!unattributed || /^unattributed$/i.test(match[1]));

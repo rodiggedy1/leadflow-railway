@@ -76,6 +76,7 @@ function workspace(options: { initial?: boolean; history?: unknown[] } = {}) {
   runInNewContext(compiled, { module, exports: module.exports, React, ...hooks, trpc, ...provenance,
     claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema,
     getCsInboxReplyPhoneNumberIdForSelectedConversation, normalizedLeadPhone: (value: string | null) => value?.replace(/\D/g, "").slice(-10) || "",
+    ClaudeSmsConversationTasks: () => null, // Actual related-task behavior is covered by the task UI harness.
     ...Object.fromEntries(["Users", "Eye", "X", "CalendarClock", "Sparkles", "ChevronRight", "Loader2", "RefreshCw", "ChevronDown", "Pencil", "Send"].map(name => [name, icon])), Avatar: avatar,
     smsConversationName: (value: any) => value.leadName, customerPortraitFor: () => "/synthetic.png", displayLeadSource: () => "CS", renderMessageBody: (value: string) => value, formatTime: () => "10:00 AM",
     fetch: fetchMock, crypto: { randomUUID: () => REQUEST }, AbortController, TextDecoder, console: { warn: vi.fn() }, requestAnimationFrame: () => 1, cancelAnimationFrame: vi.fn(), Date,

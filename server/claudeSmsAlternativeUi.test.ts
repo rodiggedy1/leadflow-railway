@@ -172,6 +172,7 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   uuid.mockReturnValueOnce("00000000-0000-4000-8000-000000000001").mockReturnValue("00000000-0000-4000-8000-000000000002");
   runInNewContext(compiled, { module, exports: module.exports, React, ...hooks, trpc,
     ...Object.fromEntries(iconNames.map((name) => [name, icon])), Avatar: icon,
+    ClaudeSmsConversationTasks: () => null, // Actual related-task behavior is covered by the task UI harness.
     claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, getCsInboxReplyPhoneNumberIdForSelectedConversation,
     claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, normalizedLeadPhone,
     claudeDraftSourceSchema, reviewedClaudeSmsProvenance, smsSenderLabel, smsSenderProvenanceSchema,

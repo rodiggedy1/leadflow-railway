@@ -1,3 +1,4 @@
+import { withoutApprovedTaskConversationDisplay } from "./taskConversationDisplaySourceControl";
 import React from "react";
 import * as recordingUtils from "../client/src/lib/utils";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -93,7 +94,8 @@ function stateHarness(trpc: unknown = {}, context?: unknown) {
   const local = load(react, trpc);
   return { ui: local, render: (name: keyof Ui, props: Record<string, unknown>) => { cursor = 0; return (local[name] as (p: unknown) => Element)(props); } };
 }
-const between = (start: string, end: string) => pageSource.slice(pageSource.indexOf(start), pageSource.indexOf(end, pageSource.indexOf(start)));
+const preservedPageSource = withoutApprovedTaskConversationDisplay("client/src/pages/CommandChatExactLive.tsx", pageSource);
+const between = (start: string, end: string) => preservedPageSource.slice(preservedPageSource.indexOf(start), preservedPageSource.indexOf(end, preservedPageSource.indexOf(start)));
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
 describe("Customer task compact queue and exact canonical identity", () => {
@@ -185,6 +187,7 @@ describe("Customer task compact queue and exact canonical identity", () => {
 
   it("preserves every pre-existing button and completion/cache lifecycle around the explicit takeover additions", () => {
     const buttons = (source: string) => {
+      source = withoutApprovedTaskConversationDisplay("client/src/components/ClaudeCustomerTasks.tsx", source);
       const ast = ts.createSourceFile("card.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
       const result: string[] = [];
       const visit = (node: ts.Node) => {

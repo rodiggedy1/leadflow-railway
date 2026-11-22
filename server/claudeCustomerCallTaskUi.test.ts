@@ -87,13 +87,15 @@ function call(overrides: Partial<CallTask> = {}): CallTask {
 type Element = React.ReactElement<Record<string, any>>;
 const nodes = (tree: unknown): Element[] => Array.isArray(tree) ? tree.flatMap(nodes) : React.isValidElement<Record<string, any>>(tree) ? [tree, ...nodes(tree.props.children)] : [];
 const text = (tree: unknown): string => typeof tree === "string" || typeof tree === "number" ? String(tree) : Array.isArray(tree) ? tree.map(text).join("") : React.isValidElement<Record<string, any>>(tree) ? text(tree.props.children) : "";
-const transcriptText = (tree: unknown): string => nodes(tree).filter(node => node.props.className === "cct-call-turn").map(text).join("\n");
+const transcriptText = (tree: unknown): string => nodes(tree).filter(node => node.props.className === "cct-call-turn").map(turn =>
+  nodes(turn).filter(node => node.props.className === "cct-call-speaker").map(text).join("") + nodes(turn).filter(node => node.props.className === "cct-verbatim").map(text).join("\n")).join("\n");
 const normalized = (value: string) => value.replace(/\s+/g, " ").trim();
 const button = (tree: unknown, label: string) => nodes(tree).find(node => node.type === "button" && text(node) === label)!;
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 const Dialog = (_props: any) => null;
 const DialogContent = (_props: any) => null;
 const DialogTrigger = (_props: any) => null;
+const Provider = (_props: any) => null;
 const div = ({ children, ...props }: any) => React.createElement("div", props, children);
 const sanitizer = { sanitize: vi.fn((value: string, options: unknown) => {
   expect(options).toEqual({ USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] });
@@ -104,6 +106,7 @@ function harness(api: unknown = {}, initialContext?: unknown, input = source) {
   const slots = new Map<string, unknown[]>();
   let key = ""; let cursor = 0; let context = initialContext;
   const react = { ...React,
+    createContext: () => ({ Provider }),
     useState(initial: unknown) {
       const values = slots.get(key)!; const index = cursor++;
       if (!(index in values)) values[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
@@ -137,6 +140,11 @@ function harness(api: unknown = {}, initialContext?: unknown, input = source) {
     if (!React.isValidElement<Record<string, any>>(tree)) return tree;
     const name = Object.keys(ui).find(name => ui[name] === tree.type);
     if (name) return expand(render(name, tree.props, path), `${path}.${name}`, dialogState);
+    if (tree.type === Provider) {
+      const previous = context; context = tree.props.value;
+      try { return expand(tree.props.children, `${path}.provider`, dialogState); }
+      finally { context = previous; }
+    }
     if (tree.type === Dialog) return React.createElement("div", { "data-dialog-open": tree.props.open }, expand(tree.props.children, `${path}.dialog`, tree.props as any));
     if (tree.type === DialogContent) return dialogState?.open ? React.createElement("div", { role: "dialog", className: tree.props.className }, expand(tree.props.children, `${path}.content`, dialogState)) : null;
     if (tree.type === DialogTrigger) {
@@ -278,11 +286,11 @@ describe("Task-call playback and transcript presentation repair — offline", ()
     const words = Array.from({ length: 137 }, (_, index) => `original${index}`).join(" ");
     const transcript = `Unattributed:  ${words}  \r\nStaff: these are words inside undiarized text.\nCorrection: Monday, not Friday.\n中文 日本語 العربية <script>literal evidence</script>`;
     const task = staff(transcript), work = rig(task);
-    const tree = work.ui.CustomerTaskCallTranscript({ task });
+    const tree = work.expand(work.ui.CustomerTaskCallTranscript({ task }));
     expect(nodes(tree).filter(node => node.props.className === "cct-call-speaker").map(text)).toEqual(["Unattributed:"]);
-    const paragraphs = nodes(tree).filter(node => node.type === "p").map(node => node.props.children);
-    expect(paragraphs.slice(0, 3).join("")).toBe(`  ${words}  `);
-    expect(paragraphs).toContain("Staff: these are words inside undiarized text.");
+    const paragraphs = nodes(tree).filter(node => node.props.className === "cct-verbatim").map(text);
+    expect(paragraphs.length).toBeGreaterThan(1);
+    expect(paragraphs.join("")).toBe(transcript.replace(/^Unattributed:/, ""));
     expect(normalized(transcriptText(tree))).toBe(normalized(transcript));
     expect(renderToStaticMarkup(tree)).toContain("&lt;script&gt;literal evidence&lt;/script&gt;");
     expect(renderToStaticMarkup(tree)).not.toContain("<script>");
@@ -292,7 +300,7 @@ describe("Task-call playback and transcript presentation repair — offline", ()
   it("separates existing AI and native staff labels literally, leaves arbitrary colon-prefixed prose unlabelled", () => {
     for (const task of [call({ call: { ...call().call, transcript: "AI: Original words.\nUser: Exact answer.\nCorrection: Monday, not Friday." } }),
       staff("Caller: Original caller words.\nStaff: Original staff words.\nUnattributed: Unknown voice.", "quo")]) {
-      const work = rig(task), tree = work.ui.CustomerTaskCallTranscript({ task });
+      const work = rig(task), tree = work.expand(work.ui.CustomerTaskCallTranscript({ task }));
       expect(normalized(transcriptText(tree))).toBe(normalized(task.call.transcript));
       const labels = nodes(tree).filter(node => node.props.className === "cct-call-speaker").map(text);
       expect(labels).toEqual(task.call.provider === "vapi" ? ["AI:", "User:"] : ["Caller:", "Staff:", "Unattributed:"]);
@@ -443,8 +451,184 @@ describe("AI call addition preserves actual baseline SMS/email, layout and popup
     expect(between(withoutApprovedTaskReads(source), "/** Own only", "/** Canonical call evidence")).toBe(between(original, "/** Own only", "export function TaskCompletionConfirm"));
     expect(between(source, "  const [confirmOpen", "  return <article")).toBe(between(original, "  const [confirmOpen", "  return <article"));
     expect(source.slice(source.indexOf("{error && !confirmOpen"))).toBe(original.slice(original.indexOf("{error && !confirmOpen")));
-    expect(page.replace('    if ("call" in task) return; // TaskCard opens its canonical call evidence locally.\n', "")).toBe(baseline(pagePath));
+    expect(withoutApprovedTaskCallPlayback(pagePath, page).replace('    if ("call" in task) return; // TaskCard opens its canonical call evidence locally.\n', "")).toBe(baseline(pagePath));
     for (const path of ["client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-exact-live.css", "client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css", "client/src/components/ui/dialog.tsx"]) expect(withoutApprovedTaskCallPlayback(path, readFileSync(path, "utf8"))).toBe(baseline(path));
     expect(source).not.toMatch(/\bfetch\(|EventSource|setInterval|\.slice\(0,/);
+  });
+});
+
+// Current authorized UI additions: full source, real exported components, synthetic data only.
+describe("SMS conversation to canonical task navigation — offline", () => {
+  function related(tasks: CustomerTask[] = [sms()]) {
+    const a = actions(), refresh = vi.fn(), onOpenConversation = vi.fn();
+    const context = { callerId: actor.id, tasks, loading: false, failed: false, transientFailure: true,
+      pendingIds: new Set<number>(), actions: a, refresh, onOpenConversation };
+    // No tRPC methods provided: any new query or mutation is a hard offline failure.
+    const work = harness({}, context);
+    const render = (sessionId = 42) => work.expand(work.render("ClaudeSmsConversationTasks", { sessionId }), "related");
+    return { work, context, a, refresh, onOpenConversation, render };
+  }
+  const launch = (tree: unknown) => {
+    const focus = vi.fn();
+    nodes(tree).find(node => node.type === "button" && node.props["aria-haspopup"] === "dialog")!.props.onClick({ currentTarget: { focus } });
+    return focus;
+  };
+  it("matches only exact stored SMS sessions, not same-phone siblings, email tasks, or linked call tasks", () => {
+    const original = [sms({ id: 11 }), sms({ id: 12, sessionId: 43 }), call({ sessionId: 42 }), email()];
+    const r = related(original);
+    expect(r.work.ui.customerSmsConversationTasks(original, 42).map((task: CustomerTask) => task.id)).toEqual([11]);
+    expect(r.work.ui.customerSmsConversationTasks(original, 43).map((task: CustomerTask) => task.id)).toEqual([12]);
+    expect(original.map(task => task.id)).toEqual([11, 12, 903, 902]);
+    expect(nodes(r.render()).filter(node => node.type === "li")).toHaveLength(1);
+    expect(r.render(44)).toBeNull();
+    for (const action of Object.values(r.a)) expect(action).not.toHaveBeenCalled();
+  });
+  it.each([0, -1, 1.5, NaN, Number.MAX_SAFE_INTEGER + 1])("rejects invalid conversation identity %s without inventing a match", id => {
+    const r = related();
+    expect(r.work.ui.customerSmsConversationTasks(r.context.tasks, id)).toEqual([]);
+    expect(r.render(id)).toBeNull();
+  });
+  it("sorts all Open tasks before Done, newest first with a stable id tie-break, and preserves source order", () => {
+    const rows = [sms({ id: 1, status: "done", receivedAt: NOW }), sms({ id: 2, receivedAt: NOW - 100 }),
+      sms({ id: 3, status: "claimed", owner: { id: "other", name: "Other staff" }, receivedAt: NOW - 100 }),
+      sms({ id: 4, status: "done", receivedAt: NOW - 100 })];
+    const r = related(rows), tree = r.render();
+    expect(r.work.ui.customerSmsConversationTasks(rows, 42).map((task: CustomerTask) => task.id)).toEqual([3, 2, 1, 4]);
+    expect(rows.map(task => task.id)).toEqual([1, 2, 3, 4]);
+    expect(text(nodes(tree).find(node => node.type === "summary"))).toContain("2 Open · 2 Done");
+    expect(nodes(tree).filter(node => node.props.className === "cct-related-task-status").map(text)).toEqual(["Open", "Open", "Done", "Done"]);
+  });
+  it("renders every task in the numbered, collapsible, bounded-scroll list with full literal wrapping titles", () => {
+    const title = '<script>literal title</script> & ' + "complete task title ".repeat(15);
+    const r = related(Array.from({ length: 160 }, (_, index) => sms({ id: index + 1, title: `${index}: ${title}` })));
+    const tree = r.render(), list = nodes(tree).find(node => node.type === "ol")!;
+    expect(nodes(list).filter(node => node.type === "li")).toHaveLength(160);
+    expect(nodes(tree).find(node => node.type === "details")!.props.open).toBe(true);
+    expect(text(tree)).toContain(`159: ${title}`);
+    const markup = renderToStaticMarkup(tree);
+    expect(markup).toContain("&lt;script&gt;literal title&lt;/script&gt;"); expect(markup).not.toContain("<script>");
+    const css = readFileSync("client/src/components/claude-customer-tasks.css", "utf8");
+    expect(css).toContain("max-height: min(180px, 22dvh)"); expect(css).toContain("overflow-y: auto");
+    expect(css).toContain(".cct-related-task-title { min-width: 0; flex: 1; overflow-wrap: anywhere;");
+  });
+  it.each(["unclaimed", "claimed", "done"] as const)("opens the existing %s task card read-only and preserves task-to-conversation navigation", status => {
+    const task = sms({ status, owner: status === "unclaimed" ? null : actor, completedBy: status === "done" ? confirmer : null });
+    const r = related([task]); let tree = r.render();
+    expect(nodes(tree).some(node => node.props.role === "dialog")).toBe(false);
+    const link = nodes(tree).find(node => node.type === "button" && node.props["aria-haspopup"] === "dialog")!;
+    expect(link.props.type).toBe("button"); launch(tree); tree = r.render();
+    const dialog = nodes(tree).find(node => node.props.role === "dialog")!;
+    expect(dialog).toBeDefined(); expect(nodes(dialog).find(node => node.props["data-task-id"] === task.id)!.props["data-task-status"]).toBe(status);
+    expect(text(dialog)).toContain(task.title); expect(text(dialog)).toContain(task.sourceText);
+    for (const action of Object.values(r.a)) expect(action).not.toHaveBeenCalled();
+    expect(r.refresh).not.toHaveBeenCalled(); expect(r.onOpenConversation).not.toHaveBeenCalled();
+    button(dialog, "Open full conversation").props.onClick(); expect(r.onOpenConversation).not.toHaveBeenCalled();
+    expect(nodes(r.render()).some(node => node.props.role === "dialog")).toBe(false);
+  });
+  it("uses canonical status changes in both list and already-open detail and hides selection on another session", () => {
+    const task = sms({ status: "claimed", owner: actor }), r = related([task]);
+    launch(r.render());
+    r.context.tasks = [{ ...task, status: "done", completedBy: confirmer, completedAt: NOW, completionNote: "Completed by staff" }];
+    const tree = r.render();
+    expect(text(nodes(tree).find(node => node.type === "summary"))).toContain("0 Open · 1 Done");
+    expect(nodes(tree).find(node => node.props["data-task-id"] === task.id)!.props["data-task-status"]).toBe("done");
+    expect(text(tree)).toContain("Confirmed by Confirming staff"); expect(button(tree, "Mark done")).toBeUndefined();
+    r.context.tasks = [...r.context.tasks, sms({ id: 999, sessionId: 43 })];
+    expect(nodes(r.render(43)).some(node => node.props.role === "dialog")).toBe(false);
+    expect(task.status).toBe("claimed");
+  });
+  it("shows honest loading/error states, retries only on click, and never claims no tasks during a failed cache read", () => {
+    const r = related([]); r.context.loading = true;
+    expect(text(nodes(r.render()).find(node => node.props.role === "status"))).toBe("Loading related tasks…"); expect(r.refresh).not.toHaveBeenCalled();
+    r.context.loading = false; r.context.failed = true;
+    expect(text(r.render())).toContain("Related tasks could not be refreshed."); expect(text(r.render())).not.toContain("No tasks");
+    button(r.render(), "Retry").props.onClick(); expect(r.refresh).toHaveBeenCalledOnce();
+    r.context.failed = false; expect(r.render()).toBeNull();
+  });
+  it("retains an open canonical completion dialog and its note through transient errors without reopening after dismissal", () => {
+    const r = related([sms({ status: "claimed", owner: actor })]); launch(r.render());
+    button(r.render(), "Mark done").props.onClick();
+    nodes(r.render()).find(node => node.type === "textarea")!.props.onChange({ target: { value: "Unsaved human confirmation note" } });
+    r.context.failed = true;
+    const stale = r.render(); expect(text(stale)).toContain("Showing the last loaded status.");
+    expect(nodes(stale).filter(node => node.props.role === "dialog")).toHaveLength(2);
+    expect(nodes(stale).find(node => node.type === "textarea")!.props.value).toBe("Unsaved human confirmation note");
+    for (const action of Object.values(r.a)) expect(action).not.toHaveBeenCalled();
+    const raw = r.work.render("ClaudeSmsConversationTasks", { sessionId: 42 });
+    nodes(raw).find(node => node.type === Dialog)!.props.onOpenChange(false);
+    r.context.failed = false; expect(nodes(r.render()).some(node => node.props.role === "dialog")).toBe(false);
+  });
+  it("restores keyboard focus to the launching row with preventScroll and suppresses cached private details on auth failure", () => {
+    const r = related(), focus = launch(r.render());
+    const raw = r.work.render("ClaudeSmsConversationTasks", { sessionId: 42 }), preventDefault = vi.fn();
+    nodes(raw).find(node => node.type === DialogContent)!.props.onCloseAutoFocus({ preventDefault });
+    expect(preventDefault).toHaveBeenCalledOnce(); expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    r.context.failed = true; r.context.transientFailure = false;
+    const tree = r.render(); expect(text(tree)).toContain("Unavailable");
+    expect(nodes(tree).some(node => node.props["data-task-id"])).toBe(false);
+    expect(nodes(tree).filter(node => node.props.className === "cct-related-task-title")).toHaveLength(0);
+  });
+  it("adds only the child/import to the existing drawer and leaves all queries, effects, drafts, sends and scroll code byte-identical", () => {
+    const control = execFileSync("git", ["show", `e58f374b:${pagePath}`], { encoding: "utf8" });
+    expect(withoutApprovedTaskCallPlayback(pagePath, page)).toBe(control);
+    expect(page).toContain('{conversation.id > 0 && <ClaudeSmsConversationTasks sessionId={conversation.id} key={conversation.id} />}');
+    const current = ts.createSourceFile(componentPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const node = current.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "ClaudeSmsConversationTasks")!;
+    expect(node.getText(current)).not.toMatch(/trpc\.|useEffect|fetch\(|setTimeout|setInterval|refetchInterval|\.actions\./);
+  });
+});
+
+describe("Phone-call reading format only — offline", () => {
+  const staff = (transcript: string, transcriptSource: "saved" | "quo" = "quo") => contract.customerStaffCallTaskSchema.parse({ ...call(),
+    call: { provider: "openphone", providerCallId: "ACsynthetic", recordingId: 91, transcript, transcriptSource,
+      recordingUrl: null, businessPhoneNumberId: "PNsynthetic", businessPhoneNumber: "+13015550987", staffUserId: null, direction: "incoming" } });
+  it("retains native speaker turns and source paragraph breaks without altering literal words or punctuation", () => {
+    const task = staff("Caller:  First paragraph.\nStill the same paragraph.\n\nSecond paragraph!\nStaff: Exact answer?\n\nFollow-up wording.");
+    const work = rig(task), tree = work.expand(work.ui.CustomerTaskCallTranscript({ task }));
+    expect(nodes(tree).filter(node => node.props.className === "cct-call-speaker").map(text)).toEqual(["Caller:", "Staff:"]);
+    expect(nodes(tree).filter(node => node.props.className === "cct-verbatim").map(text)).toEqual([
+      "  First paragraph.\nStill the same paragraph.", "Second paragraph!\n", " Exact answer?", "Follow-up wording."]);
+    expect(normalized(transcriptText(tree))).toBe(normalized(task.call.transcript));
+    expect(text(tree)).not.toContain("Speaker not identified");
+  });
+  it("groups punctuated passages on sentence boundaries and uses lossless neutral chunks only for oversized sentences", () => {
+    const work = rig(call());
+    const sentences = Array.from({ length: 8 }, (_, i) => `Sentence ${i} ` + "original wording ".repeat(10) + "ends here. ").join("");
+    const paragraphs: string[] = work.ui.phoneCallReadingParagraphs(sentences);
+    expect(paragraphs.length).toBeGreaterThan(1); expect(paragraphs.join("")).toBe(sentences);
+    paragraphs.forEach(paragraph => expect(paragraph.trim()).toMatch(/ends here\.$/));
+    const unpunctuated = "  " + Array.from({ length: 151 }, (_, i) => `word${i}`).join("  ") + " \n";
+    const fallback: string[] = work.ui.phoneCallReadingParagraphs(unpunctuated);
+    expect(fallback.length).toBeGreaterThan(1); expect(fallback.join("")).toBe(unpunctuated);
+    expect(work.ui.phoneCallReadingParagraphs("First.\r\n \r\nSecond.")).toEqual(["First.", "Second."]);
+  });
+  it("keeps saved Whisper undiarized, including inner Staff/Caller-looking prose and repeated original paragraphs", () => {
+    const transcript = "Unattributed: Exact first paragraph.\n\nStaff: spoken words, not a verified identity.\nCaller: more literal words.\n\nRepeated sentence. Repeated sentence.\nUnattributed: Second saved segment.";
+    const work = rig(staff(transcript, "saved")), tree = work.expand(work.ui.CustomerTaskCallTranscript({ task: work.context.tasks[0] }));
+    expect(nodes(tree).filter(node => node.props.className === "cct-call-speaker").map(text)).toEqual(["Unattributed:", "Unattributed:"]);
+    expect(text(tree)).toContain("Speaker not identified — this transcript may include both sides of the call.");
+    expect(normalized(transcriptText(tree))).toBe(normalized(transcript));
+    expect(nodes(tree).filter(node => node.props.className === "cct-call-turn").every(node => node.props["data-speaker"] === "unattributed")).toBe(true);
+  });
+  it("safely preserves unknown-speaker, non-Latin and HTML-looking text without adding invented labels or timestamps", () => {
+    const transcript = "Correction: Monday, not Friday.\n\n中文 日本語 العربية <script>literal</script> & original.";
+    const work = rig(staff(transcript)), tree = work.expand(work.ui.CustomerTaskCallTranscript({ task: work.context.tasks[0] }));
+    expect(nodes(tree).filter(node => node.props.className === "cct-call-speaker")).toHaveLength(0);
+    expect(normalized(transcriptText(tree))).toBe(normalized(transcript));
+    expect(renderToStaticMarkup(tree)).toContain("&lt;script&gt;literal&lt;/script&gt;"); expect(renderToStaticMarkup(tree)).not.toContain("<script>");
+    expect(text(tree)).toContain("Speaker not identified"); expect(text(tree)).not.toMatch(/Madison|Ava|00:00/);
+  });
+  it("preserves the confirmed-working audio function/mount byte-for-byte and renders AI transcripts byte-identically to the released baseline", () => {
+    const control = execFileSync("git", ["show", `e58f374b:${componentPath}`], { encoding: "utf8" });
+    const fn = (input: string, name: string) => {
+      const ast = ts.createSourceFile(componentPath, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      return ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name)!.getText(ast);
+    };
+    expect(fn(source, "CustomerTaskCallRecording")).toBe(fn(control, "CustomerTaskCallRecording"));
+    expect(fn(source, "CustomerTaskCallEvidence")).toBe(fn(control, "CustomerTaskCallEvidence"));
+    for (const transcript of [call().call.transcript, "AI: " + "original word ".repeat(151) + "\nUser: Exact answer.\nCorrection: keep this plain.", "中文 <script>literal</script>\n\nOriginal unlabeled line."]) {
+      const task = call({ call: { ...call().call, transcript } });
+      expect(renderToStaticMarkup(rig(task).ui.CustomerTaskCallTranscript({ task }))).toBe(renderToStaticMarkup(rig(task, control).ui.CustomerTaskCallTranscript({ task })));
+    }
   });
 });

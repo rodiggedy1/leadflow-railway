@@ -1,3 +1,4 @@
+import { withoutApprovedTaskConversationDisplay } from "./taskConversationDisplaySourceControl";
 /** Test-only: restore only the fixed approved task-call playback/display hunks.
  * Behavioral tests always execute the actual unnormalized component. */
 const approved: Record<string, Array<[string, string]>> = {
@@ -35,6 +36,7 @@ const approved: Record<string, Array<[string, string]>> = {
   ]
 };
 export function withoutApprovedTaskCallPlayback(path: string, source: string): string {
+  source = withoutApprovedTaskConversationDisplay(path, source);
   for (const [current, original] of approved[path] ?? []) {
     const count = source.split(current).length - 1;
     if (count !== 0 && count !== 1) throw new Error(`Unexpected task-call preservation hunk: ${path}`);

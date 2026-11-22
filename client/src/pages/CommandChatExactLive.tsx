@@ -54,7 +54,7 @@ import { useTabLeader } from "@/hooks/useTabLeader";
 import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AiConcierge from "@/components/AiConcierge";
-import { ClaudeCustomerTasksProvider, ClaudeCustomerTasksQueue, ClaudeCustomerTaskStreamCard, customerTaskIdFromMessage } from "@/components/ClaudeCustomerTasks";
+import { ClaudeCustomerTasksProvider, ClaudeCustomerTasksQueue, ClaudeCustomerTaskStreamCard, ClaudeSmsConversationTasks, customerTaskIdFromMessage } from "@/components/ClaudeCustomerTasks";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, type ClaudeSmsAlternativeGenerateInput, type ClaudeSmsAlternativeResult } from "@shared/claudeSmsAlternative";
@@ -2855,6 +2855,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     {!isTeamConversation && <button type="button" className="ccc-live-sms-quote-assistant-trigger" onClick={openQuoteAssistant} disabled={prepareQuoteAssistant.isPending}><Sparkles />{prepareQuoteAssistant.isPending ? "Reading lead details…" : "Create quote with AI"}</button>}
     {isTeamConversation && activeScheduleTeam && <section className="ccc-live-sms-team-schedule" aria-label={`${activeScheduleTeam.name} schedule for today`}><header><span><CalendarClock />Today&apos;s schedule</span><b>{teamRoute.length} {teamRoute.length === 1 ? "stop" : "stops"}</b></header>{teamRoute.length ? <ol>{teamRoute.slice(0, 4).map((job) => { const etaLabel = teamRouteEtaLabel(job.jobStatus, job.etaTimestamp); return <li key={job.id}><time>{scheduleTimeLabel(job.serviceDateTime)}</time><strong>{job.customerName || "Customer"}</strong><span className={`ccc-live-sms-job-status ${teamRouteStatusClass(job.jobStatus)}`}><TeamRouteStatusIcon status={job.jobStatus} /><b>{teamRouteStatusLabel(job.jobStatus)}</b>{etaLabel && <small>{etaLabel}</small>}</span></li>; })}</ol> : <p>No scheduled stops today.</p>}{teamRoute.length > 4 && <a href="/admin/schedule">View all {teamRoute.length} stops <ChevronRight /></a>}</section>}
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
+    {conversation.id > 0 && <ClaudeSmsConversationTasks sessionId={conversation.id} key={conversation.id} />}
     <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => {
       const outgoing = message.role !== "user";
       const senderName = message.senderName?.trim() || callerName;
