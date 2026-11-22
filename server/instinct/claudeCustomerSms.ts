@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { customerSmsContextHash, customerSmsTurnAfter } from "./customerSmsFreshness";
 import type { CustomerReplyPlan } from "../../shared/claudeCustomerTasks";
 import { normalizePhone } from "../utils/phone";
 import type { AlternativeSessionRow } from "./claudeSmsAlternativeSessionRead";
@@ -55,15 +56,20 @@ export interface CustomerSmsStore {
   recordAcceptance(claim: CustomerSmsClaim, providerMessageId: string): Promise<boolean>;
   markUncertain(claim: CustomerSmsClaim): Promise<void>;
   suppress(claim: CustomerSmsClaim, code: string): Promise<void>;
+  verifyBeforeSubmission?(claim: CustomerSmsClaim): Promise<boolean>;
+  reportFailure?(claim: CustomerSmsClaim, code: string, uncertain?: boolean): Promise<{ taskId: number; notify: boolean } | null>;
   suppressBeforeSubmission(claim: CustomerSmsClaim, code: string, failure?: CustomerSmsFailureDetails): Promise<void>;
 }
 export interface CustomerSmsOptions {
   config: () => CustomerSmsConfig | null;
   readSession(id: number): Promise<CustomerSmsSession | null>;
   readReceivingLine(id: string): Promise<string>;
-  generate(binding: CustomerSmsBinding, session: CustomerSmsSession): Promise<CustomerReplyPlan>;
+  generate(binding: CustomerSmsBinding, session: CustomerSmsSession, signal?: AbortSignal): Promise<CustomerReplyPlan>;
   store: CustomerSmsStore;
   send(input: { to: string; content: string; fromNumberId: string }): Promise<{ success: boolean; messageId?: string; error?: string }>;
+  onFailure?: (detail: { taskId: number | null; code: string; sessionId: number }) => void | Promise<void>;
+  generationTimeoutMs?: number;
+  submissionTimeoutMs?: number;
   onTaskChange?: () => void | Promise<void>;
 }
 const excludedSenders = new Set(["+16505164957", "+16506469270", "+17259009272"]);
@@ -83,9 +89,9 @@ function currentTurn(row: CustomerSmsSession, input: CustomerSmsInput): boolean 
     [value.opMsgId, value.openPhoneId, value.openPhoneMessageId, value.providerMessageId].filter(id => typeof id === "string" && id))));
   const inbound = history.filter(turn => turn && ["user", "customer"].includes(turn.role));
   const matching = inbound.filter(turn => ids(turn).includes(input.providerMessageId));
-  if (matching.length !== 1 || matching[0] !== inbound.at(-1) || matching[0].content !== input.inboundText
+  if (matching.length !== 1 || inbound.some(turn => turn !== matching[0] && customerSmsTurnAfter(history as any[], turn, matching[0])) || matching[0].content !== input.inboundText
     || ids(matching[0]).length !== 1) return false;
-  if (history.slice(history.indexOf(matching[0]) + 1).some(turn => ["assistant", "agent", "office"].includes(turn.role))) return false;
+  if (history.some(turn => turn !== matching[0] && customerSmsTurnAfter(history as any[], turn, matching[0]) && ["assistant", "agent", "office"].includes(turn.role))) return false;
   return envelopes(matching[0]).every(value => {
     if (value.sessionId != null && String(value.sessionId) !== String(input.sessionId)) return false;
     for (const key of ["phoneNumberId", "receivingPhoneNumberId"]) if (value[key] != null && value[key] !== input.receivingPhoneNumberId) return false;
@@ -126,6 +132,23 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       if (!hasTask) return;
       try { await options.onTaskChange?.(); } catch { /* A refresh is not the committed task/send outcome. */ }
     };
+    const reportFailure = async (code: string, uncertain = false) => {
+      const alertWithoutTask = async () => {
+        try { await options.onFailure?.({ taskId: null, code, sessionId: input.sessionId }); }
+        catch { console.warn("[ClaudeCustomerSMS] Independent owner alert unavailable", { sessionId: input.sessionId, code }); }
+      };
+      if (!claim) { await alertWithoutTask(); return; }
+      try {
+        const review = await options.store.reportFailure?.(claim, code, uncertain);
+        if (!review) return;
+        hasTask = true;
+        await refreshTask();
+        if (review.notify) await options.onFailure?.({ taskId: review.taskId, code, sessionId: input.sessionId });
+      } catch {
+        console.warn("[ClaudeCustomerSMS] Failure review persistence or notification unavailable", { sessionId: input.sessionId, code });
+        await alertWithoutTask();
+      }
+    };
     try {
       const session = await options.readSession(input.sessionId);
       if (!session || session.contact.sessionId !== String(input.sessionId) || session.contact.phone !== phone
@@ -137,11 +160,19 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       if (normalizePhone(receivingPhoneNumber) !== receivingPhoneNumber || !receivingPhoneNumber || receivingPhoneNumber === phone) return { outcome: "excluded" };
       const binding: CustomerSmsBinding = { sessionId: input.sessionId, providerMessageId: input.providerMessageId, fromPhone: phone,
         receivingPhoneNumberId: input.receivingPhoneNumberId, receivingPhoneNumber, inboundText: input.inboundText,
-        createdAt, receivedAt: input.receivedAt, customerName: session.contact.displayName, historyHash: customerHistoryHash(session.messageHistory) };
+        createdAt, receivedAt: input.receivedAt, customerName: session.contact.displayName, historyHash: customerHistoryHash(session.messageHistory), historyContextHash: customerSmsContextHash(session.messageHistory) ?? undefined };
       claim = await options.store.claim(binding);
       if (!claim) return { outcome: "duplicate" };
       let plan: CustomerReplyPlan;
-      try { plan = await options.generate(binding, session); }
+      try {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const controller = new AbortController();
+        try {
+          plan = await Promise.race([options.generate(binding, session, controller.signal), new Promise<never>((_, reject) => {
+            timer = setTimeout(() => { reject(new Error("CUSTOMER_REPLY_GENERATION_TIMEOUT")); controller.abort(); }, options.generationTimeoutMs ?? 120_000);
+          })]);
+        } finally { if (timer) clearTimeout(timer); }
+      }
       catch (error) {
         failure = { failures: [describeCustomerSmsFailure(error, "generation")] };
         plan = fallbackPlan();
@@ -149,7 +180,7 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       const currentConfig = options.config();
       if (!currentConfig || currentConfig.startAt !== config.startAt || currentConfig.allowedPhone !== config.allowedPhone
         || currentConfig.testCustomerOverride !== config.testCustomerOverride || currentConfig.scope !== config.scope) {
-        await options.store.suppress(claim, "CONFIG_CHANGED"); return { outcome: "suppressed" };
+        await options.store.suppress(claim, "CONFIG_CHANGED"); await reportFailure("CONFIG_CHANGED"); return { outcome: "suppressed" };
       }
       let prepared: boolean | CustomerReplyPlan;
       if (failure) failurePhase = "fallback_preparation";
@@ -164,31 +195,44 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
         const recoveryConfig = options.config();
         if (!recoveryConfig || recoveryConfig.startAt !== config.startAt || recoveryConfig.allowedPhone !== config.allowedPhone
           || recoveryConfig.testCustomerOverride !== config.testCustomerOverride || recoveryConfig.scope !== config.scope) {
-          await options.store.suppress(claim, "CONFIG_CHANGED"); return { outcome: "suppressed" };
+          await options.store.suppress(claim, "CONFIG_CHANGED"); await reportFailure("CONFIG_CHANGED"); return { outcome: "suppressed" };
         }
         failurePhase = "fallback_preparation";
         prepared = await options.store.prepare(claim, plan, failure);
       }
-      if (!prepared) return { outcome: "suppressed" };
+      if (!prepared) { await reportFailure("CUSTOMER_REPLY_PREPARATION_STOPPED"); return { outcome: "suppressed" }; }
       failurePhase = "pre_send";
       // Quote links and their canonical price text commit with the existing
       // task/receipt. Submit that exact durable text, never the pre-link draft.
       const replyPlan = typeof prepared === "object" ? prepared : plan;
       hasTask = replyPlan.task !== null;
       await refreshTask();
+      if (failure) await reportFailure(failure.failures[0].code);
       const submissionConfig = options.config();
       if (!submissionConfig || submissionConfig.startAt !== config.startAt || submissionConfig.allowedPhone !== config.allowedPhone
         || submissionConfig.testCustomerOverride !== config.testCustomerOverride || submissionConfig.scope !== config.scope) {
-        await options.store.suppressBeforeSubmission(claim, "CONFIG_CHANGED"); await refreshTask(); return { outcome: "suppressed" };
+        await options.store.suppressBeforeSubmission(claim, "CONFIG_CHANGED"); await reportFailure("CONFIG_CHANGED"); await refreshTask(); return { outcome: "suppressed" };
+      }
+      if (options.store.verifyBeforeSubmission && !await options.store.verifyBeforeSubmission(claim)) {
+        await options.store.suppressBeforeSubmission(claim, "STALE_CUSTOMER_MESSAGE");
+        await reportFailure("CUSTOMER_REPLY_PREPARATION_STOPPED");
+        return { outcome: "suppressed" };
       }
       // Durable exact reply and actionable task already exist before submission.
       submissionStarted = true;
-      const response = await options.send({ to: phone, content: replyPlan.replyText, fromNumberId: input.receivingPhoneNumberId });
+      let sendTimer: ReturnType<typeof setTimeout> | undefined;
+      let response: Awaited<ReturnType<CustomerSmsOptions["send"]>>;
+      try {
+        response = await Promise.race([options.send({ to: phone, content: replyPlan.replyText, fromNumberId: input.receivingPhoneNumberId }),
+          new Promise<never>((_, reject) => {
+            sendTimer = setTimeout(() => reject(new Error("CUSTOMER_REPLY_SUBMISSION_TIMEOUT")), options.submissionTimeoutMs ?? 30_000);
+          })]);
+      } finally { if (sendTimer) clearTimeout(sendTimer); }
       if (!response.success || typeof response.messageId !== "string" || !response.messageId.trim()) {
-        await options.store.markUncertain(claim); await refreshTask(); return { outcome: "uncertain" };
+        await options.store.markUncertain(claim); await reportFailure("SUBMISSION_UNCERTAIN", true); await refreshTask(); return { outcome: "uncertain" };
       }
       if (!await options.store.recordAcceptance(claim, response.messageId)) {
-        await options.store.markUncertain(claim); await refreshTask(); return { outcome: "uncertain" };
+        await options.store.markUncertain(claim); await reportFailure("SUBMISSION_UNCERTAIN", true); await refreshTask(); return { outcome: "uncertain" };
       }
       await refreshTask();
       return { outcome: "accepted" };
@@ -201,6 +245,7 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
           });
         } catch { /* Existing durable claim remains blocked, never retried. */ }
       }
+      await reportFailure(submissionStarted ? "SUBMISSION_UNCERTAIN" : "GENERATION_OR_PERSISTENCE_FAILED", submissionStarted);
       await refreshTask();
       return { outcome: submissionStarted ? "uncertain" : "failed" };
     }

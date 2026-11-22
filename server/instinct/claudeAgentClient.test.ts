@@ -261,6 +261,48 @@ describe("MOCKED TRANSPORT ONLY: exact first-lead instructions without tools", (
     expect(h.fetchMock).not.toHaveBeenCalled();
   });
 
+  it.each(["configuration_fetch", "configuration_json", "session_post", "sse"])("aborts an initial run during %s and removes the caller listener without retry", async waitingAt => {
+    let rejectPending!: (error: Error) => void;
+    const pending = () => new Promise<Response>((_resolve, reject) => { rejectPending = reject; });
+    const h = initialHarness({ overrideHttp: call => {
+      if (call.path.startsWith("/v1/agents/")) {
+        if (waitingAt === "configuration_fetch") return pending();
+        if (waitingAt === "configuration_json") {
+          const response = json(baseAgent());
+          vi.spyOn(response, "json").mockImplementation(pending);
+          return response;
+        }
+      }
+      if (waitingAt === "session_post" && call.method === "POST" && call.path === "/v1/sessions") return pending();
+    } });
+    const controller = new AbortController();
+    const added = vi.spyOn(controller.signal, "addEventListener"), removed = vi.spyOn(controller.signal, "removeEventListener");
+    const running = h.runInitial({ signal: controller.signal });
+    await settle();
+    const expectedCalls = waitingAt === "sse" ? 5 : waitingAt === "session_post" ? 3 : 1;
+    expect(h.calls).toHaveLength(expectedCalls);
+    const fetchSignal = h.fetchMock.mock.calls[0][1].signal as AbortSignal;
+    expect(fetchSignal.aborted).toBe(false); controller.abort("private cancellation reason");
+    await stopped(running, "CANCELLED"); expect(fetchSignal.aborted).toBe(true);
+    expect(added).toHaveBeenCalledTimes(1);
+    expect(removed).toHaveBeenCalledWith("abort", added.mock.calls[0][1]);
+    if (waitingAt !== "sse") rejectPending(new Error("PRIVATE_LATE_REJECTION"));
+    await settle(); expect(h.calls).toHaveLength(expectedCalls); expect(h.toolCalls).not.toHaveBeenCalled();
+    expect(JSON.stringify(h.traces)).not.toContain("PRIVATE_");
+  });
+
+  it("observes a rejected hook promise when that hook synchronously aborts before race registration", async () => {
+    const h = initialHarness(), controller = new AbortController();
+    let rejectHook!: (error: Error) => void;
+    const hook = new Promise<void>((_resolve, reject) => { rejectHook = reject; });
+    const running = h.runInitial({ signal: controller.signal, onTrace: entry => {
+      if (entry.stage === "http_response") { controller.abort(); return hook; }
+    } });
+    await stopped(running, "CANCELLED");
+    rejectHook(new Error("PRIVATE_DETACHED_HOOK_REJECTION")); await settle();
+    expect(h.calls).toHaveLength(1); expect(h.toolCalls).not.toHaveBeenCalled();
+  });
+
   it("leaves the existing general-draft inherited-system and one-context-tool defaults intact", async () => {
     const h = harness({ onMessage: h => { h.push(message()); h.push(idle()); } });
     await h.run();
@@ -512,7 +554,9 @@ describe("scoped source extraction preservation", () => {
     const prefix = source.slice(source.indexOf("export const EXISTING_AGENT_ID"), coreStart)
       .replace("/** Private session overrides used only by the dedicated first-lead entrypoint. */\ninterface SessionRunOptions extends RunOptions {\n  systemOverride?: string;\n  allowEmptyTools?: true;\n}\n", "")
       .replace("function customTools(backend: Backend, allowEmptyTools = false)", "function customTools(backend: Backend)")
-      .replace("(backend.tools.length === 0 && !allowEmptyTools)", "backend.tools.length === 0");
+      .replace("(backend.tools.length === 0 && !allowEmptyTools)", "backend.tools.length === 0")
+      .replace("if (signal.aborted) {\n    // The operation/hook was evaluated before this helper. Observe late failure\n    // even when cancellation wins before Promise.race can attach its handlers.\n    void promise.catch(() => undefined);\n    throw new ManagedAgentDemoError(\"CANCELLED\", sessionId);\n  }",
+        "if (signal.aborted) throw new ManagedAgentDemoError(\"CANCELLED\", sessionId);");
     const core = source.slice(coreStart, wrapperStart)
       .replace("options: SessionRunOptions", "options: RunOptions")
       .replace("customTools(options.backend, options.allowEmptyTools === true)", "customTools(options.backend)")

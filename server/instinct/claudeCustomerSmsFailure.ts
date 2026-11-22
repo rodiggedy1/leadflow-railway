@@ -40,3 +40,12 @@ export function describeCustomerSmsFailure(error: unknown, phase: CustomerSmsFai
   })) : [];
   return diagnosticSchema.parse({ phase, code, name, issues });
 }
+
+/** Terminal failure receipts are not human dismissal or proof of an SMS reply. */
+export function customerSmsDraftHidesUnanswered(draft: { status: string; capability?: string | null; errorCode?: string | null;
+  dismissedAt?: unknown; dismissedBy?: unknown; outboundOpenPhoneId?: string | null; sentAt?: unknown }): boolean {
+  if (["SENT", "DELIVERED"].includes(draft.status)) return true;
+  if (draft.status !== "DISMISSED") return false;
+  if (draft.outboundOpenPhoneId || draft.sentAt || draft.dismissedAt || draft.dismissedBy) return true;
+  return !["claude_customer_reply_v1", "claude_thumbtack_first_response_v1"].includes(draft.capability ?? "") || !draft.errorCode;
+}

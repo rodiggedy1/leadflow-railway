@@ -36,29 +36,16 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
   async function fresh(tx: Tx, claim: FirstResponseClaim): Promise<boolean> {
     const [draft] = rows(await tx.execute(sql`SELECT * FROM madison_sms_drafts WHERE id = ${claim.draftId} FOR UPDATE`));
     const [session] = rows(await tx.execute(sql`SELECT * FROM conversation_sessions WHERE id = ${claim.sessionId} FOR UPDATE`));
-    const [card] = rows(await tx.execute(sql`SELECT * FROM ops_chat_messages WHERE id = ${claim.cardId} FOR UPDATE`));
-    if (!draft || !session || !card || !claim.lead.sendEligible || !claim.lead.phone || draft.status !== "TOOLS_RUNNING" || draft.dismissedAt || draft.dismissedBy
+    // Business/card activity is not eligibility. Keep only this phone's send ownership and explicit consent.
+    if (!draft || !session || !claim.lead.phone || draft.status !== "TOOLS_RUNNING" || draft.dismissedAt || draft.dismissedBy
       || draft.capability !== capability || draft.inboundOpenPhoneId !== claim.lead.key || Number(draft.sessionId) !== claim.sessionId
-      || draft.fromPhone !== claim.lead.phone || session.leadPhone !== claim.lead.phone || session.leadSource !== "thumbtack"
-      || session.stage !== "AVAILABILITY" || Number(session.aiMode) !== 0 || Number(session.smsOptOut) !== 0 || Number(session.isBooked) !== 0
-      || session.assignedAgentId || session.assignedAgentName || session.lastCalledAt || session.respondedAt || session.csResolvedAt
-      || session.madisonDeferredUntil || session.lastProcessedMessageId || session.lastCustomerReplyAt || session.lastCustomerMessageTs
-      || session.lastAiMessageAt || session.internalNotes || Number(session.messageCount) !== 0) return false;
-    const savedBinding = json(draft.resolvedContext), expected = binding(claim), metadata = json(card.metadata ?? "{}");
-    if (Object.keys(expected).some(key => JSON.stringify(savedBinding?.[key]) !== JSON.stringify((expected as any)[key]))
-      || Number(card.sessionId) !== claim.sessionId || Number(metadata.sessionId) !== claim.sessionId || metadata.nativeFirstResponseKey !== claim.lead.key
-      || metadata.claimedBy || card.cardStatus === "dismissed" || !Array.isArray(json(session.messageHistory)) || json(session.messageHistory).length !== 0) return false;
-    const [capture] = rows(await tx.execute(sql`SELECT source, event_type, raw_payload FROM webhook_events WHERE id = ${claim.lead.capture.id}`));
-    if (!capture || capture.source !== "thumbtack" || capture.event_type !== "NegotiationCreatedV4" || capture.raw_payload !== claim.lead.capture.rawPayload) return false;
+      || draft.fromPhone !== claim.lead.phone || session.leadPhone !== claim.lead.phone || Number(session.smsOptOut) !== 0) return false;
     if (rows(await tx.execute(sql`SELECT id FROM sms_opt_outs WHERE phone = ${claim.lead.phone}`)).length) return false;
     // Preserve global consent checks without using previous conversations/messages to reject a lead.
     const phone10 = claim.lead.phone.slice(-10);
     const otherSessions = rows(await tx.execute(sql`SELECT leadPhone, smsOptOut FROM conversation_sessions
       WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = ${phone10} AND id <> ${claim.sessionId}`));
     if (otherSessions.some(other => normalizePhone(other.leadPhone) === claim.lead.phone && Number(other.smsOptOut))) return false;
-    if (rows(await tx.execute(sql`SELECT id FROM ops_chat_messages WHERE
-      (sessionId = ${claim.sessionId} OR (JSON_VALID(metadata) = 1 AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.sessionId')) = ${String(claim.sessionId)}))
-      AND id <> ${claim.cardId} AND (authorRole <> 'system' OR quickAction = 'madison_sms_dismissed')`)).length) return false;
     return !stop(claim.lead.facts.description) && !claim.lead.facts.nativeDetails.some(detail => stop(detail.answer));
   }
   return {
@@ -83,9 +70,8 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
           // Older native receipts used negotiation/attempt hashes but persisted the same canonical phone.
           const older = lead.phone ? rows(await tx.execute(sql`SELECT id, resolvedContext FROM madison_sms_drafts WHERE fromPhone = ${lead.phone}
             AND capability = ${capability} AND inboundOpenPhoneId LIKE 'tt-first:v1:%'`)) : [];
-          const prior = confirmedPhoneReceipt ?? exact ?? older[0];
           // Pre-fix claims already created their session/card atomically. Recognize those retries too.
-          if ([confirmedPhoneReceipt, exact, ...older].some(receipt => isSameNegotiation(receipt, lead))) return null;
+          if (confirmedPhoneReceipt || exact || older.some(receipt => isSameNegotiation(receipt, lead))) return null;
           const price = quote(lead), now = new Date();
           const phone = lead.phone ?? `no-phone-tt-${lead.capture.id}`;
           const sessionId = Number(header(await tx.insert(conversationSessions).values({ leadPhone: phone, leadName: lead.facts.name,
@@ -110,14 +96,13 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
               size, price, utmSource: "thumbtack", sessionId, arrivedAt: now.getTime(), negotiationId: lead.native.negotiationId,
               nativeFirstResponseKey: lead.key }) })).insertId);
           if (![intakeId, claim.cardId].every(id => Number.isSafeInteger(id) && id > 0)) throw new Error("INTAKE_OR_CARD_INSERT_ID_MISSING");
-          // Commit the distinct lead even when its phone has already had an introduction.
-          if (prior) return null;
+          // A new lead card is the trigger. Another negotiation's phone receipt is not an eligibility veto.
           try {
             introductionAttempted = true;
             claim.draftId = Number(header(await tx.insert(madisonSmsDrafts).values({ inboundOpenPhoneId: lead.key, sessionId, fromPhone: phone,
               senderName: lead.facts.name, senderType: "customer", status: lead.sendEligible ? "TOOLS_RUNNING" : "DISMISSED", capability, capabilityVersion: 1,
-              resolvedContext: binding(claim), capabilityResult: { phase: lead.sendEligible ? "claimed" : "suppressed_native_dates", startAt: config.startAt },
-              errorStage: lead.sendEligible ? null : "GATE", errorCode: lead.sendEligible ? null : "SUPPRESSED_NATIVE_DATES",
+              resolvedContext: binding(claim), capabilityResult: { phase: lead.sendEligible ? "claimed" : "no_valid_phone", startAt: config.startAt },
+              errorStage: lead.sendEligible ? null : "GATE", errorCode: lead.sendEligible ? null : "NO_VALID_PHONE",
               originalMessage: buildOriginalMessage(lead), observations: [], suggestedActions: [], followUps: [],
               sendPolicyMode: "automatic", sendPolicyEnabled: 1, sendPolicyEvaluatedAt: now, createdAt: now, updatedAt: now })).insertId);
           } catch (error) {

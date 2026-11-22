@@ -1464,10 +1464,10 @@ export default function CommandChatExactLive() {
   }, [showNotice, smsInbox]);
 
   const openSmsDrawerFromLead = useCallback((lead: CommandLead) => {
-    const inboxConversation = smsInbox.find((conversation) => (
-      (lead.sessionId !== null && conversation.id === lead.sessionId)
-      || (lead.phone && normalizedLeadPhone(conversation.leadPhone) === normalizedLeadPhone(lead.phone))
-    ));
+    const phone = normalizedLeadPhone(lead.phone);
+    const inboxConversation = phone
+      ? smsInbox.find((conversation) => normalizedLeadPhone(conversation.leadPhone) === phone)
+      : smsInbox.find((conversation) => lead.sessionId !== null && conversation.id === lead.sessionId);
     if (!inboxConversation && !lead.phone) {
       showNotice("A Command Chat text conversation is not available for this lead yet.");
       return;
@@ -1479,7 +1479,7 @@ export default function CommandChatExactLive() {
       jobContext: buildThumbtackLeadDraftContext(lead),
     } : null);
     setSelectedSmsConversation(inboxConversation ?? {
-      id: lead.sessionId ?? 0,
+      id: lead.sourceLabel === "Thumbtack" && phone ? 0 : lead.sessionId ?? 0,
       leadName: lead.name,
       leadPhone: lead.phone,
       leadSource: lead.sourceLabel === "Thumbtack" ? "thumbtack" : null,
@@ -2418,6 +2418,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const [claudeDraftError, setClaudeDraftError] = useState("");
   const claudeDraftBusyRef = useRef<ClaudeSmsAlternativeGenerateInput | ClaudeInitialLeadInput | null>(null);
   const claudeDraftScopeRef = useRef({ key: "", epoch: 0 });
+  const claudeInvalidatedPendingRef = useRef(false);
   const claudeDraftMountedRef = useRef(true);
   const { data: detail } = trpc.leads.getCsConversation.useQuery(
     { sessionId: conversation.id },
@@ -2492,6 +2493,14 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     detail?.sessionId ?? conversation.id, claudeReceivingPhoneNumberId, claudeSenderPhoneNumberId]);
   smsDraftAttribution.target(smsDraftTargetKey);
   const claudeInitialLeadMode = !isTeamConversation && conversation.id >= 0 && Boolean(leadCardPhone && leadCardSnapshot);
+  const smsComposerIdentityKey = JSON.stringify([conversation.id, conversation.personType,
+    normalizedLeadPhone(leadCardPhone || conversation.leadPhone), leadCardSnapshot?.id ?? null]);
+  const claudeInitialConversationVerified = conversation.id > 0 && detail?.sessionId === conversation.id
+    && normalizedLeadPhone(conversation.leadPhone) === normalizedLeadPhone(leadCardPhone ?? null)
+    && normalizedLeadPhone(detail.leadPhone) === normalizedLeadPhone(leadCardPhone ?? null);
+  const claudeInitialSessionId = claudeInitialConversationVerified ? conversation.id : 0;
+  const claudeInitialPhoneMismatch = claudeInitialLeadMode && detail?.sessionId === conversation.id
+    && normalizedLeadPhone(detail.leadPhone) !== normalizedLeadPhone(leadCardPhone ?? null);
   const claudeLeadFacts: ClaudeInitialLeadFacts | null = leadCardSnapshot ? {
     name: leadCardSnapshot.name, serviceType: leadCardSnapshot.serviceType, category: leadCardSnapshot.category,
     address: leadCardSnapshot.address, location: leadCardSnapshot.location, requestedDates: leadCardSnapshot.requestedDates,
@@ -2503,10 +2512,10 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   } : null;
   const claudeOriginalConversation = useMemo(() => {
     try {
-      const saved: unknown = JSON.parse(detail?.messageHistory ?? "[]");
-      return Array.isArray(saved) ? saved : null;
-    } catch { return null; }
-  }, [detail?.messageHistory]);
+      const saved: unknown = JSON.parse(claudeInitialLeadMode && !claudeInitialConversationVerified ? "[]" : detail?.messageHistory ?? "[]");
+      return Array.isArray(saved) ? saved : claudeInitialLeadMode ? [] : null;
+    } catch { return claudeInitialLeadMode ? [] : null; }
+  }, [claudeInitialLeadMode, claudeInitialConversationVerified, detail?.messageHistory]);
   const claudeOrdinaryDraftVisible = !isTeamConversation && conversation.id > 0 && !leadCardPhone;
   const claudeOrdinaryDraftEligible = claudeOrdinaryDraftVisible && detail?.sessionId === conversation.id
     && detail?.leadPhone === conversation.leadPhone && Boolean(claudeInbound)
@@ -2516,26 +2525,36 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       (liveClaudeConversation.lastMessageTs != null && claudeInbound?.ts != null && liveClaudeConversation.lastMessageTs > claudeInbound.ts)
       || (liveClaudeConversation.lastMessageText != null && liveClaudeConversation.lastMessageText !== claudeInbound?.content?.slice(0, 255))));
   const claudeDraftVisible = claudeInitialLeadMode || claudeOrdinaryDraftVisible;
-  const claudeDraftEligible = claudeInitialLeadMode ? Boolean(claudeLeadFacts && claudeOriginalConversation
-    && (conversation.id === 0 || detail)
-    && (!detail || (detail.sessionId === conversation.id && normalizedLeadPhone(detail.leadPhone) === normalizedLeadPhone(leadCardPhone ?? null))))
+  const claudeDraftEligible = claudeInitialLeadMode ? Boolean(claudeLeadFacts && claudeOriginalConversation)
     : claudeOrdinaryDraftEligible;
-  const claudeScopeKey = JSON.stringify([conversation.id, conversation.leadPhone, conversation.personType, leadCardPhone,
-    detail?.sessionId, detail?.leadPhone, detail?.messageHistory, claudeReceivingPhoneNumberId,
-    liveClaudeConversation.lastMessageTs, liveClaudeConversation.lastMsgTs, liveClaudeConversation.lastMessageText, liveClaudeConversation.lastSenderRole,
-    claudeInitialLeadMode, leadDraft, claudeInitialLeadMode ? leadCardSnapshot : null, claudeInitialLeadMode ? claudeLeadFacts : null,
-    claudeInitialLeadMode ? name : null]);
+  // Bind to request identity/context, not poll-only bookkeeping, full card
+  // status, JSON formatting, or older sibling turns in ordinary SMS responses.
+  const claudeScopeKey = JSON.stringify([conversation.id, normalizedLeadPhone(conversation.leadPhone), conversation.personType,
+    normalizedLeadPhone(leadCardPhone ?? null), claudeInitialLeadMode, claudeDraftEligible,
+    claudeReceivingPhoneNumberId, claudeSenderPhoneNumberId,
+    claudeInitialLeadMode ? [leadCardSnapshot?.id, claudeInitialSessionId, claudeOriginalConversation, leadDraft, claudeLeadFacts, name]
+      : [detail?.sessionId, normalizedLeadPhone(detail?.leadPhone ?? null), claudeInbound, claudeReceivingPhoneNumberId,
+        claudeSenderPhoneNumberId, liveClaudeConversation.lastMessageTs, liveClaudeConversation.lastMessageText, liveClaudeConversation.lastSenderRole]]);
   // Invalidate synchronously, before effects, so a late response or old button
   // callback cannot use a draft after switching customer, line, or incoming turn.
   if (claudeDraftScopeRef.current.key !== claudeScopeKey) {
+    if (claudeDraftBusyRef.current) claudeInvalidatedPendingRef.current = true;
     claudeDraftScopeRef.current = { key: claudeScopeKey, epoch: claudeDraftScopeRef.current.epoch + 1 };
   }
   const claudeDraftScope = claudeDraftScopeRef.current;
   const claudeAlternative = trpc.madison.claudeAlternative.generate.useMutation();
   const claudeInitialLeadAlternative = trpc.madison.claudeAlternative.generateInitialLead.useMutation();
   useEffect(() => {
+    const invalidatedPending = claudeInvalidatedPendingRef.current;
+    claudeInvalidatedPendingRef.current = false;
+    // The underlying request may finish later; detach it so an explicit retry
+    // is possible, and its success/error/finally cannot overwrite a newer call.
+    claudeDraftBusyRef.current = null;
+    setClaudeDraftPending(false);
     setClaudeDraft(null);
-    setClaudeDraftError("");
+    setClaudeDraftError((previous) => invalidatedPending
+      ? "Lead or conversation details changed while Claude was drafting. Your reply is unchanged. Get Claude draft again to retry."
+      : previous.includes("Get Claude draft again to retry.") ? previous : "");
   }, [claudeScopeKey]);
   useEffect(() => {
     claudeDraftMountedRef.current = true;
@@ -2551,9 +2570,9 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     if (claudeDraftBusyRef.current || !claudeDraftEligible
       || claudeDraftScopeRef.current !== claudeDraftScope) return;
     if (claudeInitialLeadMode) {
-      const parsed = claudeInitialLeadInputSchema.safeParse({ sessionId: conversation.id, customerPhone: leadCardPhone,
+      const parsed = claudeInitialLeadInputSchema.safeParse({ sessionId: claudeInitialSessionId, customerPhone: leadCardPhone,
         requestId: crypto.randomUUID(), leadDetails: claudeLeadFacts, originalConversation: claudeOriginalConversation,
-        draftRequest: { conversationContext: smsConversationContext, customerName: name,
+        draftRequest: { conversationContext: claudeInitialConversationVerified ? smsConversationContext : "", customerName: name,
           jobContext: leadDraft?.jobContext ?? "", scenario: leadDraft?.scenario ?? "" } });
       if (!parsed.success) {
         setClaudeDraftError("Claude could not read this lead's details. Your reply is unchanged.");
@@ -2619,9 +2638,10 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
   const currentClaudeDraft = claudeDraft && claudeDraft.scopeKey === claudeScopeKey
     && claudeDraft.epoch === claudeDraftScope.epoch ? claudeDraft.result : null;
   const allowClaudeUse = Boolean(currentClaudeDraft && claudeDraftEligible && !claudeDraftPending
-    && currentClaudeDraft.sessionId === conversation.id && (currentClaudeDraft.kind === "initial_lead"
-    ? claudeInitialLeadMode && normalizedLeadPhone(currentClaudeDraft.customerPhone) === normalizedLeadPhone(leadCardPhone ?? null)
-    : !claudeInitialLeadMode && currentClaudeDraft.providerMessageId === claudeInbound?.providerMessageId
+    && (currentClaudeDraft.kind === "initial_lead"
+    ? claudeInitialLeadMode && currentClaudeDraft.sessionId === claudeInitialSessionId
+      && normalizedLeadPhone(currentClaudeDraft.customerPhone) === normalizedLeadPhone(leadCardPhone ?? null)
+    : !claudeInitialLeadMode && currentClaudeDraft.sessionId === conversation.id && currentClaudeDraft.providerMessageId === claudeInbound?.providerMessageId
     && currentClaudeDraft.receivingPhoneNumberId === claudeReceivingPhoneNumberId
     && currentClaudeDraft.receivingPhoneNumberId === claudeSenderPhoneNumberId));
   const useClaudeReply = () => {
@@ -2685,7 +2705,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     setConfirmedOutgoing([]);
     initialBottomScrollDone.current = false;
     scrollAfterSendRef.current = false;
-  }, [conversation.id]);
+  }, [smsComposerIdentityKey]);
   useEffect(() => {
     if (smsComposerRef.current) resizeSmsComposer(smsComposerRef.current);
   }, [draft, resizeSmsComposer]);
@@ -2761,6 +2781,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     <footer>
       {claudeDraftVisible && <article className="ccc-live-sms-ai-draft-card" aria-label="Optional Claude draft"><header><span><Sparkles />Claude alternative</span><small>Optional · review only</small></header>
         {currentClaudeDraft && <><small>{currentClaudeDraft.kind === "initial_lead" ? `First lead reply · ${currentClaudeDraft.customerPhone}` : `Reply on ${currentClaudeDraft.receivingPhoneNumber}`}</small><p>{currentClaudeDraft.replyText}</p></>}
+        {claudeInitialPhoneMismatch && <p role="status">The linked conversation has a different phone. Claude will draft from this lead card only; replies still go to the card's phone.</p>}
         {claudeDraftError && <p role="status">{claudeDraftError}</p>}
         <div><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!claudeDraftEligible || claudeDraftPending} onClick={() => void generateClaudeDraft()}>{claudeDraftPending ? <Loader2 className="animate-spin" /> : <Sparkles />}{claudeDraftPending ? "Getting Claude draft…" : "Get Claude draft"}</button>
           {currentClaudeDraft && <><button type="button" className="ccc-live-sms-ai-draft-insert" disabled={!allowClaudeUse} onClick={useClaudeReply}><Pencil />Use reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" onClick={() => setClaudeDraft(null)}>Discard</button></>}

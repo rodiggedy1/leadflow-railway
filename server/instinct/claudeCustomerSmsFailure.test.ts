@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { customerSmsFailureDetailsSchema, describeCustomerSmsFailure } from "./claudeCustomerSmsFailure";
+import { customerSmsFailureDetailsSchema, customerSmsDraftHidesUnanswered, describeCustomerSmsFailure } from "./claudeCustomerSmsFailure";
 
 describe("customer SMS failure diagnostics — no raw model, SDK, SQL or credential text", () => {
   it("retains exact application error codes and failing phase", () => {
@@ -40,4 +41,29 @@ describe("customer SMS failure diagnostics — no raw model, SDK, SQL or credent
   it.each([null, undefined, "private thrown string", 123])("handles non-Error throws without retaining their contents: %j", error => {
     expect(describeCustomerSmsFailure(error, "generation")).toEqual({ phase: "generation", code: "UNCLASSIFIED_ERROR", name: "UnknownError", issues: [] });
   });
+});
+
+describe("failure receipts remain unanswered", () => {
+  it.each(["CONFIG_CHANGED", "STALE_CUSTOMER_MESSAGE", "GENERATION_OR_PERSISTENCE_FAILED"])("exposes an unsent automatic %s failure", errorCode => {
+    expect(customerSmsDraftHidesUnanswered({ status: "DISMISSED", capability: "claude_customer_reply_v1", errorCode })).toBe(false);
+  });
+  it.each([{ dismissedBy: "Sam" }, { dismissedAt: new Date() }, { outboundOpenPhoneId: "actual-sent" }, { sentAt: new Date() }])("preserves actual human dismissal/actual send %#", patch => {
+    expect(customerSmsDraftHidesUnanswered({ status: "DISMISSED", capability: "claude_customer_reply_v1", errorCode: "CONFIG_CHANGED", ...patch })).toBe(true);
+  });
+  it("preserves legacy dismissed receipts and actual acceptance", () => {
+    expect(customerSmsDraftHidesUnanswered({ status: "DISMISSED", capability: "legacy" })).toBe(true);
+    expect(customerSmsDraftHidesUnanswered({ status: "SENT", capability: "claude_customer_reply_v1" })).toBe(true);
+    expect(customerSmsDraftHidesUnanswered({ status: "SENDING", errorCode: "SUBMISSION_UNCERTAIN" })).toBe(false);
+  });
+});
+
+it("the application adapter forwards the failure third argument and logs unsuccessful owner alerts", () => {
+  const source = readFileSync(new URL("./claudeCustomerSmsApplication.ts", import.meta.url), "utf8");
+  expect(source).toContain("prepare: async (claim, plan, failure)");
+  expect(source).toContain("taskStore.prepare(claim, plan, failure)");
+  expect(source).toContain("if (!delivered) console.warn");
+});
+
+it.each(["HUMAN_REPLY_WON", "MANUAL_FIRST_RESPONSE"])("does not equate the %s send-attempt gate to actual human submission", errorCode => {
+  expect(customerSmsDraftHidesUnanswered({ status: "DISMISSED", capability: "claude_customer_reply_v1", errorCode })).toBe(false);
 });

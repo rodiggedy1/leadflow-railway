@@ -70,18 +70,19 @@ const initialResult = (request: ClaudeInitialLeadInput, overrides: Partial<Claud
   actionsExecuted: false, agentId: "synthetic-agent", agentSessionId: "synthetic-agent-session", ...overrides,
 });
 const normalizedLeadPhone = (value: string | null) => value?.replace(/\D/g, "").slice(-10) || "";
-function clickedLeadDraft(lead: LeadSnapshot): { draft: Props["leadDraft"]; snapshot: LeadSnapshot | null } {
+function clickedLeadDraft(lead: LeadSnapshot, inbox: Conversation[] = []): { draft: Props["leadDraft"]; snapshot: LeadSnapshot | null; selected: Conversation | null } {
   let draft: Props["leadDraft"] = null;
   let snapshot: LeadSnapshot | null = null;
+  let selected: Conversation | null = null;
   const script = ts.transpileModule(`${between("  const openSmsDrawerFromLead =", "  const addPendingOutgoingMessage =")}\nopenSmsDrawerFromLead(lead);`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
-  runInNewContext(script, { lead, useCallback: (callback: unknown) => callback, smsInbox: [], showNotice: vi.fn(),
-    setSelectedLeadCardPhone: vi.fn(), setSelectedSmsConversation: vi.fn(),
+  runInNewContext(script, { lead, useCallback: (callback: unknown) => callback, smsInbox: inbox, showNotice: vi.fn(),
+    setSelectedLeadCardPhone: vi.fn(), setSelectedSmsConversation: (value: Conversation) => { selected = value; },
     setSelectedLeadCardDraft: (value: Props["leadDraft"]) => { draft = value; },
     setSelectedLeadCardSnapshot: (value: LeadSnapshot) => { snapshot = value; }, normalizedLeadPhone,
     THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext }, { timeout: 1500 });
-  return { draft, snapshot };
+  return { draft, snapshot, selected };
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -339,7 +340,8 @@ describe("optional Claude alternative actual SMS drawer", () => {
       } else if (change === "line") { work.setLive([conversation({ lastInboundPhoneNumberId: "PN_OTHER_LINE" })]); work.render(); }
       else if (change === "history") { work.setDetail({ sessionId: 42, leadPhone: "+13015550123", messageHistory: history("OM_NEW_INBOUND") }); work.render(); }
       else { work.setLive([conversation({ lastMessageText: "New incoming request", lastMessageTs: 1800000000100 })]); work.render(); }
-      expect(findButton(work.render(), "Getting Claude draft…")!.props.disabled).toBe(true);
+      expect(findButton(work.render(), "Getting Claude draft…")).toBeUndefined();
+      expect(work.html()).toContain("Get Claude draft again to retry.");
       work.claudeResponse.resolve(result(request)); await work.settle();
       expect(work.html()).not.toContain("Synthetic Claude reply for review."); expect(work.html()).not.toContain("Use reply");
       expect(work.send).not.toHaveBeenCalled(); expect(work.workspaceSend).not.toHaveBeenCalled();
@@ -353,6 +355,39 @@ describe("optional Claude alternative actual SMS drawer", () => {
     work.claudeResponse.resolve(result(work.generate.mock.calls[0][0])); await work.settle(); const use = findButton(work.render(), "Use reply");
     work.setLive([conversation({ lastInboundPhoneNumberId: "PN_OTHER_LINE" })]); work.render(); click(use);
     expect(textarea(work.render()).props.value).toBe("Human reply"); expect(work.html()).not.toContain("Use reply"); expect(work.send).not.toHaveBeenCalled(); work.dispose();
+  });
+
+  it.each(["success", "error"] as const)("retains pending %s through incidental polling and older sibling-history additions", async outcome => {
+    const work = workspace(); work.edit("Human reply"); click(findButton(work.render(), "Get Claude draft"));
+    const request = work.generate.mock.calls[0][0];
+    const returned = JSON.parse(history());
+    returned.unshift({ role: "assistant", content: "Older sibling turn", ts: 1 });
+    work.setDetail({ sessionId: 42, leadPhone: "+13015550123", messageHistory: JSON.stringify(returned, null, 2) });
+    work.setLive([conversation({ lastMsgTs: 1800000009999 })]);
+    expect(findButton(work.render(), "Getting Claude draft…")).toBeDefined();
+    if (outcome === "success") work.claudeResponse.resolve(result(request));
+    else work.claudeResponse.reject(new Error("PRIVATE provider failure"));
+    await work.settle();
+    expect(work.html()).toContain(outcome === "success" ? "Synthetic Claude reply for review." : "Claude draft is unavailable");
+    expect(work.html()).not.toContain("PRIVATE"); expect(textarea(work.render()).props.value).toBe("Human reply");
+    expect(work.send).not.toHaveBeenCalled(); work.dispose();
+  });
+
+  it.each(["success", "error"] as const)("releases pending scope changes and never lets an old %s overwrite a newer retry", async outcome => {
+    const work = workspace(); click(findButton(work.render(), "Get Claude draft"));
+    const oldRequest = work.generate.mock.calls[0][0];
+    const next = deferred<ClaudeSmsAlternativeResult>(); work.generate.mockImplementationOnce(() => next.promise);
+    work.setDetail({ sessionId: 42, leadPhone: "+13015550123", messageHistory: history("OM_NEW_INBOUND") });
+    expect(work.html()).toContain("Get Claude draft again to retry.");
+    expect(findButton(work.render(), "Getting Claude draft…")).toBeUndefined();
+    click(findButton(work.render(), "Get Claude draft"));
+    const newRequest = work.generate.mock.calls[1][0];
+    if (outcome === "success") work.claudeResponse.resolve(result(oldRequest, { replyText: "Obsolete reply" }));
+    else work.claudeResponse.reject(new Error("Obsolete error"));
+    await work.settle(); expect(findButton(work.render(), "Getting Claude draft…")).toBeDefined();
+    next.resolve(result(newRequest, { replyText: "New verified reply" })); await work.settle();
+    expect(work.html()).toContain("New verified reply"); expect(work.html()).not.toContain("Obsolete");
+    expect(work.html()).not.toContain("Claude draft is unavailable"); expect(work.send).not.toHaveBeenCalled(); work.dispose();
   });
 
   it("unavailable or mismatched provider results never affect composer or manual sending, and never activate World-class fallback", async () => {
@@ -382,13 +417,87 @@ describe("optional Claude alternative actual SMS drawer", () => {
 });
 
 describe("optional Claude first lead draft in the existing workspace", () => {
+  it("opens by canonical phone rather than the misleading session id, and leaves unmatched native cards on session zero", () => {
+    const clicked = leadSnapshot({ sessionId: 99 });
+    const wrong = conversation({ id: 99, leadPhone: "email-session14220455" });
+    const real = conversation({ id: 42, leadPhone: "+13015550123" });
+    expect(clickedLeadDraft(clicked, [wrong, real]).selected).toBe(real);
+    expect(clickedLeadDraft(clicked, [wrong]).selected).toMatchObject({ id: 0, leadPhone: clicked.phone, leadName: clicked.name });
+  });
+
+  it.each(["mismatch", "unavailable", "wrong-detail", "bad-history"] as const)("drafts from card phone and facts despite %s linked detail, without consuming an unrelated history", async mode => {
+    const clicked = leadSnapshot();
+    const work = workspace({ snapshot: clicked, leadCardPhone: clicked.phone, noDetail: mode === "unavailable" });
+    if (mode !== "unavailable") work.setDetail({ sessionId: mode === "wrong-detail" ? 99 : 42,
+      leadPhone: mode === "mismatch" ? "email-session14220455" : "+13015550123",
+      messageHistory: mode === "bad-history" ? "invalid JSON" : '[{"role":"user","content":"Unrelated email content"}]' });
+    work.edit("Human card reply");
+    expect(findButton(work.render(), "Get Claude draft")!.props.disabled).toBe(false);
+    if (mode === "mismatch") expect(work.html()).toContain("The linked conversation has a different phone.");
+    click(findButton(work.render(), "Get Claude draft"));
+    const request = work.generateInitial.mock.calls[0][0];
+    expect(request).toMatchObject({ sessionId: mode === "bad-history" ? 42 : 0, customerPhone: clicked.phone, leadDetails: leadFacts(), originalConversation: [] });
+    expect(request.draftRequest?.conversationContext).toBe("");
+    work.initialResponse.resolve(initialResult(request)); await work.settle();
+    click(findButton(work.render(), "Use reply"));
+    click(elements(work.render()).find(node => node.props["aria-label"] === "Send text reply"));
+    expect(work.workspaceSend).toHaveBeenCalledWith({ phone: clicked.phone, message: "Synthetic Claude first lead reply.", name: "Synthetic customer",
+      claudeDraftSource: { requestId: request.requestId, kind: "initial_lead" } });
+    expect(work.send).not.toHaveBeenCalled(); work.dispose();
+  });
+
+  it.each(["success", "error"] as const)("retains initial %s on polling-only card status and history formatting changes", async outcome => {
+    const clicked = leadSnapshot();
+    const work = workspace({ snapshot: clicked, leadCardPhone: clicked.phone });
+    click(findButton(work.render(), "Get Claude draft")); const request = work.generateInitial.mock.calls[0][0];
+    work.setSnapshot({ ...clicked, claimedBy: "New claimer", isBooked: true } as LeadSnapshot);
+    work.setDetail({ sessionId: 42, leadPhone: "301-555-0123", messageHistory: JSON.stringify(JSON.parse(history()), null, 2) });
+    work.setLive([conversation({ lastMsgTs: 1800000009999 })]);
+    expect(findButton(work.render(), "Getting Claude draft…")).toBeDefined();
+    if (outcome === "success") work.initialResponse.resolve(initialResult(request));
+    else work.initialResponse.reject(new Error("PRIVATE"));
+    await work.settle(); expect(work.html()).toContain(outcome === "success" ? "Synthetic Claude first lead reply." : "Claude draft is unavailable");
+    work.dispose();
+  });
+
+  it.each(["success", "error"] as const)("allows an explicit initial retry and ignores the previous call's late %s", async outcome => {
+    const clicked = leadSnapshot();
+    const work = workspace({ selected: { id: 0 }, snapshot: clicked, leadCardPhone: clicked.phone, noDetail: true });
+    work.edit("Human reply"); click(findButton(work.render(), "Get Claude draft"));
+    const oldRequest = work.generateInitial.mock.calls[0][0];
+    const next = deferred<ClaudeInitialLeadResult>(); work.generateInitial.mockImplementationOnce(() => next.promise);
+    work.setSnapshot(leadSnapshot({ description: "Updated notes on the same card" }));
+    expect(work.html()).toContain("Get Claude draft again to retry.");
+    expect(findButton(work.render(), "Get Claude draft")!.props.disabled).toBe(false);
+    click(findButton(work.render(), "Get Claude draft")); const newRequest = work.generateInitial.mock.calls[1][0];
+    if (outcome === "success") work.initialResponse.resolve(initialResult(oldRequest, { replyText: "Old initial reply" }));
+    else work.initialResponse.reject(new Error("Old private error"));
+    await work.settle(); expect(findButton(work.render(), "Getting Claude draft…")).toBeDefined();
+    next.resolve(initialResult(newRequest, { replyText: "New initial reply" })); await work.settle();
+    expect(work.html()).toContain("New initial reply"); expect(work.html()).not.toContain("Old initial reply");
+    expect(work.html()).not.toContain("Claude draft is unavailable"); expect(textarea(work.render()).props.value).toBe("Human reply");
+    expect(work.workspaceSend).not.toHaveBeenCalled(); work.dispose();
+  });
+
+  it("clears a selected Claude composer draft when switching same-session-zero cards, preventing cross-lead send", async () => {
+    const clicked = leadSnapshot();
+    const work = workspace({ selected: { id: 0 }, snapshot: clicked, leadCardPhone: clicked.phone, noDetail: true });
+    click(findButton(work.render(), "Get Claude draft")); work.initialResponse.resolve(initialResult(work.generateInitial.mock.calls[0][0])); await work.settle();
+    const oldUse = findButton(work.render(), "Use reply"); click(oldUse);
+    work.setSnapshot(leadSnapshot({ id: 502, phone: "3015550124" })); work.setPhone("3015550124"); work.render(); click(oldUse);
+    expect(textarea(work.render()).props.value).toBe("");
+    click(elements(work.render()).find(node => node.props["aria-label"] === "Send text reply"));
+    expect(work.workspaceSend).not.toHaveBeenCalled(); expect(work.send).not.toHaveBeenCalled(); work.dispose();
+  });
+
   it("preserves prompt, builder body, exact Claude draftRequest payload, and quote-assistant callbacks/JSX bytes", async () => {
     expect(hash(THUMBTACK_FIRST_RESPONSE_PROMPT)).toBe("aa2665b8f0c82ba8daae49e7f0d0d66fe5234b8ba653d6fa4eb36c3bdadc2ed4");
     const sharedSource = readFileSync(new URL("../shared/claudeInitialLead.ts", import.meta.url), "utf8");
     expect(hash(sharedSource.slice(sharedSource.indexOf("  const details = lead.nativeDetails"), sharedSource.indexOf("\n}", sharedSource.indexOf("  const details = lead.nativeDetails")))))
       .toBe("4f156c33795eff623fb0124030a04ed0505825529196e76b98f62fc4c1fdebcd");
-    expect(hash(between("  const openSmsDrawerFromLead =", "  const addPendingOutgoingMessage =").replace("    setSelectedLeadCardSnapshot(lead);\n", "")))
-      .toBe("2d778c081dea57587a62e47d140ea7fb89581832a7702804c5e1bbba04f1c3bf");
+    // Linkage is now phone-first; the approved prompt construction stays literal.
+    expect(between("  const openSmsDrawerFromLead =", "  const addPendingOutgoingMessage ="))
+      .toContain('scenario: `${THUMBTACK_FIRST_RESPONSE_PROMPT}\\n\\nThumbtack lead:\\n${buildThumbtackLeadDraftContext(lead)}`');
     expect(hash(between("  const prepareQuoteAssistant =", "  const resizeSmsComposer ="))).toBe("1b2512e0130449642679f7a74807105f30650510ac0aba0437b62b6bfb7db0cc");
     expect(hash(between("    {quoteAssistantOpen && quoteAssistantFields && <QuoteAssistantModal", "function QuoteAssistantModal")))
       .toBe("02adc581431e0792109bacff678dfc5633fc2057a528a84e8f28c96ce90901fd");
@@ -489,7 +598,9 @@ describe("optional Claude first lead draft in the existing workspace", () => {
     const clicked = leadSnapshot();
     const loading = workspace({ selected: { id: 42, lastInboundPhoneNumberId: null }, snapshot: clicked, leadCardPhone: clicked.phone, noDetail: true });
     await loading.settle(); const get = findButton(loading.render(), "Get Claude draft")!;
-    expect(get.props.disabled).toBe(true); click(get); expect(loading.generateInitial).not.toHaveBeenCalled(); loading.dispose();
+    expect(get.props.disabled).toBe(false); click(get);
+    expect(loading.generateInitial.mock.calls[0][0]).toMatchObject({ sessionId: 0, customerPhone: clicked.phone, originalConversation: [] });
+    loading.dispose();
   });
 
   it("uses exact clicked facts rather than a same-phone matched lead and retains the full original saved history for web and Thumbtack cards", async () => {
@@ -519,7 +630,7 @@ describe("optional Claude first lead draft in the existing workspace", () => {
   it("drops late results and old Use callbacks on same-session clicked card/facts/notes/phone/mode/history/line changes", async () => {
     for (const change of ["card", "category", "notes", "phone", "mode", "history", "line", "away-and-back"] as const) {
       const clicked = leadSnapshot();
-      const work = workspace({ selected: { id: 0, lastInboundPhoneNumberId: null }, snapshot: clicked, leadCardPhone: clicked.phone, history: "[]" });
+      const work = workspace({ selected: { id: 42, lastInboundPhoneNumberId: null }, snapshot: clicked, leadCardPhone: clicked.phone, history: "[]" });
       await work.settle(); work.edit("Human response"); click(findButton(work.render(), "Get Claude draft"));
       const request = work.generateInitial.mock.calls[0][0];
       const mutate = () => {
@@ -528,14 +639,15 @@ describe("optional Claude first lead draft in the existing workspace", () => {
         else if (change === "notes") work.setSnapshot(leadSnapshot({ description: "Changed notes", nativeDetails: [{ answer: "Changed retained detail" }] }));
         else if (change === "phone") work.setPhone("(301) 555-0124");
         else if (change === "mode") { work.setSnapshot(null); work.setPhone(undefined); }
-        else if (change === "history") work.setDetail({ sessionId: 0, leadPhone: "+13015550123", messageHistory: '[{"role":"assistant","content":"Saved new turn"}]' });
-        else work.setLive([conversation({ id: 0, lastInboundPhoneNumberId: "PN_NEW_LINE" })]);
+        else if (change === "history") work.setDetail({ sessionId: 42, leadPhone: "+13015550123", messageHistory: '[{"role":"assistant","content":"Saved new turn"}]' });
+        else work.setLive([conversation({ id: 42, lastInboundPhoneNumberId: "PN_NEW_LINE" })]);
         work.render();
         if (change === "away-and-back") { work.setSnapshot(clicked); work.render(); }
       };
       mutate(); work.initialResponse.resolve(initialResult(request)); await work.settle();
       expect(work.html()).not.toContain("Synthetic Claude first lead reply."); expect(work.html()).not.toContain("Use reply");
-      expect(textarea(work.render()).props.value).toBe("Human response"); expect(work.workspaceSend).not.toHaveBeenCalled(); expect(work.send).not.toHaveBeenCalled();
+      expect(textarea(work.render()).props.value).toBe(["card", "phone", "mode", "away-and-back"].includes(change) ? "" : "Human response");
+      expect(work.workspaceSend).not.toHaveBeenCalled(); expect(work.send).not.toHaveBeenCalled();
       work.dispose();
     }
     const clicked = leadSnapshot();
@@ -543,7 +655,7 @@ describe("optional Claude first lead draft in the existing workspace", () => {
     await work.settle(); work.edit("Human response"); click(findButton(work.render(), "Get Claude draft"));
     work.initialResponse.resolve(initialResult(work.generateInitial.mock.calls[0][0])); await work.settle();
     const oldUse = findButton(work.render(), "Use reply"); work.setSnapshot(leadSnapshot({ id: 502, description: "Other clicked card notes" })); work.render(); click(oldUse);
-    expect(textarea(work.render()).props.value).toBe("Human response"); expect(work.workspaceSend).not.toHaveBeenCalled(); work.dispose();
+    expect(textarea(work.render()).props.value).toBe(""); expect(work.workspaceSend).not.toHaveBeenCalled(); work.dispose();
   });
 
   it("keeps composer untouched and World-class disabled on initial failures and result identity mismatches, and drops unmounted replies", async () => {

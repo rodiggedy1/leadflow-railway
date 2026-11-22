@@ -11,6 +11,7 @@ import {
 import type { getDb } from "../db";
 import { normalizePhone } from "../utils/phone";
 import { customerSmsFailureDetailsSchema, type CustomerSmsFailureDetails } from "./claudeCustomerSmsFailure";
+import { customerSmsContextHash, customerSmsEnvelopes, customerSmsIds, customerSmsTurnAfter } from "./customerSmsFreshness";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -26,8 +27,9 @@ export interface CustomerSmsBinding {
   createdAt: number;
   receivedAt: number;
   customerName: string | null;
-  /** SHA256 of the exact stored messageHistory string, not reserialized JSON. */
+  /** Original model snapshot checksum; freshness uses historyContextHash. */
   historyHash: string;
+  historyContextHash?: string;
 }
 export interface CustomerSmsClaim { draftId: number; key: string; binding: CustomerSmsBinding }
 export type CustomerTaskErrorCode = "NOT_FOUND" | "FORBIDDEN" | "CONFLICT" | "PRECONDITION_FAILED";
@@ -41,6 +43,7 @@ const bindingSchema = z.object({
   receivingPhoneNumberId: z.string().min(1), receivingPhoneNumber: z.string().regex(/^\+[1-9]\d{7,14}$/),
   inboundText: z.string().min(1), createdAt: z.number().finite(), receivedAt: z.number().finite(),
   customerName: z.string().nullable(), historyHash: z.string().regex(/^[a-f0-9]{64}$/),
+  historyContextHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 const envelopeSchema = z.object({ taskId: z.number().int().positive(), task: customerTaskSchema }).strict();
 const rows = (result: unknown): Record<string, any>[] => (result as any)[0];
@@ -52,9 +55,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const keyFor = (binding: CustomerSmsBinding) => binding.providerMessageId;
 const taskKeyFor = (binding: CustomerSmsBinding) => `cs-task:v1:${hash(JSON.stringify([binding.account ?? "openphone", binding.providerMessageId, binding.receivingPhoneNumberId]))}`;
 const isInbound = (turn: any) => turn && ["user", "customer"].includes(turn.role);
-const ids = (turn: any): string[] => Array.from(new Set([turn, turn?.metadata].filter(Boolean)
-  .flatMap(part => [part.opMsgId, part.openPhoneId, part.openPhoneMessageId, part.providerMessageId])
-  .filter((id): id is string => typeof id === "string" && id.length > 0)));
+const ids = customerSmsIds;
 const stop = (text: string) => /^\s*(stop|unsubscribe|quit|end|remove me|opt.?out)\s*$/i.test(text);
 
 export interface ClaudeCustomerTasksStore {
@@ -64,6 +65,8 @@ export interface ClaudeCustomerTasksStore {
   markUncertain(claim: CustomerSmsClaim): Promise<void>;
   suppress(claim: CustomerSmsClaim, code: string): Promise<void>;
   suppressBeforeSubmission(claim: CustomerSmsClaim, code: string, failure?: CustomerSmsFailureDetails): Promise<void>;
+  verifyBeforeSubmission(claim: CustomerSmsClaim): Promise<boolean>;
+  reportFailure(claim: CustomerSmsClaim, code: string, uncertain?: boolean): Promise<{ taskId: number; notify: boolean } | null>;
   list(): Promise<CustomerTask[]>;
   get(id: number): Promise<CustomerTask | null>;
   claimTask(id: number, actor: TaskActor, expectedOwnerId?: string): Promise<CustomerTask>;
@@ -150,7 +153,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
       AND outboundOpenPhoneId IS NULL AND sentAt IS NULL AND (errorCode IS NULL OR errorCode <> 'SUBMISSION_UNCERTAIN')`));
     if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_FAILURE_DETAIL_SAVE_FAILED");
   }
-  async function fresh(tx: Tx, binding: CustomerSmsBinding): Promise<boolean> {
+  async function fresh(tx: Tx, binding: CustomerSmsBinding, compareContext = true): Promise<boolean> {
     const [session] = rows(await tx.execute(sql`SELECT * FROM conversation_sessions WHERE id = ${binding.sessionId} FOR UPDATE`));
     const testCustomer = options.allowTestCustomer?.(binding.fromPhone) === true;
     if (!session || normalizePhone(session.leadPhone) !== binding.fromPhone
@@ -158,17 +161,24 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
       || typeof session.leadSource !== "string" || (!testCustomer && (/cleaner|hiring|interview|internal|staff|schedule_confirm/i.test(session.leadSource)
         || session.csQueue === "Teams" || /^INTERVIEW_|^SCHEDULE_CONFIRM/.test(session.stage ?? "")))
       || binding.fromPhone === binding.receivingPhoneNumber || stop(binding.inboundText)
-      || typeof session.messageHistory !== "string" || hash(session.messageHistory) !== binding.historyHash) return false;
+      || typeof session.messageHistory !== "string") return false;
     let history: any;
     try { history = JSON.parse(session.messageHistory); } catch { return false; }
-    if (!Array.isArray(history) || history.some(turn => !turn || typeof turn !== "object")) return false;
+    if (!Array.isArray(history) || history.some(turn => !turn || typeof turn !== "object" || typeof turn.role !== "string" || typeof turn.content !== "string")) return false;
+    const contextHash = customerSmsContextHash(history);
+    if (compareContext && binding.historyContextHash && binding.historyContextHash !== contextHash) return false;
+    if (!binding.historyContextHash && contextHash) binding.historyContextHash = contextHash;
     const matches = history.map((turn, index) => ({ turn, index })).filter(({ turn }) => ids(turn).includes(binding.providerMessageId));
     if (matches.length !== 1 || !isInbound(matches[0].turn) || ids(matches[0].turn).length !== 1
       || matches[0].turn.content !== binding.inboundText) return false;
     const anchor = matches[0];
-    if (history.slice(anchor.index + 1).some(turn => isInbound(turn) || turn.role === "assistant")) return false;
-    const envelopes = [anchor.turn, anchor.turn.metadata].filter(Boolean);
+    if (history.some(turn => turn !== anchor.turn && customerSmsTurnAfter(history, turn, anchor.turn)
+      && (isInbound(turn) || ["assistant", "agent", "office"].includes(turn.role)))) return false;
+    const envelopes = customerSmsEnvelopes(anchor.turn);
+    if (!envelopes.length) return false;
     for (const part of envelopes) {
+      if (part.sessionId != null && String(part.sessionId) !== String(binding.sessionId)) return false;
+      if (part.direction != null && part.direction !== "incoming") return false;
       for (const field of ["phoneNumberId", "receivingPhoneNumberId"]) {
         if (part[field] != null && part[field] !== binding.receivingPhoneNumberId) return false;
       }
@@ -193,9 +203,13 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
     const id = taskId(draft);
     if (id === null) return null;
     const task = parseTask(await taskRow(tx, id));
+    const state = decode(draft.capabilityResult);
+    const internalFailureText = draft.generatedDraft == null && state?.failureReviewRecorded === true
+      && typeof state.failureReviewText === "string" && task.reply.status === "suppressed"
+      && task.reply.text === state.failureReviewText;
     if (task.sessionId !== claim.binding.sessionId || task.sourceMessageId !== claim.binding.providerMessageId
       || task.customerPhone !== claim.binding.fromPhone || task.receivingPhoneNumberId !== claim.binding.receivingPhoneNumberId
-      || task.reply.text !== draft.generatedDraft) return fail("CONFLICT", "Customer task reply binding changed.");
+      || (task.reply.text !== draft.generatedDraft && !internalFailureText)) return fail("CONFLICT", "Customer task reply binding changed.");
     return task;
   }
   function requireOwner(task: CustomerTask, actor: TaskActor): void {
@@ -329,6 +343,50 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
         AND (errorCode IS NULL OR errorCode <> 'SUBMISSION_UNCERTAIN')`));
       if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_NO_SUBMISSION_SAVE_FAILED");
       if (task) { task.reply.status = "suppressed"; await saveTask(tx, task); }
+    }),
+    verifyBeforeSubmission: claim => db.transaction(async tx => {
+      const draft = await receipt(tx, claim);
+      return draft.status === "SENDING" && !draft.outboundOpenPhoneId && !draft.sentAt
+        && draft.errorCode !== "SUBMISSION_UNCERTAIN" && !draft.dismissedAt && !draft.dismissedBy
+        && await fresh(tx, claim.binding);
+    }),
+    reportFailure: (claim, code, uncertain = false) => db.transaction(async tx => {
+      const draft = await receipt(tx, claim);
+      if (draft.outboundOpenPhoneId || draft.sentAt || ["SENT", "DELIVERED"].includes(draft.status)
+        || draft.dismissedAt || draft.dismissedBy) return null;
+      if (!uncertain && !await fresh(tx, claim.binding, false)) return null;
+      const state = decode(draft.capabilityResult) ?? {};
+      if (state.failureReviewRecorded === true && (!uncertain || state.failureReviewCode === "SUBMISSION_UNCERTAIN")) return null;
+      let task = await replyTask(tx, draft, claim);
+      let id = task?.id ?? null;
+      if (!task) {
+        id = await createTask(tx, {
+          sessionId: claim.binding.sessionId, customerName: claim.binding.customerName, customerPhone: claim.binding.fromPhone,
+          sourceMessageId: claim.binding.providerMessageId, sourceText: claim.binding.inboundText,
+          receivedAt: claim.binding.receivedAt, receivingPhoneNumberId: claim.binding.receivingPhoneNumberId,
+          receivingPhoneNumber: claim.binding.receivingPhoneNumber,
+        }, { replyText: draft.generatedDraft || "No customer reply was submitted.", task: {
+          title: uncertain ? "Review uncertain customer SMS submission" : "Review customer message after reply failure",
+          items: [{ title: uncertain ? "Verify whether the SMS was accepted before any manual follow-up" : "Review the unanswered customer message and follow up",
+            evidenceQuote: claim.binding.inboundText }],
+        } }, taskKeyFor(claim.binding));
+        task = parseTask(await taskRow(tx, id!));
+      } else if (!task.items.some(item => item.id === "reply-failure-review")) {
+        task.items.push({ id: "reply-failure-review", title: uncertain ? "Verify SMS acceptance before any manual follow-up" : "Review the customer reply failure and follow up",
+          evidenceQuote: claim.binding.inboundText, completedBy: null, completedAt: null });
+      }
+      if (uncertain) {
+        const reviewItem = task.items.find(item => item.id === "reply-failure-review");
+        if (reviewItem) reviewItem.title = "Verify SMS acceptance before any manual follow-up";
+      }
+      task.reply.status = uncertain ? "uncertain" : draft.status === "SENDING" ? "prepared" : "suppressed";
+      await saveTask(tx, task);
+      const reviewState = { ...state, taskId: id, failureReviewRecorded: true, failureReviewCode: code,
+        ...(draft.generatedDraft == null ? { failureReviewText: task.reply.text } : {}) };
+      const changed = header(await tx.execute(sql`UPDATE madison_sms_drafts SET capabilityResult = ${JSON.stringify(reviewState)},
+        updatedAt = NOW(3) WHERE id = ${claim.draftId} AND capability = ${capability}`));
+      if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_FAILURE_REVIEW_SAVE_FAILED");
+      return { taskId: id!, notify: true };
     }),
     async list() {
       return rows(await db.execute(sql`SELECT * FROM ops_chat_messages WHERE quickAction = ${action} AND channel = 'command' ORDER BY id DESC`)).map(parseTask);

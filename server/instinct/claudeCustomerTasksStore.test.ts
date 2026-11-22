@@ -65,7 +65,10 @@ function port(options: Parameters<typeof createClaudeCustomerTasksStore>[1] = {}
         return [{ affectedRows: 1 }];
       }
       if (s.startsWith("UPDATE madison_sms_drafts")) {
-        if (s.includes("SET errorMessage =")) {
+        if (s.includes("SET capabilityResult =")) {
+          const row = state.drafts.find((row: any) => row.id === p[1] && row.capability === p[2]);
+          if (!row) return [{ affectedRows: 0 }]; row.capabilityResult = JSON.parse(p[0] as string);
+        } else if (s.includes("SET errorMessage =")) {
           const row = state.drafts.find((row: any) => row.id === p[1] && row.capability === p[2]
             && ["TOOLS_RUNNING", "SENDING"].includes(row.status) && !row.outboundOpenPhoneId && !row.sentAt && row.errorCode !== "SUBMISSION_UNCERTAIN");
           if (!row) return [{ affectedRows: 0 }]; row.errorMessage = p[0];
@@ -132,7 +135,7 @@ describe("customer task store — offline transactional SQL port", () => {
     await expect(h.store.prepare(c, { ...plan, task: { ...plan.task, items: [{ title: "Invented", evidenceQuote: "Tuesday" }] } })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(h.state().cards).toHaveLength(0); expect(h.state().drafts[0].status).toBe("TOOLS_RUNNING");
   });
-  it.each(["phone", "line", "session_optout", "global_optout", "source_kind", "queue", "interview_stage", "source_content", "source_id", "new_inbound", "human_reply", "exact_hash"])("fresh prepare rejects %s change", async change => {
+  it.each(["phone", "line", "session_optout", "global_optout", "source_kind", "queue", "interview_stage", "source_content", "source_id", "new_inbound", "human_reply"])("fresh prepare rejects %s change", async change => {
     const h = port(), c = (await h.store.claim(h.binding))!, s = h.state().sessions[0];
     if (change === "phone") s.leadPhone = "+12025559876";
     if (change === "line") s.lastInboundPhoneNumberId = "PN-other";
@@ -144,9 +147,61 @@ describe("customer task store — offline transactional SQL port", () => {
     if (change === "source_content") s.messageHistory = s.messageHistory.replace("Friday", "Saturday");
     if (change === "source_id") s.messageHistory = s.messageHistory.replace("inbound-1", "inbound-2");
     if (change === "new_inbound" || change === "human_reply") s.messageHistory = JSON.stringify([...JSON.parse(s.messageHistory), { role: change === "new_inbound" ? "user" : "assistant", content: "New text", ts: 120, opMsgId: "new-1" }]);
-    if (change === "exact_hash") s.messageHistory = ` ${s.messageHistory}`;
+
     expect(await h.store.prepare(c, plan)).toBe(false); expect(h.state().cards).toHaveLength(0);
     expect(h.state().drafts[0]).toMatchObject({ status: "DISMISSED", errorCode: "STALE_CUSTOMER_MESSAGE" });
+  });
+  it.each(["Yes please", "That's fine"])("keeps the same %s inbound link plan through formatting, metadata enrichment and reorder", async text => {
+    const received: any[] = [{ role: "assistant", content: "Would you like the link?", ts: 90 },
+      { role: "user", content: text, ts: 100, opMsgId: "inbound-1" }];
+    const preparePlan = vi.fn(async (_tx, _claim, incoming) => ({ replyText: incoming.replyText, task: incoming.task }));
+    const h = port({ preparePlan }); h.binding.inboundText = text;
+    h.state().sessions[0].messageHistory = JSON.stringify(received);
+    h.binding.historyHash = createHash("sha256").update(h.state().sessions[0].messageHistory).digest("hex");
+    const claim = (await h.store.claim(h.binding))!;
+    h.state().sessions[0].messageHistory = JSON.stringify([{ ...received[1], senderName: "Michael", metadata: { delivery: "received" } },
+      { ...received[0], opMsgId: "older-enriched" }], null, 2);
+    const linkPlan = { replyText: "Your existing verified link", task: null, smsBookingQuote: { preserved: true } };
+    expect(await h.store.prepare(claim, linkPlan)).toEqual({ replyText: linkPlan.replyText, task: null });
+    expect(preparePlan).toHaveBeenCalledWith(expect.anything(), claim, linkPlan);
+    expect(h.state().drafts[0].status).toBe("SENDING");
+  });
+  it("blocks changed meaningful historical text while escalating the still-unanswered current turn", async () => {
+    const h = port(); const old = { role: "assistant", content: "Old question", ts: 90 };
+    h.state().sessions[0].messageHistory = JSON.stringify([old, ...JSON.parse(h.state().sessions[0].messageHistory)]);
+    const c = (await h.store.claim(h.binding))!;
+    h.state().sessions[0].messageHistory = h.state().sessions[0].messageHistory.replace("Old question", "Changed question");
+    expect(await h.store.prepare(c, plan)).toBe(false);
+    const review = await h.store.reportFailure(c, "CUSTOMER_REPLY_PREPARATION_STOPPED");
+    expect(review).toMatchObject({ notify: true }); expect(h.task().reply.status).toBe("suppressed");
+    expect(await h.store.reportFailure(c, "CUSTOMER_REPLY_PREPARATION_STOPPED")).toBeNull();
+    expect(h.state().cards).toHaveLength(1);
+  });
+  it("durably records a config-stop failure task once without preparation or send", async () => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
+    await h.store.suppress(c, "CONFIG_CHANGED");
+    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toMatchObject({ taskId: expect.any(Number), notify: true });
+    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toBeNull();
+    expect(h.state().cards).toHaveLength(1); expect(h.task().reply.status).toBe("suppressed");
+    expect(h.state().drafts[0].status).toBe("DISMISSED");
+    expect(h.state().drafts[0].generatedDraft).toBeUndefined();
+    expect(h.state().drafts[0].capabilityResult.failureReviewText).toBe("No customer reply was submitted.");
+  });
+  it.each(["new_inbound", "human_reply", "optout", "wrong_phone", "wrong_line"])("never escalates a legitimate %s stop as a failed unanswered turn", async kind => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
+    if (kind === "optout") h.state().sessions[0].smsOptOut = 1;
+    if (kind === "wrong_phone") h.state().sessions[0].leadPhone = "+12025559876";
+    if (kind === "wrong_line") h.state().sessions[0].lastInboundPhoneNumberId = "PN-other";
+    if (kind === "new_inbound" || kind === "human_reply") h.state().sessions[0].messageHistory = JSON.stringify([
+      ...JSON.parse(h.state().sessions[0].messageHistory), { role: kind === "new_inbound" ? "user" : "assistant", content: "Later", ts: 120, opMsgId: "later" }]);
+    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toBeNull(); expect(h.state().cards).toHaveLength(0);
+  });
+  it("uncertain ordinary replies receive one review task and remain blocked from resubmission", async () => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
+    await h.store.prepare(c, { replyText: "Ordinary answer", task: null }); await h.store.markUncertain(c);
+    expect(await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true)).toMatchObject({ notify: true });
+    expect(h.task().reply.status).toBe("uncertain"); expect(h.state().drafts[0].status).toBe("SENDING");
+    expect(await h.store.claim(h.binding)).toBeNull(); expect(await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true)).toBeNull();
   });
   it("even a supplied matching history hash cannot authorize an already replied-to source", async () => {
     const h = port(), s = h.state().sessions[0];
@@ -508,4 +563,20 @@ describe("customer task store — offline transactional SQL port", () => {
     expect(h.state().sessions[0].stage).toBe("CS_INBOUND");
     expect(trace).toEqual(["existing-agent-generation-mocked", "durable-task-before-provider", "existing-sse-task-update", "existing-sse-task-update"]);
   });
+});
+
+it("upgrades a prior generation review to uncertainty on the same task without duplicate tasks", async () => {
+  const h = port(), c = (await h.store.claim(h.binding))!;
+  await h.store.prepare(c, plan); await h.store.reportFailure(c, "CUSTOMER_REPLY_GENERATION_TIMEOUT");
+  await h.store.markUncertain(c); await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true);
+  expect(h.state().cards).toHaveLength(1); expect(h.task().reply.status).toBe("uncertain");
+  expect(h.task().items.find((item: any) => item.id === "reply-failure-review").title).toContain("Verify SMS acceptance");
+  expect(await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true)).toBeNull();
+});
+
+it("escalates a human-won send attempt only if its exact inbound remains actually unanswered", async () => {
+  const h = port(), c = (await h.store.claim(h.binding))!;
+  Object.assign(h.state().drafts[0], { status: "DISMISSED", errorCode: "HUMAN_REPLY_WON" });
+  expect(await h.store.reportFailure(c, "CUSTOMER_REPLY_PREPARATION_STOPPED")).toMatchObject({ notify: true });
+  expect(h.task().reply.status).toBe("suppressed"); expect(h.state().drafts[0].generatedDraft).toBeUndefined();
 });

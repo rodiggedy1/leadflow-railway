@@ -132,8 +132,9 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
     }
     try {
       const { dispatchClaudeThumbtackFirstResponse } = await import("./instinct/claudeThumbtackFirstResponseApplication");
-      await dispatchClaudeThumbtackFirstResponse(captureId);
-      res.status(200).json({ dispatched: true });
+      const result = await dispatchClaudeThumbtackFirstResponse(captureId);
+      const failed = result.outcome === "failed" || result.outcome === "uncertain" || result.outcome === "disabled";
+      res.status(failed ? 503 : 200).json({ dispatched: result.outcome === "sent", ...result });
     } catch (error) {
       console.error("[ThumbTackCapture] native first-response handoff failed", error);
       res.status(500).json({ error: "Native first-response handoff failed" });
@@ -256,7 +257,9 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
             await relayClaudeThumbtackFirstResponse(captureId);
           } else {
             const { dispatchClaudeThumbtackFirstResponse } = await import("./instinct/claudeThumbtackFirstResponseApplication");
-            await dispatchClaudeThumbtackFirstResponse(captureId).catch(error => console.error("[ThumbTackCapture] native first response stopped", error));
+            const result = await dispatchClaudeThumbtackFirstResponse(captureId);
+            console.log("[ThumbTackCapture] native introduction outcome", result);
+            if (["failed", "uncertain", "disabled"].includes(result.outcome)) return;
           }
           await db.execute(sql`UPDATE webhook_events SET processed = 1, processed_at = NOW() WHERE id = ${captureId}`);
         }

@@ -7,6 +7,7 @@ import { messageTemplateRouter } from "./messageTemplateRouter";
 import { invoiceRouter } from "./invoiceRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
+import { customerSmsDraftHidesUnanswered } from "./instinct/claudeCustomerSmsFailure";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog, smsCampaignRecipients, smsCampaigns, reactivationContacts, reactivationCampaigns } from "../drizzle/schema";
@@ -3852,6 +3853,13 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             id: madisonSmsDrafts.id,
             sessionId: madisonSmsDrafts.sessionId,
             status: madisonSmsDrafts.status,
+            capability: madisonSmsDrafts.capability,
+            errorCode: madisonSmsDrafts.errorCode,
+            dismissedAt: madisonSmsDrafts.dismissedAt,
+            dismissedBy: madisonSmsDrafts.dismissedBy,
+            outboundOpenPhoneId: madisonSmsDrafts.outboundOpenPhoneId,
+            sentAt: madisonSmsDrafts.sentAt,
+            inboundOpenPhoneId: madisonSmsDrafts.inboundOpenPhoneId,
             senderName: madisonSmsDrafts.senderName,
             originalMessage: madisonSmsDrafts.originalMessage,
             generatedDraft: madisonSmsDrafts.generatedDraft,
@@ -3935,10 +3943,12 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           // Only expose a draft for the current inbound turn. A terminal
           // draft must not keep its session visible after human dismissal,
           // and an older terminal draft must not mask a newer inbound SMS.
-          const currentDraft = sessionDraft?.originalMessage === lastReal.content
+          const currentDraft = sessionDraft && (latestInboundMessageId
+            ? sessionDraft.inboundOpenPhoneId === latestInboundMessageId
+            : sessionDraft.originalMessage === lastReal.content)
             ? sessionDraft
             : null;
-          if (currentDraft && ["SENT", "DISMISSED", "DELIVERED"].includes(currentDraft.status)) continue;
+          if (currentDraft && customerSmsDraftHidesUnanswered(currentDraft)) continue;
           unansweredSessions.push({
             id: s.id,
             leadName: s.leadName ?? null,

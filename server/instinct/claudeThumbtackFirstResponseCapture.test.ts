@@ -8,7 +8,7 @@ import { registerThumbTackWebhookCaptureRoute } from "../thumbtackWebhookCapture
 import { THUMBTACK_FIRST_RESPONSE_OWNER_URL, relayClaudeThumbtackFirstResponse } from "./claudeThumbtackFirstResponseRelay";
 const vars = ["THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED", "THUMBTACK_CLAUDE_FIRST_RESPONSE_START_AT", "OPENPHONE_PHONE_NUMBER_ID", "RAILWAY_ENVIRONMENT_NAME", "PREVIEW_MODE", "CRON_SECRET"];
 const baseline = vars.map(key => process.env[key]);
-beforeEach(() => { vars.forEach(key => delete process.env[key]); vi.resetAllMocks(); mocks.dispatch.mockResolvedValue(undefined); mocks.oldNative.mockResolvedValue(undefined); });
+beforeEach(() => { vars.forEach(key => delete process.env[key]); vi.resetAllMocks(); mocks.dispatch.mockImplementation(async captureId => ({ captureId, outcome: "sent", messageId: "offline-provider" })); mocks.oldNative.mockResolvedValue(undefined); });
 afterEach(() => { vars.forEach((key, i) => { if (baseline[i] === undefined) delete process.env[key]; else process.env[key] = baseline[i]; }); vi.unstubAllGlobals(); });
 function route() {
   const posts: Record<string, any> = {};
@@ -34,7 +34,7 @@ describe("offline native capture hook", () => {
   });
   it("active path dispatches the exact saved capture after ACK and never runs the legacy model", async () => {
     on(); const { post, res, body } = route(); mocks.execute.mockResolvedValue([{ insertId: 7 }]);
-    mocks.dispatch.mockImplementation(async id => { expect(id).toBe(7); expect(res.json).toHaveBeenCalled(); expect(mocks.execute).toHaveBeenCalledTimes(1); });
+    mocks.dispatch.mockImplementation(async id => { expect(id).toBe(7); expect(res.json).toHaveBeenCalled(); expect(mocks.execute).toHaveBeenCalledTimes(1); return { captureId: id, outcome: "sent", messageId: "offline-provider" }; });
     await post({ body }, res); expect(mocks.dispatch).toHaveBeenCalledOnce(); expect(mocks.oldNative).not.toHaveBeenCalled();
   });
   it("distinct leads sharing a webhook ID and repeated negotiations each dispatch their own capture", async () => {
@@ -86,7 +86,30 @@ describe("offline native capture hook", () => {
   });
   it("Production receiver requires existing auth and calls only the existing saved-capture dispatcher", async () => {
     on(); process.env.CRON_SECRET = "test-relay-secret"; const { owner, res } = route(); await owner(req(7), res);
-    expect(mocks.dispatch).toHaveBeenCalledWith(7); expect(mocks.execute).not.toHaveBeenCalled(); expect(res.json).toHaveBeenCalledWith({ dispatched: true });
+    expect(mocks.dispatch).toHaveBeenCalledWith(7); expect(mocks.execute).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({ dispatched: true, captureId: 7, outcome: "sent", messageId: "offline-provider" });
+  });
+  it.each(["failed", "uncertain", "disabled"])("a %s introduction is not marked processed or reported dispatched", async outcome => {
+    on(); process.env.CRON_SECRET = "test-relay-secret";
+    mocks.dispatch.mockResolvedValue({ captureId: 7, outcome, code: "OFFLINE_FAILURE" });
+    const { post, owner, res, body } = route(); mocks.execute.mockResolvedValue([{ insertId: 7 }]);
+    await post({ body }, res); expect(mocks.execute).toHaveBeenCalledOnce();
+    const receiver = route(); await receiver.owner(req(7), receiver.res);
+    expect(receiver.res.status).toHaveBeenCalledWith(503);
+    expect(receiver.res.json).toHaveBeenCalledWith({ dispatched: false, captureId: 7, outcome, code: "OFFLINE_FAILURE" });
+    expect(mocks.oldNative).not.toHaveBeenCalled();
+  });
+  it("a duplicate delivery reports the skip, not an SMS dispatch", async () => {
+    on(); process.env.CRON_SECRET = "test-relay-secret";
+    mocks.dispatch.mockResolvedValue({ captureId: 7, outcome: "duplicate" });
+    const { owner, res } = route(); await owner(req(7), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ dispatched: false, captureId: 7, outcome: "duplicate" });
+  });
+  it("an absent rollout date does not prevent dispatching a new lead card", async () => {
+    on(); delete process.env.THUMBTACK_CLAUDE_FIRST_RESPONSE_START_AT;
+    const { post, res, body } = route(); mocks.execute.mockResolvedValue([{ insertId: 7 }]);
+    await post({ body }, res); expect(mocks.dispatch).toHaveBeenCalledWith(7);
   });
   it("receiver rejects wrong auth before dispatch", async () => {
     on(); process.env.CRON_SECRET = "test-relay-secret"; const { owner, res } = route(); await owner(req(7, "wrong"), res);

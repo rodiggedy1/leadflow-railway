@@ -3,23 +3,24 @@ import { claudeCustomerSmsConfig, createClaudeCustomerSmsService, customerHistor
 import { dispatchClaudeCustomerSms } from "./claudeCustomerSmsApplication";
 import type { CustomerSmsClaim } from "./claudeCustomerTasksStore";
 import type { CustomerSmsStore } from "./claudeCustomerSms";
-const database = vi.hoisted(() => ({ imported: vi.fn(), getDb: vi.fn(async () => null) }));
+const database = vi.hoisted(() => ({ notify: vi.fn(async (_payload: { title: string; content: string }): Promise<boolean> => true), imported: vi.fn(), getDb: vi.fn(async () => null) }));
+vi.mock("../_core/notification", () => ({ notifyOwner: database.notify }));
 vi.mock("../db", () => { database.imported(); return { getDb: database.getDb }; });
 const created = "2026-11-16T18:00:00Z", at = Date.parse(created);
 const input: CustomerSmsInput = { sessionId: 71, providerMessageId: "inbound-real", fromPhone: "+12025550123", receivingPhoneNumberId: "PN-existing", inboundText: "Move my cleaning to Monday at 9", createdAt: created, receivedAt: at + 1000, isCleaner: false, direction: "incoming" };
 const snapshot = (): CustomerSmsSession => ({ contact: { sessionId: "71", rawPhone: input.fromPhone, phone: input.fromPhone, displayName: "Jane Smith", contactGap: null },
   messageHistory: JSON.stringify([{ role: "user", content: "Previous question", opMsgId: "older" }, { role: "assistant", content: "Earlier staff reply" }, { role: "user", content: input.inboundText, opMsgId: input.providerMessageId }]),
   lastInboundPhoneNumberId: input.receivingPhoneNumberId, leadSource: "cs-inbound", smsOptOut: 0, csQueue: "Clients" });
-function fixture() {
+function fixture(onFailure = vi.fn(async (_detail: any) => undefined)) {
   const order: string[] = [];
   const store = { claim: vi.fn(async (binding: any) => { order.push("claim"); return { draftId: 5, binding } as CustomerSmsClaim; }),
     prepare: vi.fn<CustomerSmsStore["prepare"]>(async () => { order.push("task-and-text-durable"); return true; }), recordAcceptance: vi.fn(async () => { order.push("acceptance"); return true; }),
-    markUncertain: vi.fn(async () => undefined), suppress: vi.fn(async () => undefined), suppressBeforeSubmission: vi.fn(async () => undefined) };
+    verifyBeforeSubmission: vi.fn(async () => true), reportFailure: vi.fn(async () => ({ taskId: 101, notify: true })), markUncertain: vi.fn(async () => undefined), suppress: vi.fn(async () => undefined), suppressBeforeSubmission: vi.fn(async () => undefined) };
   const config = vi.fn<() => CustomerSmsConfig | null>(() => ({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }));
   const readSession = vi.fn(async () => snapshot()), readReceivingLine = vi.fn(async () => "+12025550999");
   const generate = vi.fn(async () => { order.push("generate"); return { replyText: "Absolutely, Jane—we'll take care of this and confirm once the change is made.", task: { title: "Reschedule Jane's cleaning", items: [{ title: "Move cleaning to Monday at 9", evidenceQuote: input.inboundText }] } }; });
   const send = vi.fn(async () => { order.push("send"); return { success: true, messageId: "accepted-provider-id" }; });
-  return { order, store, config, readSession, readReceivingLine, generate, send, run: createClaudeCustomerSmsService({ config, readSession, readReceivingLine, generate, store, send }) };
+  return { onFailure, order, store, config, readSession, readReceivingLine, generate, send, run: createClaudeCustomerSmsService({ config, readSession, readReceivingLine, generate, store, send, onFailure }) };
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 describe("customer replies and real human-task intent", () => {
@@ -43,6 +44,56 @@ describe("customer replies and real human-task intent", () => {
     const f = fixture(); f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: true })
       .mockReturnValue({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false });
     expect(await f.run({ ...input, isCleaner: true })).toEqual({ outcome: "suppressed" }); expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("notifies only after a durable config-stop review, with no SMS", async () => {
+    const f = fixture(); f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null);
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" });
+    expect(f.store.reportFailure).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED", false);
+    expect(f.onFailure).toHaveBeenCalledWith({ taskId: 101, code: "CONFIG_CHANGED", sessionId: 71 }); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("failed review persistence independently alerts without claiming a task exists", async () => {
+    const f = fixture(); f.store.reportFailure.mockRejectedValue(new Error("offline"));
+    f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null);
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.onFailure).toHaveBeenCalledWith({ taskId: null, code: "CONFIG_CHANGED", sessionId: 71 }); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("does not notify a legitimate superseded stop when the store rejects escalation", async () => {
+    const f = fixture(); f.store.prepare.mockResolvedValue(false); f.store.reportFailure.mockResolvedValue(null as never);
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.onFailure).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("bounds a hanging generation and ignores its late link plan without regeneration", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = fixture(); let resolve!: (plan: any) => void; f.generate.mockImplementation(() => new Promise(done => { resolve = done; }));
+      const result = f.run(input); await vi.advanceTimersByTimeAsync(120_000);
+      expect(await result).toEqual({ outcome: "accepted" }); expect(f.generate).toHaveBeenCalledTimes(1);
+      resolve({ replyText: "Late original link", task: null }); await Promise.resolve();
+      expect(f.send).toHaveBeenCalledTimes(1); expect(f.send.mock.calls[0][0].content).not.toContain("Late");
+      expect(f.store.prepare.mock.calls[0][2]?.failures[0].code).toBe("CUSTOMER_REPLY_GENERATION_TIMEOUT");
+    } finally { vi.useRealTimers(); }
+  });
+  it("bounds a hanging SMS submission at 30 seconds and never accepts or retries its late result", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = fixture(); let resolve!: (result: any) => void;
+      f.send.mockImplementation(() => new Promise(done => { resolve = done; }));
+      const result = f.run(input); await vi.advanceTimersByTimeAsync(30_000);
+      expect(await result).toEqual({ outcome: "uncertain" });
+      expect(f.store.markUncertain).toHaveBeenCalledTimes(1); expect(f.store.reportFailure).toHaveBeenCalledWith(expect.anything(), "SUBMISSION_UNCERTAIN", true);
+      resolve({ success: true, messageId: "late-accepted" }); await Promise.resolve();
+      expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.recordAcceptance).not.toHaveBeenCalled(); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+  it("rechecks the actual unanswered turn after durable preparation and before SMS submission", async () => {
+    const f = fixture(); f.store.verifyBeforeSubmission.mockResolvedValue(false); f.store.reportFailure.mockResolvedValue(null as never);
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" });
+    expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "STALE_CUSTOMER_MESSAGE");
+    expect(f.send).not.toHaveBeenCalled(); expect(f.onFailure).not.toHaveBeenCalled();
+  });
+  it("independently alerts a pre-claim source failure without creating a fake task", async () => {
+    const f = fixture(); f.readSession.mockRejectedValue(new Error("offline source"));
+    expect(await f.run(input)).toEqual({ outcome: "failed" });
+    expect(f.onFailure).toHaveBeenCalledWith({ taskId: null, code: "GENERATION_OR_PERSISTENCE_FAILED", sessionId: 71 });
+    expect(f.store.claim).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
   });
   it("persists the task and exact acknowledgment before using the actual receiving line", async () => {
     const f = fixture(); expect(await f.run(input)).toEqual({ outcome: "accepted" });
@@ -255,7 +306,35 @@ describe("explicit future-only all-customer recipient scope", () => {
   });
   it("opens the existing lazy application only for a valid explicit all-customer scope", async () => {
     for (const [key, value] of Object.entries(allEnv)) vi.stubEnv(key, value);
-    database.getDb.mockClear();
+    database.getDb.mockClear(); database.notify.mockClear();
     expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "failed" }); expect(database.getDb).toHaveBeenCalledTimes(1);
+    expect(database.notify).toHaveBeenCalledWith({ title: "Customer SMS needs staff review", content: expect.stringContaining("Staff task could not be saved; review the conversation manually.") });
+    expect(database.notify.mock.calls[0][0].content).toContain("CUSTOMER_REPLY_DATABASE_UNAVAILABLE");
+  });
+  it("alerts once if database acquisition rejects, without pretending a staff task was created", async () => {
+    for (const [key, value] of Object.entries(allEnv)) vi.stubEnv(key, value);
+    database.notify.mockClear(); database.getDb.mockRejectedValueOnce(new Error("synthetic unavailable"));
+    expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "failed" });
+    expect(database.notify).toHaveBeenCalledTimes(1);
+    expect(database.notify.mock.calls[0][0].content).toContain("Session 71. Staff task could not be saved");
+    expect(database.notify.mock.calls[0][0].content).not.toContain("synthetic unavailable");
+  });
+  it("preserves the explicit failure when the independent owner notification rejects", async () => {
+    for (const [key, value] of Object.entries(allEnv)) vi.stubEnv(key, value);
+    database.notify.mockRejectedValueOnce(new Error("synthetic alert unavailable"));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(await dispatchClaudeCustomerSms(input)).toEqual({ outcome: "failed" });
+    expect(warning).toHaveBeenCalledWith("[ClaudeCustomerSMS] Owner alert unavailable", { taskId: null, code: "CUSTOMER_REPLY_DATABASE_UNAVAILABLE", sessionId: 71 });
+  });
+  it("bounds an independent owner alert at ten seconds without retrying it", async () => {
+    vi.useFakeTimers();
+    try {
+      for (const [key, value] of Object.entries(allEnv)) vi.stubEnv(key, value);
+      database.notify.mockClear(); database.notify.mockImplementationOnce(() => new Promise<boolean>(() => undefined));
+      vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const pending = dispatchClaudeCustomerSms(input);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await pending).toEqual({ outcome: "failed" }); expect(database.notify).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
   });
 });

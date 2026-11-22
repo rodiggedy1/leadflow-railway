@@ -57,18 +57,29 @@ export const thumbtackLeadRouter = router({
       seen.add(negotiationId);
       const customer = data?.customer ?? {};
       const phone = customer.phone?.trim() || null;
+      const phoneDigits = phone?.replace(/\D/g, "").slice(-10) ?? "";
+      const hasRealPhone = phoneDigits.length === 10;
       const linkedMessage = messageRows.find((message) => {
         try {
           const metadata = JSON.parse(message.metadata ?? "{}") as Record<string, unknown>;
           const cardPhone = typeof metadata.leadPhone === "string" ? metadata.leadPhone : "";
           const cardName = typeof metadata.leadName === "string" ? metadata.leadName : "";
-          return (phone && cardPhone.replace(/\D/g, "").slice(-10) === phone.replace(/\D/g, "").slice(-10))
-            || (cardName && namesMatch(cardName, [customer.firstName, customer.lastName].filter(Boolean).join(" ")));
+          return hasRealPhone
+            ? cardPhone.replace(/\D/g, "").slice(-10) === phoneDigits
+            : Boolean(cardName && namesMatch(cardName, [customer.firstName, customer.lastName].filter(Boolean).join(" ")));
         } catch { return false; }
       });
       const linkedSessionId = linkedMessage ? metadataSessionId(linkedMessage.metadata) : null;
       const linkedClaimedBy = linkedMessage ? metadataClaimedBy(linkedMessage.metadata) : null;
-      const sessionRows = linkedSessionId
+      // Card metadata can point to an email/placeholder session even when the
+      // card has the real phone. Verify the actual session phone first.
+      const sessionRows = hasRealPhone
+        ? (await db.execute(sql`
+            SELECT id, isBooked, bookedByAgentName FROM conversation_sessions
+            WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = ${phoneDigits}
+            ORDER BY id DESC LIMIT 1
+          `) as any)[0] as Array<{ id: number; isBooked: number; bookedByAgentName: string | null }>
+        : linkedSessionId
         ? (await db.execute(sql`
             SELECT id, isBooked, bookedByAgentName FROM conversation_sessions
             WHERE id = ${linkedSessionId}
@@ -84,7 +95,7 @@ export const thumbtackLeadRouter = router({
       const linkedSession = sessionRows[0] ?? null;
       leads.push({
         ...projectThumbtackNativeLead(payload),
-        sessionId: linkedSessionId ?? linkedSession?.id ?? null,
+        sessionId: hasRealPhone ? linkedSession?.id ?? null : linkedSessionId ?? linkedSession?.id ?? null,
         messageId: linkedMessage?.id ?? null,
         claimedBy: linkedClaimedBy,
         isBooked: linkedSession?.isBooked === 1,

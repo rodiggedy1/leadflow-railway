@@ -153,7 +153,12 @@ function emptyArray(value: unknown): boolean {
 }
 /** Cancel waiting locally. Cannot undo an already-started backend mutation. */
 async function abortable<T>(promise: Promise<T>, signal: AbortSignal, sessionId?: string): Promise<T> {
-  if (signal.aborted) throw new ManagedAgentDemoError("CANCELLED", sessionId);
+  if (signal.aborted) {
+    // The operation/hook was evaluated before this helper. Observe late failure
+    // even when cancellation wins before Promise.race can attach its handlers.
+    void promise.catch(() => undefined);
+    throw new ManagedAgentDemoError("CANCELLED", sessionId);
+  }
   let listener: (() => void) | undefined;
   const cancelled = new Promise<never>((_, reject) => {
     listener = () => reject(new ManagedAgentDemoError("CANCELLED", sessionId));

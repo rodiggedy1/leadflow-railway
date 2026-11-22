@@ -8,10 +8,12 @@ import {
 } from "../../shared/claudeInitialLead";
 import { normalizePhone } from "../utils/phone";
 import { prepareCsReplyMessages } from "../csReplyStream";
-import { runInitialLeadDraft, type InitialLeadDraftOptions } from "./claudeAgentClient";
-import { validateClaudeReviewReply, type OpsCaller } from "./claudeSmsAlternative";
+import { ManagedAgentDemoError, runInitialLeadDraft, type InitialLeadDraftOptions, type TraceEntry } from "./claudeAgentClient";
+import { ClaudeSmsAlternativeError, validateClaudeReviewReply, type OpsCaller } from "./claudeSmsAlternative";
 export { claudeInitialLeadInputSchema, claudeInitialLeadResultSchema } from "../../shared/claudeInitialLead";
 
+// Caller-owned total budget; other saved-agent capabilities keep their defaults.
+export const CLAUDE_INITIAL_LEAD_TIMEOUT_MS = 120_000;
 export class ClaudeInitialLeadError extends Error {
   constructor(readonly code: string) { super(code); this.name = "ClaudeInitialLeadError"; }
 }
@@ -47,29 +49,113 @@ function legacyDraftRequest(input: ClaudeInitialLeadInput) {
 
 export type ClaudeInitialLeadContentOptions = Pick<ClaudeInitialLeadOptions, "prepareMessages" | "runner">;
 
+const safeCodes = new Set([
+  "INVALID_JSON", "INVALID_CUSTOMER_PHONE", "INVALID_PREPARED_MESSAGES", "UNAUTHORIZED", "TIMEOUT",
+  "UNSAFE_REPLY_CLAIM", "UNSAFE_REPLY_PRESENTATION", "MISSING_API_KEY", "INVALID_BACKEND",
+  "INVALID_PAYLOAD", "AGENT_MISMATCH", "UNSAFE_AGENT", "ENVIRONMENT_MISMATCH", "SESSION_MISMATCH",
+  "PROVIDER_HTTP_ERROR", "PROVIDER_TRANSPORT_ERROR", "UNKNOWN_POST_OUTCOME", "INVALID_RESPONSE",
+  "INVALID_EVENT", "PROVIDER_SESSION_ERROR", "UNSAFE_TOOL", "TOOL_OUTCOME_UNKNOWN", "REPLAY_CONFLICT",
+  "INCOMPLETE_TURN", "CANCELLED", "HOOK_FAILED",
+]);
+const safeTraceStages = new Set<TraceEntry["stage"]>([
+  "http_response", "configuration_verified", "session_created", "session_verified", "tool_started",
+  "tool_result_acknowledged", "tool_replay_suppressed", "completed", "failed",
+]);
+function safeSessionId(value: unknown): string | undefined {
+  return typeof value === "string" && /^sesn_[A-Za-z0-9]{1,128}$/.test(value) ? value : undefined;
+}
+function safeStatus(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599 ? value : undefined;
+}
+function failureMetadata(error: unknown) {
+  const known = error instanceof ClaudeInitialLeadError || error instanceof ClaudeSmsAlternativeError || error instanceof ManagedAgentDemoError;
+  return {
+    code: known && safeCodes.has(error.code) ? error.code : error instanceof z.ZodError ? "VALIDATION_ERROR" : "INITIAL_LEAD_FAILED",
+    ...(error instanceof ManagedAgentDemoError && safeStatus(error.status) !== undefined ? { status: safeStatus(error.status) } : {}),
+    ...(error instanceof ManagedAgentDemoError && safeSessionId(error.sessionId) ? { agentSessionId: safeSessionId(error.sessionId) } : {}),
+  };
+}
+/** Fixed metadata only. Logging must never change the draft/auth outcome. */
+function logMetadata(level: "info" | "error", metadata: Record<string, unknown>): void {
+  try { console[level]("[ClaudeInitialLead]", metadata); } catch { /* best-effort */ }
+}
+
 /** Shared generation body. Only the human wrapper supplies staff reauthorization;
  * the application dispatcher must enforce its own durable first-response claim. */
 async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeInitialLeadContentOptions,
   reauthorize: () => Promise<unknown>): Promise<ClaudeInitialLeadResult> {
-  const customerPhone = normalizePhone(input.customerPhone);
-  if (!customerPhone) return fail("INVALID_CUSTOMER_PHONE");
-  const request = input.draftRequest ?? legacyDraftRequest(input);
-  const messages = await (options.prepareMessages ?? prepareCsReplyMessages)(request);
-  if (messages.length !== 2 || messages[0].role !== "system" || messages[1].role !== "user"
-    || !messages[0].content.trim() || !messages[1].content.trim()) return fail("INVALID_PREPARED_MESSAGES");
-  const contextHash = createHash("sha256").update(canonical({ sessionId: input.sessionId, customerPhone,
-    leadDetails: input.leadDetails, originalConversation: input.originalConversation, request, messages })).digest("hex");
-  await reauthorize();
-  const output = await (options.runner ?? runInitialLeadDraft)({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
-  // The model returns exactly the plain SMS requested by the primary prompt.
-  // JSON is constructed locally for the unchanged non-sendable reply validator.
-  const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId]);
-  if (/\b(?:quote|pricing|message|SMS|text|link)\s+(?:has been|was|is)\s+(?:sent|texted|created|generated|processed)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
-  if (/\bquote\s+(?:id|code|number|reference)\s*[:#]/i.test(replyText)) return fail("UNSAFE_REPLY_PRESENTATION");
-  await reauthorize();
-  return claudeInitialLeadResultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
-    sessionId: input.sessionId, customerPhone, contextHash, replyText,
-    mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+  const controller = new AbortController();
+  const deadline = Date.now() + CLAUDE_INITIAL_LEAD_TIMEOUT_MS;
+  let stage = "validate_input", timedOut = false, finished = false;
+  let agentSessionId: string | undefined, status: number | undefined;
+  const checkDeadline = () => {
+    if (timedOut || Date.now() >= deadline) { timedOut = true; controller.abort(); return fail("TIMEOUT"); }
+  };
+  const enterStage = (next: string) => {
+    checkDeadline(); stage = next;
+    logMetadata("info", { stage, sessionId: input.sessionId });
+  };
+  const onTrace: NonNullable<InitialLeadDraftOptions["onTrace"]> = entry => {
+    if (finished) return;
+    if (!safeTraceStages.has(entry.stage)) return;
+    agentSessionId = safeSessionId(entry.sessionId) ?? agentSessionId;
+    status = safeStatus(entry.status) ?? status;
+    logMetadata("info", { stage: "managed_agent", traceStage: entry.stage, sessionId: input.sessionId,
+      ...(agentSessionId ? { agentSessionId } : {}), ...(safeStatus(entry.status) !== undefined ? { status: safeStatus(entry.status) } : {}),
+      ...(entry.code && safeCodes.has(entry.code) ? { code: entry.code } : {}) });
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    // Reject the caller even if preparation or an injected runner ignores abort.
+    // Promise.race observes detached work; stage guards forbid late progression.
+    const stop = () => { timedOut = true; reject(new ClaudeInitialLeadError("TIMEOUT")); controller.abort(); };
+    timer = setTimeout(stop, CLAUDE_INITIAL_LEAD_TIMEOUT_MS);
+  });
+  let work: Promise<ClaudeInitialLeadResult>;
+  try {
+    work = (async () => {
+      checkDeadline();
+      const customerPhone = normalizePhone(input.customerPhone);
+      if (!customerPhone) return fail("INVALID_CUSTOMER_PHONE");
+      const request = input.draftRequest ?? legacyDraftRequest(input);
+      enterStage("prepare_messages");
+      // The shared preparer has no signal seam. Bound waiting here, not its internals.
+      const messages = await (options.prepareMessages ?? prepareCsReplyMessages)(request);
+      checkDeadline();
+      if (messages.length !== 2 || messages[0].role !== "system" || messages[1].role !== "user"
+        || !messages[0].content.trim() || !messages[1].content.trim()) return fail("INVALID_PREPARED_MESSAGES");
+      const contextHash = createHash("sha256").update(canonical({ sessionId: input.sessionId, customerPhone,
+        leadDetails: input.leadDetails, originalConversation: input.originalConversation, request, messages })).digest("hex");
+      enterStage("reauthorize_before_run");
+      await reauthorize();
+      enterStage("managed_agent");
+      const output = await (options.runner ?? runInitialLeadDraft)({ systemPrompt: messages[0].content, userPrompt: messages[1].content,
+        signal: controller.signal, onTrace });
+      agentSessionId = safeSessionId(output.sessionId) ?? agentSessionId;
+      enterStage("validate_reply");
+      // The model returns exactly the plain SMS requested by the primary prompt.
+      // JSON is constructed locally for the unchanged non-sendable reply validator.
+      const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId]);
+      if (/\b(?:quote|pricing|message|SMS|text|link)\s+(?:has been|was|is)\s+(?:sent|texted|created|generated|processed)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
+      if (/\bquote\s+(?:id|code|number|reference)\s*[:#]/i.test(replyText)) return fail("UNSAFE_REPLY_PRESENTATION");
+      enterStage("reauthorize_before_return");
+      await reauthorize();
+      checkDeadline();
+      const result = claudeInitialLeadResultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
+        sessionId: input.sessionId, customerPhone, contextHash, replyText,
+        mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+      enterStage("completed");
+      return result;
+    })();
+    return await Promise.race([work, timeout]);
+  } catch (error) {
+    const safe = timedOut ? new ClaudeInitialLeadError("TIMEOUT") : error;
+    logMetadata("error", { stage, sessionId: input.sessionId, ...(agentSessionId ? { agentSessionId } : {}),
+      ...(status !== undefined ? { status } : {}), ...failureMetadata(safe) });
+    throw safe;
+  } finally {
+    finished = true; clearTimeout(timer); controller.abort();
+  }
 }
 
 /** Internal content-only entrypoint, not an API or permission bypass. No staff
@@ -112,8 +198,12 @@ const applicationService = createClaudeInitialLeadService({ authorizeCaller: asy
 export async function generateClaudeInitialLead(input: ClaudeInitialLeadInput, opsCaller: OpsCaller): Promise<ClaudeInitialLeadResult> {
   try { return await applicationService.generate(input, opsCaller); }
   catch (error) {
+    logMetadata("error", { stage: "manual_wrapper", ...failureMetadata(error) });
     if (error instanceof ClaudeInitialLeadError && error.code === "UNAUTHORIZED") {
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Staff login required." });
+    }
+    if (error instanceof ClaudeInitialLeadError && error.code === "TIMEOUT") {
+      throw new TRPCError({ code: "TIMEOUT", message: "Claude initial lead drafting timed out. No SMS was sent and no actions were executed." });
     }
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Claude could not produce a safe review-only initial lead draft. No SMS was sent and no actions were executed." });
   }
