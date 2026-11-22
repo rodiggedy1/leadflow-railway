@@ -3,6 +3,7 @@ import type { CustomerReplyPlan } from "../../shared/claudeCustomerTasks";
 import { normalizePhone } from "../utils/phone";
 import type { AlternativeSessionRow } from "./claudeSmsAlternativeSessionRead";
 import type { CustomerSmsBinding, CustomerSmsClaim } from "./claudeCustomerTasksStore";
+import { describeCustomerSmsFailure, type CustomerSmsFailureDetails, type CustomerSmsFailure } from "./claudeCustomerSmsFailure";
 
 export interface CustomerSmsInput {
   sessionId: number; providerMessageId: string; fromPhone: string; receivingPhoneNumberId: string;
@@ -50,11 +51,11 @@ export const customerHistoryHash = (history: unknown): string => createHash("sha
 export interface CustomerSmsSession extends AlternativeSessionRow { leadSource?: unknown; smsOptOut?: unknown; csQueue?: unknown }
 export interface CustomerSmsStore {
   claim(binding: CustomerSmsBinding): Promise<CustomerSmsClaim | null>;
-  prepare(claim: CustomerSmsClaim, plan: CustomerReplyPlan): Promise<boolean | CustomerReplyPlan>;
+  prepare(claim: CustomerSmsClaim, plan: CustomerReplyPlan, failure?: CustomerSmsFailureDetails): Promise<boolean | CustomerReplyPlan>;
   recordAcceptance(claim: CustomerSmsClaim, providerMessageId: string): Promise<boolean>;
   markUncertain(claim: CustomerSmsClaim): Promise<void>;
   suppress(claim: CustomerSmsClaim, code: string): Promise<void>;
-  suppressBeforeSubmission(claim: CustomerSmsClaim, code: string): Promise<void>;
+  suppressBeforeSubmission(claim: CustomerSmsClaim, code: string, failure?: CustomerSmsFailureDetails): Promise<void>;
 }
 export interface CustomerSmsOptions {
   config: () => CustomerSmsConfig | null;
@@ -113,6 +114,14 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
     let claim: CustomerSmsClaim | null = null;
     let submissionStarted = false;
     let hasTask = false;
+    let failure: CustomerSmsFailureDetails | undefined;
+    let failurePhase: CustomerSmsFailure["phase"] = "pre_send";
+    const fallbackPlan = (): CustomerReplyPlan => ({
+      replyText: "Sorry—I couldn't finish that response. I've flagged your message for our team to review.",
+      task: { title: "Review customer message after reply failure", items: [
+        { title: "Review the customer's message and follow up", evidenceQuote: input.inboundText },
+      ] },
+    });
     const refreshTask = async () => {
       if (!hasTask) return;
       try { await options.onTaskChange?.(); } catch { /* A refresh is not the committed task/send outcome. */ }
@@ -131,14 +140,37 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
         createdAt, receivedAt: input.receivedAt, customerName: session.contact.displayName, historyHash: customerHistoryHash(session.messageHistory) };
       claim = await options.store.claim(binding);
       if (!claim) return { outcome: "duplicate" };
-      const plan = await options.generate(binding, session);
+      let plan: CustomerReplyPlan;
+      try { plan = await options.generate(binding, session); }
+      catch (error) {
+        failure = { failures: [describeCustomerSmsFailure(error, "generation")] };
+        plan = fallbackPlan();
+      }
       const currentConfig = options.config();
       if (!currentConfig || currentConfig.startAt !== config.startAt || currentConfig.allowedPhone !== config.allowedPhone
         || currentConfig.testCustomerOverride !== config.testCustomerOverride || currentConfig.scope !== config.scope) {
         await options.store.suppress(claim, "CONFIG_CHANGED"); return { outcome: "suppressed" };
       }
-      const prepared = await options.store.prepare(claim, plan);
+      let prepared: boolean | CustomerReplyPlan;
+      if (failure) failurePhase = "fallback_preparation";
+      try {
+        prepared = failure ? await options.store.prepare(claim, plan, failure) : await options.store.prepare(claim, plan);
+      } catch (error) {
+        // One deterministic fallback, never model retries or receipt revival.
+        // prepare's existing transaction rolls back the failed quote/task first.
+        if (failure) throw error;
+        failure = { failures: [describeCustomerSmsFailure(error, "preparation")] };
+        plan = fallbackPlan();
+        const recoveryConfig = options.config();
+        if (!recoveryConfig || recoveryConfig.startAt !== config.startAt || recoveryConfig.allowedPhone !== config.allowedPhone
+          || recoveryConfig.testCustomerOverride !== config.testCustomerOverride || recoveryConfig.scope !== config.scope) {
+          await options.store.suppress(claim, "CONFIG_CHANGED"); return { outcome: "suppressed" };
+        }
+        failurePhase = "fallback_preparation";
+        prepared = await options.store.prepare(claim, plan, failure);
+      }
       if (!prepared) return { outcome: "suppressed" };
+      failurePhase = "pre_send";
       // Quote links and their canonical price text commit with the existing
       // task/receipt. Submit that exact durable text, never the pre-link draft.
       const replyPlan = typeof prepared === "object" ? prepared : plan;
@@ -160,11 +192,13 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       }
       await refreshTask();
       return { outcome: "accepted" };
-    } catch {
+    } catch (error) {
       if (claim) {
         try {
           if (submissionStarted) await options.store.markUncertain(claim);
-          else await options.store.suppressBeforeSubmission(claim, "GENERATION_OR_PERSISTENCE_FAILED");
+          else await options.store.suppressBeforeSubmission(claim, "GENERATION_OR_PERSISTENCE_FAILED", {
+            failures: [...(failure?.failures ?? []), describeCustomerSmsFailure(error, failurePhase)].slice(-2),
+          });
         } catch { /* Existing durable claim remains blocked, never retried. */ }
       }
       await refreshTask();

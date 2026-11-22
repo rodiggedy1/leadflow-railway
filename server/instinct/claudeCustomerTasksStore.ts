@@ -10,6 +10,7 @@ import {
 } from "../../shared/claudeCustomerTasks";
 import type { getDb } from "../db";
 import { normalizePhone } from "../utils/phone";
+import { customerSmsFailureDetailsSchema, type CustomerSmsFailureDetails } from "./claudeCustomerSmsFailure";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -58,11 +59,11 @@ const stop = (text: string) => /^\s*(stop|unsubscribe|quit|end|remove me|opt.?ou
 
 export interface ClaudeCustomerTasksStore {
   claim(binding: CustomerSmsBinding): Promise<CustomerSmsClaim | null>;
-  prepare(claim: CustomerSmsClaim, plan: CustomerReplyPlan): Promise<boolean | CustomerReplyPlan>;
+  prepare(claim: CustomerSmsClaim, plan: CustomerReplyPlan, failure?: CustomerSmsFailureDetails): Promise<boolean | CustomerReplyPlan>;
   recordAcceptance(claim: CustomerSmsClaim, providerMessageId: string): Promise<boolean>;
   markUncertain(claim: CustomerSmsClaim): Promise<void>;
   suppress(claim: CustomerSmsClaim, code: string): Promise<void>;
-  suppressBeforeSubmission(claim: CustomerSmsClaim, code: string): Promise<void>;
+  suppressBeforeSubmission(claim: CustomerSmsClaim, code: string, failure?: CustomerSmsFailureDetails): Promise<void>;
   list(): Promise<CustomerTask[]>;
   get(id: number): Promise<CustomerTask | null>;
   claimTask(id: number, actor: TaskActor, expectedOwnerId?: string): Promise<CustomerTask>;
@@ -140,6 +141,14 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
   async function receipt(tx: Tx, claim: CustomerSmsClaim): Promise<Record<string, any>> {
     const [draft] = rows(await tx.execute(sql`SELECT * FROM madison_sms_drafts WHERE id = ${claim.draftId} FOR UPDATE`));
     return validateReceipt(draft, claim);
+  }
+  async function saveFailure(tx: Tx, claim: CustomerSmsClaim, failure?: CustomerSmsFailureDetails): Promise<void> {
+    if (!failure) return;
+    const detail = JSON.stringify(customerSmsFailureDetailsSchema.parse(failure));
+    const changed = header(await tx.execute(sql`UPDATE madison_sms_drafts SET errorMessage = ${detail}
+      WHERE id = ${claim.draftId} AND capability = ${capability} AND status IN ('TOOLS_RUNNING', 'SENDING')
+      AND outboundOpenPhoneId IS NULL AND sentAt IS NULL AND (errorCode IS NULL OR errorCode <> 'SUBMISSION_UNCERTAIN')`));
+    if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_FAILURE_DETAIL_SAVE_FAILED");
   }
   async function fresh(tx: Tx, binding: CustomerSmsBinding): Promise<boolean> {
     const [session] = rows(await tx.execute(sql`SELECT * FROM conversation_sessions WHERE id = ${binding.sessionId} FOR UPDATE`));
@@ -223,7 +232,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
         throw error;
       }
     },
-    prepare: (claim, rawPlan) => db.transaction(async tx => {
+    prepare: (claim, rawPlan, failure) => db.transaction(async tx => {
       const originalPlan = options.preparePlan ? null : customerReplyPlanSchema.parse(rawPlan), draft = await receipt(tx, claim);
       if (draft.status !== "TOOLS_RUNNING") return false;
       if (draft.dismissedAt || draft.dismissedBy || !await fresh(tx, claim.binding)) {
@@ -233,6 +242,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
         if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_SUPPRESSION_SAVE_FAILED");
         return false;
       }
+      await saveFailure(tx, claim, failure);
       const preparedPlan = await options.preparePlan?.(tx, claim, rawPlan) ?? null;
       const plan = originalPlan ?? customerReplyPlanSchema.parse(preparedPlan ?? rawPlan);
       if (plan.task?.items.some(item => !claim.binding.inboundText.includes(item.evidenceQuote))) {
@@ -304,7 +314,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
     }),
     // Only the coordinator's branch BEFORE calling send may invoke this. An
     // uncertain submission/acceptance must never be converted to a retryable state.
-    suppressBeforeSubmission: (claim, code) => db.transaction(async tx => {
+    suppressBeforeSubmission: (claim, code, failure) => db.transaction(async tx => {
       const draft = await receipt(tx, claim);
       if (!["TOOLS_RUNNING", "SENDING"].includes(draft.status)) return;
       if (draft.outboundOpenPhoneId || draft.sentAt || draft.errorCode === "SUBMISSION_UNCERTAIN")
@@ -312,6 +322,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
       const task = await replyTask(tx, draft, claim);
       if (task?.reply.status === "uncertain" || task?.reply.providerMessageId)
         return fail("CONFLICT", "A submitted or uncertain reply cannot be released.");
+      await saveFailure(tx, claim, failure);
       const changed = header(await tx.execute(sql`UPDATE madison_sms_drafts SET status = 'DISMISSED', errorStage = 'GATE',
         errorCode = ${code}, updatedAt = NOW(3) WHERE id = ${claim.draftId} AND capability = ${capability}
         AND status IN ('TOOLS_RUNNING', 'SENDING') AND outboundOpenPhoneId IS NULL AND sentAt IS NULL

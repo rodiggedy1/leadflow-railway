@@ -8,7 +8,7 @@ import { createPublicBookingPriceSnapshot, type PublicBookingPriceSnapshot } fro
 import { createCustomerBookingLink } from "../customerBookingLinkService";
 import type { getDb } from "../db";
 import { normalizePhone } from "../utils/phone";
-import { callBookingQuoteSendInputSchema } from "./callBookingQuote";
+import { smsBookingQuoteSendInputSchema } from "./smsBookingQuoteSendSchema";
 import { createSmsBookingQuotePresentation, renderSmsBookingQuoteText, renderSmsBookingQuoteSummary } from "./bookingQuotePresentation";
 import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQuestion";
 import type { CustomerSmsBinding } from "./claudeCustomerTasksStore";
@@ -38,7 +38,7 @@ const header = (result: unknown): { insertId?: number; affectedRows?: number } =
 const positiveId = z.number().int().positive().refine(Number.isSafeInteger);
 const savedQuoteSchema = z.object({
   quoteId: z.string().min(1),
-  input: callBookingQuoteSendInputSchema.omit({ extrasConfirmed: true, smsNumberConfirmed: true }),
+  input: smsBookingQuoteSendInputSchema.omit({ extrasConfirmed: true, smsNumberConfirmed: true }),
   link: smsBookingQuoteStateSchema.shape.link.unwrap(),
 }).strict();
 const envelopeSchema = z.object({
@@ -117,7 +117,7 @@ function normalizeInput(input: CreateCustomerBookingLinkInput): CreateCustomerBo
 /** Rebuild only the validated canonical quote-link input represented by metadata. */
 function inputForState(state: SmsBookingQuoteState): CreateCustomerBookingLinkInput | null {
   const fields = state.fields;
-  const parsed = callBookingQuoteSendInputSchema.safeParse({
+  const parsed = smsBookingQuoteSendInputSchema.safeParse({
     customerName: fields.customerName, customerPhone: state.customerPhone,
     ...(fields.customerEmail != null ? { customerEmail: fields.customerEmail } : {}),
     address: fields.address, requestedLocalDate: fields.requestedLocalDate, requestedLocalTime: fields.requestedLocalTime,

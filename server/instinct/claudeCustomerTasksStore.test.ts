@@ -7,6 +7,7 @@ import { createClaudeCustomerTasksStore, type CustomerSmsBinding } from "./claud
 import { createClaudeCustomerSmsService } from "./claudeCustomerSms";
 import { createClaudeCustomerSmsGenerator } from "./claudeCustomerSmsGeneration";
 import { createClaudeCustomerTasksRouter } from "../claudeCustomerTasksRouter";
+import { describeCustomerSmsFailure } from "./claudeCustomerSmsFailure";
 vi.mock("../db", () => ({ getDb: vi.fn(async () => null) }));
 vi.mock("../_core/agentAuth", () => ({ getAgentFromRequest: vi.fn(async () => null) }));
 
@@ -64,7 +65,11 @@ function port(options: Parameters<typeof createClaudeCustomerTasksStore>[1] = {}
         return [{ affectedRows: 1 }];
       }
       if (s.startsWith("UPDATE madison_sms_drafts")) {
-        if (s.includes("SET status = 'SENDING'")) {
+        if (s.includes("SET errorMessage =")) {
+          const row = state.drafts.find((row: any) => row.id === p[1] && row.capability === p[2]
+            && ["TOOLS_RUNNING", "SENDING"].includes(row.status) && !row.outboundOpenPhoneId && !row.sentAt && row.errorCode !== "SUBMISSION_UNCERTAIN");
+          if (!row) return [{ affectedRows: 0 }]; row.errorMessage = p[0];
+        } else if (s.includes("SET status = 'SENDING'")) {
           const row = state.drafts.find((row: any) => row.id === p[3] && row.capability === p[4] && row.status === "TOOLS_RUNNING");
           if (!row) return [{ affectedRows: 0 }]; Object.assign(row, { status: "SENDING", generatedDraft: p[0], approvedText: p[1], capabilityResult: JSON.parse(p[2] as string) });
         } else if (s.includes("SET status = 'SENT'")) {
@@ -208,6 +213,43 @@ describe("customer task store — offline transactional SQL port", () => {
     const h = port(), c = (await h.store.claim(h.binding))!;
     expect(await h.store.prepare(c, { replyText: "A grounded answer", task: null })).toBe(true);
     expect(h.state().cards).toHaveLength(0); expect(await h.store.recordAcceptance(c, "outbound-1")).toBe(true);
+  });
+  it("stores the original failure atomically with a durable fallback task and preserves it after acceptance", async () => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
+    const failure = { failures: [describeCustomerSmsFailure(new Error("SMS_QUOTE_MODEL_PRICE"), "generation")] };
+    const fallback = { replyText: "Sorry—I couldn't finish that response. I've flagged your message for our team to review.",
+      task: { title: "Review customer message after reply failure", items: [{ title: "Review and follow up", evidenceQuote: h.binding.inboundText }] } };
+    expect(await h.store.prepare(c, fallback, failure)).toBe(true);
+    expect(JSON.parse(h.state().drafts[0].errorMessage)).toEqual(failure); expect(h.task().reply.status).toBe("prepared");
+    expect(await h.store.recordAcceptance(c, "fallback-acceptance")).toBe(true);
+    expect(JSON.parse(h.state().drafts[0].errorMessage)).toEqual(failure);
+    expect(h.state().drafts[0].status).toBe("SENT"); expect(h.task().reply.status).toBe("sent");
+    expect(await h.store.claim(h.binding)).toBeNull();
+  });
+  it("rolls back failure details and fallback task when durable preparation fails", async () => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
+    const failure = { failures: [describeCustomerSmsFailure(new Error("SMS_QUOTE_STATE_CONFLICT"), "preparation")] };
+    h.fail("ops_chat_messages"); await expect(h.store.prepare(c, plan, failure)).rejects.toThrow();
+    expect(h.state().cards).toHaveLength(0); expect(h.state().drafts[0]).not.toHaveProperty("errorMessage");
+    expect(h.state().drafts[0].status).toBe("TOOLS_RUNNING"); h.fail("");
+    await h.store.suppressBeforeSubmission(c, "GENERATION_OR_PERSISTENCE_FAILED", failure);
+    expect(JSON.parse(h.state().drafts[0].errorMessage)).toEqual(failure);
+    expect(h.state().drafts[0].status).toBe("DISMISSED");
+  });
+  it("does not add failure details or a fallback task to a stale or opted-out receipt", async () => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
+    h.state().sessions[0].smsOptOut = 1;
+    expect(await h.store.prepare(c, plan, { failures: [describeCustomerSmsFailure(new Error("SMS_QUOTE_MODEL_PRICE"), "generation")] })).toBe(false);
+    expect(h.state().cards).toHaveLength(0); expect(h.state().drafts[0]).not.toHaveProperty("errorMessage");
+    expect(h.state().drafts[0].errorCode).toBe("STALE_CUSTOMER_MESSAGE");
+  });
+  it("does not overwrite diagnostics or release a submitted or uncertain reply", async () => {
+    const h = port(), c = await h.prepared(); await h.store.markUncertain(c);
+    const before = structuredClone(h.state());
+    await expect(h.store.suppressBeforeSubmission(c, "GENERATION_OR_PERSISTENCE_FAILED", {
+      failures: [describeCustomerSmsFailure(new Error("SMS_QUOTE_MODEL_PRICE"), "generation")],
+    })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(h.state()).toEqual(before);
   });
   it("concurrent task claims have one owner even with equal display names; no conversation assignment", async () => {
     const h = port(); await h.prepared(); const id = h.task().id;

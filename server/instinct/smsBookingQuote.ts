@@ -4,13 +4,13 @@ import { PUBLIC_BOOKING_PRICED_EXTRAS } from "../../shared/publicBookingPricing"
 import { normalizePhone } from "../utils/phone";
 import {
   callBookingQuotePricingSchema,
-  callBookingQuoteSendInputSchema,
   previewCallBookingQuote,
   type CallBookingQuotePreview,
 } from "./callBookingQuote";
+import { smsBookingQuoteSendInputSchema } from "./smsBookingQuoteSendSchema";
 
 const pricingShape = callBookingQuotePricingSchema.shape;
-const sendShape = callBookingQuoteSendInputSchema.shape;
+const sendShape = smsBookingQuoteSendInputSchema.shape;
 const nonemptyQuote = z.string().min(1).refine(value => value.trim().length > 0, "Evidence must not be blank.");
 
 /** No transport, execution, sender, price, token or URL fields are model-owned. */
@@ -262,7 +262,7 @@ export function advanceSmsBookingQuote(
 
   let input: CreateCustomerBookingLinkInput | null = null;
   if (patch.action === "link" && missing.length === 0 && pricing !== null && preview?.success) {
-    const parsed = callBookingQuoteSendInputSchema.parse({
+    const parsed = smsBookingQuoteSendInputSchema.parse({
       customerName: fields.customerName, customerPhone: binding.fromPhone,
       ...(fields.customerEmail != null ? { customerEmail: fields.customerEmail } : {}),
       address: fields.address, requestedLocalDate: fields.requestedLocalDate,

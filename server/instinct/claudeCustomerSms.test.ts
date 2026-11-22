@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { claudeCustomerSmsConfig, createClaudeCustomerSmsService, customerHistoryHash, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride, type CustomerSmsInput, type CustomerSmsSession, type CustomerSmsConfig } from "./claudeCustomerSms";
 import { dispatchClaudeCustomerSms } from "./claudeCustomerSmsApplication";
 import type { CustomerSmsClaim } from "./claudeCustomerTasksStore";
+import type { CustomerSmsStore } from "./claudeCustomerSms";
 const database = vi.hoisted(() => ({ imported: vi.fn(), getDb: vi.fn(async () => null) }));
 vi.mock("../db", () => { database.imported(); return { getDb: database.getDb }; });
 const created = "2026-11-16T18:00:00Z", at = Date.parse(created);
@@ -12,7 +13,7 @@ const snapshot = (): CustomerSmsSession => ({ contact: { sessionId: "71", rawPho
 function fixture() {
   const order: string[] = [];
   const store = { claim: vi.fn(async (binding: any) => { order.push("claim"); return { draftId: 5, binding } as CustomerSmsClaim; }),
-    prepare: vi.fn(async () => { order.push("task-and-text-durable"); return true; }), recordAcceptance: vi.fn(async () => { order.push("acceptance"); return true; }),
+    prepare: vi.fn<CustomerSmsStore["prepare"]>(async () => { order.push("task-and-text-durable"); return true; }), recordAcceptance: vi.fn(async () => { order.push("acceptance"); return true; }),
     markUncertain: vi.fn(async () => undefined), suppress: vi.fn(async () => undefined), suppressBeforeSubmission: vi.fn(async () => undefined) };
   const config = vi.fn<() => CustomerSmsConfig | null>(() => ({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }));
   const readSession = vi.fn(async () => snapshot()), readReceivingLine = vi.fn(async () => "+12025550999");
@@ -55,6 +56,74 @@ describe("customer replies and real human-task intent", () => {
   it("rejects an already answered source and a contradictory source ID", async () => { const f = fixture(), s = snapshot(), h = JSON.parse(s.messageHistory as string); h.push({ role: "assistant", content: "Human already answered" }); f.readSession.mockResolvedValue({ ...s, messageHistory: JSON.stringify(h) }); expect(await f.run(input)).toEqual({ outcome: "excluded" }); h.pop(); h.at(-1).providerMessageId = "conflicting-id"; f.readSession.mockResolvedValue({ ...s, messageHistory: JSON.stringify(h) }); expect(await f.run(input)).toEqual({ outcome: "excluded" }); expect(f.send).not.toHaveBeenCalled(); });
   it("skips every duplicate receipt without generating, task creation or send", async () => { const f = fixture(); f.store.claim.mockResolvedValue(null as never); expect(await f.run(input)).toEqual({ outcome: "duplicate" }); expect(f.generate).not.toHaveBeenCalled(); expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); });
   it("does not send an acknowledgment if durable task persistence fails", async () => { const f = fixture(); f.store.prepare.mockRejectedValue(new Error("storage failure")); expect(await f.run(input)).toEqual({ outcome: "failed" }); expect(f.send).not.toHaveBeenCalled(); expect(f.store.suppressBeforeSubmission).toHaveBeenCalled(); });
+  it("uses a durable staff-task fallback after generation fails, without rerunning the model", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE"));
+    expect(await f.run(input)).toEqual({ outcome: "accepted" });
+    expect(f.generate).toHaveBeenCalledTimes(1); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.store.prepare).toHaveBeenCalledWith(expect.anything(), {
+      replyText: "Sorry—I couldn't finish that response. I've flagged your message for our team to review.",
+      task: { title: "Review customer message after reply failure", items: [{ title: "Review the customer's message and follow up", evidenceQuote: input.inboundText }] },
+    }, { failures: [expect.objectContaining({ phase: "generation", code: "SMS_QUOTE_MODEL_PRICE" })] });
+    expect(f.send).toHaveBeenCalledTimes(1); expect(f.order.indexOf("task-and-text-durable")).toBeLessThan(f.order.indexOf("send"));
+    expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
+  });
+  it("falls back once when quote preparation fails, using the same receipt and no new model call", async () => {
+    const f = fixture(); f.store.prepare.mockRejectedValueOnce(new Error("SMS_QUOTE_STATE_CONFLICT"));
+    expect(await f.run(input)).toEqual({ outcome: "accepted" });
+    expect(f.generate).toHaveBeenCalledTimes(1); expect(f.store.claim).toHaveBeenCalledTimes(1);
+    expect(f.store.prepare).toHaveBeenCalledTimes(2);
+    expect(f.store.prepare.mock.calls[1]).toEqual([f.store.prepare.mock.calls[0][0], expect.objectContaining({ task: expect.anything() }),
+      { failures: [expect.objectContaining({ phase: "preparation", code: "SMS_QUOTE_STATE_CONFLICT" })] }]);
+    expect(f.send).toHaveBeenCalledTimes(1);
+  });
+  it("retains both failures and sends nothing when the fallback task cannot be persisted", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_INVALID_EVIDENCE"));
+    f.store.prepare.mockRejectedValue(new Error("CUSTOMER_REPLY_PREPARE_FAILED"));
+    expect(await f.run(input)).toEqual({ outcome: "failed" }); expect(f.send).not.toHaveBeenCalled();
+    expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", {
+      failures: [expect.objectContaining({ phase: "generation", code: "SMS_QUOTE_INVALID_EVIDENCE" }),
+        expect.objectContaining({ phase: "fallback_preparation", code: "CUSTOMER_REPLY_PREPARE_FAILED" })],
+    });
+  });
+  it("does not send a fallback when configuration changes during the failed generation", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE"));
+    f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null);
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" });
+    expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("does not substitute a fallback for stale or human-won preparation", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE")); f.store.prepare.mockResolvedValue(false);
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" });
+    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("never replaces or retries an uncertain fallback submission", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE")); f.send.mockRejectedValue(new Error("timeout"));
+    expect(await f.run(input)).toEqual({ outcome: "uncertain" });
+    expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.store.markUncertain).toHaveBeenCalledTimes(1); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
+  });
+  it("does not prepare fallback if configuration is disabled by the failed quote preparation", async () => {
+    const f = fixture(); f.store.prepare.mockImplementationOnce(async () => {
+      f.config.mockReturnValue(null); throw new Error("SMS_QUOTE_STATE_CONFLICT");
+    });
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" });
+    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.store.suppress).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED");
+    expect(f.send).not.toHaveBeenCalled();
+  });
+  it("rechecks configuration after the fallback is durable and before submission", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE"));
+    f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false })
+      .mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null);
+    expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "CONFIG_CHANGED"); expect(f.send).not.toHaveBeenCalled();
+  });
+  it("does not resend a fallback after provider acceptance persistence fails", async () => {
+    const f = fixture(); f.generate.mockRejectedValue(new Error("SMS_QUOTE_MODEL_PRICE"));
+    f.store.recordAcceptance.mockRejectedValue(new Error("unknown commit"));
+    expect(await f.run(input)).toEqual({ outcome: "uncertain" }); expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.store.markUncertain).toHaveBeenCalledTimes(1);
+    expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled();
+  });
   it("does not send stale or human-won claims", async () => { const f = fixture(); f.store.prepare.mockResolvedValue(false); expect(await f.run(input)).toEqual({ outcome: "suppressed" }); expect(f.send).not.toHaveBeenCalled(); });
   it.each([{ success: false }, { success: true }, { success: true, messageId: " " }])("never treats provider result %# as confirmed acceptance", async response => { const f = fixture(); f.send.mockResolvedValue(response as never); expect(await f.run(input)).toEqual({ outcome: "uncertain" }); expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.recordAcceptance).not.toHaveBeenCalled(); expect(f.store.markUncertain).toHaveBeenCalled(); });
   it("never retries a transport timeout or post-acceptance persistence uncertainty", async () => { const f = fixture(); f.send.mockRejectedValue(new Error("timeout")); expect(await f.run(input)).toEqual({ outcome: "uncertain" }); expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.suppressBeforeSubmission).not.toHaveBeenCalled(); const other = fixture(); other.store.recordAcceptance.mockRejectedValue(new Error("unknown commit")); expect(await other.run(input)).toEqual({ outcome: "uncertain" }); expect(other.send).toHaveBeenCalledTimes(1); expect(other.store.suppress).not.toHaveBeenCalled(); expect(other.store.suppressBeforeSubmission).not.toHaveBeenCalled(); });

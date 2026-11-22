@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createPublicBookingPriceSnapshot, PUBLIC_BOOKING_PRICED_EXTRAS } from "../../shared/publicBookingPricing";
 import { callBookingQuoteSendInputSchema, type CallBookingQuotePricing } from "./callBookingQuote";
+import { smsBookingQuoteSendInputSchema } from "./smsBookingQuoteSendSchema";
+import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQuestion";
 import {
   advanceSmsBookingQuote,
   assertSmsBookingQuoteModelText,
@@ -160,7 +162,15 @@ describe("pure progressive qualification and canonical parity", () => {
       requestedLocalDate: fullFields.requestedLocalDate, requestedLocalTime: fullFields.requestedLocalTime,
       pricing, notes: [],
     });
-    expect(callBookingQuoteSendInputSchema.safeParse({ ...result.input, extrasConfirmed: true, smsNumberConfirmed: true }).success).toBe(true);
+    const send = { ...result.input, extrasConfirmed: true, smsNumberConfirmed: true };
+    expect(smsBookingQuoteSendInputSchema.safeParse(send).success).toBe(true);
+    const call = callBookingQuoteSendInputSchema.safeParse(send);
+    expect(call.success).toBe(false);
+    if (call.success) throw new Error("Voice confirmations must remain required");
+    expect(call.error.issues.map(issue => issue.path.join("."))).toEqual(["customerNameConfirmed", "city", "addressConfirmed"]);
+    for (const key of ["customerNameConfirmed", "city", "addressConfirmed"]) {
+      expect(result.input).not.toHaveProperty(key); expect(result.state.fields).not.toHaveProperty(key);
+    }
     expect(result.input).not.toHaveProperty("token"); expect(result.state.link).toBeNull();
   });
   it.each(["collect", "quote"] as const)("does not return execution input for %s", action => {
@@ -170,7 +180,14 @@ describe("pure progressive qualification and canonical parity", () => {
   it("can preview pricing while contact/date/time remain missing", () => {
     const result = run({ ...pricing, extrasConfirmed: true }, { action: "quote" });
     expect(result.preview?.success).toBe(true); expect(result.input).toBeNull();
+    if (!result.preview?.success) throw new Error("Price-only quote must remain valid");
+    expect(result.preview.priceSnapshot).toEqual(createPublicBookingPriceSnapshot(pricing));
     expect(result.missing).toEqual(["customerName", "address", "requestedLocalDate", "requestedLocalTime"]);
+    expect(createSmsBookingQuoteMissingQuestion(result, "quote")).toBeNull();
+    for (const key of result.missing) expect(result.state.fields).not.toHaveProperty(key);
+    const link = run({ ...pricing, extrasConfirmed: true });
+    expect(link.input).toBeNull(); expect(link.preview?.success).toBe(true);
+    expect(createSmsBookingQuoteMissingQuestion(link, "link")).toBe("What name would you like to use for your cleaning quote?");
   });
   it.each(["home", "hourly"] as const)("matches every service and recurrence using the canonical engine in %s mode", pricingMode => {
     for (const serviceId of ["standard", "deep", "moveout"] as const) {
@@ -491,6 +508,7 @@ describe("additive SMS overlay and side-effect-free dependency surface", () => {
     expect(source).not.toMatch(/\b(?:getDb|sendSms|fetch|runInitialLeadDraft|executeCallBookingQuoteTool|createCustomerBookingLink)\s*\(/);
     expect(source).not.toMatch(/from ["'][^"']*(?:db|openphone|Application|Store|claudeAgentClient)["']/);
     expect(source).toContain("previewCallBookingQuote({ pricing, extrasConfirmed: true })");
-    expect(source).toContain("callBookingQuoteSendInputSchema.parse({");
+    expect(source).toContain("smsBookingQuoteSendInputSchema.parse({");
+    expect(source).not.toContain("callBookingQuoteSendInputSchema");
   });
 });

@@ -144,6 +144,13 @@ function transactionalDb() {
       Object.assign(row, { lastMessageText: p[1], lastMessageTs: p[2], lastMessageRole: "assistant", messageCount: row.messageCount + 1 });
       return [{ affectedRows: 1 }];
     }
+    if (s === "UPDATE madison_sms_drafts SET errorMessage = ? WHERE id = ? AND capability = ? AND status IN ('TOOLS_RUNNING', 'SENDING') AND outboundOpenPhoneId IS NULL AND sentAt IS NULL AND (errorCode IS NULL OR errorCode <> 'SUBMISSION_UNCERTAIN')") {
+      writes.push({ table: "madison_sms_drafts", kind: "failure-detail" });
+      const row = state.drafts.find(row => row.id === p[1] && row.capability === p[2]
+        && ["TOOLS_RUNNING", "SENDING"].includes(row.status) && !row.outboundOpenPhoneId && !row.sentAt && row.errorCode !== "SUBMISSION_UNCERTAIN");
+      if (!row) return [{ affectedRows: 0 }];
+      row.errorMessage = p[0]; return [{ affectedRows: 1 }];
+    }
     if (s.startsWith("UPDATE madison_sms_drafts SET status = 'SENDING', generatedDraft = ?") && s.endsWith("WHERE id = ? AND capability = ? AND status = 'TOOLS_RUNNING'")) {
       fail("receipt-prepare"); writes.push({ table: "madison_sms_drafts", kind: "prepare" });
       const row = state.drafts.find(row => row.id === p[3] && row.capability === p[4] && row.status === "TOOLS_RUNNING");
@@ -298,6 +305,17 @@ function expectAcceptedHistory(h: ReturnType<typeof harness>, input: CustomerSms
   expect(draft).toMatchObject({ status: "SENT", generatedDraft: submitted.content, approvedText: submitted.content });
   expect(draft).not.toHaveProperty("deliveredAt");
 }
+function expectSafeFallback(h: ReturnType<typeof harness>, input: CustomerSmsInput) {
+  const reply = "Sorry—I couldn't finish that response. I've flagged your message for our team to review.";
+  const task = h.tasks().find(value => value.sourceMessageId === input.providerMessageId)!;
+  expect(task).toMatchObject({ title: "Review customer message after reply failure", status: "unclaimed",
+    items: [{ title: "Review the customer's message and follow up", evidenceQuote: input.inboundText }],
+    reply: { text: reply, status: "sent" } });
+  const receipt = h.state().drafts.find(value => value.inboundOpenPhoneId === input.providerMessageId)!;
+  expect(receipt.generatedDraft).toBe(reply); expect(JSON.parse(receipt.errorMessage).failures).not.toHaveLength(0);
+  expect(receipt.generatedDraft).not.toMatch(/\$|https?:|\{\{|confirmed|reserved|processed your payment/i);
+  expectAcceptedHistory(h, input);
+}
 function canonicalInput(fields = fullFields) {
   const { customerName, address, requestedLocalDate, requestedLocalTime } = fields;
   return { customerName: customerName!, customerPhone: PHONE, address: address!, requestedLocalDate: requestedLocalDate!, requestedLocalTime: requestedLocalTime!,
@@ -322,6 +340,74 @@ afterEach(() => {
 });
 
 describe("SMS new-booking quote application: real generator → qualification → canonical link → original task/receipt → one sender", () => {
+  it("keeps the last valid pricing state after an invalid model price and answers the next price message normally", async () => {
+    const h = harness(), collected = { ...pricing, extrasConfirmed: true };
+    expect((await h.turn("Deep home cleaning, 3 bedrooms, 2 bathrooms, House, condition 5, biweekly; no extras confirmed.", collected, "collect")).result.outcome).toBe("accepted");
+    const before = structuredClone(h.quote());
+    const bad = await h.turn("What is the price", {}, "quote", { replyText: "It costs $1." });
+    expect(bad.result.outcome).toBe("accepted"); expectSafeFallback(h, bad.input);
+    expect(h.quote()).toEqual(before); expect(h.state().funnels).toEqual([]);
+    const next = await h.turn("Please tell me the actual quote price.", {}, "quote");
+    expect(next.result.outcome).toBe("accepted");
+    const preview = previewCallBookingQuote({ pricing, extrasConfirmed: true });
+    if (!preview.success) throw Error("Expected canonical price");
+    expect(h.send.mock.calls[2][0].content).toContain(preview.priceFormatted);
+    expect(h.send.mock.calls[2][0].content).not.toContain("couldn't finish");
+    expect(h.tasks()).toHaveLength(1); expect(h.runner).toHaveBeenCalledTimes(3); expectAcceptedHistory(h, next.input);
+  });
+  it("claims one receipt and sends one task-backed fallback for concurrent duplicate deliveries of invalid model output", async () => {
+    const h = harness(), input = h.append("What is the price"); h.queue("invalid JSON output");
+    const results = await Promise.all([h.run(input), h.run(input), h.run(input)]);
+    expect(results.filter(value => value.outcome === "accepted")).toHaveLength(1);
+    expect(results.filter(value => value.outcome === "duplicate")).toHaveLength(2);
+    expectSafeFallback(h, input); expect(h.tasks()).toHaveLength(1);
+    expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
+    expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]);
+  });
+  it.each(["new-inbound", "human-reply", "global-optout", "session-optout", "line-changed", "phone-changed", "config-changed"])
+    ("does not send fallback when %s makes the invalid generation stale or ineligible", async change => {
+      const h = harness(), input = h.append("What is the price"); h.queue("invalid JSON output");
+      h.afterModel(() => {
+        if (change === "new-inbound") h.append("Please wait for my next message.");
+        if (change === "human-reply") h.row().messageHistory = JSON.stringify([...h.history(), { role: "assistant", content: "A human answered.", opMsgId: "human-outbound" }]);
+        if (change === "global-optout") h.state().optouts.push({ id: 1, phone: PHONE });
+        if (change === "session-optout") h.row().smsOptOut = 1;
+        if (change === "line-changed") h.row().lastInboundPhoneNumberId = LINE_TWO;
+        if (change === "phone-changed") h.row().leadPhone = "+17035559876";
+        if (change === "config-changed") h.changeConfig({ ...h.config(), startAt: NOW - 2 });
+      });
+      expect(await h.run(input)).toEqual({ outcome: "suppressed" });
+      expect(h.send).not.toHaveBeenCalled(); expect(h.tasks()).toEqual([]); expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]);
+    });
+  it("answers 'What is the price' with the canonical total before collecting date/address and continues to a valid SMS link", async () => {
+    const h = harness();
+    // Synthetic, explicit pricing inputs; this is not a reconstruction of Jody's unknown full quote state.
+    const selections: CallBookingQuotePricing = { ...pricing, condition: 10, extras: [
+      { id: "inside-oven", quantity: 1 }, { id: "interior-windows", quantity: 3 },
+      { id: "organizing-hour", quantity: 1 }, { id: "laundry-load", quantity: 3 },
+    ] };
+    const collect = await h.turn("Deep home clean, 3 bedrooms, 2 bathrooms, House, condition 10, biweekly. Inside oven 1, interior windows 3, organizing 1 hour, laundry 3 loads; those extras are confirmed.",
+      { ...selections, extrasConfirmed: true }, "collect");
+    expect(collect.result.outcome).toBe("accepted");
+    const quote = await h.turn("What is the price", {}, "quote");
+    expect(quote.result.outcome).toBe("accepted");
+    const preview = previewCallBookingQuote({ pricing: selections, extrasConfirmed: true });
+    if (!preview.success) throw Error("Expected synthetic canonical price");
+    const response = h.send.mock.calls[1][0].content;
+    expect(response).toContain(preview.priceFormatted); expect(response).toContain(preview.futureVisitPriceFormatted!);
+    expect(response).toContain("Inside Oven"); expect(response).toContain("Interior Windows");
+    expect(response).toContain("One Hour of Organizing"); expect(response).toContain("Laundry");
+    expect(response).not.toContain("couldn't finish"); expect(h.tasks()).toEqual([]); expect(h.state().funnels).toEqual([]);
+    expect(h.quote()?.fields).not.toHaveProperty("requestedLocalDate"); expectAcceptedHistory(h, quote.input);
+    const request = await h.turn("Can you send my booking link?", {}, "link");
+    expect(request.result.outcome).toBe("accepted"); expect(h.state().funnels).toEqual([]);
+    expect(h.send.mock.calls[2][0].content).not.toMatch(/couldn't finish|https?:/);
+    const linked = await h.turn(`My name is ${NAME}, address ${ADDRESS}, November 20 at 10:30 am. Send the booking link.`,
+      { customerName: NAME, address: ADDRESS, requestedLocalDate: "2026-11-20", requestedLocalTime: "10:30" }, "link");
+    expect(linked.result.outcome).toBe("accepted"); expect(h.state().funnels).toHaveLength(1);
+    expect(h.send.mock.calls[3][0].content).toContain(`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`);
+    expect(h.runner).toHaveBeenCalledTimes(4); expect(h.send).toHaveBeenCalledTimes(4); expectAcceptedHistory(h, linked.input);
+  });
   it("collects a multi-turn quote durably, never invents empty extras or re-asks known name/address/time, and matches call/shared canonical prices exactly", async () => {
     const h = harness();
     const first = await h.turn(`I want a new deep home cleaning quote. My name is ${NAME}. The address is ${ADDRESS}, Friday November 20 at 10:30 am.`, {
@@ -694,7 +780,7 @@ describe("SMS new-booking quote application: real generator → qualification �
     expect(h.send.mock.calls[2][0].content).toContain(original.link!.token);
   });
 
-  it.each(["fingerprint", "input", "quote-id", "customer-phone", "url-path", "price"])("rejects a tampered historical %s receipt before generation, persistence or another send", async corruption => {
+  it.each(["fingerprint", "input", "quote-id", "customer-phone", "url-path", "price"])("rejects a tampered historical %s quote and sends only the task-backed fallback", async corruption => {
     const h = harness(); await h.turn();
     await h.turn("Use 4 bedrooms for this new quote and send the revised link.", { bedrooms: 4 });
     const card = h.quoteRows()[0], envelope = JSON.parse(card.metadata);
@@ -710,11 +796,11 @@ describe("SMS new-booking quote application: real generator → qualification �
     card.metadata = JSON.stringify(envelope);
     const before = structuredClone({ cards: h.state().cards, funnels: h.state().funnels }), input = h.append("Return to 3 bedrooms and send my new quote link.");
     h.queue(h.output(input, { bedrooms: 3 }));
-    expect(await h.run(input)).toEqual({ outcome: "failed" });
-    expect(h.state().cards).toEqual(before.cards); expect(h.state().funnels).toEqual(before.funnels);
-    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.send).toHaveBeenCalledTimes(2);
-    expect(h.state().drafts.at(-1)).toMatchObject({ status: "DISMISSED", errorCode: "GENERATION_OR_PERSISTENCE_FAILED" });
-    expect(h.history().filter(turn => turn.role === "assistant")).toHaveLength(2);
+    expect(await h.run(input)).toEqual({ outcome: "accepted" });
+    expect(h.state().cards.filter(row => before.cards.some(old => old.id === row.id))).toEqual(before.cards);
+    expect(h.state().funnels).toEqual(before.funnels);
+    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.send).toHaveBeenCalledTimes(3);
+    expectSafeFallback(h, input); expect(h.history().filter(turn => turn.role === "assistant")).toHaveLength(3);
   });
 
   it("a simultaneous repeated provider delivery can generate, create a link and submit only once even across fresh factories", async () => {
@@ -865,9 +951,9 @@ describe("SMS new-booking quote application: real generator → qualification �
     const value = await h.turn(FULL_TEXT, fullFields, "link", {
       quoteTextTemplate: "First cleaning: {{firstCleaningPrice}}. Review: {{bookingLink}}. Again: {{bookingLink}}.",
     });
-    expect(value.result).toEqual({ outcome: "failed" });
-    expect(h.writes.some(write => write.table === "booking_funnel_records" || write.table === "ops_chat_messages")).toBe(false);
-    expect(h.send).not.toHaveBeenCalled();
+    expect(value.result).toEqual({ outcome: "accepted" }); expectSafeFallback(h, value.input);
+    expect(h.writes.some(write => write.table === "booking_funnel_records" || write.kind === SMS_BOOKING_QUOTE_ACTION)).toBe(false);
+    expect(h.quoteRows()).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
   });
 
   it("uses a Spanish server-owned summary with complete canonical facts instead of the model acknowledgement without a legacy template", async () => {
@@ -935,9 +1021,10 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
     expect(await h.run(input)).toEqual({ outcome: "failed" }); expect(h.state().drafts).toEqual([]); expect(h.runner).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled(); expect(h.quoteRows()).toEqual([]);
   });
 
-  it.each(["customerPhone", "fromNumberId", "url", "price", "customPriceCents"])("rejects model-owned %s without creating quote/link/task/sender effects", async key => {
+  it.each(["customerPhone", "fromNumberId", "url", "price", "customPriceCents"])("rejects model-owned %s and sends only a safe task-backed fallback", async key => {
     const h = harness(), input = h.append(FULL_TEXT), output = h.output(input, fullFields); (output.bookingQuote.fields as Row)[key] = "untrusted"; h.queue(output);
-    expect(await h.run(input)).toEqual({ outcome: "failed" }); expect(h.send).not.toHaveBeenCalled(); expect(h.state().cards).toEqual([]); expect(h.state().funnels).toEqual([]);
+    expect(await h.run(input)).toEqual({ outcome: "accepted" }); expectSafeFallback(h, input);
+    expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -961,8 +1048,8 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
     ["unknown template placeholder", { quoteTextTemplate: "{{firstCleaningPrice}} {{bookingLink}} {{customPrice}}" }],
   ])("rejects active %s rather than trusting the model with prices, links or completed-business claims", async (_label, patch) => {
     const h = harness(), input = h.append(FULL_TEXT); h.queue(h.output(input, fullFields, "link", patch as Row));
-    expect(await h.run(input)).toEqual({ outcome: "failed" });
-    expect(h.state().cards).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.send).not.toHaveBeenCalled();
+    expect(await h.run(input)).toEqual({ outcome: "accepted" }); expectSafeFallback(h, input);
+    expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
   });
 
   it("does not make an incomplete link request bookable or invent extras while their selection is still unknown", async () => {
@@ -989,18 +1076,24 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
       for (const evidence of Object.values(output.bookingQuote.evidence)) evidence.turnIndex = 2;
       output.bookingQuote.evidence.bedrooms = { turnIndex: 0, quote: "3 bedrooms" };
     }
-    h.queue(output); expect(await h.run(input)).toEqual({ outcome: "failed" });
-    expect(h.state().funnels).toEqual([]); expect(h.state().cards).toEqual([]); expect(h.send).not.toHaveBeenCalled();
+    h.queue(output); expect(await h.run(input)).toEqual({ outcome: "accepted" }); expectSafeFallback(h, input);
+    expect(h.state().funnels).toEqual([]); expect(h.quoteRows()).toEqual([]); expect(h.send).toHaveBeenCalledTimes(1);
   });
 
   it.each(["funnel", "state-insert", "state-save", "task-insert", "task-save", "receipt-prepare", "receipt-insert"] as Fault[])("rolls back all quote/link/task effects when %s persistence fails before submission", async fault => {
     const h = harness(), input = h.append(`${FULL_TEXT} Also update my gate note to use gate 1234.`);
     h.queue(h.output(input, fullFields, "link", { task: { title: "Update the existing customer access note", items: [{ title: "Update the gate note", evidenceQuote: "use gate 1234" }] } }));
     const beforeHistory = h.row().messageHistory; h.setFault(fault);
-    expect(await h.run(input)).toEqual({ outcome: "failed" });
-    expect(h.state().cards).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.row().messageHistory).toBe(beforeHistory); expect(h.send).not.toHaveBeenCalled();
-    if (fault === "receipt-insert") expect(h.state().drafts).toEqual([]);
-    else expect(h.state().drafts[0]).toMatchObject({ status: "DISMISSED", errorCode: "GENERATION_OR_PERSISTENCE_FAILED" });
+    const canPersistFallback = ["funnel", "state-insert", "state-save"].includes(fault);
+    expect(await h.run(input)).toEqual({ outcome: canPersistFallback ? "accepted" : "failed" });
+    expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]);
+    if (canPersistFallback) {
+      expectSafeFallback(h, input); expect(h.send).toHaveBeenCalledTimes(1); expect(h.tasks()).toHaveLength(1);
+    } else {
+      expect(h.state().cards).toEqual([]); expect(h.row().messageHistory).toBe(beforeHistory); expect(h.send).not.toHaveBeenCalled();
+      if (fault === "receipt-insert") expect(h.state().drafts).toEqual([]);
+      else expect(h.state().drafts[0]).toMatchObject({ status: "DISMISSED", errorCode: "GENERATION_OR_PERSISTENCE_FAILED" });
+    }
     expect(h.events).toContain("rollback");
     expect(h.events).toContain(`fault:${fault}`);
   });
