@@ -1,3 +1,5 @@
+import { withoutApprovedSmsTaskTimeline } from "./taskSmsTimelineSourceControl";
+
 /** Test-only: remove only the fixed phone-format/related-SMS-task UI hunks.
  * Historical byte guards stay unchanged; behavioral tests execute the actual source. */
 const approved: Record<string, Array<[string, string]>> = {
@@ -33,6 +35,7 @@ const approved: Record<string, Array<[string, string]>> = {
   ]
 };
 export function withoutApprovedTaskConversationDisplay(path: string, source: string): string {
+  source = withoutApprovedSmsTaskTimeline(path, source);
   for (const [current, original] of approved[path] ?? []) {
     const count = source.split(current).length - 1;
     if (count !== 0 && count !== 1) throw new Error(`Unexpected conversation-display preservation hunk: ${path}`);

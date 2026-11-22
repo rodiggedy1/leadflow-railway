@@ -8,6 +8,7 @@ import * as provenance from "../shared/smsSenderProvenance";
 import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema } from "../shared/claudeSmsAlternative";
 import { claudeInitialLeadInputSchema, claudeInitialLeadResultSchema } from "../shared/claudeInitialLead";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "../shared/csInboxPhoneNumberRouting";
+import { actualSmsTaskMessageAnchors, expandSmsTaskTimeline } from "./smsTaskTimelineUiHarness";
 
 // Actual UI source only: injected hooks and synthetic tRPC callbacks. No app,
 // router, DB, auth, provider, model, real data, or network imports/invocations.
@@ -73,17 +74,18 @@ function workspace(options: { initial?: boolean; history?: unknown[] } = {}) {
   let tokenRead = false;
   const fetchMock = vi.fn(async () => ({ ok: true, body: { getReader: () => ({ read: async () => { if (tokenRead) return { done: true }; tokenRead = true; return { done: false, value: new TextEncoder().encode('data: {"token":"Existing OpenAI draft."}\n') }; }, cancel: async () => {} }) } }));
   const module = { exports: {} as { Drawer: (props: any) => Element } };
+  const timeline = ({ children }: any) => children(() => null);
   runInNewContext(compiled, { module, exports: module.exports, React, ...hooks, trpc, ...provenance,
     claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema,
     getCsInboxReplyPhoneNumberIdForSelectedConversation, normalizedLeadPhone: (value: string | null) => value?.replace(/\D/g, "").slice(-10) || "",
-    ClaudeSmsConversationTasks: () => null, // Actual related-task behavior is covered by the task UI harness.
+    ClaudeSmsConversationTasks: timeline, customerSmsTaskMessageAnchors: actualSmsTaskMessageAnchors, Fragment: React.Fragment,
     ...Object.fromEntries(["Users", "Eye", "X", "CalendarClock", "Sparkles", "ChevronRight", "Loader2", "RefreshCw", "ChevronDown", "Pencil", "Send"].map(name => [name, icon])), Avatar: avatar,
     smsConversationName: (value: any) => value.leadName, customerPortraitFor: () => "/synthetic.png", displayLeadSource: () => "CS", renderMessageBody: (value: string) => value, formatTime: () => "10:00 AM",
     fetch: fetchMock, crypto: { randomUUID: () => REQUEST }, AbortController, TextDecoder, console: { warn: vi.fn() }, requestAnimationFrame: () => 1, cancelAnimationFrame: vi.fn(), Date,
     QUOTE_EXTRA_ICONS: {}, QUOTE_EXTRA_OPTIONS: [], firstName: (value: string) => value.split(" ")[0], quoteHomeType: () => "Home", window: { location: { origin: "https://synthetic.invalid" } },
   }, { timeout: 1500 });
   let tree: Element;
-  const render = () => { for (let pass = 0; pass < 12; pass++) { dirty = false; cursor = 0; tree = module.exports.Drawer({ conversation: selected, conversations: live, callerName: staff, callerPhotoUrl: "/staff.png", photoMap: { [staff]: "/staff.png", Rohan: "/rohan.png" }, businessDate: "2026-11-16", leadCardPhone: phone, leadCardSnapshot: phone ? lead : null, lead: null, onNotice: vi.fn(), onOpenLeadDetails: vi.fn(), onSessionResolved: vi.fn(), onClose: vi.fn() }); const pending = effects; effects = []; pending.forEach(run => run()); if (!dirty) return tree; } throw new Error("Synthetic drawer did not settle"); };
+  const render = () => { for (let pass = 0; pass < 12; pass++) { dirty = false; cursor = 0; tree = expandSmsTaskTimeline(module.exports.Drawer({ conversation: selected, conversations: live, callerName: staff, callerPhotoUrl: "/staff.png", photoMap: { [staff]: "/staff.png", Rohan: "/rohan.png" }, businessDate: "2026-11-16", leadCardPhone: phone, leadCardSnapshot: phone ? lead : null, lead: null, onNotice: vi.fn(), onOpenLeadDetails: vi.fn(), onSessionResolved: vi.fn(), onClose: vi.fn() }), timeline); const pending = effects; effects = []; pending.forEach(run => run()); if (!dirty) return tree; } throw new Error("Synthetic drawer did not settle"); };
   const settle = async () => { for (let i = 0; i < 20; i++) { await Promise.resolve(); if (dirty) render(); } return render(); };
   const edit = (value: string) => composer(render()).props.onChange({ target: { value } });
   const click = (label: string) => { const node = button(render(), label); expect(node).toBeDefined(); node.props.onClick(); };

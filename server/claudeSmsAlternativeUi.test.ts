@@ -9,6 +9,7 @@ import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSche
 import { THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, type ClaudeInitialLeadFacts, type ClaudeInitialLeadInput, type ClaudeInitialLeadResult } from "../shared/claudeInitialLead";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "../shared/csInboxPhoneNumberRouting";
 import { claudeDraftSourceSchema, reviewedClaudeSmsProvenance, smsSenderLabel, smsSenderProvenanceSchema } from "../shared/smsSenderProvenance";
+import { actualSmsTaskMessageAnchors, expandSmsTaskTimeline } from "./smsTaskTimelineUiHarness";
 
 // Local actual-source controller/render gate. No router, DB, authentication,
 // provider, model, network, or real customer data is imported or invoked.
@@ -98,7 +99,7 @@ const click = (node: Element | undefined) => { expect(node).toBeDefined(); (node
 const textarea = (tree: unknown) => elements(tree).find((node) => node.type === "textarea")!;
 
 function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: string; history?: string; primary?: "pending" | "fallback";
-  lead?: LeadSnapshot | null; snapshot?: LeadSnapshot | null; leadDraft?: Props["leadDraft"]; noDetail?: boolean } = {}) {
+  lead?: LeadSnapshot | null; snapshot?: LeadSnapshot | null; leadDraft?: Props["leadDraft"]; noDetail?: boolean; taskRows?: Record<string, string[]> } = {}) {
   let selected = conversation(options.selected);
   let detail: Detail | undefined = options.noDetail ? undefined : { sessionId: selected.id, leadPhone: selected.leadPhone, messageHistory: options.history ?? history() };
   let snapshot = options.snapshot;
@@ -170,9 +171,11 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   const module = { exports: {} as { Drawer: (props: Props) => React.ReactElement } };
   const uuid = vi.fn();
   uuid.mockReturnValueOnce("00000000-0000-4000-8000-000000000001").mockReturnValue("00000000-0000-4000-8000-000000000002");
+  const timeline = ({ children }: any) => children((id: string) => (options.taskRows?.[id] ?? []).map((title, index) =>
+    React.createElement("button", { key: index, "data-synthetic-task-source": id }, title)));
   runInNewContext(compiled, { module, exports: module.exports, React, ...hooks, trpc,
     ...Object.fromEntries(iconNames.map((name) => [name, icon])), Avatar: icon,
-    ClaudeSmsConversationTasks: () => null, // Actual related-task behavior is covered by the task UI harness.
+    ClaudeSmsConversationTasks: timeline, customerSmsTaskMessageAnchors: actualSmsTaskMessageAnchors, Fragment: React.Fragment,
     claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, getCsInboxReplyPhoneNumberIdForSelectedConversation,
     claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, normalizedLeadPhone,
     claudeDraftSourceSchema, reviewedClaudeSmsProvenance, smsSenderLabel, smsSenderProvenanceSchema,
@@ -185,9 +188,9 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   const render = () => {
     for (let pass = 0; pass < 12; pass++) {
       dirty = false; cursor = 0;
-      tree = module.exports.Drawer({ conversation: selected, conversations: live, callerName: "Synthetic office", callerPhotoUrl: null,
+      tree = expandSmsTaskTimeline(module.exports.Drawer({ conversation: selected, conversations: live, callerName: "Synthetic office", callerPhotoUrl: null,
         photoMap: {}, businessDate: "2026-11-15", leadCardPhone, lead: options.lead ?? null, leadCardSnapshot: snapshot, leadDraft,
-        onNotice: notice, onOpenLeadDetails: vi.fn(), onSessionResolved: vi.fn(), onClose: vi.fn() });
+        onNotice: notice, onOpenLeadDetails: vi.fn(), onSessionResolved: vi.fn(), onClose: vi.fn() }), timeline);
       const pending = jobs; jobs = []; pending.forEach((run) => run());
       if (!dirty) return tree;
     }
@@ -531,5 +534,56 @@ describe("optional Claude first lead draft in the existing workspace", () => {
     await work.settle(); click(findButton(work.render(), "Get Claude draft")); work.dispose();
     work.initialResponse.resolve(initialResult(work.generateInitial.mock.calls[0][0])); for (let turn = 0; turn < 20; turn++) await Promise.resolve();
     expect(work.lateWrites).toBe(0); expect(work.workspaceSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("SMS tasks in the actual conversation timeline — offline", () => {
+  const flow = (tree: unknown) => {
+    const scroller = elements(tree).find(node => node.props.className === "ccc-live-sms-messages")!;
+    return elements(scroller).filter(node => (typeof node.props.className === "string" && node.props.className.startsWith("ccc-live-sms-message "))
+      || Boolean(node.props["data-synthetic-task-source"])).map(node => node.props["data-synthetic-task-source"]
+        ? text(node) : text(elements(node).find(child => child.type === "p")));
+  };
+  it("places multiple tasks after their own request, before subsequent real replies, using display order rather than task status", () => {
+    const original = [
+      { role: "assistant", content: "Second actual reply", ts: 40, opMsgId: "OUT_2" },
+      { role: "user", content: "Same customer wording", ts: 30, metadata: { providerMessageId: "B" } },
+      { role: "assistant", content: "First actual reply", ts: 20, opMsgId: "OUT_1" },
+      { role: "user", content: "Same customer wording", ts: 10, openPhoneMessageId: "A" },
+    ];
+    const taskRows = { A: ["First task — Done", "Second task — Open"], B: ["Third task — Open"], OUT_1: ["Must never attach to a reply"] };
+    const w = workspace({ history: JSON.stringify(original), primary: "pending", taskRows });
+    expect(flow(w.render())).toEqual(["Same customer wording", "First task — Done", "Second task — Open", "First actual reply",
+      "Same customer wording", "Third task — Open", "Second actual reply"]);
+    expect(elements(w.render()).filter(node => node.props.className === "ccc-live-sms-messages")).toHaveLength(1);
+    expect(w.send).not.toHaveBeenCalled(); expect(w.workspaceSend).not.toHaveBeenCalled();
+    taskRows.A[1] = "Second task — Done";
+    expect(flow(w.render())).toEqual(["Same customer wording", "First task — Done", "Second task — Done", "First actual reply",
+      "Same customer wording", "Third task — Open", "Second actual reply"]);
+    expect(original.map(message => message.content)).toEqual(["Second actual reply", "Same customer wording", "First actual reply", "Same customer wording"]);
+    w.dispose();
+  });
+  it.each([
+    [{ role: "user", content: "Request", ts: 10 }],
+    [{ role: "user", content: "Request", ts: 10, opMsgId: "A", metadata: { providerMessageId: "OTHER" } }],
+    [{ role: "user", content: "Request", ts: 10, opMsgId: "A" }, { role: "user", content: "Duplicate", ts: 11, opMsgId: "A" }],
+    [{ role: "user", content: "Request", ts: 10, opMsgId: "A" }, { role: "user", content: " ", ts: 11, opMsgId: "A" }],
+    [{ role: "user", content: "Request", ts: 10, opMsgId: "A" }, { role: "assistant", content: "Outbound collision", ts: 11, opMsgId: "A" }],
+  ].map(messages => ({ messages })))("does not manufacture an anchor from missing, conflicting, duplicate, hidden or outbound-colliding saved IDs %#", ({ messages }) => {
+    const w = workspace({ history: JSON.stringify(messages), primary: "pending", taskRows: { A: ["Unsafe task"] } });
+    expect(elements(w.render()).filter(node => node.props["data-synthetic-task-source"])).toHaveLength(0);
+    expect(text(w.render())).not.toContain("Unsafe task");
+    expect(flow(w.render())[0]).toBe("Request");
+    w.dispose();
+  });
+  it("requires the loaded detail to belong to the selected exact session and does not hide normal history while loading", () => {
+    const messages = [{ role: "user", content: "Request", ts: 10, opMsgId: "A" }];
+    const w = workspace({ history: JSON.stringify(messages), primary: "pending", taskRows: { A: ["Bound task"] } });
+    expect(flow(w.render())).toEqual(["Request", "Bound task"]);
+    w.setDetail({ sessionId: 43, leadPhone: "+13015550123", messageHistory: JSON.stringify(messages) });
+    expect(flow(w.render())).toEqual(["Request"]);
+    w.setDetail(undefined); expect(text(w.render())).toContain("Loading text history…");
+    expect(elements(w.render()).filter(node => node.props["data-synthetic-task-source"])).toHaveLength(0);
+    w.dispose();
   });
 });

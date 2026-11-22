@@ -52,20 +52,18 @@
 .cct-phone-transcript p.cct-verbatim { margin: 0 0 14px; }
 .cct-phone-transcript p.cct-verbatim:last-child { margin-bottom: 0; }
 .cct-phone-transcript .cct-phone-transcript-notice { margin: 0; padding: 9px 11px; border-radius: 6px; background: #302d38; color: #c9c2d2; font-size: 11px; line-height: 1.5; }
-.cct-related-tasks { flex-shrink: 0; min-width: 0; margin: 0 16px 10px; padding: 10px; border: 1px solid #50425e; border-radius: 8px; background: #24202c; color: #e7dff1; font-size: 11px; }
-.cct-related-tasks > summary { display: flex; align-items: center; gap: 7px; cursor: pointer; list-style: none; }
-.cct-related-tasks > summary::-webkit-details-marker { display: none; }
-.cct-related-tasks > summary > svg { width: 14px; height: 14px; flex-shrink: 0; }
-.cct-related-tasks > summary > span { margin-left: auto; color: #b8abc6; font-size: 10px; }
-.cct-related-tasks[open] > summary > svg:last-child { transform: rotate(180deg); }
-.cct-related-task-list { display: grid; gap: 5px; max-height: min(180px, 22dvh); margin: 10px 0 0; padding-left: 20px; overflow-y: auto; }
-.cct-related-task-list > li::marker { color: #a895bb; }
-.cct-related-task-list button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 1px solid #403748; border-radius: 6px; background: #302737; color: #efe8f7; font: inherit; text-align: left; cursor: pointer; }
-.cct-related-task-title { min-width: 0; flex: 1; overflow-wrap: anywhere; }
-.cct-related-task-status { flex-shrink: 0; padding: 3px 6px; border-radius: 4px; background: #54422e; color: #f2d3a7; font-size: 10px; }
-.cct-related-task-status[data-status="done"] { background: #2b493b; color: #bce1cf; }
+.cct-message-tasks { display: grid; align-self: flex-start; gap: 6px; width: min(100%, 540px); min-width: 0; margin: -4px 0 4px; color: #e7dff1; font-size: 11px; }
+.cct-message-task { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 42px; padding: 9px 10px; border: 1px solid #50425e; border-left: 3px solid #ad8bf2; border-radius: 7px; background: #302737; color: #efe8f7; font: inherit; line-height: 1.45; text-align: left; cursor: pointer; }
+.cct-message-task:hover { border-color: #8b73ac; background: #382c42; }
+.cct-message-task-label { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; color: #d2b5ff; font-size: 10px; font-weight: 700; }
+.cct-message-task-label svg { width: 14px; height: 14px; flex-shrink: 0; }
+.cct-message-task-title { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.cct-message-task-status { flex-shrink: 0; padding: 3px 6px; border-radius: 4px; background: #54422e; color: #f2d3a7; font-size: 10px; }
+.cct-message-task-status[data-status="done"] { background: #2b493b; color: #bce1cf; }
+.cct-message-tasks p { margin: 0; color: #b8abc6; line-height: 1.45; }
+.cct-message-tasks p button { margin-left: 4px; border: 0; background: transparent; color: #d2b5ff; font: inherit; text-decoration: underline; cursor: pointer; }
 .cct-confirm-dialog.cct-related-task-dialog { width: min(540px, calc(100vw - 32px)); max-width: 540px; }
-.cct-related-tasks button:focus-visible, .cct-related-tasks > summary:focus-visible { outline: 2px solid #b6a0cf; outline-offset: 3px; }
+.cct-message-tasks button:focus-visible { outline: 2px solid #b6a0cf; outline-offset: 3px; }
 .cct-source-message { padding: 9px; border: 1px solid #71558f; border-left: 3px solid #ba95ed; border-radius: 6px; background: #352b43; }
 .cct-source-message h4 { color: #dcc5fa; }
 .cct-source-message .cct-verbatim { color: #f5f0fa; font-size: 12px; line-height: 1.5; }

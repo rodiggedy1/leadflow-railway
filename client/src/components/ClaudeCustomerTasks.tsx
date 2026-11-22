@@ -139,29 +139,49 @@ function useCustomerTasks() {
 export function customerSmsConversationTasks(tasks: readonly CustomerTask[], sessionId: number): CustomerTask[] {
   if (!Number.isSafeInteger(sessionId) || sessionId <= 0) return [];
   return tasks.filter(task => !("call" in task) && !("email" in task) && task.sessionId === sessionId)
-    .sort((left, right) => Number(left.status === "done") - Number(right.status === "done")
-      || right.receivedAt - left.receivedAt || right.id - left.id);
+    .sort((left, right) => left.receivedAt - right.receivedAt || left.id - right.id);
+}
+
+type SmsTaskSourceMessage = { role?: unknown; opMsgId?: unknown; openPhoneId?: unknown; openPhoneMessageId?: unknown; providerMessageId?: unknown; metadata?: unknown };
+/** Same retained provider-ID aliases as the saved SMS binding; never infer from text/time. */
+export function customerSmsTaskMessageAnchors(messages: readonly SmsTaskSourceMessage[]): Array<string | null> {
+  const counts = new Map<string, number>();
+  const candidates = messages.map(message => {
+    if (!message) return null;
+    const metadata = message.metadata && typeof message.metadata === "object" && !Array.isArray(message.metadata)
+      ? message.metadata as SmsTaskSourceMessage : null;
+    const ids = Array.from(new Set([message, metadata].flatMap(part => part
+      ? [part.opMsgId, part.openPhoneId, part.openPhoneMessageId, part.providerMessageId] : [])
+      .filter((id): id is string => typeof id === "string" && Boolean(id.trim()))));
+    ids.forEach(id => counts.set(id, (counts.get(id) ?? 0) + 1));
+    return (message.role === "user" || message.role === "customer") && ids.length === 1 ? ids[0] : null;
+  });
+  return candidates.map(id => id !== null && counts.get(id) === 1 ? id : null);
 }
 
 /** Reuse the shared authenticated list and task card; opening a task is read-only. */
-export function ClaudeSmsConversationTasks({ sessionId }: { sessionId: number }) {
+export function ClaudeSmsConversationTasks({ sessionId, children }: { sessionId: number; children: (afterMessage: (sourceMessageId: string) => ReactNode) => ReactNode }) {
   const context = useCustomerTasks();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
   const tasks = customerSmsConversationTasks(context.tasks, sessionId);
   const selected = tasks.find(task => task.id === selectedId) ?? null;
-  const openCount = tasks.filter(task => task.status !== "done").length;
-  if (!tasks.length && !context.loading && !context.failed) return null;
-  return <>
-    <details className="cct-related-tasks" open key={sessionId}>
-      <summary><ClipboardList aria-hidden="true" /><strong>Related tasks</strong><span>{context.loading ? "Loading…" : context.failed && (!tasks.length || !context.transientFailure) ? "Unavailable" : `${openCount} Open · ${tasks.length - openCount} Done`}</span><ChevronDown aria-hidden="true" /></summary>
-      {context.failed && <p role="alert">Related tasks could not be refreshed. {context.transientFailure && tasks.length > 0 && "Showing the last loaded status. "}<button type="button" onClick={() => void context.refresh()}>Retry</button></p>}
-      {context.loading ? <p role="status">Loading related tasks…</p> : (!context.failed || context.transientFailure) && tasks.length > 0 && <ol className="cct-related-task-list">{tasks.map(task => <li key={task.id}>
-        <button type="button" aria-haspopup="dialog" aria-label={`View task: ${task.title} — ${task.status === "done" ? "Done" : "Open"}`} onClick={event => { opener.current = event.currentTarget; setSelectedId(task.id); }}>
-          <span className="cct-related-task-title">{task.title}</span><span className="cct-related-task-status" data-status={task.status === "done" ? "done" : "open"}>{task.status === "done" ? "Done" : "Open"}</span>
+  const byMessage = new Map<string, CustomerTask[]>();
+  tasks.forEach(task => byMessage.set(task.sourceMessageId, [...(byMessage.get(task.sourceMessageId) ?? []), task]));
+  const afterMessage = (sourceMessageId: string) => {
+    const attached = byMessage.get(sourceMessageId) ?? [];
+    if (!attached.length) return null;
+    return <div className="cct-message-tasks" aria-label="Tasks from this message">
+      {context.failed && <p role="alert">Tasks could not be refreshed. {context.transientFailure && "Showing the last loaded status. "}<button type="button" onClick={() => void context.refresh()}>Retry</button></p>}
+      {context.loading ? <p role="status">Loading task status…</p> : (!context.failed || context.transientFailure) && attached.map(task =>
+        <button className="cct-message-task" key={task.id} type="button" aria-haspopup="dialog" aria-label={`View task: ${task.title} — ${task.status === "done" ? "Done" : "Open"}`} onClick={event => { opener.current = event.currentTarget; setSelectedId(task.id); }}>
+          <span className="cct-message-task-label"><ClipboardList aria-hidden="true" />Task</span><span className="cct-message-task-title">{task.title}</span><span className="cct-message-task-status" data-status={task.status === "done" ? "done" : "open"}>{task.status === "done" ? "Done" : "Open"}</span>
         </button>
-      </li>)}</ol>}
-    </details>
+      )}
+    </div>;
+  };
+  return <>
+    {children(afterMessage)}
     <Dialog open={Boolean(selected)} onOpenChange={open => { if (!open) setSelectedId(null); }}>
       <DialogContent className="cct-confirm-dialog cct-related-task-dialog" onCloseAutoFocus={event => { event.preventDefault(); opener.current?.focus({ preventScroll: true }); }}><DialogTitle>Task details</DialogTitle><DialogDescription>Existing task from this SMS conversation</DialogDescription>
         <TaskContext.Provider value={{ ...context, onOpenConversation: () => setSelectedId(null) }}>

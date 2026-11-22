@@ -465,8 +465,11 @@ describe("SMS conversation to canonical task navigation — offline", () => {
       pendingIds: new Set<number>(), actions: a, refresh, onOpenConversation };
     // No tRPC methods provided: any new query or mutation is a hard offline failure.
     const work = harness({}, context);
-    const render = (sessionId = 42) => work.expand(work.render("ClaudeSmsConversationTasks", { sessionId }), "related");
-    return { work, context, a, refresh, onOpenConversation, render };
+    const raw = (sessionId = 42, ids = ["SYNTHETIC_SOURCE"]) => work.render("ClaudeSmsConversationTasks", {
+      sessionId, children: (afterMessage: (id: string) => React.ReactNode) => ids.map(id => React.createElement(React.Fragment, { key: id }, afterMessage(id))),
+    });
+    const render = (sessionId = 42, ids = ["SYNTHETIC_SOURCE"]) => work.expand(raw(sessionId, ids), "related");
+    return { work, context, a, refresh, onOpenConversation, render, raw };
   }
   const launch = (tree: unknown) => {
     const focus = vi.fn();
@@ -479,37 +482,42 @@ describe("SMS conversation to canonical task navigation — offline", () => {
     expect(r.work.ui.customerSmsConversationTasks(original, 42).map((task: CustomerTask) => task.id)).toEqual([11]);
     expect(r.work.ui.customerSmsConversationTasks(original, 43).map((task: CustomerTask) => task.id)).toEqual([12]);
     expect(original.map(task => task.id)).toEqual([11, 12, 903, 902]);
-    expect(nodes(r.render()).filter(node => node.type === "li")).toHaveLength(1);
-    expect(r.render(44)).toBeNull();
+    expect(nodes(r.render()).filter(node => node.props.className === "cct-message-task")).toHaveLength(1);
+    expect(text(r.render(44))).toBe("");
     for (const action of Object.values(r.a)) expect(action).not.toHaveBeenCalled();
   });
   it.each([0, -1, 1.5, NaN, Number.MAX_SAFE_INTEGER + 1])("rejects invalid conversation identity %s without inventing a match", id => {
     const r = related();
     expect(r.work.ui.customerSmsConversationTasks(r.context.tasks, id)).toEqual([]);
-    expect(r.render(id)).toBeNull();
+    expect(text(r.render(id))).toBe("");
   });
-  it("sorts all Open tasks before Done, newest first with a stable id tie-break, and preserves source order", () => {
+  it("orders tasks within their request without promoting Open ahead of Done and preserves the canonical source array", () => {
     const rows = [sms({ id: 1, status: "done", receivedAt: NOW }), sms({ id: 2, receivedAt: NOW - 100 }),
       sms({ id: 3, status: "claimed", owner: { id: "other", name: "Other staff" }, receivedAt: NOW - 100 }),
       sms({ id: 4, status: "done", receivedAt: NOW - 100 })];
     const r = related(rows), tree = r.render();
-    expect(r.work.ui.customerSmsConversationTasks(rows, 42).map((task: CustomerTask) => task.id)).toEqual([3, 2, 1, 4]);
+    expect(r.work.ui.customerSmsConversationTasks(rows, 42).map((task: CustomerTask) => task.id)).toEqual([2, 3, 4, 1]);
     expect(rows.map(task => task.id)).toEqual([1, 2, 3, 4]);
-    expect(text(nodes(tree).find(node => node.type === "summary"))).toContain("2 Open · 2 Done");
-    expect(nodes(tree).filter(node => node.props.className === "cct-related-task-status").map(text)).toEqual(["Open", "Open", "Done", "Done"]);
+    expect(nodes(tree).filter(node => node.props.className === "cct-message-task-status").map(text)).toEqual(["Open", "Open", "Done", "Done"]);
+    r.context.tasks = rows.map(task => ({ ...task, status: "done" }));
+    expect(nodes(r.render()).filter(node => node.props.className === "cct-message-task-title").map(text)).toEqual(
+      nodes(tree).filter(node => node.props.className === "cct-message-task-title").map(text));
   });
-  it("renders every task in the numbered, collapsible, bounded-scroll list with full literal wrapping titles", () => {
+  it("renders every task inline with full literal wrapping titles and no panel, numbered list or task scrollbar", () => {
     const title = '<script>literal title</script> & ' + "complete task title ".repeat(15);
     const r = related(Array.from({ length: 160 }, (_, index) => sms({ id: index + 1, title: `${index}: ${title}` })));
-    const tree = r.render(), list = nodes(tree).find(node => node.type === "ol")!;
-    expect(nodes(list).filter(node => node.type === "li")).toHaveLength(160);
-    expect(nodes(tree).find(node => node.type === "details")!.props.open).toBe(true);
+    const tree = r.render();
+    expect(nodes(tree).filter(node => node.props.className === "cct-message-task")).toHaveLength(160);
+    expect(nodes(tree).some(node => node.type === "details" || node.type === "ol" || node.type === "li")).toBe(false);
+    expect(text(tree)).not.toContain("Related tasks");
     expect(text(tree)).toContain(`159: ${title}`);
     const markup = renderToStaticMarkup(tree);
     expect(markup).toContain("&lt;script&gt;literal title&lt;/script&gt;"); expect(markup).not.toContain("<script>");
     const css = readFileSync("client/src/components/claude-customer-tasks.css", "utf8");
-    expect(css).toContain("max-height: min(180px, 22dvh)"); expect(css).toContain("overflow-y: auto");
-    expect(css).toContain(".cct-related-task-title { min-width: 0; flex: 1; overflow-wrap: anywhere;");
+    const timelineCss = css.slice(css.indexOf(".cct-message-tasks {"), css.indexOf(".cct-source-message {"));
+    expect(timelineCss).not.toMatch(/overflow(?:-[xy])?\s*:|max-height\s*:/);
+    expect(css).not.toContain(".cct-related-task-list");
+    expect(css).toContain(".cct-message-task-title { min-width: 0; flex: 1; overflow-wrap: anywhere;");
   });
   it.each(["unclaimed", "claimed", "done"] as const)("opens the existing %s task card read-only and preserves task-to-conversation navigation", status => {
     const task = sms({ status, owner: status === "unclaimed" ? null : actor, completedBy: status === "done" ? confirmer : null });
@@ -530,7 +538,7 @@ describe("SMS conversation to canonical task navigation — offline", () => {
     launch(r.render());
     r.context.tasks = [{ ...task, status: "done", completedBy: confirmer, completedAt: NOW, completionNote: "Completed by staff" }];
     const tree = r.render();
-    expect(text(nodes(tree).find(node => node.type === "summary"))).toContain("0 Open · 1 Done");
+    expect(nodes(tree).filter(node => node.props.className === "cct-message-task-status").map(text)).toEqual(["Done"]);
     expect(nodes(tree).find(node => node.props["data-task-id"] === task.id)!.props["data-task-status"]).toBe("done");
     expect(text(tree)).toContain("Confirmed by Confirming staff"); expect(button(tree, "Mark done")).toBeUndefined();
     r.context.tasks = [...r.context.tasks, sms({ id: 999, sessionId: 43 })];
@@ -538,12 +546,12 @@ describe("SMS conversation to canonical task navigation — offline", () => {
     expect(task.status).toBe("claimed");
   });
   it("shows honest loading/error states, retries only on click, and never claims no tasks during a failed cache read", () => {
-    const r = related([]); r.context.loading = true;
-    expect(text(nodes(r.render()).find(node => node.props.role === "status"))).toBe("Loading related tasks…"); expect(r.refresh).not.toHaveBeenCalled();
+    const r = related(); r.context.loading = true;
+    expect(text(nodes(r.render()).find(node => node.props.role === "status"))).toBe("Loading task status…"); expect(r.refresh).not.toHaveBeenCalled();
     r.context.loading = false; r.context.failed = true;
-    expect(text(r.render())).toContain("Related tasks could not be refreshed."); expect(text(r.render())).not.toContain("No tasks");
+    expect(text(r.render())).toContain("Tasks could not be refreshed."); expect(text(r.render())).not.toContain("No tasks");
     button(r.render(), "Retry").props.onClick(); expect(r.refresh).toHaveBeenCalledOnce();
-    r.context.failed = false; expect(r.render()).toBeNull();
+    r.context.tasks = []; expect(text(r.render())).toBe("");
   });
   it("retains an open canonical completion dialog and its note through transient errors without reopening after dismissal", () => {
     const r = related([sms({ status: "claimed", owner: actor })]); launch(r.render());
@@ -554,27 +562,55 @@ describe("SMS conversation to canonical task navigation — offline", () => {
     expect(nodes(stale).filter(node => node.props.role === "dialog")).toHaveLength(2);
     expect(nodes(stale).find(node => node.type === "textarea")!.props.value).toBe("Unsaved human confirmation note");
     for (const action of Object.values(r.a)) expect(action).not.toHaveBeenCalled();
-    const raw = r.work.render("ClaudeSmsConversationTasks", { sessionId: 42 });
+    const raw = r.raw();
     nodes(raw).find(node => node.type === Dialog)!.props.onOpenChange(false);
     r.context.failed = false; expect(nodes(r.render()).some(node => node.props.role === "dialog")).toBe(false);
   });
   it("restores keyboard focus to the launching row with preventScroll and suppresses cached private details on auth failure", () => {
     const r = related(), focus = launch(r.render());
-    const raw = r.work.render("ClaudeSmsConversationTasks", { sessionId: 42 }), preventDefault = vi.fn();
+    const raw = r.raw(), preventDefault = vi.fn();
     nodes(raw).find(node => node.type === DialogContent)!.props.onCloseAutoFocus({ preventDefault });
     expect(preventDefault).toHaveBeenCalledOnce(); expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     r.context.failed = true; r.context.transientFailure = false;
-    const tree = r.render(); expect(text(tree)).toContain("Unavailable");
+    const tree = r.render(); expect(text(tree)).toContain("Tasks could not be refreshed.");
     expect(nodes(tree).some(node => node.props["data-task-id"])).toBe(false);
-    expect(nodes(tree).filter(node => node.props.className === "cct-related-task-title")).toHaveLength(0);
+    expect(nodes(tree).filter(node => node.props.className === "cct-message-task-title")).toHaveLength(0);
   });
-  it("adds only the child/import to the existing drawer and leaves all queries, effects, drafts, sends and scroll code byte-identical", () => {
+  it("changes only render-only anchors and the timeline seam; all queries, effects, drafts, sends and scroll code stay byte-identical", () => {
     const control = execFileSync("git", ["show", `e58f374b:${pagePath}`], { encoding: "utf8" });
     expect(withoutApprovedTaskCallPlayback(pagePath, page)).toBe(control);
-    expect(page).toContain('{conversation.id > 0 && <ClaudeSmsConversationTasks sessionId={conversation.id} key={conversation.id} />}');
+    expect(page).toContain('<div className="ccc-live-sms-messages" ref={messageListRef}><ClaudeSmsConversationTasks');
+    expect(page).toContain('{smsTaskAnchors[index] && afterMessage(smsTaskAnchors[index]!)}');
     const current = ts.createSourceFile(componentPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const node = current.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "ClaudeSmsConversationTasks")!;
     expect(node.getText(current)).not.toMatch(/trpc\.|useEffect|fetch\(|setTimeout|setInterval|refetchInterval|\.actions\./);
+  });
+  it.each(["opMsgId", "openPhoneId", "openPhoneMessageId", "providerMessageId"])("accepts the saved %s alias and identical repeated metadata aliases without guessing", alias => {
+    const r = related(), anchors = r.work.ui.customerSmsTaskMessageAnchors;
+    expect(anchors([{ role: "user", [alias]: "SOURCE", metadata: { providerMessageId: "SOURCE" } }])).toEqual(["SOURCE"]);
+    expect(anchors([{ role: "customer", metadata: { [alias]: "SOURCE" } }])).toEqual(["SOURCE"]);
+    expect(anchors([{ role: "user", [alias]: "  " }])).toEqual([null]);
+  });
+  it("rejects missing/contradictory identities, duplicate saved turns, and outbound or unknown-role ID collisions", () => {
+    const anchors = related().work.ui.customerSmsTaskMessageAnchors;
+    expect(anchors([{ role: "user", content: "same words", ts: NOW }, { role: "assistant", opMsgId: "OUT" }])).toEqual([null, null]);
+    expect(anchors([{ role: "user", opMsgId: "A", metadata: { providerMessageId: "B" } }])).toEqual([null]);
+    expect(anchors([{ role: "user", opMsgId: "A" }, { role: "user", opMsgId: "A" }])).toEqual([null, null]);
+    expect(anchors([{ role: "user", opMsgId: "A" }, { role: "assistant", providerMessageId: "A" }])).toEqual([null, null]);
+    expect(anchors([{ role: "user", opMsgId: "A" }, { role: "system", opMsgId: "A", providerMessageId: "B" }])).toEqual([null, null]);
+    expect(anchors([null, {}, { role: "user", opMsgId: 123 }, { role: "assistant", metadata: { opMsgId: "C" } }])).toEqual([null, null, null, null]);
+  });
+  it("renders all tasks only at their exact request and never moves a Done task to a different request", () => {
+    const r = related([sms({ id: 1, title: "First task", sourceMessageId: "A", status: "done" }),
+      sms({ id: 2, title: "Second task", sourceMessageId: "A" }), sms({ id: 3, title: "Third task", sourceMessageId: "B" }),
+      sms({ id: 4, title: "Unresolved task", sourceMessageId: "MISSING" })]);
+    const groups = nodes(r.render(42, ["A", "B"])).filter(node => node.props.className === "cct-message-tasks");
+    expect(groups.map(group => nodes(group).filter(node => node.props.className === "cct-message-task-title").map(text))).toEqual([["First task", "Second task"], ["Third task"]]);
+    expect(text(groups[0])).toContain("Done"); expect(text(r.render(42, ["A", "B"]))).not.toContain("Unresolved task");
+    const second = nodes(groups[0]).filter(node => node.props.className === "cct-message-task")[1];
+    second.props.onClick({ currentTarget: { focus: vi.fn() } });
+    expect(nodes(r.render(42, ["A", "B"])).find(node => node.props["data-task-id"])!.props["data-task-id"]).toBe(2);
+    for (const action of Object.values(r.a)) expect(action).not.toHaveBeenCalled();
   });
 });
 

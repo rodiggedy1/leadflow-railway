@@ -54,7 +54,7 @@ import { useTabLeader } from "@/hooks/useTabLeader";
 import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AiConcierge from "@/components/AiConcierge";
-import { ClaudeCustomerTasksProvider, ClaudeCustomerTasksQueue, ClaudeCustomerTaskStreamCard, ClaudeSmsConversationTasks, customerTaskIdFromMessage } from "@/components/ClaudeCustomerTasks";
+import { ClaudeCustomerTasksProvider, ClaudeCustomerTasksQueue, ClaudeCustomerTaskStreamCard, ClaudeSmsConversationTasks, customerSmsTaskMessageAnchors, customerTaskIdFromMessage } from "@/components/ClaudeCustomerTasks";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
 import { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema, type ClaudeSmsAlternativeGenerateInput, type ClaudeSmsAlternativeResult } from "@shared/claudeSmsAlternative";
@@ -2462,6 +2462,15 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     ));
     return [...persisted, ...notYetPersisted].sort((left, right) => (left.ts ?? 0) - (right.ts ?? 0));
   }, [confirmedOutgoing, detail?.messageHistory]);
+  const smsTaskAnchors = useMemo(() => {
+    if (detail?.sessionId !== conversation.id) return [];
+    try {
+      const history: unknown = JSON.parse(detail.messageHistory);
+      if (!Array.isArray(history)) return [];
+      const savedIds = new Set(customerSmsTaskMessageAnchors(history).filter((id): id is string => id !== null));
+      return customerSmsTaskMessageAnchors(messages).map(id => id !== null && savedIds.has(id) ? id : null);
+    } catch { return []; }
+  }, [conversation.id, detail?.sessionId, detail?.messageHistory, messages]);
   const smsConversationContext = useMemo(() => messages.slice(-5)
     .map((message) => `${message.role === "user" ? "Customer" : "Agent"}: ${message.content}`)
     .join("\n"), [messages]);
@@ -2855,8 +2864,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     {!isTeamConversation && <button type="button" className="ccc-live-sms-quote-assistant-trigger" onClick={openQuoteAssistant} disabled={prepareQuoteAssistant.isPending}><Sparkles />{prepareQuoteAssistant.isPending ? "Reading lead details…" : "Create quote with AI"}</button>}
     {isTeamConversation && activeScheduleTeam && <section className="ccc-live-sms-team-schedule" aria-label={`${activeScheduleTeam.name} schedule for today`}><header><span><CalendarClock />Today&apos;s schedule</span><b>{teamRoute.length} {teamRoute.length === 1 ? "stop" : "stops"}</b></header>{teamRoute.length ? <ol>{teamRoute.slice(0, 4).map((job) => { const etaLabel = teamRouteEtaLabel(job.jobStatus, job.etaTimestamp); return <li key={job.id}><time>{scheduleTimeLabel(job.serviceDateTime)}</time><strong>{job.customerName || "Customer"}</strong><span className={`ccc-live-sms-job-status ${teamRouteStatusClass(job.jobStatus)}`}><TeamRouteStatusIcon status={job.jobStatus} /><b>{teamRouteStatusLabel(job.jobStatus)}</b>{etaLabel && <small>{etaLabel}</small>}</span></li>; })}</ol> : <p>No scheduled stops today.</p>}{teamRoute.length > 4 && <a href="/admin/schedule">View all {teamRoute.length} stops <ChevronRight /></a>}</section>}
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
-    {conversation.id > 0 && <ClaudeSmsConversationTasks sessionId={conversation.id} key={conversation.id} />}
-    <div className="ccc-live-sms-messages" ref={messageListRef}>{!detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => {
+    <div className="ccc-live-sms-messages" ref={messageListRef}><ClaudeSmsConversationTasks sessionId={conversation.id} key={conversation.id}>{afterMessage => !detail ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div> : messages.map((message, index) => {
       const outgoing = message.role !== "user";
       const senderName = message.senderName?.trim() || callerName;
       const senderLabel = smsSenderLabel(message, callerName);
@@ -2864,8 +2872,8 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       const automaticSender = message.role === "assistant" && parsedProvenance.success
         && parsedProvenance.data.mode === "automatic" && message.opMsgId === parsedProvenance.data.providerMessageId;
       const senderPhotoUrl = automaticSender ? null : photoMap[senderName] ?? (senderName === callerName ? callerPhotoUrl : null);
-      return <article className={`ccc-live-sms-message ${outgoing ? "is-outgoing" : ""}`} key={`${message.ts ?? index}-${message.content}`}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={automaticSender ? "Claude AI" : senderName} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{senderLabel}</span> : conversation.personType === "team" ? name : "Customer"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{renderMessageBody(message.content)}</p></article>;
-    })}</div>
+      return <Fragment key={`${message.ts ?? index}-${message.content}`}><article className={`ccc-live-sms-message ${outgoing ? "is-outgoing" : ""}`} key={`${message.ts ?? index}-${message.content}`}><small>{outgoing ? <span className="ccc-live-sms-outbound-sender"><Avatar name={automaticSender ? "Claude AI" : senderName} photoUrl={senderPhotoUrl} className="ccc-live-sms-outbound-avatar" />{senderLabel}</span> : conversation.personType === "team" ? name : "Customer"}{message.ts ? ` · ${formatTime(message.ts)}` : ""}</small><p>{renderMessageBody(message.content)}</p></article>{smsTaskAnchors[index] && afterMessage(smsTaskAnchors[index]!)}</Fragment>;
+    })}</ClaudeSmsConversationTasks></div>
     <footer>
       {smsAutoDraftLoading && <div className="ccc-live-sms-ai-draft-status" aria-live="polite"><RefreshCw className="animate-spin" /><span>AI is drafting a reply…</span></div>}
       {!smsAutoDraftLoading && smsAutoDraftReady && smsAutoDraftText && <article className={`ccc-live-sms-ai-draft-card ${smsAutoDraftMinimized ? "is-minimized" : ""}`}><header><span><Sparkles />World-class draft</span><small>Review before sending</small><button type="button" className="ccc-live-sms-ai-draft-toggle" aria-label={smsAutoDraftMinimized ? "Expand world-class draft" : "Minimize world-class draft"} aria-expanded={!smsAutoDraftMinimized} title={smsAutoDraftMinimized ? "Expand draft" : "Minimize draft"} onClick={() => setSmsAutoDraftMinimized((value) => !value)}><ChevronDown /></button></header>{!smsAutoDraftMinimized && <><p>{smsAutoDraftText}</p><div><button type="button" className="ccc-live-sms-ai-draft-insert" onClick={insertSmsAutoDraft}><Pencil />Insert into reply</button><button type="button" className="ccc-live-sms-ai-draft-regenerate" disabled={claudeDraftPending} onClick={regenerateSmsDraft}><RefreshCw />Regenerate</button></div></>}</article>}
