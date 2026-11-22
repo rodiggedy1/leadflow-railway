@@ -1,3 +1,4 @@
+import { withoutApprovedTaskCallPlayback } from "./taskCallPlaybackSourceControl";
 /** Test-only: remove only the fixed approved staff-call feature hunks.
  * All unrelated bytes remain subject to the original historical comparisons. */
 const takeoverHunks: Record<string, Array<[string, string, number]>> = {
@@ -16,6 +17,7 @@ const takeoverHunks: Record<string, Array<[string, string, number]>> = {
 };
 /** Strip only the fixed takeover additions, never arbitrary ownership or UI code. */
 export function withoutApprovedTaskTakeover(path: string, source: string): string {
+  source = withoutApprovedTaskCallPlayback(path, source);
   for (const [current, original, occurrences] of takeoverHunks[path] ?? []) {
     const count = source.split(current).length - 1;
     if (count !== 0 && count !== occurrences) throw new Error(`Unexpected task takeover preservation hunk: ${path}`);

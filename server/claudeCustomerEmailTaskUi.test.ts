@@ -1,4 +1,6 @@
+import { withoutApprovedTaskCallPlayback } from "./taskCallPlaybackSourceControl";
 import React from "react";
+import * as recordingUtils from "../client/src/lib/utils";
 import { renderToStaticMarkup } from "react-dom/server";
 import { execFileSync } from "node:child_process";
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
@@ -48,6 +50,7 @@ function withoutApprovedStreamRefresh(value: string) {
 // Test-only: restore exactly the approved takeover hunks for historical byte guards.
 // Behavioral harnesses continue to execute the actual, unnormalized source.
 function withoutApprovedTaskTakeover(value: string) {
+  value = withoutApprovedTaskCallPlayback(componentPath, value);
   const approved: Array<[string, string]> = [
     ['  claim: (id: number, expectedOwnerId?: string) => Promise<void>;\n', '  claim: (id: number) => Promise<void>;\n'],
     ['    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined\n      ? claim.mutateAsync({ id })\n      : claim.mutateAsync({ id, expectedOwnerId })),\n', '    claim: (id) => run(id, () => claim.mutateAsync({ id })),\n'],
@@ -76,7 +79,7 @@ function withoutCallComponent(value: string) {
     .replace('<p className="cct-verbatim">{task.reply.text}</p></section>}', '<p className="cct-verbatim">{task.reply.text}</p></section>');
 }
 const taskQueueInsets = "\n/* Match the working Leads queue's side insets; keep the grid and Leads untouched. */\n.ccc-live #ccc-tasks-panel .cct-queue {\n  margin: 0 10px 12px;\n  padding: 12px;\n  border: 1px solid transparent;\n}\n";
-const unchangedTaskCss = (value: string) => value.replace(taskQueueInsets, "");
+const unchangedTaskCss = (value: string) => withoutApprovedTaskCallPlayback("client/src/components/claude-customer-tasks.css", value).replace(taskQueueInsets, "");
 const baseline = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
 const controlSource = baseline(componentPath);
 const controlPage = baseline(pagePath);
@@ -140,7 +143,8 @@ function harness(api: any = {}, initialContext?: unknown, input = source) {
     if (id === "dompurify") return sanitizer;
     if (id === "lucide-react") return icons;
     if (id === "@/lib/trpc") return { trpc: api };
-    if (id === "@shared/claudeCustomerTasks") return contract;
+    if (id === "@/lib/utils") return recordingUtils;
+      if (id === "@shared/claudeCustomerTasks") return contract;
     if (id === "@/components/ui/dialog") return { Dialog: dialog, DialogContent: div, DialogDescription: div, DialogTitle: div };
     if (id.endsWith(".css")) return {};
     throw new Error(`Forbidden offline UI import: ${id}`);

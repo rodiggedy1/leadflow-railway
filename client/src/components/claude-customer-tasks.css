@@ -42,6 +42,9 @@
 .cct-details-body h4 { margin: 0 0 5px; color: #bfbfc9; font-size: 10px; font-weight: 650; }
 .cct-details-body p { margin: 3px 0 0; color: #d3d3dc; overflow-wrap: anywhere; }
 .cct-verbatim { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cct-call-transcript { display: grid; gap: 12px; margin-top: 10px; font-size: 12px; line-height: 1.65; }
+.cct-call-turn { min-width: 0; padding-left: 10px; border-left: 2px solid #625274; }
+.cct-call-speaker { color: #dcc5fa; font-size: 11px; }
 .cct-source-message { padding: 9px; border: 1px solid #71558f; border-left: 3px solid #ba95ed; border-radius: 6px; background: #352b43; }
 .cct-source-message h4 { color: #dcc5fa; }
 .cct-source-message .cct-verbatim { color: #f5f0fa; font-size: 12px; line-height: 1.5; }

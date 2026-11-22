@@ -2,6 +2,7 @@ import React, { createContext, useContext, useRef, useState, type ReactNode } fr
 import DOMPurify from "dompurify";
 import { Check, ChevronDown, ClipboardList, Loader2, RefreshCw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { proxyRecordingUrl } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import "./claude-customer-tasks.css";
@@ -185,13 +186,34 @@ export function ClaudeCustomerTaskStreamCard({ taskId }: { taskId: number | null
 /** Canonical call evidence needs no SMS session or conversation lookup. */
 export function CustomerTaskCallRecording({ taskId }: { taskId: number }) {
   const recording = trpc.claudeCustomerTasks.recording.useQuery({ id: taskId }, { retry: false, staleTime: 0, refetchOnWindowFocus: false });
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const url = proxyRecordingUrl(recording.data?.url);
+  const retry = () => { setFailedUrl(null); setAttempt(value => value + 1); void recording.refetch(); };
   if (recording.isLoading) return <p role="status">Loading call recording…</p>;
-  if (recording.isError) return <p role="alert">Call recording unavailable. <button type="button" onClick={() => void recording.refetch()}>Retry</button></p>;
-  if (!recording.data?.url) return <p>Call recording unavailable.</p>;
+  if (recording.isError) return <p role="alert">Call recording unavailable. <button type="button" onClick={retry}>Retry</button></p>;
+  if (!url) return <p>Call recording unavailable.</p>;
   return <section aria-label="Call recording"><h4>Call recording</h4>
-    <audio controls preload="none" className="w-full" aria-label="Call recording" src={recording.data.url} />
-    <a href={recording.data.url} target="_blank" rel="noopener noreferrer">Open call recording</a>
+    <audio key={`${url}:${attempt}`} controls preload="metadata" className="w-full" aria-label="Call recording" src={url} onError={() => setFailedUrl(url)} />
+    {failedUrl === url && <p role="alert">Audio could not be loaded. <button type="button" onClick={retry}>Retry</button></p>}
+    <a href={url} target="_blank" rel="noopener noreferrer">Open call recording</a>
   </section>;
+}
+/** Use the AI Calls page's line/label presentation, without inventing speaker identity.
+ * Saved Whisper evidence is not diarized: label-like words inside it remain prose. */
+export function CustomerTaskCallTranscript({ task }: { task: Extract<CustomerTask, { call: unknown }> }) {
+  const unattributed = task.call.provider === "openphone" && task.call.transcriptSource === "saved";
+  return <div className="cct-call-transcript">{task.call.transcript.split(/\r?\n/).filter(line => line.trim()).map((line, index) => {
+    const match = line.match(/^\s*(Assistant|AI|User|Caller|Customer|Client|Staff|Unattributed):([\s\S]*)$/i);
+    const labeled = match && (!unattributed || /^unattributed$/i.test(match[1]));
+    const content = labeled ? match[2] : line;
+    // Neutral reading paragraphs only; do not imply new speakers or alter words.
+    const paragraphs = content.match(/(?:\s*\S+){1,60}\s*/g) ?? [content];
+    return <article className="cct-call-turn" key={index}>
+      {labeled && <strong className="cct-call-speaker">{match[1]}:</strong>}
+      {paragraphs.map((paragraph, paragraphIndex) => <p className="cct-verbatim" key={paragraphIndex}>{paragraph}</p>)}
+    </article>;
+  })}</div>;
 }
 export function CustomerTaskCallEvidence({ task }: { task: Extract<CustomerTask, { call: unknown }> }) {
   const [open, setOpen] = useState(false);
@@ -201,7 +223,7 @@ export function CustomerTaskCallEvidence({ task }: { task: Extract<CustomerTask,
       <DialogTitle>{task.call.provider === "openphone" ? "Full staff call" : "Full AI call"}</DialogTitle>
       <DialogDescription>{task.customerName || (task.call.provider === "openphone" ? "Caller" : "Customer")}{task.customerPhone && ` · ${task.customerPhone}`}</DialogDescription>
       <div className="cct-confirm-body">
-        <section aria-label="Full call transcript"><h4>Full call transcript</h4><p className="cct-verbatim">{task.call.transcript}</p></section>
+        <section aria-label="Full call transcript"><h4>Full call transcript</h4><CustomerTaskCallTranscript task={task} /></section>
         {open && task.call.recordingUrl && <CustomerTaskCallRecording taskId={task.id} />}
       </div>
     </DialogContent>

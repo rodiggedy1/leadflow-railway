@@ -1,4 +1,5 @@
 import React from "react";
+import * as recordingUtils from "../client/src/lib/utils";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { execFileSync } from "node:child_process";
@@ -51,6 +52,7 @@ function load(react: typeof React, trpc: unknown): Ui {
       if (id === "dompurify") return DOMPurify;
       if (id === "lucide-react") return icons;
       if (id === "@/lib/trpc") return { trpc };
+      if (id === "@/lib/utils") return recordingUtils;
       if (id === "@shared/claudeCustomerTasks") return contract;
       if (id === "@/components/ui/dialog") return { Dialog: (props: any) => props.open ? div(props) : null, DialogContent: div, DialogDescription: div, DialogTitle: div, DialogTrigger: div };
       if (id.endsWith(".css")) return {};
@@ -288,7 +290,7 @@ describe("Stream shared-list refresh display-only boundary", () => {
       return value;
     };
     expect(normalize(withoutApprovedStaffCallFeature(path, source), true)).toBe(normalize(baseline, false));
-    const allowed = [path, "server/claudeCustomerTasksUi.test.ts", "server/claudeCustomerEmailTaskUi.test.ts", "server/claudeCustomerCallTaskUi.test.ts", "server/claudeCustomerTasksRefreshUi.test.ts",
+    const allowed = [path, "client/src/components/claude-customer-tasks.css", "server/claudeCustomerTasksUi.test.ts", "server/claudeCustomerEmailTaskUi.test.ts", "server/claudeCustomerCallTaskUi.test.ts", "server/claudeCustomerTasksRefreshUi.test.ts",
       "shared/claudeCustomerTasks.ts", "server/webhooks.ts", "server/claudeCustomerTasksRouter.ts", "server/claudeCustomerTasksRouter.test.ts", "server/claudeCustomerCallSafety.test.ts", "server/smsBookingQuoteIsolation.test.ts",
       "server/claudeCustomerTaskClaimLifecycle.test.ts", "server/instinct/smsBookingQuoteWritingStyle.test.ts", "server/callBookingQuoteIntegration.test.ts",
       "server/instinct/claudeCustomerTasksStore.ts", "server/instinct/claudeCustomerTasksStore.test.ts",

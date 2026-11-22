@@ -1,4 +1,5 @@
 import React from "react";
+import * as recordingUtils from "../client/src/lib/utils";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -59,6 +60,7 @@ function load(react = React, trpc: unknown = {}): Ui {
       if (id === "dompurify") return DOMPurify;
       if (id === "lucide-react") return icons;
       if (id === "@/lib/trpc") return { trpc };
+      if (id === "@/lib/utils") return recordingUtils;
       if (id === "@shared/claudeCustomerTasks") return contract;
       if (id === "@/components/ui/dialog") return { Dialog: dialog, DialogContent: div, DialogDescription: div, DialogTitle: div };
       if (id.endsWith(".css")) return {};
@@ -201,7 +203,8 @@ describe("Customer task compact queue and exact canonical identity", () => {
       '    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined\n      ? claim.mutateAsync({ id })\n      : claim.mutateAsync({ id, expectedOwnerId })),',
       '    claim: (id) => run(id, () => claim.mutateAsync({ id })),');
     expect(hash(baselineActions.slice(baselineActions.indexOf('  const run ='), baselineActions.indexOf('  return <TaskContext.Provider')))).toBe("ce3e4148342bb5aa0dcc7289c8177f32d92c8c84729f05c46d71c7c0a6154c07");
-    expect(hash(componentSource.slice(componentSource.indexOf('  const [confirmOpen'), componentSource.indexOf('  return <article')))).toBe("7804809679708c1360153b78dddaf31f418ac8edc0d81d96b33d55ea3d00614f");
+    const confirmStart = componentSource.indexOf('  const [confirmOpen');
+    expect(hash(componentSource.slice(confirmStart, componentSource.indexOf('  return <article', confirmStart)))).toBe("7804809679708c1360153b78dddaf31f418ac8edc0d81d96b33d55ea3d00614f");
     expect(hash(componentSource.slice(componentSource.indexOf('{error && !confirmOpen')))).toBe("2693e4f9f82fe9fb3659260f70de3baf74eb24e224b8bff31dda9237f5a78587");
   });
 

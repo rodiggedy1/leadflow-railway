@@ -1,4 +1,6 @@
+import { withoutApprovedTaskCallPlayback } from "./taskCallPlaybackSourceControl";
 import React from "react";
+import * as recordingUtils from "../client/src/lib/utils";
 import { renderToStaticMarkup } from "react-dom/server";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -20,6 +22,7 @@ const baseline = (path: string) => execFileSync("git", ["show", `${BASELINE}:${p
 // Test-only: restore exactly the approved takeover hunks for historical byte guards.
 // Behavioral harnesses continue to execute the actual, unnormalized source.
 function withoutApprovedTaskTakeover(value: string) {
+  value = withoutApprovedTaskCallPlayback(componentPath, value);
   const approved: Array<[string, string]> = [
     ['  claim: (id: number, expectedOwnerId?: string) => Promise<void>;\n', '  claim: (id: number) => Promise<void>;\n'],
     ['    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined\n      ? claim.mutateAsync({ id })\n      : claim.mutateAsync({ id, expectedOwnerId })),\n', '    claim: (id) => run(id, () => claim.mutateAsync({ id })),\n'],
@@ -84,6 +87,8 @@ function call(overrides: Partial<CallTask> = {}): CallTask {
 type Element = React.ReactElement<Record<string, any>>;
 const nodes = (tree: unknown): Element[] => Array.isArray(tree) ? tree.flatMap(nodes) : React.isValidElement<Record<string, any>>(tree) ? [tree, ...nodes(tree.props.children)] : [];
 const text = (tree: unknown): string => typeof tree === "string" || typeof tree === "number" ? String(tree) : Array.isArray(tree) ? tree.map(text).join("") : React.isValidElement<Record<string, any>>(tree) ? text(tree.props.children) : "";
+const transcriptText = (tree: unknown): string => nodes(tree).filter(node => node.props.className === "cct-call-turn").map(text).join("\n");
+const normalized = (value: string) => value.replace(/\s+/g, " ").trim();
 const button = (tree: unknown, label: string) => nodes(tree).find(node => node.type === "button" && text(node) === label)!;
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 const Dialog = (_props: any) => null;
@@ -114,6 +119,7 @@ function harness(api: unknown = {}, initialContext?: unknown, input = source) {
       if (id === "dompurify") return sanitizer;
       if (id === "lucide-react") return icons;
       if (id === "@/lib/trpc") return { trpc: api };
+      if (id === "@/lib/utils") return recordingUtils;
       if (id === "@shared/claudeCustomerTasks") return contract;
       if (id === "@/components/ui/dialog") return { Dialog, DialogContent, DialogTrigger, DialogDescription: div, DialogTitle: div };
       if (id.endsWith(".css")) return {};
@@ -194,9 +200,10 @@ describe("Canonical AI customer call task evidence in the actual queue and strea
       open.props.onClick(); tree = work.render(placement, pending);
       const dialog = nodes(tree).find(node => node.props.role === "dialog")!; expect(dialog).toBeDefined();
       const full = nodes(dialog).find(node => node.props["aria-label"] === "Full call transcript")!;
-      expect(nodes(full).find(node => node.type === "p")!.props.children).toBe(transcript);
+      expect(normalized(transcriptText(full))).toBe(normalized(transcript));
+      expect(nodes(full).filter(node => node.props.className === "cct-call-speaker")).toHaveLength(transcript.trim().split("\n").length);
       const audio = nodes(dialog).find(node => node.type === "audio")!;
-      expect(audio.props).toMatchObject({ controls: true, preload: "none", src: work.recordingUrl, "aria-label": "Call recording" });
+      expect(audio.props).toMatchObject({ controls: true, preload: "metadata", src: work.recordingUrl, "aria-label": "Call recording" });
       const recording = nodes(dialog).find(node => node.type === "a")!;
       expect(recording.props).toMatchObject({ href: work.recordingUrl, target: "_blank", rel: "noopener noreferrer" });
       expect(work.recording).toHaveBeenCalledWith({ id: task.id }, { retry: false, staleTime: 0, refetchOnWindowFocus: false });
@@ -213,7 +220,7 @@ describe("Canonical AI customer call task evidence in the actual queue and strea
     const work = rig(task); button(work.render("stream"), "Open full call").props.onClick(); const tree = work.render("stream");
     expect(text(nodes(tree).find(node => node.props.className === "cct-customer-phone"))).toBe("");
     expect(nodes(tree).some(node => node.type === "audio" || node.type === "a")).toBe(false);
-    expect(text(tree)).toContain(task.call.transcript); expect(text(tree)).not.toContain("+13015550123");
+    expect(normalized(transcriptText(tree))).toBe(normalized(task.call.transcript)); expect(text(tree)).not.toContain("+13015550123");
     expect(source).toContain('<DialogTrigger asChild><button type="button" className="cct-conversation-link">Open full call</button></DialogTrigger>');
     expect(source).toContain('<Dialog open={open} onOpenChange={setOpen}>');
     expect(source).toContain('<DialogContent className="cct-confirm-dialog">');
@@ -224,11 +231,81 @@ describe("Canonical AI customer call task evidence in the actual queue and strea
     const task = call(); const work = rig(task); const refetch = vi.fn();
     work.recording.mockReturnValue({ data: mode === "missing" ? { url: null } : undefined, isLoading: mode === "loading", isError: mode === "error", refetch } as any);
     expect(work.recording).not.toHaveBeenCalled(); button(work.render("stream"), "Open full call").props.onClick();
-    const tree = work.render("stream"); expect(text(tree)).toContain(task.call.transcript);
+    const tree = work.render("stream"); expect(normalized(transcriptText(tree))).toBe(normalized(task.call.transcript));
     expect(nodes(tree).some(node => node.type === "audio" || node.type === "a")).toBe(false);
     expect(renderToStaticMarkup(tree)).not.toContain(task.call.recordingUrl!);
     expect(text(tree)).toContain(mode === "loading" ? "Loading call recording" : "Call recording unavailable");
     if (mode === "error") { button(tree, "Retry").props.onClick(); expect(refetch).toHaveBeenCalledOnce(); }
+  });
+});
+
+describe("Task-call playback and transcript presentation repair — offline", () => {
+  const staff = (transcript = "Unattributed: Original saved words.", source: "quo" | "saved" = "saved") => contract.customerStaffCallTaskSchema.parse({ ...call(), sourceMessageId: "ACsynthetic-staff",
+    call: { provider: "openphone", providerCallId: "ACsynthetic-staff", recordingId: 91, transcript, transcriptSource: source,
+      recordingUrl: "https://recordings.example.test/staff.wav", businessPhoneNumberId: "PNsynthetic", businessPhoneNumber: "+13015550987", staffUserId: null, direction: "incoming" } });
+  it.each(["vapi", "openphone"] as const)("uses the existing AI player proxy and metadata loading for %s only after opening", provider => {
+    const task = provider === "vapi" ? call() : staff();
+    for (const url of ["https://storage.vapi.ai/synthetic.wav", "https://synthetic.r2.cloudflarestorage.com/calls/synthetic.wav", "https://synthetic.r2.dev/calls/synthetic.wav", "https://recordings.example.test/public.wav"]) {
+      const work = rig(task);
+      work.recording.mockReturnValue({ data: { url }, isLoading: false, isError: false, refetch: vi.fn() });
+      expect(work.recording).not.toHaveBeenCalled();
+      button(work.render("stream"), "Open full call").props.onClick(); const tree = work.render("stream");
+      const expected = recordingUtils.proxyRecordingUrl(url);
+      expect(nodes(tree).find(node => node.type === "audio")!.props).toMatchObject({ src: expected, controls: true, preload: "metadata" });
+      expect(nodes(tree).find(node => node.type === "a")!.props.href).toBe(expected);
+      expect(work.recording).toHaveBeenCalledTimes(1);
+      expect(work.recording.mock.calls[0][1]).not.toHaveProperty("refetchInterval");
+    }
+  });
+  it("reports a media-element failure without polling, retries once on click and remounts even if the fresh URL is identical", () => {
+    const work = rig(call()), refetch = vi.fn();
+    work.recording.mockReturnValue({ data: { url: "https://storage.vapi.ai/synthetic.wav" }, isLoading: false, isError: false, refetch });
+    button(work.render("stream"), "Open full call").props.onClick();
+    let tree = work.render("stream"), audio = nodes(tree).find(node => node.type === "audio")!;
+    const originalKey = audio.key; audio.props.onError();
+    tree = work.render("stream"); expect(text(tree)).toContain("Audio could not be loaded."); expect(refetch).not.toHaveBeenCalled();
+    expect(normalized(transcriptText(tree))).toBe(normalized(call().call.transcript));
+    button(tree, "Retry").props.onClick(); expect(refetch).toHaveBeenCalledTimes(1);
+    tree = work.render("stream"); audio = nodes(tree).find(node => node.type === "audio")!;
+    expect(audio.key).not.toBe(originalKey); expect(text(tree)).not.toContain("Audio could not be loaded.");
+    audio.props.onError();
+    work.recording.mockReturnValue({ data: { url: "https://storage.vapi.ai/new-synthetic.wav" }, isLoading: false, isError: false, refetch });
+    tree = work.render("stream"); expect(text(tree)).not.toContain("Audio could not be loaded.");
+    expect(nodes(tree).find(node => node.type === "audio")!.props.src).toBe(recordingUtils.proxyRecordingUrl("https://storage.vapi.ai/new-synthetic.wav"));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+  it("formats saved undiarized text into neutral paragraphs without changing words or inventing inner speaker attribution", () => {
+    const words = Array.from({ length: 137 }, (_, index) => `original${index}`).join(" ");
+    const transcript = `Unattributed:  ${words}  \r\nStaff: these are words inside undiarized text.\nCorrection: Monday, not Friday.\n中文 日本語 العربية <script>literal evidence</script>`;
+    const task = staff(transcript), work = rig(task);
+    const tree = work.ui.CustomerTaskCallTranscript({ task });
+    expect(nodes(tree).filter(node => node.props.className === "cct-call-speaker").map(text)).toEqual(["Unattributed:"]);
+    const paragraphs = nodes(tree).filter(node => node.type === "p").map(node => node.props.children);
+    expect(paragraphs.slice(0, 3).join("")).toBe(`  ${words}  `);
+    expect(paragraphs).toContain("Staff: these are words inside undiarized text.");
+    expect(normalized(transcriptText(tree))).toBe(normalized(transcript));
+    expect(renderToStaticMarkup(tree)).toContain("&lt;script&gt;literal evidence&lt;/script&gt;");
+    expect(renderToStaticMarkup(tree)).not.toContain("<script>");
+    expect(task.call.transcript).toBe(transcript);
+    expect(work.recording).not.toHaveBeenCalled(); for (const action of Object.values(work.a)) expect(action).not.toHaveBeenCalled();
+  });
+  it("separates existing AI and native staff labels literally, leaves arbitrary colon-prefixed prose unlabelled", () => {
+    for (const task of [call({ call: { ...call().call, transcript: "AI: Original words.\nUser: Exact answer.\nCorrection: Monday, not Friday." } }),
+      staff("Caller: Original caller words.\nStaff: Original staff words.\nUnattributed: Unknown voice.", "quo")]) {
+      const work = rig(task), tree = work.ui.CustomerTaskCallTranscript({ task });
+      expect(normalized(transcriptText(tree))).toBe(normalized(task.call.transcript));
+      const labels = nodes(tree).filter(node => node.props.className === "cct-call-speaker").map(text);
+      expect(labels).toEqual(task.call.provider === "vapi" ? ["AI:", "User:"] : ["Caller:", "Staff:", "Unattributed:"]);
+      expect(text(tree)).not.toContain("Ava"); expect(text(tree)).not.toContain("Madison");
+    }
+  });
+  it("normalizes only the exact approved display hunks and still detects unrelated changes", () => {
+    for (const path of [componentPath, "client/src/components/claude-customer-tasks.css"]) {
+      const original = execFileSync("git", ["show", `af1b1337:${path}`], { encoding: "utf8" });
+      const current = readFileSync(path, "utf8");
+      expect(withoutApprovedTaskCallPlayback(path, current)).toBe(original);
+      expect(withoutApprovedTaskCallPlayback(path, current + "\n// UNAUTHORIZED_CHANGE\n")).not.toBe(original);
+    }
   });
 });
 
@@ -246,7 +323,7 @@ describe("Staff Quo calls reuse the unchanged task card and human controls", () 
     expect(text(tree)).toContain(task.customerPhone!); expect(text(tree)).toContain(task.items[0].evidenceQuote);
     expect(text(tree)).not.toContain("Acknowledgment"); expect(work.get).not.toHaveBeenCalled(); expect(work.recording).not.toHaveBeenCalled();
     button(tree, "Open full call").props.onClick(); tree = work.render(placement);
-    expect(text(tree)).toContain("Full staff call"); expect(text(tree)).toContain(task.call.transcript);
+    expect(text(tree)).toContain("Full staff call"); expect(normalized(transcriptText(tree))).toBe(normalized(task.call.transcript));
     expect(work.recording).toHaveBeenCalledWith({ id: task.id }, { retry: false, staleTime: 0, refetchOnWindowFocus: false });
     expect(nodes(tree).find(node => node.type === "audio")!.props.src).toBe(work.recordingUrl);
     expect(work.onOpenConversation).not.toHaveBeenCalled();
@@ -367,7 +444,7 @@ describe("AI call addition preserves actual baseline SMS/email, layout and popup
     expect(between(source, "  const [confirmOpen", "  return <article")).toBe(between(original, "  const [confirmOpen", "  return <article"));
     expect(source.slice(source.indexOf("{error && !confirmOpen"))).toBe(original.slice(original.indexOf("{error && !confirmOpen")));
     expect(page.replace('    if ("call" in task) return; // TaskCard opens its canonical call evidence locally.\n', "")).toBe(baseline(pagePath));
-    for (const path of ["client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-exact-live.css", "client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css", "client/src/components/ui/dialog.tsx"]) expect(readFileSync(path, "utf8")).toBe(baseline(path));
+    for (const path of ["client/src/components/claude-customer-tasks.css", "client/src/pages/command-chat-exact-live.css", "client/src/pages/CommandChatEmailDetail.tsx", "client/src/pages/command-chat-email-detail.css", "client/src/components/ui/dialog.tsx"]) expect(withoutApprovedTaskCallPlayback(path, readFileSync(path, "utf8"))).toBe(baseline(path));
     expect(source).not.toMatch(/\bfetch\(|EventSource|setInterval|\.slice\(0,/);
   });
 });
