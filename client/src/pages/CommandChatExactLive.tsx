@@ -1327,7 +1327,8 @@ export default function CommandChatExactLive() {
   const claimLeadFromQueue = useCallback((lead: CommandLead) => {
     if (lead.claimedBy || claimCommandLead.isPending || unclaimCommandLead.isPending) return;
     setOptimisticClaimedBy((current) => ({ ...current, [lead.id]: callerName }));
-    claimCommandLead.mutate({ messageId: lead.id, ...(lead.sessionId ? { sessionId: lead.sessionId } : {}) });
+    claimCommandLead.mutate({ messageId: lead.id, ...(lead.sessionId ? { sessionId: lead.sessionId } : {}),
+      ...(lead.negotiationId ? { nativeNegotiationId: lead.negotiationId } : {}) });
   }, [callerName, claimCommandLead, claimCommandLead.isPending, unclaimCommandLead.isPending]);
   const unclaimLeadFromQueue = useCallback(async (lead: CommandLead) => {
     if (!lead.claimedBy || unclaimCommandLead.isPending) return;

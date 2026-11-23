@@ -1882,10 +1882,17 @@ export const opsChatRouter = router({
    * Updates the opsChatMessages.metadata field and stamps the conversationSession.
    */
   claimLead: opsChatProcedure
-    .input(z.object({ messageId: z.number(), sessionId: z.number().optional() }))
+    .input(z.object({ messageId: z.number(), sessionId: z.number().optional(), nativeNegotiationId: z.string().trim().min(1).max(128).optional() }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      if (input.nativeNegotiationId) {
+        const { claimNativeThumbtackLead } = await import("./thumbtackNativeClaim");
+        const result = await claimNativeThumbtackLead(db, input.nativeNegotiationId, ctx.opsCaller);
+        if (result.success) broadcastOpsUpdate("lead_update");
+        return result;
+      }
 
       const claimedAt = Date.now();
       const claimedBy = ctx.opsCaller.name;
