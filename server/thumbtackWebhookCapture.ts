@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { handleNativeThumbTackLead, type ThumbTackNativePayload } from "./thumbtackWebhook";
 
 export type ThumbTackWebhookCapture = {
   eventType: string | null;
@@ -110,8 +109,8 @@ export function summarizeThumbTackWebhook(body: unknown): ThumbTackWebhookCaptur
 }
 
 /**
- * Retains every Thumbtack webhook delivery. NegotiationCreatedV4 deliveries also
- * trigger the existing Thumbtack lead lifecycle after durable persistence.
+ * Preview forwards deliveries to the existing Production capture/first-response
+ * owner. Read routes continue to inspect their shared retained event database.
  */
 export function registerThumbTackWebhookCaptureRoute(app: Express): void {
   app.get("/api/webhooks/thumbtack-capture/events", async (req, res) => {
@@ -192,53 +191,33 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
   });
 
   app.post("/api/webhooks/thumbtack-capture", async (req, res) => {
-    const summary = summarizeThumbTackWebhook(req.body);
-    const body = isRecord(req.body) ? req.body : {};
-    const eventId = firstStringAtPaths(body, [
-      "event.webhookID",
-      "event.webhookId",
-      "data.messageID",
-      "data.negotiationID",
-    ]);
-    const eventType = firstStringAtPaths(body, [
-      "event.eventType",
-      "event.type",
-      "eventType",
-      "type",
-    ]) ?? "unknown";
-
     try {
-      const db = await getDb();
-      if (!db) {
-        res.status(503).json({ error: "Database unavailable" });
+      // Forward before any local persistence: Production must receive the first
+      // capture, not a second copy suppressed by its existing intake ownership.
+      // webhookID identifies the subscription, not a unique customer lead.
+      const upstream = await fetch("https://quote.maidinblack.com/api/webhooks/thumbtack-capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(req.body ?? {}),
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!upstream.ok) {
+        console.error("[ThumbTackCapture] Production receiver rejected delivery", upstream.status);
+        res.status(upstream.status).json({ received: false, forwarded: false, error: "Production receiver rejected delivery" });
         return;
       }
-
-      const rawPayload = JSON.stringify(req.body ?? {});
-      await db.execute(
-        sql`INSERT INTO webhook_events (source, event_type, event_id, from_phone, to_phone, raw_payload, processed, created_at) VALUES (${"thumbtack"}, ${eventType}, ${eventId}, ${null}, ${null}, ${rawPayload}, 0, NOW())`
-      );
-      console.log("[ThumbTackCapture] persisted payload summary", JSON.stringify(summary));
-      res.status(200).json({ received: true, summary, persisted: true });
-
-      // Native Lead details are now the active Thumbtack trigger. Keep this
-      // after the response so Thumbtack receives a fast acknowledgement, and
-      // only process the full lead event—not message/status notifications.
-      if (eventType === "NegotiationCreatedV4" && eventId) {
-        const prior = await db.execute(
-          sql`SELECT id FROM webhook_events WHERE source = ${"thumbtack"} AND event_id = ${eventId} ORDER BY id ASC LIMIT 2`
-        );
-        const priorRows = (prior as any)[0] as any[];
-        if (priorRows.length === 1) {
-          await handleNativeThumbTackLead(req.body as ThumbTackNativePayload);
-          await db.execute(sql`UPDATE webhook_events SET processed = 1, processed_at = NOW() WHERE id = ${priorRows[0].id}`);
-        } else {
-          console.log(`[ThumbTackCapture] skipped duplicate native lead event ${eventId}`);
-        }
+      const acknowledgement: unknown = await upstream.json();
+      if (!isRecord(acknowledgement) || acknowledgement.received !== true || acknowledgement.persisted !== true) {
+        throw new Error("PRODUCTION_CAPTURE_ACKNOWLEDGEMENT_MISSING");
       }
+      // Acknowledge only Production's durable capture. No local lead, claim,
+      // model call, sender, retry loop, or duplicate-lead check runs here.
+      res.status(upstream.status).json(acknowledgement);
     } catch (error) {
-      console.error("[ThumbTackCapture] failed to persist payload:", error);
-      res.status(500).json({ received: false, persisted: false });
+      const code = error instanceof Error ? error.name : "FORWARD_FAILED";
+      console.error("[ThumbTackCapture] Production forwarding failed", code);
+      res.status(502).json({ received: false, forwarded: false, error: "Production receiver unavailable" });
     }
   });
 
