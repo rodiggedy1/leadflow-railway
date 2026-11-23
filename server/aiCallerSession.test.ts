@@ -16,7 +16,7 @@ vi.mock("react", () => ({
   useEffect: (effect: () => void | (() => void)) => { const cleanup = effect(); if (cleanup) runner.cleanups.push(cleanup); },
 }));
 import { useAiCallerSession } from "../client/src/hooks/useAiCallerSession";
-const params: AiCallerStart = { leadflowJobId: 501, jobDate: "2026-11-22", personName: "Sample Person", phone: "+12025550101", scenario: "Confirm address", script: "Please confirm the full address including city.", audience: "customer", language: "en" };
+const params: AiCallerStart = { leadflowJobId: 501, jobDate: "2026-11-22", personName: "Sample Person", phone: "+12025550101", scenario: "Confirm address", script: "Please confirm the full address including city.", audience: "customer", language: "en", scriptMode: "instructions" };
 const poll = (status: AiCallerPoll["status"]): AiCallerPoll => ({ status, summary: "Stored summary", transcript: "Ava: Hello.\nCustomer: Hello.", recordingUrl: "https://storage.vapi.ai/sample.wav", durationSeconds: 12 });
 function api(): AiCallerTransport {
   return { startCall: vi.fn(async () => ({ vapiCallId: "sample-call" })), pollCall: vi.fn(async () => poll("completed")) };

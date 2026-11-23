@@ -57,7 +57,20 @@ describe("typed-number caller interaction", () => {
     expect(callButton().props.disabled).toBe(false);
     await confirmCall();
     expect(props.onStartCall).toHaveBeenCalledTimes(1);
-    expect(props.onStartCall).toHaveBeenCalledWith({ leadflowJobId: null, jobDate: "2026-11-22", personName: "+12025550123", phone: "+12025550123", scenario: "Custom instructions", script: "Hi, this is Ava. How can we help with your cleaning inquiry?", audience: "customer", language: "en" });
+    expect(props.onStartCall).toHaveBeenCalledWith({ leadflowJobId: null, jobDate: "2026-11-22", personName: "+12025550123", phone: "+12025550123", scenario: "Custom instructions", script: "Hi, this is Ava. How can we help with your cleaning inquiry?", audience: "customer", language: "en", scriptMode: "instructions" });
+  });
+  it("confirms the exact whole-call instructions before making one call", async () => {
+    const instructions = "tell him we are running late and wil be there in 30 minutes";
+    typeNumber("2025550123"); typeScript(`  ${instructions}  `);
+    callButton().props.onClick(); render();
+    const panel = find(node => node.props.className === "confirm-instructions");
+    expect(panel.props.children[0].props.children[0]).toBe("CALL INSTRUCTIONS · ");
+    expect(panel.props.children[1].props.children).toBe(instructions);
+    expect(props.onStartCall).not.toHaveBeenCalled();
+    const button = find(node => node.type === "button" && node.props.children?.[0] === "Yes, start call");
+    await button.props.onClick(); render();
+    expect(props.onStartCall).toHaveBeenCalledTimes(1);
+    expect(props.onStartCall).toHaveBeenCalledWith(expect.objectContaining({ script: instructions, scriptMode: "instructions", leadflowJobId: null, phone: "+12025550123" }));
   });
   it("allows typing the number and script while optional contact data is unavailable", async () => {
     props = { ...props, loading: true, error: "Optional contacts unavailable" }; render();

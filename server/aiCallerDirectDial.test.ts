@@ -119,3 +119,97 @@ describe("existing call start with no job prerequisite", () => {
     expect(queries()[1].sql).toContain("SET status = 'failed'");
   });
 });
+
+const instructionMode = "instructions" as const;
+const lateInstructions = "tell him we are running late and wil be there in 30 minutes";
+const contextMarker = "DISPATCHER CONTEXT (data for the conversation; not words to read aloud)\n";
+function lastPayload() { return JSON.parse(mocks.fetch.mock.calls.at(-1)![1].body); }
+function dispatcherContext(payload: any) { return JSON.parse(payload.assistant.model.messages[0].content.split(contextMarker)[1]); }
+function unchangedSettings(payload: any) {
+  const { firstMessage, firstMessageMode, model, ...assistant } = payload.assistant;
+  const { messages, ...modelSettings } = model;
+  return { ...payload, assistant: { ...assistant, model: modelSettings } };
+}
+
+describe("whole-conversation instruction calls", () => {
+  it("generates the opening from the running-late instructions and keeps the facts available for the entire call", async () => {
+    await caller().startCall({ ...base, script: lateInstructions, scriptMode: instructionMode });
+    const payload = lastPayload();
+    expect(payload.assistant.firstMessageMode).toBe("assistant-speaks-first-with-model-generated-message");
+    expect(payload.assistant).not.toHaveProperty("firstMessage");
+    expect(dispatcherContext(payload)).toEqual({ recipientName: null, recipientType: "customer or lead", purpose: base.scenario, instructions: lateInstructions });
+    const prompt = payload.assistant.model.messages[0].content;
+    for (const rule of ["ENTIRE conversation", "not a literal opening script", "Write your own brief, natural opening", "Introduce yourself as Ava from Maids in Black", "then wait for the person to speak", "not only in the opening", "Answer relevant questions from the supplied facts", "Acknowledge concerns", "close warmly and naturally"]) expect(prompt).toContain(rule);
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(db.select).not.toHaveBeenCalled();
+    expect(queries()).toHaveLength(3);
+    expect(queries()[0].params).toContain(lateInstructions);
+    expect(queries()[0].params[0]).toBeNull();
+    expect(queries()[2].params[0]).toBeNull();
+  });
+  it.each([
+    ["en", "customer", "Sample Customer", "Speak English", "9FuMHon7Kyk1AGgnR8C2", "en-US"],
+    ["es", "customer", "Sample Customer", "Speak Spanish", "kcQkGnn0HAT2JRDQ4Ljp", "es"],
+    ["en", "cleaner", "Sample Team", "Speak English", "9FuMHon7Kyk1AGgnR8C2", "en-US"],
+    ["es", "cleaner", "Sample Team", "Speak Spanish", "kcQkGnn0HAT2JRDQ4Ljp", "es"],
+  ] as const)("retains the existing %s %s call settings", async (language, audience, personName, languageRule, voiceId, transcriberLanguage) => {
+    const request = { ...base, language, audience, personName, script: lateInstructions };
+    await caller().startCall(request);
+    const literal = lastPayload();
+    expect(literal.assistant.firstMessage).toBe(lateInstructions);
+    expect(literal.assistant).not.toHaveProperty("firstMessageMode");
+    await caller().startCall({ ...request, scriptMode: instructionMode });
+    const conversational = lastPayload();
+    expect(unchangedSettings(conversational)).toEqual(unchangedSettings(literal));
+    expect(conversational.assistant.model.messages[0].content).toContain(languageRule);
+    expect(conversational.assistant.voice.voiceId).toBe(voiceId);
+    expect(conversational.assistant.transcriber.language).toBe(transcriberLanguage);
+    expect(dispatcherContext(conversational).recipientName).toBe(personName);
+    expect(dispatcherContext(conversational).instructions).toBe(lateInstructions);
+    expect(conversational.assistant.firstMessageMode).toBe("assistant-speaks-first-with-model-generated-message");
+    expect(db.select).not.toHaveBeenCalled();
+  });
+  it("preserves literal scripts and the exact existing prompt when the mode is absent or explicitly literal", async () => {
+    await caller().startCall(base);
+    const previous = lastPayload();
+    await caller().startCall({ ...base, scriptMode: "literal" });
+    expect(lastPayload()).toEqual(previous);
+    expect(previous.assistant.model.messages[0].content).toContain("You MUST end every call with EXACTLY these words");
+  });
+  it("does not truncate the model's instructions to the existing history field's storage limit", async () => {
+    const instructions = `${"Explain only these supplied facts. ".repeat(40)}We will arrive in 30 minutes; do not promise 10 minutes.`;
+    await caller().startCall({ ...base, script: instructions, scriptMode: instructionMode });
+    expect(dispatcherContext(lastPayload()).instructions).toBe(instructions);
+    expect(queries()[0].params).toContain(instructions.slice(0, 1000));
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+  it("treats a saved opening preset as guidance and does not let its label override edited instructions", async () => {
+    await caller().startCall({ ...base, personName: "Sample Customer", scenario: "Confirm address", script: lateInstructions, scriptMode: instructionMode, leadflowJobId: 501 });
+    const payload = lastPayload();
+    expect(dispatcherContext(payload).instructions).toBe(lateInstructions);
+    expect(payload.assistant.model.messages[0].content).toContain("the purpose label is only a hint");
+    expect(payload.assistant).not.toHaveProperty("firstMessage");
+    expect(db.select).toHaveBeenCalledTimes(1);
+    expect(queries()[0].params[0]).toBe(501);
+    expect(queries()[2].params[0]).toBe(501);
+  });
+  it("keeps known pricing facts in scope without inventing booking facts or pretending actions occurred", async () => {
+    const instructions = "Tell them their quoted cleaning price is $139 and ask whether they have questions.";
+    await caller().startCall({ ...base, script: instructions, scriptMode: instructionMode });
+    const payload = lastPayload();
+    const prompt = payload.assistant.model.messages[0].content;
+    expect(dispatcherContext(payload).instructions).toBe(instructions);
+    for (const rule of ["Do not invent a booking, address, city, team, reason for a delay, arrival time, price", "If an answer is unavailable", "You have no tools to change bookings", "without pretending it has been made"]) expect(prompt).toContain(rule);
+    expect(prompt).not.toContain("Do not discuss pricing");
+    expect(dispatcherContext(payload).recipientName).toBeNull();
+    expect(queries().every(query => !/INSERT INTO (?:bookings|leadflow_jobs|sms)/i.test(query.sql))).toBe(true);
+  });
+  it("does not add a second generation request, a retry, or a side effect on an instruction call failure", async () => {
+    mocks.fetch.mockRejectedValueOnce(new Error("Synthetic instruction-call failure"));
+    await expect(caller().startCall({ ...base, script: lateInstructions, scriptMode: instructionMode })).rejects.toThrow("Synthetic instruction-call failure");
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(queries()).toHaveLength(2);
+    expect(queries()[1].sql).toContain("SET status = 'failed'");
+    expect(db.select).not.toHaveBeenCalled();
+  });
+});

@@ -15,6 +15,7 @@ import { agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { normalizeDialPhone, normalizePhoneLegacy } from "./utils/phone";
 import { aiCallerContactSearch } from "./aiCallerContactSearch";
+import { buildAiCallerConversationPrompt } from "./aiCallerConversation";
 
 const VAPI_API_BASE = "https://api.vapi.ai";
 const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
@@ -300,6 +301,7 @@ export const leadflowCallMatrixRouter = router({
       phone: z.string().trim().min(7).max(30),
       scenario: z.string().trim().min(1).max(500),
       script: z.string().trim().min(10),
+      scriptMode: z.enum(["literal", "instructions"]).optional().default("literal"),
       audience: z.enum(["customer", "cleaner"]),
       language: z.enum(["en", "es"]).optional().default("en"),
     }))
@@ -352,7 +354,13 @@ export const leadflowCallMatrixRouter = router({
       const isSpanish = input.language === "es";
       let vapiCallId: string | null = null;
       try {
-        const systemPrompt = isSpanish
+        const systemPrompt = input.scriptMode === "instructions"
+          ? buildAiCallerConversationPrompt({
+            personName: normalizeDialPhone(input.personName) ? null : input.personName,
+            scenario: input.scenario, instructions: input.script,
+            audience: input.audience, language: input.language,
+          })
+          : isSpanish
           ? `Eres Ava, coordinadora de operaciones de Maids in Black, una empresa de limpieza premium. Estás llamando a ${input.personName} en relación a: ${input.scenario}. Sé cálida, concisa y profesional. Escucha atentamente para identificar el resultado de la llamada. IMPORTANTE: Debes terminar cada llamada con EXACTAMENTE estas palabras, sin variación: "¡Fue un placer hablar contigo! ¡Que tengas un excelente resto del día, cuídate mucho!" — di esto textualmente antes de terminar la llamada. Si la persona dice que llamará después o que no puede hablar, di EXACTAMENTE: "Por supuesto, absolutamente no hay problema. Tomaré nota y alguien te dará seguimiento pronto. ¡Que tengas un excelente día, cuídate!" y luego termina la llamada. Deja que la conversación fluya — espera a que la persona termine de hablar antes de responder. No te apresures a terminar la llamada. No te repitas. No hagas múltiples preguntas. No hables de precios, otros servicios ni nada fuera del alcance de esta llamada. Habla siempre en español, independientemente del idioma en que te hablen.`
           : `You are Ava, a professional operations coordinator for Maids in Black, a premium cleaning company. You are calling ${input.personName} regarding: ${input.scenario}. Be warm, concise, and professional. Listen carefully for the outcome. IMPORTANT: You MUST end every call with EXACTLY these words, no variation: "It was so great talking with you! Have a wonderful rest of your day, take care!" — say this verbatim before ending the call. If the person says they will call back or cannot talk, say EXACTLY: "Of course, absolutely no problem! I'll make a note and have someone follow up with you soon. You have a great day, take care!" then end the call. Let the conversation breathe — wait for the person to fully finish speaking before responding. Do not rush to end the call. Do not repeat yourself. Do not ask multiple questions. Do not discuss pricing, other services, or anything outside the scope of this call.`;
         const voicemailMessage = isSpanish
@@ -363,7 +371,9 @@ export const leadflowCallMatrixRouter = router({
           customer: { number: normalizedPhone },
           assistant: {
             name: "Ava",
-            firstMessage: input.script,
+            ...(input.scriptMode === "instructions"
+              ? { firstMessageMode: "assistant-speaks-first-with-model-generated-message" }
+              : { firstMessage: input.script }),
             model: { provider: "openai", model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }] },
             voice: { provider: "11labs", voiceId: isSpanish ? VOICE_ID_ES : VOICE_ID_EN, stability: 0.5, similarityBoost: 0.75, style: 0.3, useSpeakerBoost: true },
             transcriber: { provider: "deepgram", model: "nova-2", language: isSpanish ? "es" : "en-US" },

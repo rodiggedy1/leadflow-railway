@@ -12,6 +12,7 @@ export type AiCallerStart = {
   phone: string;
   scenario: string;
   script: string;
+  scriptMode?: "literal" | "instructions";
   audience: "customer" | "cleaner";
   language?: "en" | "es";
 };
