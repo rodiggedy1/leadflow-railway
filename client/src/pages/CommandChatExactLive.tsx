@@ -54,6 +54,7 @@ import { useTabLeader } from "@/hooks/useTabLeader";
 import { IssueEngineOverlay } from "@/components/IssueEngineOverlay";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AiConcierge from "@/components/AiConcierge";
+import { LeadCallNotesButton, LeadCallNotesDialog } from "@/components/LeadCallNotes";
 import { ClaudeCustomerTasksProvider, ClaudeCustomerTasksQueue, ClaudeCustomerTaskStreamCard, ClaudeSmsConversationTasks, customerSmsTaskMessageAnchors, customerTaskIdFromMessage } from "@/components/ClaudeCustomerTasks";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import { getCsInboxReplyPhoneNumberIdForSelectedConversation } from "@shared/csInboxPhoneNumberRouting";
@@ -801,6 +802,8 @@ function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingP
 
   const orderedLeads = [...leads].sort((a, b) => b.ts - a.ts);
   const [selectedLead, setSelectedLead] = useState<CommandLead | null>(null);
+  const [callNotesLead, setCallNotesLead] = useState<CommandLead | null>(null);
+  const callNotesTrigger = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     setSelectedLead((current) => current ? leads.find((lead) => lead.id === current.id) ?? current : current);
   }, [leads]);
@@ -812,7 +815,7 @@ function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingP
     {lead.location && <p className="ccc-live-lead-primary-detail"><MapPin />{lead.location}</p>}
     <p className="ccc-live-lead-primary-detail"><Sparkles />{lead.serviceType || lead.detail}</p>
     <div className="ccc-live-lead-chip-row">{[lead.requestedDates, lead.bedrooms && lead.bathrooms ? `${lead.bedrooms} Bed · ${lead.bathrooms} Bath` : lead.rooms, lead.frequency].filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div>
-    <footer><button type="button" className={lead.claimedBy ? "is-claimed ccc-live-lead-claim-pill" : "ccc-live-lead-claim-pill"} title={lead.claimedBy ? `Unclaim lead from ${lead.claimedBy}` : "Claim lead"} aria-label={lead.claimedBy ? `Unclaim lead from ${lead.claimedBy}` : "Claim lead"} disabled={claimPending} onClick={(event) => { event.stopPropagation(); lead.claimedBy ? onUnclaim(lead) : onClaim(lead); }}>{lead.claimedBy ? <><Check />{firstName(lead.claimedBy)}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={bookingPending || !lead.sessionId} onClick={(event) => { event.stopPropagation(); lead.isBooked ? onUnbook(lead) : onMarkBooked(lead); }}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button><button type="button" className="ccc-live-lead-view-button ccc-live-lead-view-icon" aria-label={`View details for ${lead.name}`} title="View lead details" onClick={(event) => { event.stopPropagation(); setSelectedLead(lead); }}><Eye /></button></footer>
+    <footer><button type="button" className={lead.claimedBy ? "is-claimed ccc-live-lead-claim-pill" : "ccc-live-lead-claim-pill"} title={lead.claimedBy ? `Unclaim lead from ${lead.claimedBy}` : "Claim lead"} aria-label={lead.claimedBy ? `Unclaim lead from ${lead.claimedBy}` : "Claim lead"} disabled={claimPending} onClick={(event) => { event.stopPropagation(); lead.claimedBy ? onUnclaim(lead) : onClaim(lead); }}>{lead.claimedBy ? <><Check />{firstName(lead.claimedBy)}</> : <><Users />Claim</>}</button><button type="button" className={lead.isBooked ? "is-booked" : ""} disabled={bookingPending || !lead.sessionId} onClick={(event) => { event.stopPropagation(); lead.isBooked ? onUnbook(lead) : onMarkBooked(lead); }}>{lead.isBooked ? <><Check />Booked</> : "Book"}</button><LeadCallNotesButton name={lead.name} onOpen={button => { callNotesTrigger.current = button; setCallNotesLead(lead); }} /><button type="button" className="ccc-live-lead-view-button ccc-live-lead-view-icon" aria-label={`View details for ${lead.name}`} title="View lead details" onClick={(event) => { event.stopPropagation(); setSelectedLead(lead); }}><Eye /></button></footer>
   </section>; };
   return (
     <article className={`ccc-context-card ccc-live-lead-queue ${orderedLeads.length ? "has-leads" : ""}`}>
@@ -820,6 +823,7 @@ function LeadQueue({ title, description, leads, smsInbox, claimPending, bookingP
       <p className="ccc-live-lead-queue-description">{description}</p>
       {orderedLeads.length ? <div className="ccc-live-lead-list">{orderedLeads.map(renderLeadCard)}</div> : <p className="ccc-live-card-empty">No leads in this queue.</p>}
       {selectedLead && <LeadDetailPanel lead={selectedLead} onClose={() => setSelectedLead(null)} onClaim={onClaim} onUnclaim={onUnclaim} claimPending={claimPending} bookingPending={bookingPending} onMarkBooked={onMarkBooked} onUnbook={onUnbook} onOpenSms={onOpenSms} onTestBridge={onTestBridge} bridgePending={bridgePending} onCopyPhone={copyPhone} />}
+      {callNotesLead && <LeadCallNotesDialog lead={callNotesLead} onClose={() => setCallNotesLead(null)} returnFocus={() => callNotesTrigger.current?.focus()} />}
     </article>
   );
 }

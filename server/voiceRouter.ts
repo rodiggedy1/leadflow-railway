@@ -14,8 +14,13 @@ import { router, agentProcedure } from "./_core/trpc";
 import { getDb } from "./db";
 import { voiceCalls, callbackTasks, conversationSessions } from "../drizzle/schema";
 import { getAssistantId } from "./vapiService";
+import { leadCallNotesInputSchema } from "../shared/leadCallNotes";
+import { getLeadCallNotes } from "./leadCallNotes";
 
 export const voiceRouter = router({
+  getLeadCallNotes: agentProcedure.input(leadCallNotesInputSchema)
+    .query(({ input }) => getLeadCallNotes(input)),
+
   /**
    * List all voice calls, newest first.
    */
