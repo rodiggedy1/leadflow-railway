@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { thumbtackSmsPhonePattern } from "./thumbtackSmsPhone";
 
 /** Explicit projection of the authenticated staff's existing selected lead card.
  * All builder fields are required; nullability matches the current UI type. */
@@ -63,13 +62,6 @@ export const claudeInitialLeadResultSchema = z.object({
 }).strict();
 export type ClaudeInitialLeadInput = z.infer<typeof claudeInitialLeadInputSchema>;
 export type ClaudeInitialLeadResult = z.infer<typeof claudeInitialLeadResultSchema>;
-
-/** Native WorldClass output is not a managed Claude agent session. */
-export const thumbtackInitialLeadResultSchema = claudeInitialLeadResultSchema.extend({
-  customerPhone: z.string().regex(thumbtackSmsPhonePattern),
-  agentSessionId: z.string().min(1).optional(),
-});
-export type ThumbtackInitialLeadResult = z.infer<typeof thumbtackInitialLeadResultSchema>;
 
 // Prompt bytes and builder body moved verbatim from the approved UI baseline.
 export const THUMBTACK_FIRST_RESPONSE_PROMPT = `You write first-response texts for inbound cleaning leads (Thumbtack and similar) for Maids in Black, a house cleaning business serving the DMV. I will paste a lead. Reply with ONLY the copy-paste message, with no notes, commentary, or explanations before or after it.

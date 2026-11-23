@@ -20,10 +20,10 @@ import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
 import { registerThumbTackWebhookCaptureRoute } from "./thumbtackWebhookCapture";
 import { capturedThumbtackLead } from "./instinct/claudeThumbtackFirstResponse";
 
-const envKeys = ["RAILWAY_ENVIRONMENT_NAME", "PREVIEW_MODE", "THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED", "OPENPHONE_PHONE_NUMBER_ID"];
+const envKeys = ["RAILWAY_ENVIRONMENT_NAME", "PREVIEW_MODE", "THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED", "THUMBTACK_CLAUDE_FIRST_RESPONSE_START_AT", "OPENPHONE_PHONE_NUMBER_ID"];
 const baseline = envKeys.map(key => process.env[key]);
 const payload = () => ({
-  event: { eventType: "NegotiationCreatedV4", webhookID: "offline-native-delivery" },
+  event: { eventType: "NegotiationCreatedV4", webhookID: "offline-native-delivery", triggeredAt: "2026-11-23T14:22:00Z" },
   data: {
     negotiationID: "offline-negotiation", createdAt: "2026-11-23T14:21:57Z",
     customer: { firstName: "Synthetic", lastName: "Lead", phone: "2025550123" },
@@ -44,6 +44,7 @@ beforeEach(() => {
   envKeys.forEach(key => delete process.env[key]);
   process.env.RAILWAY_ENVIRONMENT_NAME = "production";
   process.env.THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED = "true";
+  process.env.THUMBTACK_CLAUDE_FIRST_RESPONSE_START_AT = "2026-11-16T17:43:22Z";
   process.env.OPENPHONE_PHONE_NUMBER_ID = "PN-offline";
   mocks.getDb.mockResolvedValue({ execute: mocks.execute });
   mocks.execute.mockResolvedValue([{ insertId: 501, affectedRows: 1 }]);
@@ -70,7 +71,8 @@ describe("Production native Thumbtack webhook ownership", () => {
     expect(insert.sql).toContain("INSERT INTO webhook_events");
     expect(insert.params).toContain(JSON.stringify(body));
     const projected = capturedThumbtackLead({ id: 501, source: "thumbtack", eventType: "NegotiationCreatedV4",
-      receivedAt: new Date("2026-11-23T14:22:12Z"), rawPayload: JSON.stringify(body) }, { startAt: 0, fromNumberId: "PN-offline" });
+      receivedAt: new Date("2026-11-23T14:22:12Z"), earliestId: 501, earliestReceivedAt: new Date("2026-11-23T14:22:12Z"),
+      rawPayload: JSON.stringify(body) }, { startAt: 0, fromNumberId: "PN-offline" });
     expect(projected).toMatchObject({ phone: "+12025550123", sendEligible: true });
     expect(mocks.sendSms).not.toHaveBeenCalled(); expect(mocks.invokeLLM).not.toHaveBeenCalled();
     expect(mocks.setting).not.toHaveBeenCalled(); expect(mocks.notify).not.toHaveBeenCalled();
@@ -83,9 +85,10 @@ describe("Production native Thumbtack webhook ownership", () => {
     expect(mocks.sendSms).not.toHaveBeenCalled(); expect(mocks.invokeLLM).not.toHaveBeenCalled();
   });
   it("does not fall back to the two-message legacy sender when native dispatch fails", async () => {
-    const h = routes(); mocks.dispatch.mockResolvedValue({ captureId: 501, outcome: "failed", code: "OFFLINE_FAILURE" });
+    const h = routes(); mocks.dispatch.mockRejectedValue(new Error("OFFLINE_FAILURE"));
     await h.legacyUrl({ body: payload() }, h.res);
-    expect(mocks.dispatch).toHaveBeenCalledOnce(); expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.dispatch).toHaveBeenCalledOnce(); expect(mocks.execute).toHaveBeenCalledTimes(2);
+    expect(new MySqlDialect().sqlToQuery(mocks.execute.mock.calls[1][0]).sql).toContain("SET processed = 1");
     expect(mocks.sendSms).not.toHaveBeenCalled(); expect(mocks.invokeLLM).not.toHaveBeenCalled();
   });
   it("does not invoke any sender when durable native capture fails", async () => {

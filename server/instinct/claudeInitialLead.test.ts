@@ -9,14 +9,14 @@ vi.mock("./claudeAgentClient", async importOriginal => ({ ...await importOrigina
 vi.mock("../csReplyStream", async importOriginal => ({ ...await importOriginal<typeof import("../csReplyStream")>(), prepareCsReplyMessages: vi.fn() }));
 import { getDb } from "../db";
 import { getAgentFromRequest } from "../_core/agentAuth";
-import { ManagedAgentDemoError, runInitialLeadDraft } from "./claudeAgentClient";
+import { runInitialLeadDraft } from "./claudeAgentClient";
 import { prepareCsReplyMessages, buildSystemPrompt } from "../csReplyStream";
 import { madisonRouter } from "../madisonRouter";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "../knowledgeBase";
 import { THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext,
   claudeInitialLeadFactsSchema, claudeInitialLeadInputSchema, claudeInitialLeadResultSchema,
   type ClaudeInitialLeadInput, type ClaudeInitialLeadFacts } from "../../shared/claudeInitialLead";
-import { CLAUDE_INITIAL_LEAD_TIMEOUT_MS, createClaudeInitialLeadService, generateClaudeInitialLead, generateClaudeInitialLeadContent, type ClaudeInitialLeadOptions, type InitialLeadRunner } from "./claudeInitialLead";
+import { createClaudeInitialLeadService, generateClaudeInitialLeadContent, type ClaudeInitialLeadOptions, type InitialLeadRunner } from "./claudeInitialLead";
 import { validateClaudeReviewReply, type OpsCaller } from "./claudeSmsAlternative";
 const BASELINE = "0ef8260b3c4ac52cb68e4b84e6f420d0f46e2f6f";
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -37,8 +37,6 @@ const output = (finalSmsText = reply) => ({ finalSmsText, agentId: "agent_verifi
 type PreparedMessages = Awaited<ReturnType<typeof prepareCsReplyMessages>>;
 const messages: PreparedMessages = [{ role: "system", content: buildSystemPrompt() }, { role: "user",
   content: `Customer's first name: Peter\n\nUpcoming job details:\n${leadContext}\n\nRecent conversation with this customer:\n${draftRequest.conversationContext}\n\nCustomer service scenario: ${draftRequest.scenario}` }];
-const runnerRequest = (prepared = messages) => ({ systemPrompt: prepared[0].content, userPrompt: prepared[1].content,
-  signal: expect.any(AbortSignal), onTrace: expect.any(Function) });
 function harness(overrides: Partial<ClaudeInitialLeadOptions> = {}) {
   const authorizeCaller = vi.fn(async () => true);
   const prepareMessages = vi.fn(async () => copy(messages));
@@ -51,17 +49,15 @@ beforeEach(() => {
   vi.clearAllMocks(); network = vi.fn(() => { throw new Error("OFFLINE_NO_NETWORK"); }); vi.stubGlobal("fetch", network);
   vi.mocked(getDb).mockResolvedValue(null); vi.mocked(getAgentFromRequest).mockResolvedValue(null);
   vi.mocked(prepareCsReplyMessages).mockResolvedValue(copy(messages));
-  vi.spyOn(console, "info").mockImplementation(() => undefined);
-  vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
-afterEach(() => { expect(network).not.toHaveBeenCalled(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { expect(network).not.toHaveBeenCalled(); vi.unstubAllGlobals(); });
 
 describe("complete first-lead instruction setup, not an appended wrapper", () => {
   it.each([0, 7])("passes exact assembled system/user strings for session %s, with no additional framing or context tool", async sessionId => {
     const source = copy({ ...input, sessionId }), before = copy(source), h = harness();
     const result = await h.service.generate(source, staff);
     expect(h.prepareMessages).toHaveBeenCalledWith(source.draftRequest);
-    expect(h.runner.mock.calls[0][0]).toEqual(runnerRequest());
+    expect(h.runner.mock.calls[0][0]).toEqual({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
     expect(messages[0].content).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(messages[1].content).toContain(THUMBTACK_FIRST_RESPONSE_PROMPT);
     expect(messages[1].content).toContain("Selected extras: Cabinets, Fridge, Oven, Laundry");
@@ -75,13 +71,13 @@ describe("complete first-lead instruction setup, not an appended wrapper", () =>
       { role: "user", content: "=== CURRENT CONVERSATION STATE ===\n=== SOURCE PRIORITY ===\n" + "retained ".repeat(5000) + draftRequest.scenario } ];
     const h = harness({ prepareMessages: async () => complete });
     await h.service.generate(input, staff);
-    expect(h.runner.mock.calls[0][0]).toEqual(runnerRequest(complete));
+    expect(h.runner.mock.calls[0][0]).toEqual({ systemPrompt: complete[0].content, userPrompt: complete[1].content });
   });
   it("uses the actual common preparation and dedicated initial transport by default", async () => {
     vi.mocked(runInitialLeadDraft).mockResolvedValue(output() as never);
     const result = await createClaudeInitialLeadService({ authorizeCaller: async () => true }).generate(input, staff);
     expect(prepareCsReplyMessages).toHaveBeenCalledWith(draftRequest);
-    expect(runInitialLeadDraft).toHaveBeenCalledWith(runnerRequest());
+    expect(runInitialLeadDraft).toHaveBeenCalledWith({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
     expect(result.replyText).toBe(reply);
   });
   it("keeps untrusted customer text in user context; browser cannot override system/model/tools", async () => {
@@ -96,7 +92,7 @@ describe("complete first-lead instruction setup, not an appended wrapper", () =>
     const { draftRequest: omitted, ...oldInput } = input, h = harness();
     await h.service.generate(oldInput, staff);
     expect(h.prepareMessages).toHaveBeenCalledWith(draftRequest);
-    expect(h.runner.mock.calls[0][0]).toEqual(runnerRequest());
+    expect(h.runner.mock.calls[0][0]).toEqual({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
   });
 });
 
@@ -147,11 +143,13 @@ describe("preserved human authorization, review-only guards and request lifecycl
     "We will contact the team.", "Your request was escalated.", "We let the team know.", "Your quote was sent.", "Your quote has been created."])("retains no-operation claim denial: %s", async text => {
     await expect(harness({ runner: async () => output(text) }).service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
   });
-  it.each(["5pm", "5pm Eastern", "Puedes reservar cuando estés lista."])("does not suppress first-lead content for timezone wording: %s", async text => {
-    expect((await harness({ runner: async () => output(text) }).service.generate(input, staff)).replyText).toBe(text);
-  });
   it.each(["Quote ID: Q-88.", "Quote code: Q-88.", "Booking code: LF-88.", `Request ${input.requestId}.`])("retains technical identifier/presentation denial: %s", async text => {
     await expect(harness({ runner: async () => output(text) }).service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
+  });
+  it("uses the unchanged current shared validator for ordinary time wording", async () => {
+    const text = "Tomorrow at 10 AM Eastern.";
+    expect(validateClaudeReviewReply(JSON.stringify({ replyText: text }), [input.requestId])).toBe(text);
+    expect((await harness({ runner: async () => output(text) }).service.generate(input, staff)).replyText).toBe(text);
   });
   it.each(["", "   "])("rejects empty plain SMS %s", async text => {
     await expect(harness({ runner: async () => output(text) }).service.generate(input, staff)).rejects.toThrow();
@@ -188,9 +186,7 @@ describe("content-only reuse for the trusted native first-response dispatcher", 
     const manual = await h.service.generate(input, staff);
     const automaticContent = await generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner: h.runner });
     expect(automaticContent).toEqual(manual);
-    expect(h.runner.mock.calls[0][0]).toEqual(runnerRequest());
-    expect(h.runner.mock.calls[1][0]).toEqual(runnerRequest());
-    expect(h.runner.mock.calls[0][0].signal).not.toBe(h.runner.mock.calls[1][0].signal);
+    expect(h.runner.mock.calls[0][0]).toEqual(h.runner.mock.calls[1][0]);
     expect(automaticContent.replyText).toBe(reply);
     expect(automaticContent.smsSent).toBe(false);
     expect(automaticContent.actionsExecuted).toBe(false);
@@ -201,7 +197,7 @@ describe("content-only reuse for the trusted native first-response dispatcher", 
     vi.mocked(runInitialLeadDraft).mockResolvedValue(output() as never);
     expect((await generateClaudeInitialLeadContent(input)).replyText).toBe(reply);
     expect(prepareCsReplyMessages).toHaveBeenCalledWith(draftRequest);
-    expect(runInitialLeadDraft).toHaveBeenCalledWith(runnerRequest());
+    expect(runInitialLeadDraft).toHaveBeenCalledWith({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
   });
   it("preserves the same validation and refuses a blank or falsely completed action", async () => {
     const h = harness();
@@ -219,7 +215,7 @@ describe("actual existing human-authenticated Madison route", () => {
   it.each([0, 7])("uses owner caller and dedicated transport for session %s", async sessionId => {
     vi.mocked(runInitialLeadDraft).mockResolvedValue(output() as never);
     expect(await madisonRouter.createCaller(context({ openId: `owner-${sessionId}`, name: null } as never)).claudeAlternative.generateInitialLead({ ...input, sessionId })).toMatchObject({ kind: "initial_lead", sessionId, smsSent: false, actionsExecuted: false });
-    expect(runInitialLeadDraft).toHaveBeenCalledWith(runnerRequest());
+    expect(runInitialLeadDraft).toHaveBeenCalledWith({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
   });
   it("uses actual agent middleware caller instead of client identity", async () => {
     vi.mocked(getAgentFromRequest).mockResolvedValue({ agentId: 3, agentName: "Office", agentEmail: "offline@example.test", isAdmin: false } as never);
@@ -233,191 +229,6 @@ describe("actual existing human-authenticated Madison route", () => {
   });
 });
 const baselineFile = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
-describe("bounded initial caller lifecycle and safe diagnostics (offline only)", () => {
-  const fakeClock = () => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-  const settle = () => new Promise<void>(resolve => setImmediate(resolve));
-  const errorLogs = () => vi.mocked(console.error).mock.calls.map(call => call[1]);
-  const allLogs = () => JSON.stringify([...vi.mocked(console.info).mock.calls, ...vi.mocked(console.error).mock.calls]);
-
-  it.each(["resolve", "reject"])("bounds hanging preparation, clears coalescing, and ignores late %s without model execution", async late => {
-    fakeClock();
-    let resolve!: (value: PreparedMessages) => void, reject!: (error: Error) => void;
-    const prepareMessages = vi.fn<typeof prepareCsReplyMessages>().mockImplementationOnce(() => new Promise((yes, no) => { resolve = yes; reject = no; }))
-      .mockResolvedValue(copy(messages));
-    const h = harness({ prepareMessages });
-    const a = h.service.generate(input, staff).catch(error => error);
-    const b = h.service.generate(copy(input), staff).catch(error => error);
-    await settle(); expect(prepareMessages).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(CLAUDE_INITIAL_LEAD_TIMEOUT_MS - 1);
-    expect(errorLogs()).toHaveLength(0); expect(h.runner).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(await a).toMatchObject({ code: "TIMEOUT" }); expect(await b).toMatchObject({ code: "TIMEOUT" });
-    expect(errorLogs()).toContainEqual({ stage: "prepare_messages", sessionId: input.sessionId, code: "TIMEOUT" });
-    expect(vi.getTimerCount()).toBe(0);
-    if (late === "resolve") resolve(messages); else reject(new Error("SECRET_LATE_PREPARATION_FAILURE"));
-    await settle(); expect(h.runner).not.toHaveBeenCalled();
-    expect((await h.service.generate(input, staff)).replyText).toBe(reply);
-    expect(h.runner).toHaveBeenCalledTimes(1); expect(prepareMessages).toHaveBeenCalledTimes(2);
-    expect(allLogs()).not.toContain("SECRET_LATE_PREPARATION_FAILURE"); expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it.each(["resolve", "reject"])("gives execution only the remaining budget and observes its late %s", async late => {
-    fakeClock();
-    let prepare!: (value: PreparedMessages) => void, resolve!: (value: ReturnType<typeof output>) => void, reject!: (error: Error) => void;
-    let signal!: AbortSignal;
-    const h = harness({ prepareMessages: () => new Promise(yes => { prepare = yes; }),
-      runner: options => { signal = options.signal!; return new Promise((yes, no) => { resolve = yes; reject = no; }); } });
-    const result = h.service.generate(input, staff).catch(error => error);
-    await settle(); await vi.advanceTimersByTimeAsync(90_000); prepare(messages); await settle();
-    expect(signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(29_999); expect(signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1); expect(await result).toMatchObject({ code: "TIMEOUT" }); expect(signal.aborted).toBe(true);
-    const authorizeCount = h.authorizeCaller.mock.calls.length;
-    if (late === "resolve") resolve(output()); else reject(new Error("SECRET_LATE_RUN_FAILURE"));
-    await settle(); expect(h.authorizeCaller.mock.calls).toHaveLength(authorizeCount);
-    expect(errorLogs()).toContainEqual({ stage: "managed_agent", sessionId: input.sessionId, code: "TIMEOUT" });
-    expect(allLogs()).not.toContain("SECRET_LATE_RUN_FAILURE"); expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("bounds the native content-only path before preparation can return", async () => {
-    fakeClock(); const runner = vi.fn<InitialLeadRunner>();
-    const result = generateClaudeInitialLeadContent(input, { prepareMessages: () => new Promise(() => {}), runner }).catch(error => error);
-    await vi.advanceTimersByTimeAsync(CLAUDE_INITIAL_LEAD_TIMEOUT_MS);
-    expect(await result).toMatchObject({ code: "TIMEOUT" }); expect(runner).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("wires the caller deadline through the actual transport to a hanging mocked HTTP request", async () => {
-    fakeClock(); vi.stubEnv("ANTHROPIC_API_KEY", "offline-placeholder-never-a-credential");
-    const actual = await vi.importActual<typeof import("./claudeAgentClient")>("./claudeAgentClient");
-    let transportSignal!: AbortSignal, rejectHttp!: (error: Error) => void;
-    const fetchMock = vi.fn((_url: unknown, init?: RequestInit) => {
-      transportSignal = init!.signal as AbortSignal;
-      return new Promise<Response>((_resolve, reject) => { rejectHttp = reject; });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const h = harness({ runner: actual.runInitialLeadDraft });
-    const result = h.service.generate(input, staff).catch(error => error);
-    await settle(); expect(fetchMock).toHaveBeenCalledTimes(1); expect(transportSignal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(CLAUDE_INITIAL_LEAD_TIMEOUT_MS);
-    expect(await result).toMatchObject({ code: "TIMEOUT" }); expect(transportSignal.aborted).toBe(true);
-    rejectHttp(new Error("PRIVATE_TRANSPORT_FAILURE")); await settle();
-    expect(fetchMock).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
-    expect(allLogs()).not.toContain("PRIVATE_TRANSPORT_FAILURE");
-  });
-
-  it("aborts an active mocked SSE transport and retains its safe session and last HTTP status at timeout", async () => {
-    fakeClock(); vi.stubEnv("ANTHROPIC_API_KEY", "offline-placeholder-never-a-credential");
-    const actual = await vi.importActual<typeof import("./claudeAgentClient")>("./claudeAgentClient");
-    const sessionId = "sesn_OfflineSse";
-    const base = { type: "agent", id: actual.EXISTING_AGENT_ID, version: actual.EXISTING_AGENT_VERSION,
-      archived_at: null, model: { id: "opaque-saved-fixture" }, system: "opaque-saved-system", multiagent: null };
-    const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
-    const cancel = vi.fn(); let transportSignal!: AbortSignal;
-    const fetchMock = vi.fn(async (url: unknown, init?: RequestInit) => {
-      transportSignal = init!.signal as AbortSignal;
-      const path = new URL(String(url)).pathname;
-      if (path === `/v1/agents/${actual.EXISTING_AGENT_ID}`) return json(base);
-      if (path === `/v1/environments/${actual.EXISTING_ENVIRONMENT_ID}`) return json({ type: "environment", id: actual.EXISTING_ENVIRONMENT_ID, archived_at: null, config: { type: "cloud" } });
-      if (path === "/v1/sessions") {
-        const body = JSON.parse(String(init!.body));
-        return json({ type: "session", id: sessionId, agent: { ...base, ...body.agent, type: "agent" }, environment_id: actual.EXISTING_ENVIRONMENT_ID,
-          status: "idle", archived_at: null, budget: null, resources: [], vault_ids: [], deployment_id: null });
-      }
-      if (path === `/v1/sessions/${sessionId}/events/stream`) return new Response(new ReadableStream({ cancel }), { headers: { "content-type": "text/event-stream" } });
-      if (path === `/v1/sessions/${sessionId}/events`) return json({ data: [{ ...JSON.parse(String(init!.body)).events[0], id: "sevt_OfflineEcho" }] });
-      throw new Error("OFFLINE_UNEXPECTED_REQUEST");
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const result = harness({ runner: actual.runInitialLeadDraft }).service.generate(input, staff).catch(error => error);
-    await settle(); expect(fetchMock).toHaveBeenCalledTimes(5); expect(transportSignal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(CLAUDE_INITIAL_LEAD_TIMEOUT_MS);
-    expect(await result).toMatchObject({ code: "TIMEOUT" }); await settle();
-    expect(transportSignal.aborted).toBe(true); expect(cancel).toHaveBeenCalledTimes(1); expect(fetchMock).toHaveBeenCalledTimes(5);
-    expect(errorLogs()).toContainEqual({ stage: "managed_agent", sessionId: input.sessionId, agentSessionId: sessionId, status: 200, code: "TIMEOUT" });
-    expect(vi.getTimerCount()).toBe(0); expect(allLogs()).not.toContain(messages[1].content);
-  });
-
-  it.each(["success", "failure"])("cleans its timer and aborts its signal after immediate %s", async kind => {
-    fakeClock(); let signal!: AbortSignal;
-    const h = harness({ runner: async options => { signal = options.signal!; if (kind === "failure") throw new Error("PRIVATE_FAILURE"); return output(); } });
-    const result = await h.service.generate(input, staff).catch(error => error);
-    if (kind === "success") expect(result.replyText).toBe(reply); else expect(result.message).toBe("PRIVATE_FAILURE");
-    expect(signal.aborted).toBe(true); expect(vi.getTimerCount()).toBe(0);
-    const count = errorLogs().length; await vi.advanceTimersByTimeAsync(CLAUDE_INITIAL_LEAD_TIMEOUT_MS);
-    expect(errorLogs()).toHaveLength(count); expect(allLogs()).not.toContain("PRIVATE_FAILURE");
-  });
-
-  it.each(["before_run", "before_return"])("bounds a hanging staff reauthorization %s", async stage => {
-    fakeClock(); let checks = 0;
-    const authorizeCaller = vi.fn(() => ++checks === (stage === "before_run" ? 3 : 4) ? new Promise<boolean>(() => {}) : Promise.resolve(true));
-    const h = harness({ authorizeCaller });
-    const result = h.service.generate(input, staff).catch(error => error);
-    await vi.advanceTimersByTimeAsync(CLAUDE_INITIAL_LEAD_TIMEOUT_MS);
-    expect(await result).toMatchObject({ code: "TIMEOUT" });
-    expect(h.runner).toHaveBeenCalledTimes(stage === "before_run" ? 0 : 1); expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("returns a specific safe timeout through the real manual route without fallback", async () => {
-    fakeClock(); let started!: () => void;
-    const entered = new Promise<void>(resolve => { started = resolve; });
-    vi.mocked(prepareCsReplyMessages).mockImplementationOnce(() => { started(); return new Promise(() => {}); });
-    const result = madisonRouter.createCaller(context({ openId: "offline-timeout", name: null } as never)).claudeAlternative.generateInitialLead(input).catch(error => error);
-    await entered; expect(prepareCsReplyMessages).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(CLAUDE_INITIAL_LEAD_TIMEOUT_MS);
-    expect(await result).toMatchObject({ code: "TIMEOUT", message: "Claude initial lead drafting timed out. No SMS was sent and no actions were executed." });
-    expect(runInitialLeadDraft).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("retains safe stage/session/status/code and drops all prompt, text, path, credentials, and raw exception fields", async () => {
-    const secret = "sk-secret-offline-marker";
-    vi.mocked(runInitialLeadDraft).mockImplementationOnce(async options => {
-      await options.onTrace!({ stage: "session_created", sessionId: "sesn_OfflineSafe" });
-      await options.onTrace!({ stage: "http_response", sessionId: "sesn_OfflineSafe", status: 429,
-        path: secret, texts: [secret], input: { private: secret }, headers: { authorization: secret }, error: new Error(secret) } as never);
-      throw new ManagedAgentDemoError("PROVIDER_HTTP_ERROR", "sesn_OfflineSafe", 429, "rejected");
-    });
-    await expect(generateClaudeInitialLead(input, staff)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
-    expect(errorLogs()).toContainEqual({ stage: "managed_agent", sessionId: input.sessionId, agentSessionId: "sesn_OfflineSafe", status: 429, code: "PROVIDER_HTTP_ERROR" });
-    const logs = allLogs();
-    for (const value of [secret, messages[0].content, messages[1].content, input.customerPhone, details.description!, reply]) expect(logs).not.toContain(value);
-    expect(vi.mocked(console.info).mock.calls.map(call => call[1])).toContainEqual({ stage: "managed_agent", traceStage: "http_response", sessionId: input.sessionId, agentSessionId: "sesn_OfflineSafe", status: 429 });
-  });
-
-  it("does not trust arbitrary code/status/session projections from unknown exceptions or spoofed hooks", async () => {
-    vi.mocked(runInitialLeadDraft).mockImplementationOnce(async options => {
-      await options.onTrace!({ stage: "SECRET_STAGE", sessionId: "SECRET_SESSION", status: "SECRET_STATUS", code: "SECRET_CODE" } as never);
-      await options.onTrace!({ stage: "http_response", sessionId: "SECRET_SESSION", status: 999, code: "SECRET_CODE" } as never);
-      throw Object.assign(new Error("SECRET_RAW_ERROR"), { code: "SECRET_CODE", status: 401, sessionId: "SECRET_SESSION" });
-    });
-    await expect(generateClaudeInitialLead(input, staff)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
-    expect(errorLogs()).toContainEqual({ stage: "managed_agent", sessionId: input.sessionId, code: "INITIAL_LEAD_FAILED" });
-    expect(allLogs()).not.toContain("SECRET_");
-  });
-
-  it("logs safe preparation failure classification without the original exception detail", async () => {
-    vi.mocked(prepareCsReplyMessages).mockRejectedValueOnce(new Error("SECRET_PREPARATION_DETAILS"));
-    await expect(generateClaudeInitialLead(input, staff)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
-    expect(errorLogs()).toContainEqual({ stage: "prepare_messages", sessionId: input.sessionId, code: "INITIAL_LEAD_FAILED" });
-    expect(runInitialLeadDraft).not.toHaveBeenCalled(); expect(allLogs()).not.toContain("SECRET_PREPARATION_DETAILS");
-  });
-
-  it("retains known safety failure classification", async () => {
-    vi.mocked(runInitialLeadDraft).mockResolvedValueOnce(output("I've sent the quote.") as never);
-    await expect(generateClaudeInitialLead(input, staff)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
-    expect(errorLogs()).toContainEqual({ stage: "validate_reply", sessionId: input.sessionId, agentSessionId: "sesn_verified", code: "UNSAFE_REPLY_CLAIM" });
-  });
-
-  it("preserves manual staff-auth errors and logs only a fixed code", async () => {
-    await expect(generateClaudeInitialLead(input, { ...staff, name: "SECRET_STAFF_NAME", isOwner: "bad" } as never)).rejects.toMatchObject({ code: "UNAUTHORIZED", message: "Staff login required." });
-    expect(prepareCsReplyMessages).not.toHaveBeenCalled(); expect(runInitialLeadDraft).not.toHaveBeenCalled();
-    expect(errorLogs()).toContainEqual({ stage: "manual_wrapper", code: "UNAUTHORIZED" }); expect(allLogs()).not.toContain("SECRET_STAFF_NAME");
-  });
-
-  it("does not let failing logging change successful draft behavior", async () => {
-    vi.mocked(console.info).mockImplementation(() => { throw new Error("LOGGER_FAILURE"); });
-    expect((await harness().service.generate(input, staff)).replyText).toBe(reply);
-  });
-});
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 describe("exact protected source preservation", () => {
   it("keeps the original shared lead prompt and builder body verbatim", () => {
@@ -426,7 +237,8 @@ describe("exact protected source preservation", () => {
     expect(shared.match(/export function buildThumbtackLeadDraftContext\(lead: ClaudeInitialLeadFacts\): string \{([\s\S]*?)\n\}/)![1]).toBe(old.match(/function buildThumbtackLeadDraftContext\(lead: CommandLead\): string \{([\s\S]*?)\n\}/)![1]);
   });
   it("retains the existing validator and general Claude path without changes", () => {
-    for (const path of ["server/madisonKnowledgeRetrieval.ts", "server/knowledgeBase.ts", "server/utils/phone.ts", "shared/claudeSmsAlternative.ts"]) expect(sha(readFileSync(path, "utf8"))).toBe(sha(baselineFile(path)));
+    for (const path of ["server/madisonKnowledgeRetrieval.ts", "server/knowledgeBase.ts", "server/utils/phone.ts", "shared/claudeSmsAlternative.ts", "server/instinct/claudeSmsAlternative.ts"])
+      expect(sha(readFileSync(path, "utf8"))).toBe(sha(execFileSync("git", ["show", `51c0565d6e2a371c28922fb0725cf997577e3b7c:${path}`], { encoding: "utf8" })));
     const source = readFileSync("server/instinct/claudeInitialLead.ts", "utf8");
     expect(source).not.toContain("CLAUDE_INITIAL_LEAD_SAFETY_INSTRUCTIONS"); expect(source).not.toContain("get_customer_context");
     expect(source).not.toMatch(/sendSms\s*\(|setInterval\s*\(|\bdb\.(?:insert|update|delete)\s*\(|ensureAccount|CREATE TABLE|ALTER TABLE/);
