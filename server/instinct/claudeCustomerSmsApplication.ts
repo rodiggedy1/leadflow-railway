@@ -42,6 +42,7 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
     },
     readReceivingLine: createReceivingLineReader(),
     generate: (binding, session, signal) => createClaudeCustomerSmsGeneratorWithReply(createSmsBookingQuoteReplyGenerator({
+      signal,
       smsBookingQuote: { readState: quoteStore.read },
       runner: options => runInitialLeadDraft({ ...options, signal }),
     }))(binding, session),

@@ -29,6 +29,7 @@ export interface SmsBookingQuotePreparation {
 }
 export type SmsBookingQuoteReplyPlan = CustomerReplyPlan & { smsBookingQuote?: SmsBookingQuotePreparation };
 export type SmsBookingQuoteGenerationOptions = ClaudeCustomerSmsGenerationOptions & {
+  signal?: AbortSignal;
   smsBookingQuote: {
     readState(binding: ClaudeCustomerSmsGenerationBinding): Promise<SmsBookingQuoteState | null>;
   };
@@ -70,8 +71,8 @@ function templateNeutralText(template: string): string {
 }
 
 /** Passive SMS-only wrapper. The caller must first verify exactConversation.
- * All captures are invocation-local. One original saved-agent runner call;
- * no persistence, provider/DB calls, sends, classifier, retries or price math. */
+ * All captures are invocation-local. One saved-agent call plus at most one
+ * syntax-only recovery; no persistence, sends, classifier or price math. */
 export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGenerationOptions) {
   return async function generateSmsBookingQuoteReply(input: ClaudeCustomerReplyInput): Promise<SmsBookingQuoteReplyPlan> {
     const binding = input.context.binding as ClaudeCustomerSmsGenerationBinding | undefined;
@@ -101,11 +102,21 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
         const indexedPayload = { ...payload, context: { ...payload.context,
           originalConversation: originalConversation.map((turn, turnIndex) => ({ ...turn, turnIndex })),
         } };
-        const output = await (options.runner ?? runInitialLeadDraft)({ ...runnerOptions,
+        const request = { ...runnerOptions,
           systemPrompt: `=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${runnerOptions.systemPrompt}`,
           userPrompt: JSON.stringify(indexedPayload),
-        });
-        const parsed = extendedReplySchema.parse(JSON.parse(output.finalSmsText));
+        };
+        const runner = options.runner ?? runInitialLeadDraft;
+        const output = await runner(request);
+        const rawText = output.finalSmsText;
+        let rawValue: unknown;
+        try { rawValue = JSON.parse(rawText); }
+        catch (error) {
+          if (!(error instanceof SyntaxError) || options.signal?.aborted) throw error;
+          const secondOutput = await runner(request);
+          rawValue = JSON.parse(secondOutput.finalSmsText);
+        }
+        const parsed = extendedReplySchema.parse(rawValue);
         capture.output = parsed;
         return { finalSmsText: JSON.stringify({ replyText: parsed.replyText, task: parsed.task }) };
       },

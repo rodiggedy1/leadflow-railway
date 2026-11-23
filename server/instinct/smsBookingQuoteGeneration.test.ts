@@ -111,6 +111,7 @@ describe("SMS-only additive quote generation", () => {
   it("accepts legacy ordinary two-field output and never returns state metadata", async () => {
     const input = fixture("What is your service area?"), h = harness({ replyText: "We serve the approved areas. Which area are you in?", task: null });
     expect(await h.generate(input)).toEqual({ replyText: "We serve the approved areas. Which area are you in?", task: null });
+    expect(h.runner).toHaveBeenCalledTimes(1);
   });
 
   it("leaves complete shared email context and the old two-field generator unaffected", async () => {
@@ -272,15 +273,116 @@ describe("SMS-only additive quote generation", () => {
     await expect(harness(active(input, { task })).generate(input)).rejects.toThrow("TASK_EVIDENCE_NOT_CURRENT_INBOUND");
   });
 
+  it("recovers malformed JSON once using the identical request and complete unchanged customer, history, knowledge and state", async () => {
+    const history = Array.from({ length: 650 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `Turn ${index} ${"z".repeat(600)}` }));
+    const input = fixture(fullText, [...history, { role: "customer", content: fullText, opMsgId: "msg-current", direction: "incoming" }]);
+    const previous = advanceSmsBookingQuote(null, update(input), { binding: input.context.binding as ClaudeCustomerSmsGenerationBinding,
+      originalConversation: input.context.originalConversation as any[], nowMs: NOW }).state;
+    previous.link = { fingerprint: "synthetic-fingerprint", token: "mib-saved-token", urlPath: "/book/mib-saved-token", firstCleaningTotalCents: 10000 };
+    previous.fields.notes = Array.from({ length: 20 }, () => "Customer instructions ".repeat(40).trim());
+    const beforeInput = JSON.stringify(input), beforeState = JSON.stringify(previous), h = harness(active(input), previous);
+    h.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    const plan = await h.generate(input);
+    expect(plan).toEqual({ replyText: "Thanks, Maya! Here are the details for you to review.", task: null,
+      smsBookingQuote: { previous, update: update(input), originalConversation: input.context.originalConversation,
+        quoteTextTemplate: canonicalPresentation(input, update(input), "en", previous) } });
+    expect(plan.smsBookingQuote?.originalConversation).toBe(input.context.originalConversation);
+    expect(h.runner).toHaveBeenCalledTimes(2);
+    const firstRequest = h.runner.mock.calls[0][0], secondRequest = h.runner.mock.calls[1][0];
+    expect(secondRequest).toBe(firstRequest);
+    expect(secondRequest.systemPrompt).toBe(firstRequest.systemPrompt);
+    expect(secondRequest.userPrompt).toBe(firstRequest.userPrompt);
+    expect(firstRequest.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+    expect(firstRequest.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(JSON.parse(firstRequest.userPrompt)).toEqual({ incomingMessage: input.incomingMessage, context: { ...input.context,
+      originalConversation: (input.context.originalConversation as any[]).map((turn, turnIndex) => ({ ...turn, turnIndex })),
+      smsBookingQuote: { state: previous, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }, knowledgeBase: MAIDS_IN_BLACK_KNOWLEDGE_BASE } });
+    expect(h.readKnowledge).toHaveBeenCalledTimes(1);
+    expect(h.readKnowledge).toHaveBeenCalledWith(input.incomingMessage);
+    expect(h.readState).toHaveBeenCalledTimes(1);
+    expect(h.readState).toHaveBeenCalledWith(input.context.binding);
+    expect(JSON.stringify(input)).toBe(beforeInput);
+    expect(JSON.stringify(previous)).toBe(beforeState);
+  });
+
   it.each([
     "Not JSON", '```json\n{"replyText":"Hello","task":null,"bookingQuote":null}\n```',
+  ])("rejects repeated malformed JSON after exactly two actual turns: %j", async result => {
+    const h = harness(result);
+    await expect(h.generate(fixture())).rejects.toThrow(SyntaxError);
+    expect(h.runner).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
     { replyText: "Hello", bookingQuote: null }, { replyText: "Hello", task: null, bookingQuote: null, send: true },
     { replyText: "Hello", task: null, bookingQuote: { action: "collect", fields: {}, evidence: {} } },
     { replyText: "Hello", task: null, bookingQuote: null, smsBookingQuote: {} },
-  ])("strictly rejects malformed or unauthorized output without another actual turn: %j", async result => {
+  ])("rejects schema-invalid or unauthorized JSON without retrying validation, including after parse recovery: %j", async result => {
     const h = harness(result);
     await expect(h.generate(fixture())).rejects.toThrow();
     expect(h.runner).toHaveBeenCalledTimes(1);
+    const recovery = harness(result);
+    recovery.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    await expect(recovery.generate(fixture())).rejects.toThrow();
+    expect(recovery.runner).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { name: "customer field evidence", output: (input: ClaudeCustomerReplyInput) => {
+      const bookingQuote = update(input);
+      bookingQuote.evidence.bedrooms = { turnIndex: 1, quote: "service and home details" };
+      return active(input, { bookingQuote });
+    }, error: "SMS_QUOTE_EVIDENCE_NOT_CUSTOMER" },
+    { name: "current-inbound task evidence", output: (input: ClaudeCustomerReplyInput) => active(input,
+      { task: { title: "Review request", items: [{ title: "Review", evidenceQuote: "Historical customer quote" }] } }), error: "TASK_EVIDENCE_NOT_CURRENT_INBOUND" },
+    { name: "unsafe completion claim", output: (input: ClaudeCustomerReplyInput) => active(input,
+      { replyText: "Your booking is confirmed." }), error: "UNSAFE_REPLY_CLAIM" },
+    { name: "model-owned price", output: (input: ClaudeCustomerReplyInput) => active(input,
+      { replyText: "It is $250." }), error: "SMS_QUOTE_MODEL_PRICE" },
+    { name: "protected ID presentation", output: (input: ClaudeCustomerReplyInput) => active(input,
+      { quoteTextTemplate: `${linkTemplate} msg-current` }), error: "UNSAFE_REPLY_PRESENTATION" },
+  ])("retains $name validation without retry, including after one malformed output", async row => {
+    const input = fixture(), result = row.output(input), h = harness(result);
+    await expect(h.generate(input)).rejects.toThrow(row.error);
+    expect(h.runner).toHaveBeenCalledTimes(1);
+    const recovery = harness(result);
+    recovery.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    await expect(recovery.generate(input)).rejects.toThrow(row.error);
+    expect(recovery.runner).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a SyntaxError thrown by the first runner rather than JSON parsing", async () => {
+    const error = new SyntaxError("RUNNER_SYNTAX_FAILURE"), h = harness(active(fixture()));
+    h.runner.mockRejectedValueOnce(error);
+    await expect(h.generate(fixture())).rejects.toBe(error);
+    expect(h.runner).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([new Error("SECOND_RUNNER_FAILURE"), new SyntaxError("SECOND_RUNNER_SYNTAX_FAILURE")])("propagates second runner rejection without a third call: %s", async error => {
+    const h = harness(active(fixture()));
+    h.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" }).mockRejectedValueOnce(error);
+    await expect(h.generate(fixture())).rejects.toBe(error);
+    expect(h.runner).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not start recovery when aborted while the first runner is pending and returns malformed JSON", async () => {
+    const controller = new AbortController(), h = harness("Not JSON");
+    let release!: () => void, started!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const start = new Promise<void>(resolve => { started = resolve; });
+    h.runner.mockImplementationOnce(async () => { started(); await gate; return { finalSmsText: "Not JSON" }; });
+    const generate = createSmsBookingQuoteReplyGenerator({ signal: controller.signal, runner: h.runner,
+      readKnowledge: h.readKnowledge, smsBookingQuote: { readState: h.readState } });
+    const pending = generate(fixture()), rejected = expect(pending).rejects.toThrow();
+    await start;
+    expect(h.runner).toHaveBeenCalledTimes(1);
+    controller.abort();
+    release();
+    await rejected;
+    expect(controller.signal.aborted).toBe(true);
+    expect(h.runner).toHaveBeenCalledTimes(1);
+    expect(h.readKnowledge).toHaveBeenCalledTimes(1);
+    expect(h.readState).toHaveBeenCalledTimes(1);
   });
 
   it.each(["customerPhone", "price", "customPriceCents", "url", "token", "sender", "smsNumberConfirmed"])("rejects model-owned %s even if supplied with evidence", async key => {

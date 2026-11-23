@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { claudeCustomerSmsConfig, createClaudeCustomerSmsService, customerHistoryHash, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride, type CustomerSmsInput, type CustomerSmsSession, type CustomerSmsConfig } from "./claudeCustomerSms";
 import { dispatchClaudeCustomerSms } from "./claudeCustomerSmsApplication";
 import type { CustomerSmsClaim } from "./claudeCustomerTasksStore";
-import type { CustomerSmsStore } from "./claudeCustomerSms";
+import type { CustomerSmsOptions, CustomerSmsStore } from "./claudeCustomerSms";
+import { createClaudeCustomerSmsGeneratorWithReply } from "./claudeCustomerSmsGeneration";
+import { createSmsBookingQuoteReplyGenerator, type SmsBookingQuoteGenerationOptions } from "./smsBookingQuoteGeneration";
 const database = vi.hoisted(() => ({ notify: vi.fn(async (_payload: { title: string; content: string }): Promise<boolean> => true), imported: vi.fn(), getDb: vi.fn(async () => null) }));
 vi.mock("../_core/notification", () => ({ notifyOwner: database.notify }));
 vi.mock("../db", () => { database.imported(); return { getDb: database.getDb }; });
@@ -369,5 +371,134 @@ describe("future-only SMS replies for every valid recipient and role", () => {
       await vi.advanceTimersByTimeAsync(10_000);
       expect(await pending).toEqual({ outcome: "failed" }); expect(database.notify).toHaveBeenCalledTimes(1);
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe("syntax-only recovery composed with the existing SMS coordinator", () => {
+  let network: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("OFFLINE_ONLY")); });
+  afterEach(() => { expect(network).not.toHaveBeenCalled(); });
+  const validPlan = {
+    replyText: "Absolutely, Jane. We'll take care of this and confirm once the change is made.",
+    task: { title: "Reschedule Jane's cleaning", items: [{ title: "Move cleaning to Monday at 9", evidenceQuote: input.inboundText }] },
+    bookingQuote: null,
+  };
+  const validOutput = { finalSmsText: JSON.stringify(validPlan) };
+  function recoveryFixture() {
+    const f = fixture();
+    const readKnowledge = vi.fn(async () => "Synthetic approved customer-service knowledge.");
+    const readState = vi.fn(async () => null);
+    const runner = vi.fn<NonNullable<SmsBookingQuoteGenerationOptions["runner"]>>(async () => validOutput);
+    const generate = vi.fn<CustomerSmsOptions["generate"]>((binding, session, signal) =>
+      createClaudeCustomerSmsGeneratorWithReply(createSmsBookingQuoteReplyGenerator({
+        signal, readKnowledge, smsBookingQuote: { readState },
+        runner: request => runner({ ...request, signal }),
+      }))(binding, session));
+    return { ...f, readKnowledge, readState, runner, generate,
+      run: createClaudeCustomerSmsService({ ...f, generate }) };
+  }
+  it("recovers once, keeps the original context, and prepares and sends exactly once", async () => {
+    const f = recoveryFixture(), session = snapshot(), before = JSON.stringify(session);
+    f.readSession.mockResolvedValue(session);
+    f.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    expect(await f.run(input)).toEqual({ outcome: "accepted" });
+    expect(f.runner).toHaveBeenCalledTimes(2); expect(f.generate).toHaveBeenCalledTimes(1);
+    const first = f.runner.mock.calls[0][0], second = f.runner.mock.calls[1][0];
+    expect(second.systemPrompt).toBe(first.systemPrompt); expect(second.userPrompt).toBe(first.userPrompt);
+    expect(second.signal).toBe(first.signal); expect(second.signal?.aborted).toBe(false);
+    const payload = JSON.parse(second.userPrompt);
+    expect(payload.incomingMessage).toBe(input.inboundText);
+    expect(payload.context.contact).toEqual(session.contact);
+    expect(payload.context.binding).toMatchObject({ sessionId: input.sessionId, fromPhone: input.fromPhone,
+      providerMessageId: input.providerMessageId, receivingPhoneNumberId: input.receivingPhoneNumberId,
+      historyHash: customerHistoryHash(session.messageHistory) });
+    expect(payload.context.originalConversation).toEqual(JSON.parse(session.messageHistory as string)
+      .map((turn: any, turnIndex: number) => ({ ...turn, turnIndex })));
+    expect(JSON.stringify(session)).toBe(before);
+    expect(f.readKnowledge).toHaveBeenCalledTimes(1); expect(f.readState).toHaveBeenCalledTimes(1);
+    expect(f.store.claim).toHaveBeenCalledTimes(1); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledWith({ to: input.fromPhone, content: validPlan.replyText, fromNumberId: input.receivingPhoneNumberId });
+    expect(f.store.recordAcceptance).toHaveBeenCalledTimes(1); expect(f.store.reportFailure).not.toHaveBeenCalled();
+  });
+  it("aborts during attempt two at the original deadline and ignores even a non-cooperative late valid result", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = recoveryFixture();
+      let firstDone!: (output: { finalSmsText: string }) => void;
+      let secondDone!: (output: { finalSmsText: string }) => void;
+      f.runner.mockImplementationOnce(() => new Promise(resolve => { firstDone = resolve; }))
+        .mockImplementationOnce(() => new Promise(resolve => { secondDone = resolve; }));
+      const pending = f.run(input);
+      await vi.advanceTimersByTimeAsync(119_000);
+      expect(f.runner).toHaveBeenCalledTimes(1);
+      firstDone({ finalSmsText: "Not JSON" }); await vi.advanceTimersByTimeAsync(0);
+      expect(f.runner).toHaveBeenCalledTimes(2);
+      const signal = f.runner.mock.calls[1][0].signal;
+      expect(signal).toBe(f.runner.mock.calls[0][0].signal); expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await pending).toEqual({ outcome: "failed" }); expect(signal?.aborted).toBe(true);
+      expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+      expect(f.store.reportFailure).toHaveBeenCalledTimes(1);
+      expect(f.store.suppressBeforeSubmission).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", {
+        failures: [expect.objectContaining({ phase: "generation", code: "CUSTOMER_REPLY_GENERATION_TIMEOUT" })],
+      });
+      secondDone(validOutput);
+      expect(await f.generate.mock.results[0].value).toEqual({ replyText: validPlan.replyText, task: validPlan.task });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(f.runner).toHaveBeenCalledTimes(2); expect(f.generate).toHaveBeenCalledTimes(1);
+      expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+      expect(f.store.recordAcceptance).not.toHaveBeenCalled(); expect(f.store.reportFailure).toHaveBeenCalledTimes(1);
+      expect(f.onFailure).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it("does not start recovery if attempt one returns malformed output only after timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = recoveryFixture(); let done!: (output: { finalSmsText: string }) => void;
+      f.runner.mockImplementationOnce(() => new Promise(resolve => { done = resolve; }));
+      const pending = f.run(input); await vi.advanceTimersByTimeAsync(120_000);
+      expect(await pending).toEqual({ outcome: "failed" });
+      expect(f.runner.mock.calls[0][0].signal?.aborted).toBe(true);
+      const late = expect(f.generate.mock.results[0].value).rejects.toBeInstanceOf(SyntaxError);
+      done({ finalSmsText: "Not JSON" }); await late;
+      expect(f.runner).toHaveBeenCalledTimes(1); expect(f.store.prepare).not.toHaveBeenCalled();
+      expect(f.send).not.toHaveBeenCalled(); expect(f.store.reportFailure).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it("keeps two malformed outputs in the existing human-review flow without any preparation or SMS", async () => {
+    const f = recoveryFixture(); f.runner.mockResolvedValue({ finalSmsText: "Not JSON" });
+    expect(await f.run(input)).toEqual({ outcome: "failed" });
+    expect(f.runner).toHaveBeenCalledTimes(2); expect(f.store.claim).toHaveBeenCalledTimes(1);
+    expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    expect(f.store.reportFailure).toHaveBeenCalledTimes(1);
+    expect(f.store.reportFailure).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", false);
+    expect(f.onFailure).toHaveBeenCalledWith({ taskId: 101, code: "GENERATION_OR_PERSISTENCE_FAILED", sessionId: input.sessionId });
+  });
+  it.each(["duplicate", "config-disabled", "human-won", "stale"])("preserves the %s guard on the recovered path", async guard => {
+    const f = recoveryFixture(); f.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    if (guard === "duplicate") f.store.claim.mockResolvedValue(null as never);
+    if (guard === "config-disabled") f.config.mockReturnValueOnce({ startAt: at - 1000, allowedPhone: input.fromPhone, testCustomerOverride: false }).mockReturnValue(null);
+    if (guard === "human-won") { f.store.prepare.mockResolvedValue(false); f.store.reportFailure.mockResolvedValue(null as never); }
+    if (guard === "stale") { f.store.verifyBeforeSubmission.mockResolvedValue(false); f.store.reportFailure.mockResolvedValue(null as never); }
+    expect(await f.run(input)).toEqual({ outcome: guard === "duplicate" ? "duplicate" : "suppressed" });
+    expect(f.runner).toHaveBeenCalledTimes(guard === "duplicate" ? 0 : 2);
+    expect(f.store.prepare).toHaveBeenCalledTimes(["human-won", "stale"].includes(guard) ? 1 : 0);
+    expect(f.send).not.toHaveBeenCalled(); expect(f.store.recordAcceptance).not.toHaveBeenCalled();
+  });
+  it("does not regenerate or retry preparation when persistence fails after recovery", async () => {
+    const f = recoveryFixture(); f.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    f.store.prepare.mockRejectedValue(new Error("SMS_QUOTE_STATE_CONFLICT"));
+    expect(await f.run(input)).toEqual({ outcome: "failed" });
+    expect(f.runner).toHaveBeenCalledTimes(2); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.send).not.toHaveBeenCalled(); expect(f.store.reportFailure).toHaveBeenCalledTimes(1);
+  });
+  it("does not regenerate or resend after a submission error on the recovered path", async () => {
+    const f = recoveryFixture(); f.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    f.send.mockRejectedValue(new Error("synthetic submission timeout"));
+    expect(await f.run(input)).toEqual({ outcome: "uncertain" });
+    expect(f.runner).toHaveBeenCalledTimes(2); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.recordAcceptance).not.toHaveBeenCalled();
+    expect(f.store.markUncertain).toHaveBeenCalledTimes(1);
   });
 });
