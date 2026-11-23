@@ -141,6 +141,27 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
     }
   });
 
+  app.get("/api/webhooks/thumbtack-capture/diagnostic", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (!isStatusAuthorized(req)) {
+      res.status(403).json({ error: "Unauthorized" });
+      return;
+    }
+    const captureId = typeof req.query.captureId === "string" && /^[1-9]\d{0,15}$/.test(req.query.captureId)
+      ? Number(req.query.captureId) : NaN;
+    if (!Number.isSafeInteger(captureId)) {
+      res.status(400).json({ error: "Invalid capture ID" });
+      return;
+    }
+    try {
+      const { readThumbtackFirstResponseDiagnostic } = await import("./thumbtackFirstResponseDiagnostic");
+      const diagnostic = await readThumbtackFirstResponseDiagnostic(await getDb(), captureId);
+      res.status(diagnostic.readError ? 503 : 200).json(diagnostic);
+    } catch {
+      res.status(500).json({ error: "Diagnostic unavailable" });
+    }
+  });
+
   app.get("/api/webhooks/thumbtack-capture/events", async (req, res) => {
     if (!isStatusAuthorized(req)) {
       res.status(403).json({ error: "Unauthorized" });
