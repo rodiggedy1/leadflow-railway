@@ -47,22 +47,26 @@ function declaration(value: string, name: string) {
   if (!found) throw new Error(`Missing ${name}`);
   return found.getText(parsed);
 }
-function queue(): Record<string, any> {
+function queue(availability: Record<string, any> = {}): Record<string, any> {
   const values: unknown[] = []; let cursor = 0;
   const ReactMock = { ...React,
     useState(initial: unknown) { const slot = cursor++; if (!(slot in values)) values[slot] = initial; return [values[slot], (next: unknown) => { values[slot] = next; }]; },
     useRef(initial: unknown) { const slot = cursor++; if (!(slot in values)) values[slot] = { current: initial }; return values[slot]; },
+    useMemo(factory: () => unknown) { return factory(); },
     useEffect() {},
   };
-  const component = ui(), props = { title: "All leads", description: "Newest first", leads: [{ ...lead, id: 123, ts: 1_800_000_000_000, receivedAt: 1_800_000_000_000, queue: "incoming", sourceLabel: "Thumbtack", detail: "Deep cleaning", extras: [], proposedTimes: [], nativeDetails: [], claimedBy: null, isBooked: false }], smsInbox: [], claimPending: false, bookingPending: false, callPending: false, bridgePending: false,
+  const availabilityUseQuery = vi.fn((_input: unknown, _options: unknown) => ({ data: { leads: [{ key: "123", hasCalls: true }] }, isError: false, ...availability }));
+  const invalidateAvailability = vi.fn();
+  const trpc = { useUtils: () => ({ voice: { getLeadCallNotesAvailability: { invalidate: invalidateAvailability } } }), voice: { getLeadCallNotesAvailability: { useQuery: availabilityUseQuery } } };
+  const component = ui(), props = { title: "All leads", description: "Newest first", leads: [{ ...lead, id: 123, ts: 1_800_000_000_000, receivedAt: 1_800_000_000_000, queue: "incoming", sourceLabel: "Thumbtack", detail: "Deep cleaning", extras: [], proposedTimes: [], nativeDetails: [], claimedBy: null, isBooked: false }], smsInbox: [], notesEnabled: true, claimPending: false, bookingPending: false, callPending: false, bridgePending: false,
     onClaim: vi.fn(), onUnclaim: vi.fn(), onMarkBooked: vi.fn(), onUnbook: vi.fn(), onCall: vi.fn(), onTestBridge: vi.fn(), onOpenSms: vi.fn() };
-  const code = `import React, {useState,useRef,useEffect} from "react";\nexport ${declaration(page, "LeadQueue")}`;
+  const code = `import React, {useState,useRef,useEffect,useMemo} from "react";\nexport ${declaration(page, "LeadQueue")}`;
   const module = { exports: {} as Record<string, any> };
   runInNewContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } }).outputText,
-    { module, exports: module.exports, ...icons, ...component, LeadDetailPanel: div, leadCardStatus: () => ({ kind: "new", label: "New", ts: 1_800_000_000_000 }), leadCardConversation: () => null,
+    { module, exports: module.exports, ...icons, ...component, Map: globalThis.Map, trpc, LeadDetailPanel: div, leadCardStatus: () => ({ kind: "new", label: "New", ts: 1_800_000_000_000 }), leadCardConversation: () => null,
       customerPortraitFor: () => "https://example.invalid/synthetic.png", formatPhoneDisplay: (p: string) => p, formatRelative: () => "now", firstName: (s: string) => s,
       navigator: { clipboard: { writeText: vi.fn() } }, require: (id: string) => { if (id === "react") return ReactMock; throw new Error(id); } }, { timeout: 1500 });
-  return { ...component, props, render: () => { cursor = 0; return module.exports.LeadQueue(props) as Element; } };
+  return { ...component, props, availabilityUseQuery, invalidateAvailability, render: () => { cursor = 0; return module.exports.LeadQueue(props) as Element; } };
 }
 
 describe("lead call notes popup — actual UI, offline", () => {
@@ -125,24 +129,71 @@ describe("lead call notes popup — actual UI, offline", () => {
     const long = Array.from({ length: 140 }, (_, i) => `word${i}`).join(" "), turns = h.callNotesTranscriptTurns(long);
     expect(turns[0].paragraphs.length).toBeGreaterThan(1); expect(turns[0].paragraphs.join("")).toBe(long);
   });
-  it("adds only the authenticated read query and preserves every original voice-router byte", () => {
+  it.each([true, false, null])("keeps the icon clickable and event-isolated for availability %s", hasCalls => {
+    const h = ui(), onOpen = vi.fn(), stopPropagation = vi.fn(), button = { focus: vi.fn() };
+    const tree = h.LeadCallNotesButton({ name: lead.name, hasCalls, onOpen });
+    expect(tree.props.className).toContain(hasCalls === true ? "has-notes" : hasCalls === false ? "no-notes" : "notes-unknown");
+    expect(tree.props.disabled).toBeUndefined(); expect(tree.props["aria-label"]).toBe(`View call notes for ${lead.name}`);
+    expect(tree.props.title).toBe(hasCalls === true ? "Saved call details available" : hasCalls === false ? "No saved call details yet" : "Call notes");
+    tree.props.onKeyDown({ stopPropagation }); tree.props.onClick({ stopPropagation, currentTarget: button });
+    expect(stopPropagation).toHaveBeenCalledTimes(2); expect(onOpen).toHaveBeenCalledWith(button);
+  });
+  it("batches every displayed lead once, including more than 50, with no polling or full-history read", () => {
+    const h = queue(); h.props.leads = Array.from({ length: 71 }, (_, i) => ({ ...h.props.leads[0], id: i + 1 })); h.render();
+    expect(h.availabilityUseQuery).toHaveBeenCalledTimes(1);
+    const [input, options] = h.availabilityUseQuery.mock.calls[0];
+    expect(input.leads).toHaveLength(71); expect(input.leads[0]).toEqual({ key: "1", sessionId: 42, phone: "2025550123" });
+    expect(options).toEqual({ enabled: true, staleTime: 30_000, refetchOnWindowFocus: false, retry: false });
+    expect(h.useQuery).not.toHaveBeenCalled();
+  });
+  it.each(["hidden", "empty"])("disables the availability query when the lead list is %s", variant => {
+    const h = queue(); if (variant === "hidden") h.props.notesEnabled = false; else h.props.leads = [];
+    h.render(); expect(h.availabilityUseQuery.mock.calls[0][1].enabled).toBe(false);
+    expect(page).toContain('notesEnabled={isAuthenticated && rightPanelTab === "leads"}');
+  });
+  it.each(["available", "empty", "loading", "error"])("maps only confirmed availability to icon color: %s", variant => {
+    const h = queue(variant === "loading" ? { data: undefined } : variant === "error" ? { isError: true } : { data: { leads: [{ key: "123", hasCalls: variant === "available" }] } });
+    const noteNode = nodes(h.render()).find(n => n.type === h.LeadCallNotesButton)!;
+    expect(noteNode.props.hasCalls).toBe(variant === "available" ? true : variant === "empty" ? false : null);
+  });
+  it("refreshes only lightweight availability after closing notes, preserving popup focus and actions", () => {
+    const h = queue(), noteNode = nodes(h.render()).find(n => n.type === h.LeadCallNotesButton)!;
+    noteNode.props.onOpen({ focus: vi.fn() });
+    const dialog = nodes(h.render()).find(n => n.type === h.LeadCallNotesDialog)!; dialog.props.onClose();
+    expect(h.invalidateAvailability).toHaveBeenCalledWith({ leads: [{ key: "123", sessionId: 42, phone: "2025550123" }] });
+    expect(nodes(h.render()).some(n => n.type === h.LeadCallNotesDialog)).toBe(false);
+  });
+  it("changes only icon colors and leaves popup/transcript rendering and popup CSS byte-identical", () => {
+    const original = execFileSync("git", ["show", "ca4cdad7b7bfb9ab19798e7f02fec07818472d0d:" + path], { encoding: "utf8" });
+    for (const name of ["LeadCallNotesHistory", "LeadCallNotesDialog", "callNotesTranscriptTurns"]) expect(declaration(source, name)).toBe(declaration(original, name));
+    const cssPath = "client/src/components/lead-call-notes.css", css = readFileSync(cssPath, "utf8"), originalCss = execFileSync("git", ["show", "ca4cdad7b7bfb9ab19798e7f02fec07818472d0d:" + cssPath], { encoding: "utf8" });
+    expect(css.slice(css.indexOf(".lcn-note-button svg"))).toBe(originalCss.slice(originalCss.indexOf(".lcn-note-button svg")));
+    expect(css).toContain('.lcn-note-button{width:34px;min-width:34px;padding:0;border-radius:9px;color:#96919e;');
+    expect(css).toContain('.lcn-note-button.has-notes{color:#d9c891;');
+  });
+  it("adds only the authenticated lightweight query and preserves the complete released voice router", () => {
     const routerPath = "server/voiceRouter.ts", current = readFileSync(routerPath, "utf8");
-    const original = execFileSync("git", ["show", `4839e7d91e64920ecc23b205e784ca7455409d7c:${routerPath}`], { encoding: "utf8" });
+    const original = execFileSync("git", ["show", `ca4cdad7b7bfb9ab19798e7f02fec07818472d0d:${routerPath}`], { encoding: "utf8" });
     expect(current).toContain('getLeadCallNotes: agentProcedure.input(leadCallNotesInputSchema)\n    .query(({ input }) => getLeadCallNotes(input)),');
+    expect(current).toContain('getLeadCallNotesAvailability: agentProcedure.input(leadCallNotesAvailabilityInputSchema)\n    .query(({ input }) => getLeadCallNotesAvailability(input)),');
     expect(current
-      .replace('import { leadCallNotesInputSchema } from "../shared/leadCallNotes";\n', "")
-      .replace('import { getLeadCallNotes } from "./leadCallNotes";\n', "")
-      .replace('  getLeadCallNotes: agentProcedure.input(leadCallNotesInputSchema)\n    .query(({ input }) => getLeadCallNotes(input)),\n\n', "")
+      .replace('import { leadCallNotesAvailabilityInputSchema } from "../shared/leadCallNotesAvailability";\n', "")
+      .replace('import { getLeadCallNotesAvailability } from "./leadCallNotesAvailability";\n', "")
+      .replace('  getLeadCallNotesAvailability: agentProcedure.input(leadCallNotesAvailabilityInputSchema)\n    .query(({ input }) => getLeadCallNotesAvailability(input)),\n\n', "")
     ).toBe(original);
   });
-  it("preserves every original lead-queue byte except the explicit note-icon/state/popup addition", () => {
-    const original = execFileSync("git", ["show", `4839e7d91e64920ecc23b205e784ca7455409d7c:${pagePath}`], { encoding: "utf8" });
+  it("preserves every released lead-queue/page byte except explicit lightweight note availability", () => {
+    const original = execFileSync("git", ["show", `ca4cdad7b7bfb9ab19798e7f02fec07818472d0d:${pagePath}`], { encoding: "utf8" });
     const current = declaration(page, "LeadQueue")
-      .replace('  const [callNotesLead, setCallNotesLead] = useState<CommandLead | null>(null);\n', "")
-      .replace('  const callNotesTrigger = useRef<HTMLButtonElement | null>(null);\n', "")
-      .replace('<LeadCallNotesButton name={lead.name} onOpen={button => { callNotesTrigger.current = button; setCallNotesLead(lead); }} />', "")
-      .replace('      {callNotesLead && <LeadCallNotesDialog lead={callNotesLead} onClose={() => setCallNotesLead(null)} returnFocus={() => callNotesTrigger.current?.focus()} />}\n', "");
+      .replace('notesEnabled = false, ', "").replace('notesEnabled?: boolean; ', "")
+      .replace('  const callNotesUtils = trpc.useUtils();\n', "")
+      .replace('  const callNotesAvailabilityInput = useMemo(() => ({ leads: leads.map(lead => ({ key: String(lead.id), sessionId: lead.sessionId, phone: lead.phone })) }), [leads]);\n', "")
+      .replace('  const callNotesAvailability = trpc.voice.getLeadCallNotesAvailability.useQuery(callNotesAvailabilityInput, {\n    enabled: notesEnabled && leads.length > 0, staleTime: 30_000, refetchOnWindowFocus: false, retry: false,\n  });\n', "")
+      .replace('  const callNotesAvailableById = new Map((callNotesAvailability.isError ? [] : callNotesAvailability.data?.leads ?? []).map(item => [item.key, item.hasCalls]));\n', "")
+      .replace(' hasCalls={callNotesAvailableById.get(String(lead.id)) ?? null}', "")
+      .replace('onClose={() => { setCallNotesLead(null); void callNotesUtils.voice.getLeadCallNotesAvailability.invalidate(callNotesAvailabilityInput); }}', 'onClose={() => setCallNotesLead(null)}');
     expect(current).toBe(declaration(original, "LeadQueue"));
+    expect(page.replace(declaration(page, "LeadQueue"), current).replace(' notesEnabled={isAuthenticated && rightPanelTab === "leads"}', "")).toBe(original);
     expect(declaration(page, "LeadDetailPanel")).toBe(declaration(original, "LeadDetailPanel"));
     expect(declaration(page, "SmsConversationDrawer")).toBe(declaration(original, "SmsConversationDrawer"));
   });

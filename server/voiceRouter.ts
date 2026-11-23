@@ -16,10 +16,15 @@ import { voiceCalls, callbackTasks, conversationSessions } from "../drizzle/sche
 import { getAssistantId } from "./vapiService";
 import { leadCallNotesInputSchema } from "../shared/leadCallNotes";
 import { getLeadCallNotes } from "./leadCallNotes";
+import { leadCallNotesAvailabilityInputSchema } from "../shared/leadCallNotesAvailability";
+import { getLeadCallNotesAvailability } from "./leadCallNotesAvailability";
 
 export const voiceRouter = router({
   getLeadCallNotes: agentProcedure.input(leadCallNotesInputSchema)
     .query(({ input }) => getLeadCallNotes(input)),
+
+  getLeadCallNotesAvailability: agentProcedure.input(leadCallNotesAvailabilityInputSchema)
+    .query(({ input }) => getLeadCallNotesAvailability(input)),
 
   /**
    * List all voice calls, newest first.

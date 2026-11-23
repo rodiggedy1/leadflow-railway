@@ -1,6 +1,8 @@
 .ccc-live .ccc-live-lead-primary footer:has(.lcn-note-button){grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px 42px}
-.ccc-live .ccc-live-lead-primary footer .lcn-note-button{width:34px;min-width:34px;padding:0;border-radius:9px;color:#d9c891;border-color:#5b5035;background:#2d291e}
-.ccc-live .ccc-live-lead-primary footer .lcn-note-button:hover{background:#3b3422;border-color:#9a854c;color:#f0dba0}
+.ccc-live .ccc-live-lead-primary footer .lcn-note-button{width:34px;min-width:34px;padding:0;border-radius:9px;color:#96919e;border-color:#45414b;background:#29272d}
+.ccc-live .ccc-live-lead-primary footer .lcn-note-button:hover{background:#35313b;border-color:#69616f;color:#c8c0d2}
+.ccc-live .ccc-live-lead-primary footer .lcn-note-button.has-notes{color:#d9c891;border-color:#5b5035;background:#2d291e}
+.ccc-live .ccc-live-lead-primary footer .lcn-note-button.has-notes:hover{background:#3b3422;border-color:#9a854c;color:#f0dba0}
 .lcn-note-button svg{width:16px;height:16px}
 .lcn-dialog[data-slot="dialog-content"]{display:flex;flex-direction:column;gap:0;width:min(620px,calc(100vw - 32px));max-width:620px;max-height:min(820px,calc(100dvh - 40px));padding:0;overflow:hidden;border:1px solid #414046;border-radius:16px;background:#1c1c1f;color:#e9e8ec;box-shadow:0 24px 80px #0008}
 .lcn-dialog>[data-slot="dialog-close"]{top:20px;right:20px;color:#b2adb9}

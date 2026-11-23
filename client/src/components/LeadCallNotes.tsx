@@ -6,8 +6,10 @@ import "./lead-call-notes.css";
 
 type Lead = { name: string; phone: string | null; sessionId: number | null };
 
-export function LeadCallNotesButton({ name, onOpen }: { name: string; onOpen: (button: HTMLButtonElement) => void }) {
-  return <button type="button" className="lcn-note-button" title="Call notes" aria-label={`View call notes for ${name}`} aria-haspopup="dialog"
+export function LeadCallNotesButton({ name, hasCalls = null, onOpen }: { name: string; hasCalls?: boolean | null; onOpen: (button: HTMLButtonElement) => void }) {
+  const availability = hasCalls === true ? "has-notes" : hasCalls === false ? "no-notes" : "notes-unknown";
+  const description = hasCalls === true ? "Saved call details available" : hasCalls === false ? "No saved call details yet" : "Call notes";
+  return <button type="button" className={`lcn-note-button ${availability}`} title={description} aria-description={description} aria-label={`View call notes for ${name}`} aria-haspopup="dialog"
     onKeyDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); onOpen(event.currentTarget); }}><StickyNote aria-hidden="true" /></button>;
 }
 
