@@ -4,6 +4,7 @@ import type { AiCallerSession, AiCallerStart } from "../hooks/useAiCallerSession
 import { normalizeDialPhone } from "../../../server/utils/phone";
 import { matchesCallerContactSearch, normalizeContactSearchQuery } from "../../../shared/aiCallerContactSearch";
 import { formatAiCallerError } from "../../../shared/aiCallerErrors";
+import { getAiCallerInstructionPresets } from "../lib/aiCallerInstructionPresets";
 import "./ai-caller-workspace.css";
 
 export type CallerContact = {
@@ -52,7 +53,7 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
   const [today] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
   const [search, setSearch] = useState("");
   const [picker, setPicker] = useState(false);
-  const [preset, setPreset] = useState(0);
+  const [preset, setPreset] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
   const [notice, setNotice] = useState("");
@@ -69,13 +70,19 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
     phone: normalizedPhone, type: "Customer", location: "Typed number",
     leadflowJobId: null, jobDate: businessDate ?? today, scripts: [],
   } : contacts.find(item => item.id === contactId) ?? (selectedContact?.id === contactId ? selectedContact : null);
+  const instructionPresets = getAiCallerInstructionPresets(contact?.type);
+  const currentPreset = instructionPresets.find(item => item.label === preset);
   const locked = session?.phase === "active";
   useEffect(() => {
     if (!useTypedNumber && contactId === null && contacts.length) {
       setContactId(contacts[0].id);
-      setInstructions(current => current || contacts[0].scripts[0]?.text || "");
+      if (!instructions) {
+        const firstPreset = getAiCallerInstructionPresets(contacts[0].type)[0];
+        setPreset(firstPreset?.label ?? null);
+        setInstructions(firstPreset?.text ?? "");
+      }
     }
-  }, [contacts, contactId, useTypedNumber]);
+  }, [contacts, contactId, useTypedNumber, instructions]);
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
   function notify(message: string) { setNotice(message); if (noticeTimer.current) clearTimeout(noticeTimer.current); noticeTimer.current = setTimeout(() => setNotice(""), 4500); }
   function navigate(label: string) {
@@ -88,9 +95,13 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
   }
   function chooseContact(person: CallerContact) {
     if (locked) return;
+    const nextPresets = getAiCallerInstructionPresets(person.type);
+    const nextPreset = nextPresets.find(item => item.label === preset);
+    const unchangedPreset = currentPreset && instructions === currentPreset.text;
     setUseTypedNumber(false); setManualPhone("");
-    setContactId(person.id); setSelectedContact(person); setPreset(0);
-    setInstructions(current => person.scripts[0]?.text ?? (current === contact?.scripts[preset]?.text ? "" : current));
+    setContactId(person.id); setSelectedContact(person);
+    setPreset(!instructions ? nextPresets[0]?.label ?? null : nextPreset?.label ?? null);
+    setInstructions(current => !current ? nextPresets[0]?.text ?? "" : unchangedPreset ? nextPreset?.text ?? "" : current);
     setPicker(false); changeSearch("");
   }
   function changeSearch(value: string) {
@@ -101,15 +112,16 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
   }
   function typePhone(value: string) {
     if (locked) return;
-    if (!useTypedNumber && instructions === contact?.scripts[preset]?.text) setInstructions("");
-    setUseTypedNumber(true); setManualPhone(value); setContactId(null); setSelectedContact(null); setPreset(0); closePicker();
+    const nextPreset = getAiCallerInstructionPresets().find(item => item.label === preset);
+    if (currentPreset && instructions === currentPreset.text && !nextPreset) setInstructions("");
+    setUseTypedNumber(true); setManualPhone(value); setContactId(null); setSelectedContact(null); setPreset(nextPreset?.label ?? null); closePicker();
   }
   function requestCall() {
     if (!contact?.phone || instructions.trim().length < 10 || session !== null) return;
     const payload: AiCallerStart = {
       leadflowJobId: contact.leadflowJobId, jobDate: contact.jobDate,
       personName: contact.name, phone: contact.phone,
-      scenario: contact.scripts[preset]?.label ?? "Custom instructions",
+      scenario: currentPreset?.label ?? "Custom instructions",
       script: instructions.trim(), audience: contact.type === "Team" ? "cleaner" : "customer", language: "en",
       scriptMode: "instructions",
     };
@@ -174,7 +186,7 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
               <div className="field-hint"><ShieldCheck size={12}/>{review ? "Fictional contacts for this review" : "Search customers, leads and teams — not limited to today's jobs"}</div>{error && <p className="no-results" role="alert">{error}</p>}
             </Step>
             <Step number={2} title="What should the AI do?" subtitle="Describe the purpose. Ava will turn it into a natural conversation.">
-              <div className="presets" aria-label="Instruction presets">{contact?.scripts.map((item, index) => <button key={item.label} disabled={locked} className={preset === index ? "selected" : ""} aria-pressed={preset === index} onClick={() => { setPreset(index); setInstructions(item.text); }}>{item.label}</button>)}</div>
+              <div className="presets" aria-label="Instruction presets">{instructionPresets.map(item => <button key={item.label} disabled={locked} className={preset === item.label ? "selected" : ""} aria-pressed={preset === item.label} onClick={() => { setPreset(item.label); setInstructions(item.text); }}>{item.label}</button>)}</div>
               <label className="sr-only" htmlFor="instructions">Call instructions</label><textarea id="instructions" value={instructions} placeholder="For example: Tell them we are running late and will arrive in 30 minutes." disabled={locked} onChange={event => { setInstructions(event.target.value); }} spellCheck={false}/>
               <div className="textarea-footer"><span><FileText size={12}/>Ava writes the opening and uses these instructions throughout the call.</span><span>{instructions.length} characters</span></div>
             </Step>

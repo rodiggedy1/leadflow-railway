@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import type { AiCallerWorkspaceProps, CallerContact } from "../client/src/components/AiCallerWorkspace";
+import { getAiCallerInstructionPresets } from "../client/src/lib/aiCallerInstructionPresets";
 
 const runner = vi.hoisted(() => ({ states: [] as unknown[], refs: [] as { current: any }[], cursor: 0, refCursor: 0, effects: [] as (() => void)[] }));
 vi.mock("react", async importOriginal => {
@@ -98,14 +99,16 @@ describe("typed-number caller interaction", () => {
     expect(callButton().props.disabled).toBe(true);
     expect(props.onStartCall).not.toHaveBeenCalled();
   });
-  it("keeps selecting a saved customer wired to their real existing job and script", async () => {
+  it("keeps selecting a saved customer wired to their real existing job and phone with generic instructions", async () => {
     props = { ...props, contacts: [saved] }; render(); render();
     typeNumber("2025550123");
     find(node => node.props.className === "contact-select").props.onClick(); render();
     find(node => node.type === "button" && node.props.children?.[1]?.props?.children?.[0]?.props?.children?.[0] === saved.name).props.onClick(); render();
     expect(input("dial-number").props.value).toBe("");
+    const defaultPreset = getAiCallerInstructionPresets("Customer")[0];
+    expect(input("instructions").props.value).toBe(defaultPreset.text);
     await confirmCall();
-    expect(props.onStartCall).toHaveBeenCalledWith(expect.objectContaining({ leadflowJobId: 501, phone: saved.phone, script: saved.scripts[0].text }));
+    expect(props.onStartCall).toHaveBeenCalledWith(expect.objectContaining({ leadflowJobId: 501, phone: saved.phone, scenario: defaultPreset.label, script: defaultPreset.text, scriptMode: "instructions" }));
   });
   it("keeps typed number and script locked only during an active call", () => {
     props = { ...props, session: { vapiCallId: "synthetic", phase: "active", status: "ringing", customerName: "Example", phone: "+12025550123", scenario: "Custom instructions" } }; render();
@@ -168,7 +171,13 @@ describe("broad contact search interaction", () => {
   it("does not carry a booked customer's default booking script into an unrelated searched lead", () => {
     props = { ...props, contacts: [saved], onSearchChange: vi.fn(), searchResults: { query: "rohan", contacts: [lead], loading: false } }; render(); render();
     openSearch("rohan"); choose(lead);
-    expect(input("instructions").props.value).toBe("");
-    expect(callButton().props.disabled).toBe(true);
+    const presets = getAiCallerInstructionPresets("Lead");
+    expect(input("instructions").props.value).toBe(presets[0].text);
+    expect(input("instructions").props.value).not.toBe(saved.scripts[0].text);
+    const pills = elements(find(node => node.props.className === "presets")).filter(node => node.type === "button");
+    expect(pills.map(node => node.props.children)).toEqual(presets.map(item => item.label));
+    expect(pills).toHaveLength(12);
+    expect(callButton().props.disabled).toBe(false);
+    expect(props.onStartCall).not.toHaveBeenCalled();
   });
 });
