@@ -108,6 +108,18 @@ export function normalizePhoneLegacy(phone: string): string {
   return `+${digits}`;
 }
 
+/** Explicit outbound dial input: local US formats or an international number
+ * with its +country code. Invalid text never falls through to a provider call. */
+export function normalizeDialPhone(phone: string): string | null {
+  const raw = phone.trim();
+  if (!raw || !/^\+?[\d\s().-]+$/.test(raw)) return null;
+  if (raw.startsWith("+") && !raw.startsWith("+1")) {
+    const international = raw.replace(/[^\d+]/g, "");
+    return /^\+[2-9]\d{7,14}$/.test(international) ? international : null;
+  }
+  return normalizePhone(raw);
+}
+
 // ─── Display formatting ───────────────────────────────────────────────────────
 
 /**

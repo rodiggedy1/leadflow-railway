@@ -18,7 +18,8 @@ describe("LeadFlow-owned AI Calls router", () => {
     expect(source).toContain("cleanerProfiles.launch27TeamId");
     expect(source).toContain("INSERT INTO call_log");
     expect(source).toContain("INSERT INTO field_mgmt_calls");
-    expect(source).toContain("input.audience === \"customer\" && input.leadflowJobId === null");
+    expect(source).not.toContain("A LeadFlow job is required for a customer call");
+    expect(source).toContain("leadflowJobId: z.number().int().positive().nullable().optional().default(null)");
     expect(source).toContain("eq(fieldMgmtCalls.vapiCallId, input.vapiCallId)");
     const forbiddenSymbols = new RegExp(["cleaner", "Jobs", "|", "cleaner", "_jobs"].join(""));
     expect(source).not.toMatch(forbiddenSymbols);

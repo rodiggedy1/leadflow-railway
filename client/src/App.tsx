@@ -90,6 +90,7 @@ const CommandChatExactLive = lazy(() => import("./pages/CommandChatExactLive"));
 const CustomerProfileExactLive = lazy(() => import("./pages/CustomerProfileExactLive"));
 const ConfirmationCallsExactLive = lazy(() => import("./pages/ConfirmationCallsExactLive"));
 const AiCallsExactLive = lazy(() => import("./pages/AiCallsExactLive"));
+const AiCallerLive = lazy(() => import("./pages/AiCallerLive"));
 const InvoicesExactLive = lazy(() => import("./pages/InvoicesExactLive"));
 const InvoiceCollection = lazy(() => import("./pages/InvoiceCollection").then(module => ({ default: module.InvoiceCollectionPage })));
 const CustomerInvoice = lazy(() => import("./pages/InvoiceCollection").then(module => ({ default: module.CustomerInvoicePage })));
@@ -182,7 +183,9 @@ function AdminConfirmationCallsExactReviewRoute() {
 }
 
 function AdminAiCallsExactReviewRoute() {
-  return <ReviewWorkspaceFrame navActivePath="/review/ai-calls-transcript"><AiCallsExactLive /></ReviewWorkspaceFrame>;
+  const view = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("view");
+  if (view === "configuration") return <ReviewWorkspaceFrame navActivePath="/review/ai-calls-transcript"><AiCallsExactLive /></ReviewWorkspaceFrame>;
+  return <ReviewWorkspaceFrame hideNavigation><AiCallerLive /></ReviewWorkspaceFrame>;
 }
 
 function AdminInvoicesExactReviewRoute() {

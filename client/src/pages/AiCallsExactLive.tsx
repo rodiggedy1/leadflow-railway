@@ -86,7 +86,7 @@ type TemplateRow = {
 };
 type TranscriptTurn = { speaker: TranscriptSpeaker; label: string; text: string };
 
-const SCENARIOS: Record<Audience, Scenario[]> = {
+export const SCENARIOS: Record<Audience, Scenario[]> = {
   customer: [
     { title: "Team running late", description: "Apologize, give updated ETA, ask flexibility, offer status text.", tag: "Urgent" },
     { title: "Running significantly late", description: "Team is 2+ hrs behind — offer to keep or reschedule.", tag: "Urgent" },
@@ -116,7 +116,7 @@ const QUEUE_ROWS = [
   { name: "Madison Lee", reason: "Tomorrow booking not fully confirmed.", scenario: "Confirm address" },
 ];
 
-const SCENARIO_SLUG: Record<string, string> = {
+export const SCENARIO_SLUG: Record<string, string> = {
   "Team running late": "running_late",
   "Running significantly late": "running_significantly_late",
   "Team at address / access needed": "access_needed",
@@ -155,7 +155,7 @@ function todayET() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
-function customerToItem(customer: CustomerRow): PersonItem {
+export function customerToItem(customer: CustomerRow): PersonItem {
   return {
     id: `c-${customer.leadflowJobId}`,
     leadflowJobId: customer.leadflowJobId,
@@ -170,7 +170,7 @@ function customerToItem(customer: CustomerRow): PersonItem {
   };
 }
 
-function cleanerToItem(cleaner: CleanerRow): PersonItem {
+export function cleanerToItem(cleaner: CleanerRow): PersonItem {
   return {
     id: `t-${cleaner.teamName}`,
     leadflowJobId: null,
@@ -185,7 +185,7 @@ function cleanerToItem(cleaner: CleanerRow): PersonItem {
   };
 }
 
-function buildScript(person: PersonItem, scenarioTitle: string, audience: Audience) {
+export function buildScript(person: PersonItem, scenarioTitle: string, audience: Audience) {
   const first = person.name.split(" ")[0];
   const address = person.meta.split("·")[1]?.trim() ?? "your home";
   if (audience === "cleaner") {
@@ -203,7 +203,7 @@ function buildScript(person: PersonItem, scenarioTitle: string, audience: Audien
   return `Hi ${first}, this is Ava from Maids in Black calling about your upcoming cleaning.\n\nI just need to confirm a few details: your service address, unit number if any, parking, entry instructions, and whether there are any special notes for the team.\n\nOnce confirmed, we'll update your job notes so the team has everything before arrival.`;
 }
 
-function applyMergeFields(body: string, person: PersonItem, audience: Audience) {
+export function applyMergeFields(body: string, person: PersonItem, audience: Audience) {
   const first = person.name.split(" ")[0];
   const address = person.meta.split("·")[1]?.trim() ?? "your home";
   return body

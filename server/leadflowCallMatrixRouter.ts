@@ -13,7 +13,7 @@ import {
 import { ENV } from "./_core/env";
 import { agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
-import { normalizePhoneLegacy } from "./utils/phone";
+import { normalizeDialPhone, normalizePhoneLegacy } from "./utils/phone";
 
 const VAPI_API_BASE = "https://api.vapi.ai";
 const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473";
@@ -291,7 +291,7 @@ export const leadflowCallMatrixRouter = router({
 
   startCall: agentProcedure
     .input(z.object({
-      leadflowJobId: z.number().int().positive().nullable(),
+      leadflowJobId: z.number().int().positive().nullable().optional().default(null),
       jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       personName: z.string().trim().min(1).max(255),
       phone: z.string().trim().min(7).max(30),
@@ -303,14 +303,16 @@ export const leadflowCallMatrixRouter = router({
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      const normalizedPhone = normalizePhoneLegacy(input.phone);
+      const normalizedPhone = input.audience === "customer" && input.leadflowJobId === null
+        ? normalizeDialPhone(input.phone)
+        : normalizePhoneLegacy(input.phone);
+      if (!normalizedPhone) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Enter a valid phone number, including +country code for international calls" });
+      }
       if (normalizedPhone === VAPI_OUTBOUND_PHONE_NUMBER) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Self-call protection: cannot call the VAPI outbound number" });
       }
 
-      if (input.audience === "customer" && input.leadflowJobId === null) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "A LeadFlow job is required for a customer call" });
-      }
       if (input.leadflowJobId !== null) {
         const [job] = await db.select({
           id: leadflowJobs.id,
