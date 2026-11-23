@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatAiCallerError } from "../../../shared/aiCallerErrors";
 
 /** Lifecycle copied from useCallSession: one start, active-only 5s polling,
  * no overlapping polls, terminal/unmount cleanup, and call identity guards.
@@ -101,7 +102,7 @@ export function useAiCallerSession(transport: AiCallerTransport) {
       timerRef.current = setTimeout(tick, 5000);
     } catch (error) {
       if (mountedRef.current && sessionRef.current === current) {
-        const message = error instanceof Error && error.message.length < 200 ? error.message : "Failed to connect the call.";
+        const message = formatAiCallerError(error);
         const failed: AiCallerSession = { ...current, phase: "terminal", status: "failed", outcome: {
           error: message, summary: null, transcript: null, recordingUrl: null, durationSeconds: null,
         } };

@@ -8,6 +8,10 @@ import { AiCallerWorkspace, type CallerContact, type CallerRecord } from "@/comp
 /** Approved caller using the existing owned API, voice, model and prompt. */
 export default function AiCallerLive() {
   const [date] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
+  const [searchQuery, setSearchQuery] = useState("");
+  const contactSearch = trpc.leadflowJobs.callMatrix.searchContacts.useQuery({ query: searchQuery }, {
+    enabled: searchQuery.length > 0, staleTime: 10_000, refetchOnWindowFocus: false, retry: false,
+  });
   const people = trpc.leadflowJobs.callMatrix.getPeople.useQuery({ date }, { staleTime: 60_000 });
   const templates = trpc.leadflowJobs.callMatrix.getTemplates.useQuery(undefined, { staleTime: 30_000 });
   const outbound = trpc.leadflowJobs.callMatrix.getCallHistory.useQuery({ limit: 50 }, { staleTime: 30_000 });
@@ -41,6 +45,15 @@ export default function AiCallerLive() {
       }),
     }));
   }, [people.data, templates.data, date]);
+
+  const searchedContacts = useMemo<CallerContact[]>(() => (contactSearch.isPlaceholderData ? [] : contactSearch.data ?? []).map(person => ({
+    id: `search-${person.id}`, name: person.name, phone: person.phone,
+    initials: person.name.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase(),
+    type: person.source === "cleaner" ? "Team" : person.source === "lead" ? "Lead" : "Customer",
+    location: person.context,
+    // Search identifies a person, not a current booking. Do not manufacture job facts or scripts.
+    leadflowJobId: null, jobDate: date, scripts: [],
+  })), [contactSearch.data, contactSearch.isPlaceholderData, date]);
 
   const recent = useMemo<CallerRecord[]>(() => {
     function historyPerson(phone: string | null, name?: string | null): CallerContact {
@@ -78,6 +91,8 @@ export default function AiCallerLive() {
   return <AiCallerWorkspace review={false} contacts={contacts} recent={recent}
     session={displayedSession} onStartCall={calls.startCall} onDismissSession={calls.dismissSession}
     businessDate={date} onConfigure={() => { window.location.href = "/admin/ai-calls?view=configuration"; }}
+    onSearchChange={setSearchQuery} searchResults={{ query: searchQuery, contacts: searchedContacts,
+      loading: contactSearch.isFetching, error: contactSearch.error ? "Contact search failed. Edit the search to try again." : null }}
     loading={people.isLoading || templates.isLoading}
     error={people.error?.message ?? templates.error?.message}
     historyLoading={outbound.isLoading || inbound.isLoading}

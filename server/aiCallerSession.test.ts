@@ -84,6 +84,15 @@ describe("copied AI caller lifecycle", () => {
     expect(transport.startCall).toHaveBeenCalledTimes(1); expect(transport.pollCall).not.toHaveBeenCalled();
     expect(current()?.phase).toBe("terminal");
   });
+  it("shows the missing outbound-number error even when the Vapi response exceeds 200 characters", async () => {
+    const failure = new Error('VAPI call failed: VAPI POST /call → 400: {"statusCode":400,"message":"`phoneNumber` `61431a3e-8144-4acd-b394-8f600ec3a473` does not exist.","error":"Bad Request","subscriptionLimits":{"concurrencyBlocked":false,"concurrencyLimit":10,"remainingConcurrentCalls":9}}');
+    const transport = api(); transport.startCall = vi.fn().mockRejectedValue(failure);
+    const hook = useAiCallerSession(transport);
+    await expect(hook.startCall(params)).rejects.toBe(failure);
+    expect(current()?.outcome?.error).toBe("The outbound phone number is not available in the connected Vapi account.");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(transport.startCall).toHaveBeenCalledTimes(1); expect(transport.pollCall).not.toHaveBeenCalled();
+  });
   it("stops queued polls on unmount", async () => {
     const transport = api(); const hook = useAiCallerSession(transport); await hook.startCall(params);
     runner.cleanups.forEach(cleanup => cleanup()); await vi.advanceTimersByTimeAsync(60_000);
@@ -119,6 +128,9 @@ describe("AI caller setup boundaries", () => {
     expect(source).toContain('from "./AiCallsExactLive"'); expect(source).toContain("applyMergeFields(template.body"); expect(source).toContain("buildScript(person");
     expect(source).toContain("proxyRecordingUrl(call.recordingUrl)"); expect(source).toContain("trpc.voice.listCalls.useQuery");
     expect(source).not.toContain("refetchInterval"); expect(source).not.toContain("cleanerJobId");
+    expect(source).toContain("leadflowJobs.callMatrix.searchContacts.useQuery");
+    expect(source).toContain("enabled: searchQuery.length > 0");
+    expect(source).toContain("leadflowJobId: null, jobDate: date, scripts: []");
     const forbidden = new RegExp(["cleaner", "Jobs", "|", "cleaner", "_jobs"].join("")); expect(source).not.toMatch(forbidden);
   });
   it("keeps the shared review UI and transport-injected lifecycle free of live API access", () => {

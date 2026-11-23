@@ -100,3 +100,62 @@ describe("typed-number caller interaction", () => {
     expect(input("instructions").props.disabled).toBe(true);
   });
 });
+
+describe("broad contact search interaction", () => {
+  const lead: CallerContact = { id: "search-lead-1", name: "Rohan Example", initials: "RE", phone: "+13029816191", type: "Lead", location: "Lead · Standard cleaning", leadflowJobId: null, jobDate: "2026-11-22", scripts: [] };
+  function openSearch(value: string) {
+    find(node => node.props.className === "contact-select").props.onClick(); render();
+    find(node => node.props["aria-label"] === "Search customers, leads and teams").props.onChange({ target: { value } }); render();
+  }
+  function choose(person: CallerContact) {
+    find(node => node.type === "button" && node.props.children?.[1]?.props?.children?.[0]?.props?.children?.[0] === person.name).props.onClick(); render();
+  }
+  function shows(person: CallerContact) {
+    return elements(tree).some(node => node.type === "button" && node.props.children?.[1]?.props?.children?.[0]?.props?.children?.[0] === person.name);
+  }
+  it("keeps a searched lead selected after the query and transient result list clear, with no job required", async () => {
+    props = { ...props, onSearchChange: vi.fn() }; render();
+    typeNumber("2025550123"); typeScript("Hello, this is my exact introduction for your cleaning inquiry.");
+    openSearch("  rohan  ");
+    expect(props.onSearchChange).toHaveBeenLastCalledWith("rohan");
+    props = { ...props, searchResults: { query: "rohan", contacts: [lead], loading: false } }; render();
+    expect(shows(lead)).toBe(true); choose(lead);
+    expect(props.onSearchChange).toHaveBeenLastCalledWith("");
+    props = { ...props, searchResults: { query: "", contacts: [], loading: false } }; render();
+    expect(input("dial-number").props.value).toBe("");
+    expect(input("instructions").props.value).toBe("Hello, this is my exact introduction for your cleaning inquiry.");
+    await confirmCall();
+    expect(props.onStartCall).toHaveBeenCalledWith(expect.objectContaining({ personName: lead.name, phone: lead.phone, leadflowJobId: null, audience: "customer", scenario: "Custom instructions" }));
+  });
+  it("does not present stale results for a different query or label pending search as no matches", () => {
+    props = { ...props, onSearchChange: vi.fn(), searchResults: { query: "rohan", contacts: [lead], loading: false } }; render();
+    openSearch("alba");
+    expect(shows(lead)).toBe(false);
+    expect(elements(tree).some(node => node.props.children === "Searching contacts…")).toBe(true);
+    expect(elements(tree).some(node => node.props.children === "No contacts match.")).toBe(false);
+  });
+  it("shows a search error distinctly from an empty successful search", () => {
+    props = { ...props, onSearchChange: vi.fn(), searchResults: { query: "rohan", contacts: [], loading: false, error: "Contact search failed." } }; render();
+    openSearch("rohan");
+    expect(elements(tree).some(node => node.props.role === "alert" && node.props.children === "Contact search failed.")).toBe(true);
+    expect(elements(tree).some(node => node.props.children === "No contacts match.")).toBe(false);
+    props = { ...props, searchResults: { query: "rohan", contacts: [], loading: false } }; render();
+    expect(elements(tree).some(node => node.props.children === "No contacts match.")).toBe(true);
+  });
+  it("allows opening broad search while today's optional contact list is loading or unavailable", () => {
+    props = { ...props, loading: true, error: "Today's contacts unavailable", onSearchChange: vi.fn() }; render();
+    expect(find(node => node.props.className === "contact-select").props.disabled).toBe(false);
+    openSearch("rohan"); expect(props.onSearchChange).toHaveBeenLastCalledWith("rohan");
+  });
+  it("matches formatted phone numbers in the local contact list", () => {
+    const formatted = { ...lead, type: "Customer" as const, phone: "+1 (302) 981-6191" };
+    props = { ...props, contacts: [formatted] }; render(); render();
+    openSearch("3029816191"); expect(shows(formatted)).toBe(true);
+  });
+  it("does not carry a booked customer's default booking script into an unrelated searched lead", () => {
+    props = { ...props, contacts: [saved], onSearchChange: vi.fn(), searchResults: { query: "rohan", contacts: [lead], loading: false } }; render(); render();
+    openSearch("rohan"); choose(lead);
+    expect(input("instructions").props.value).toBe("");
+    expect(callButton().props.disabled).toBe(true);
+  });
+});

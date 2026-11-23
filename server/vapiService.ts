@@ -1300,7 +1300,10 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   // Instead, check if a fieldMgmtCalls record exists for this vapiCallId — only outbound
   // FieldMgmt/LeadAlert calls have a pre-inserted record. Real inbound forwarded calls do not.
   // ROLLBACK: old VAPI-bought number: f2f1c044-c70a-4d73-a755-051f8a2a96e4
-  const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed
+  const VAPI_OUTBOUND_PHONE_NUMBER_IDS = new Set([
+    "61431a3e-8144-4acd-b394-8f600ec3a473", // Retain the previous Twilio-backed ID.
+    "f2f1c044-c70a-4d73-a755-051f8a2a96e4", // Active +19347898077, verified through Vapi.
+  ]);
 
   // ── Secondary guard: check assistant name and metadata step for outbound team calls ──
   // Race condition: for very short calls (< 5s), the end-of-call webhook can fire before
@@ -1322,7 +1325,7 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
     (call as unknown as Record<string, unknown>)?.assistant?.metadata as Record<string, unknown> | undefined
   )?.step as string | undefined;
   if (
-    call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID &&
+    VAPI_OUTBOUND_PHONE_NUMBER_IDS.has(call.phoneNumberId ?? "") &&
     (OUTBOUND_ASSISTANT_NAMES.has(assistantName ?? "") || OUTBOUND_METADATA_STEPS.has(assistantMetadataStep ?? ""))
   ) {
     console.log(`[Vapi] Secondary guard: skipping outbound team call (assistantName=${assistantName}, step=${assistantMetadataStep}, vapiCallId=${vapiCallId})`);
@@ -1342,7 +1345,7 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
     return;
   }
 
-  if (call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID) {
+  if (VAPI_OUTBOUND_PHONE_NUMBER_IDS.has(call.phoneNumberId ?? "")) {
     // Check if this is a real FieldMgmt outbound call (has a pre-inserted record)
     const dbCheck = await getDb();
     const isOutboundFieldMgmt = dbCheck && vapiCallId
@@ -1480,8 +1483,7 @@ Return ONLY a JSON object with these 4 keys. No markdown, no explanation.`,
     // Also skip if the call's phoneNumberId matches the outbound alert phone number ID
     // (belt-and-suspenders check for FieldMgmtAlert / LeadAlert calls)
     // ROLLBACK: old VAPI-bought number: f2f1c044-c70a-4d73-a755-051f8a2a96e4
-    const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed
-    if (call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID) {
+    if (VAPI_OUTBOUND_PHONE_NUMBER_IDS.has(call.phoneNumberId ?? "")) {
       console.log(`[Vapi] Skipping missed-call SMS for outbound alert call (phoneNumberId=${call.phoneNumberId}, reason: ${endedReason})`);
       return;
     }

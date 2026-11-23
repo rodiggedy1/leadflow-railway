@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowDownLeft, ArrowRight, AudioLines, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, FileText, History, Menu, MessageSquare, Mic, MoreHorizontal, Pause, PhoneCall, Play, Search, Settings2, ShieldCheck, Users, Workflow, X } from "lucide-react";
 import type { AiCallerSession, AiCallerStart } from "../hooks/useAiCallerSession";
 import { normalizeDialPhone } from "../../../server/utils/phone";
+import { matchesCallerContactSearch, normalizeContactSearchQuery } from "../../../shared/aiCallerContactSearch";
+import { formatAiCallerError } from "../../../shared/aiCallerErrors";
 import "./ai-caller-workspace.css";
 
 export type CallerContact = {
   id: string; name: string; initials: string; phone: string | null;
-  type: "Customer" | "Team"; location: string;
+  type: "Customer" | "Lead" | "Team"; location: string;
   leadflowJobId: number | null; jobDate: string;
   scripts: { label: string; text: string }[];
 };
@@ -21,6 +23,8 @@ export type AiCallerWorkspaceProps = {
   onDismissSession: () => void; onRefresh?: () => void;
   businessDate?: string; onConfigure?: () => void;
   loading?: boolean; error?: string | null; historyLoading?: boolean; historyError?: string | null;
+  onSearchChange?: (query: string) => void;
+  searchResults?: { query: string; contacts: CallerContact[]; loading: boolean; error?: string | null };
 };
 const bars = [9,16,24,12,30,40,19,32,46,28,16,36,52,32,22,44,28,38,18,31,49,26,17,39,54,35,23,43,28,19,34,47,30,18,37,24,42,27,14,29,19,12,23,10];
 function Avatar({ person, small = false }: { person: CallerContact; small?: boolean }) { return <span className={`avatar ${small ? "small" : ""}`} aria-hidden="true">{person.initials}</span>; }
@@ -40,8 +44,9 @@ function transcriptTurns(value: string | null | undefined) {
 }
 
 /** The approved three-step review layout; only data/actions vary between adapters. */
-export function AiCallerWorkspace({ review, contacts, recent, session, onStartCall, onDismissSession, onRefresh, businessDate, onConfigure, loading, error, historyLoading, historyError }: AiCallerWorkspaceProps) {
+export function AiCallerWorkspace({ review, contacts, recent, session, onStartCall, onDismissSession, onRefresh, businessDate, onConfigure, loading, error, historyLoading, historyError, onSearchChange, searchResults }: AiCallerWorkspaceProps) {
   const [contactId, setContactId] = useState<string | null>(null);
+  const [selectedContact, setSelectedContact] = useState<CallerContact | null>(null);
   const [manualPhone, setManualPhone] = useState("");
   const [useTypedNumber, setUseTypedNumber] = useState(false);
   const [today] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }));
@@ -63,7 +68,7 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
     id: "entered-number", name: normalizedPhone ?? "Entered number", initials: "PN",
     phone: normalizedPhone, type: "Customer", location: "Typed number",
     leadflowJobId: null, jobDate: businessDate ?? today, scripts: [],
-  } : contacts.find(item => item.id === contactId) ?? null;
+  } : contacts.find(item => item.id === contactId) ?? (selectedContact?.id === contactId ? selectedContact : null);
   const locked = session?.phase === "active";
   useEffect(() => {
     if (!useTypedNumber && contactId === null && contacts.length) {
@@ -84,12 +89,20 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
   function chooseContact(person: CallerContact) {
     if (locked) return;
     setUseTypedNumber(false); setManualPhone("");
-    setContactId(person.id); setPreset(0); setInstructions(person.scripts[0]?.text ?? ""); setPicker(false); setSearch("");
+    setContactId(person.id); setSelectedContact(person); setPreset(0);
+    setInstructions(current => person.scripts[0]?.text ?? (current === contact?.scripts[preset]?.text ? "" : current));
+    setPicker(false); changeSearch("");
+  }
+  function changeSearch(value: string) {
+    setSearch(value); onSearchChange?.(normalizeContactSearchQuery(value));
+  }
+  function closePicker() {
+    setPicker(false); changeSearch("");
   }
   function typePhone(value: string) {
     if (locked) return;
     if (!useTypedNumber && instructions === contact?.scripts[preset]?.text) setInstructions("");
-    setUseTypedNumber(true); setManualPhone(value); setContactId(null); setPreset(0); setPicker(false);
+    setUseTypedNumber(true); setManualPhone(value); setContactId(null); setSelectedContact(null); setPreset(0); closePicker();
   }
   function requestCall() {
     if (!contact?.phone || instructions.trim().length < 10 || session !== null) return;
@@ -108,7 +121,7 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
     const payload = confirmation;
     setConfirmation(null); setSelectedRecordId(null);
     try { await onStartCall(payload); }
-    catch (error) { notify(error instanceof Error && error.message.length < 200 ? error.message : "Call could not start."); }
+    catch (error) { notify(formatAiCallerError(error)); }
   }
   const record = recent.find(item => item.id === selectedRecordId) ?? recent[0] ?? null;
   const previewPerson = session ? { name: session.customerName, phone: session.phone, initials: session.customerName.split(" ").map(part => part[0]).join("").slice(0,2) } : record?.person;
@@ -118,7 +131,16 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
   const outcome = session?.status ?? record?.outcome ?? "Ready";
   const summary = session ? session.outcome?.error ?? session.outcome?.summary : record?.summary;
   const duration = session ? session.outcome?.durationSeconds : record?.durationSeconds;
-  const filteredContacts = contacts.filter(person => `${person.name} ${person.phone ?? ""} ${person.type} ${person.location}`.toLowerCase().includes(search.toLowerCase()));
+  const query = normalizeContactSearchQuery(search);
+  const localMatches = contacts.filter(person => matchesCallerContactSearch(person, query));
+  const currentSearch = query && searchResults?.query === query ? searchResults : null;
+  const searchLoading = !!query && !!onSearchChange && (!currentSearch || currentSearch.loading);
+  const seenContacts = new Set<string>();
+  const filteredContacts = [...localMatches, ...(currentSearch?.contacts ?? [])].filter(person => {
+    const key = `${person.type}:${normalizeDialPhone(person.phone ?? "") ?? person.id}`;
+    if (seenContacts.has(key)) return false;
+    seenContacts.add(key); return true;
+  });
   useEffect(() => { audio.current?.pause(); setPlaying(false); }, [recordingUrl, session?.vapiCallId, selectedRecordId]);
   function togglePlayback() {
     if (!audio.current || !recordingUrl) return;
@@ -146,9 +168,9 @@ export function AiCallerWorkspace({ review, contacts, recent, session, onStartCa
               <label className="dial-number" htmlFor="dial-number"><span>Phone number</span><input id="dial-number" type="tel" inputMode="tel" autoComplete="off" placeholder="(202) 555-0100" maxLength={30} value={manualPhone} disabled={locked} aria-invalid={useTypedNumber && !!manualPhone && !normalizedPhone} aria-describedby="dial-number-hint" onChange={event => typePhone(event.target.value)}/></label>
               <p id="dial-number-hint" className="field-hint">{useTypedNumber && manualPhone ? normalizedPhone ? `Calling ${normalizedPhone}` : "Enter a valid number; use +country code for international calls." : "Call a new customer or lead — no booking or saved contact needed."}</p>
               <div className="contact-option-label">Or choose an existing contact</div>
-              <div className="contact-select-wrap"><button className="contact-select" disabled={locked || loading} aria-expanded={picker} aria-controls="contact-picker" onClick={() => setPicker(!picker)}>{contact ? <><Avatar person={contact}/><span className="contact-copy"><strong>{contact.name}<span className="mini-tag">{contact.type}</span></strong><span>{contact.phone ?? "No phone on file"}<i/>{contact.location}</span></span></> : <span>{loading ? "Loading contacts…" : "Choose a person"}</span>}<ChevronDown size={17}/></button>
-              {picker && <div id="contact-picker" className="contact-picker"><div className="search-field"><Search size={15}/><input aria-label={review ? "Search sample contacts" : "Search today's customers and teams"} autoFocus placeholder="Search contacts…" value={search} onChange={event => setSearch(event.target.value)}/><button className="icon-button" aria-label="Close contacts" onClick={() => setPicker(false)}><X size={14}/></button></div>{filteredContacts.map(person => <button key={person.id} disabled={locked} onClick={() => chooseContact(person)}><Avatar person={person} small/><span><strong>{person.name} · {person.type}</strong><small>{person.phone ?? "No phone on file"}</small></span>{contactId === person.id && <Check size={16}/>}</button>)}{!filteredContacts.length && <p className="no-results">{loading ? "Loading…" : "No contacts match."}</p>}</div>}</div>
-              <div className="field-hint"><ShieldCheck size={12}/>{review ? "Fictional contacts for this review" : "Today's existing LeadFlow customers and assigned teams"}</div>{error && <p className="no-results" role="alert">{error}</p>}
+              <div className="contact-select-wrap"><button className="contact-select" disabled={locked} aria-expanded={picker} aria-controls="contact-picker" onClick={() => picker ? closePicker() : setPicker(true)}>{contact ? <><Avatar person={contact}/><span className="contact-copy"><strong>{contact.name}<span className="mini-tag">{contact.type}</span></strong><span>{contact.phone ?? "No phone on file"}<i/>{contact.location}</span></span></> : <span>{loading ? "Loading contacts…" : "Choose a person"}</span>}<ChevronDown size={17}/></button>
+              {picker && <div id="contact-picker" className="contact-picker"><div className="search-field"><Search size={15}/><input aria-label={review ? "Search sample contacts" : "Search customers, leads and teams"} autoFocus placeholder="Search by name or phone…" maxLength={100} value={search} onChange={event => changeSearch(event.target.value)}/><button className="icon-button" aria-label="Close contacts" onClick={closePicker}><X size={14}/></button></div>{filteredContacts.map(person => <button key={person.id} disabled={locked} onClick={() => chooseContact(person)}><Avatar person={person} small/><span><strong>{person.name} · {person.type}</strong><small>{person.phone ?? "No phone on file"}</small></span>{contactId === person.id && <Check size={16}/>}</button>)}{searchLoading && <p className="no-results" role="status">Searching contacts…</p>}{currentSearch?.error && <p className="no-results" role="alert">{currentSearch.error}</p>}{!filteredContacts.length && !searchLoading && !currentSearch?.error && <p className="no-results">{query ? "No contacts match." : loading ? "Loading…" : "Search by name or phone to find customers, leads and teams."}</p>}</div>}</div>
+              <div className="field-hint"><ShieldCheck size={12}/>{review ? "Fictional contacts for this review" : "Search customers, leads and teams — not limited to today's jobs"}</div>{error && <p className="no-results" role="alert">{error}</p>}
             </Step>
             <Step number={2} title="What should the AI do?" subtitle="Review the existing call script before starting.">
               <div className="presets" aria-label="Instruction presets">{contact?.scripts.map((item, index) => <button key={item.label} disabled={locked} className={preset === index ? "selected" : ""} aria-pressed={preset === index} onClick={() => { setPreset(index); setInstructions(item.text); }}>{item.label}</button>)}</div>

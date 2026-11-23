@@ -52,6 +52,7 @@ describe("existing call start with no job prerequisite", () => {
     const [url, options] = mocks.fetch.mock.calls[0];
     expect(url).toBe("https://api.vapi.ai/call");
     const payload = JSON.parse(options.body);
+    expect(payload.phoneNumberId).toBe("f2f1c044-c70a-4d73-a755-051f8a2a96e4");
     expect(payload.customer.number).toBe("+12025550123");
     expect(payload.assistant.firstMessage).toBe(base.script);
     expect(payload.assistant.name).toBe("Ava");
