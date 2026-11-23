@@ -72,7 +72,7 @@ export default function AiCallerLive() {
       outcome: call.outcome, durationSeconds: call.durationSeconds,
       time: call.createdAt, transcript: call.transcript, summary: call.summary,
       recordingUrl: proxyRecordingUrl(call.recordingUrl),
-      sortTs: Date.parse(call.createdAt ?? "") || 0,
+      sortTs: call.createdAtMs ?? 0,
     }));
     const inboundRows = (inbound.data?.calls ?? []).map(call => ({
       id: `inbound-${call.id}`, person: historyPerson(call.callerPhone, call.callerName),

@@ -507,6 +507,7 @@ export const leadflowCallMatrixRouter = router({
         .limit(input.limit);
       return rows.map(row => ({
         ...row,
+        createdAtMs: row.createdAt?.getTime() ?? null,
         createdAt: row.createdAt
           ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" }).format(row.createdAt) + " EST"
           : null,
