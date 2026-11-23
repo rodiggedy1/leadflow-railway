@@ -28,14 +28,31 @@ export function createNativeIntroductionFailureReporter(options: {
   return async (failure: FirstResponseFailure): Promise<void> => {
     const identity = failure.lead?.key ?? `capture:${failure.captureId}`;
     const key = "claude-native-failure:v1:" + createHash("sha256").update(identity).digest("hex");
-    const title = failure.uncertain ? "Check uncertain Thumbtack introduction" : "Follow up: Thumbtack introduction failed";
+    const bounded = (value: unknown, max: number) => typeof value === "string"
+      ? value.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, max) : undefined;
+    const provider = failure.provider ? {
+      kind: failure.provider.kind, code: bounded(failure.provider.code, 128),
+      httpStatus: failure.provider.httpStatus,
+      providerStatus: bounded(failure.provider.providerStatus, 64), providerReason: bounded(failure.provider.providerReason, 512),
+      providerCode: bounded(failure.provider.providerCode, 128), traceId: bounded(failure.provider.traceId, 256),
+    } : undefined;
+    const messageId = failure.messageId ?? failure.provider?.messageId;
+    const title = messageId && failure.code === "ACCEPTANCE_SAVE_FAILED" ? "Record accepted Thumbtack introduction"
+      : failure.uncertain ? "Check uncertain Thumbtack introduction" : "Follow up: Thumbtack introduction failed";
     const contact = [failure.lead?.facts.name, failure.lead?.phone].filter(Boolean).join(" · ");
-    const instruction = failure.uncertain
+    const instruction = messageId
+      ? `Quo returned message ${messageId}. Check that existing message and its status; do not send a replacement introduction.`
+      : failure.uncertain
       ? "Check the existing Quo conversation before sending anything: submission may already have been accepted."
       : "Review this lead and send the missing introduction from its existing lead card/conversation.";
+    const providerDetails = [provider?.httpStatus ? `Quo HTTP ${provider.httpStatus}` : "",
+      provider?.providerStatus ? `Provider status: ${provider.providerStatus}` : "",
+      provider?.providerCode ? `Provider code: ${provider.providerCode}` : "",
+      provider?.providerReason ? `Provider reason: ${provider.providerReason}` : "",
+      provider?.traceId ? `Quo trace: ${provider.traceId}` : ""].filter(Boolean).join("\n");
     const description = [contact || "Customer identity unavailable", `Capture ${failure.captureId}`,
       failure.claim ? `Lead card ${failure.claim.cardId}; receipt ${failure.claim.draftId}` : "Failure before an introduction receipt committed",
-      `Stage: ${failure.stage}; code: ${failure.code}`, instruction].join("\n");
+      `Stage: ${failure.stage}; code: ${failure.code}`, ...(providerDetails ? [providerDetails] : []), instruction].join("\n");
     let taskId: number | null = null, created = false, persisted = false;
     try {
       const db = options.db;
@@ -49,10 +66,11 @@ export function createNativeIntroductionFailureReporter(options: {
           createdByAgentName: "Claude", dueAt: Date.now() }));
         if (!Number.isSafeInteger(id) || id <= 0) throw new Error("NATIVE_FAILURE_TASK_INSERT_ID_MISSING");
         const noticeId = insertId(await tx.insert(opsChatMessages).values({ channel: "command", authorName: "Claude", authorRole: "system",
-          body: `${title}${contact ? ` · ${contact}` : ""}\nStaff task #${id}. ${instruction}\nCapture ${failure.captureId}; ${failure.stage}: ${failure.code}`,
+          body: `${title}${contact ? ` · ${contact}` : ""}\nStaff task #${id}. ${instruction}\nCapture ${failure.captureId}; ${failure.stage}: ${failure.code}${providerDetails ? `\n${providerDetails}` : ""}`,
           sessionId: failure.claim?.sessionId ?? null, activeDedupKey: key,
           metadata: JSON.stringify({ opsTaskId: id, responseFailure: { workflow: "thumbtack_first_response", captureId: failure.captureId,
-            draftId: failure.claim?.draftId ?? null, cardId: failure.claim?.cardId ?? null, stage: failure.stage, code: failure.code, uncertain: failure.uncertain } }),
+            draftId: failure.claim?.draftId ?? null, cardId: failure.claim?.cardId ?? null, stage: failure.stage, code: failure.code, uncertain: failure.uncertain,
+            ...(provider ? { provider } : {}), ...(messageId ? { messageId } : {}) } }),
           lastActivityAt: Date.now() }));
         if (!Number.isSafeInteger(noticeId) || noticeId <= 0) throw new Error("NATIVE_FAILURE_NOTICE_INSERT_ID_MISSING");
         return { taskId: id, created: true };
@@ -71,7 +89,8 @@ export function createNativeIntroductionFailureReporter(options: {
         catch { console.error("[ThumbtackClaude] failure task refresh failed", { captureId: failure.captureId, taskId }); }
       }
     } catch {
-      console.error("[ThumbtackClaude] CRITICAL: failure task could not be persisted", { captureId: failure.captureId, stage: failure.stage, code: failure.code });
+      console.error("[ThumbtackClaude] CRITICAL: failure task could not be persisted", { captureId: failure.captureId, stage: failure.stage, code: failure.code,
+        ...(provider ? { provider } : {}), ...(messageId ? { messageId } : {}) });
     }
     // A task failure must not prevent the independent owner alert attempt. Do not repeat alerts for an existing notice.
     if (persisted && !created) return;

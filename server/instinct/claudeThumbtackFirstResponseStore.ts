@@ -3,10 +3,12 @@ import { createHash } from "node:crypto";
 import { conversationSessions, opsChatMessages, madisonSmsDrafts } from "../../drizzle/schema";
 import type { getDb } from "../db";
 import { normalizePhone } from "../utils/phone";
+import { normalizeThumbtackSmsPhone } from "../../shared/thumbtackSmsPhone";
 import { THUMBTACK_ACCOUNT, THUMBTACK_FIRST_RESPONSE_CAPABILITY as capability,
   type CapturedLead, type EligibleLead, type FirstResponseClaim, type FirstResponseConfig, type FirstResponseStore } from "./claudeThumbtackFirstResponse";
-import type { ClaudeInitialLeadResult } from "../../shared/claudeInitialLead";
-import { automaticClaudeSmsProvenance } from "../../shared/smsSenderProvenance";
+import type { ThumbtackInitialLeadResult } from "../../shared/claudeInitialLead";
+import { automaticClaudeSmsProvenance, automaticChatGptSmsProvenance, CHATGPT_WORLDCLASS_GENERATOR_ID } from "../../shared/smsSenderProvenance";
+import type { ThumbtackQuoSmsResult } from "./thumbtackDirectQuoSms";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -14,7 +16,6 @@ const rows = (result: unknown): any[] => (result as any)[0];
 const header = (result: unknown): { insertId: number; affectedRows: number } => (result as any)[0];
 const json = (value: unknown): any => typeof value === "string" ? JSON.parse(value) : value;
 const payloadHash = (lead: EligibleLead) => createHash("sha256").update(lead.capture.rawPayload).digest("hex");
-const stop = (text: unknown) => typeof text === "string" && /^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(text);
 const intakeCapability = "thumbtack_lead_intake_v1";
 const intakeKey = (lead: EligibleLead) => "tt-intake:v1:" + createHash("sha256")
   .update(JSON.stringify(["thumbtack", THUMBTACK_ACCOUNT, lead.native.negotiationId, lead.phone])).digest("hex");
@@ -32,6 +33,19 @@ const binding = (claim: FirstResponseClaim) => ({ source: "thumbtack", account: 
   captureId: claim.lead.capture.id, payloadHash: payloadHash(claim.lead), sessionId: claim.sessionId, key: claim.lead.key,
   phone: claim.lead.phone, fromNumberId: claim.fromNumberId, originalConversation: [] });
 
+// Transport results are already redacted; persist only bounded receipt fields, never raw responses.
+function providerReceipt(provider: ThumbtackQuoSmsResult): Record<string, string | number | boolean> {
+  const receipt: Record<string, string | number | boolean> = { kind: provider.kind, success: provider.success };
+  const limits = { code: 128, httpStatus: 16, providerStatus: 128, providerReason: 500, providerCode: 128, traceId: 256 };
+  for (const [key, limit] of Object.entries(limits)) {
+    const value = (provider as unknown as Record<string, unknown>)[key];
+    if (typeof value === "string") receipt[key] = value.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, limit);
+    else if (typeof value === "number" && Number.isFinite(value)) receipt[key] = value;
+  }
+  if (provider.kind === "accepted") receipt.messageId = provider.messageId;
+  return receipt;
+}
+
 export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: EligibleLead) => string | null): FirstResponseStore {
   async function fresh(tx: Tx, claim: FirstResponseClaim): Promise<boolean> {
     const [draft] = rows(await tx.execute(sql`SELECT * FROM madison_sms_drafts WHERE id = ${claim.draftId} FOR UPDATE`));
@@ -42,11 +56,37 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
       || draft.fromPhone !== claim.lead.phone || session.leadPhone !== claim.lead.phone || Number(session.smsOptOut) !== 0) return false;
     if (rows(await tx.execute(sql`SELECT id FROM sms_opt_outs WHERE phone = ${claim.lead.phone}`)).length) return false;
     // Preserve global consent checks without using previous conversations/messages to reject a lead.
-    const phone10 = claim.lead.phone.slice(-10);
+    const phone10 = claim.lead.phone.replace(/\D/g, "").slice(-10);
     const otherSessions = rows(await tx.execute(sql`SELECT leadPhone, smsOptOut FROM conversation_sessions
       WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = ${phone10} AND id <> ${claim.sessionId}`));
-    if (otherSessions.some(other => normalizePhone(other.leadPhone) === claim.lead.phone && Number(other.smsOptOut))) return false;
-    return !stop(claim.lead.facts.description) && !claim.lead.facts.nativeDetails.some(detail => stop(detail.answer));
+    if (otherSessions.some(other => normalizeThumbtackSmsPhone(other.leadPhone) === claim.lead.phone && Number(other.smsOptOut))) return false;
+    return true;
+  }
+  async function resume(tx: Tx, lead: EligibleLead, config: FirstResponseConfig): Promise<FirstResponseClaim | null> {
+    const [draft] = rows(await tx.execute(sql`SELECT * FROM madison_sms_drafts
+      WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1 FOR UPDATE`));
+    if (!draft || !lead.phone || !isSameNegotiation(draft, lead) || !["DISMISSED", "FAILED"].includes(draft.status)
+      || draft.dismissedAt || draft.dismissedBy || draft.errorCode === "MANUAL_FIRST_RESPONSE" || draft.outboundOpenPhoneId) return null;
+    let state: any;
+    try { state = json(draft.capabilityResult); } catch { return null; }
+    if (!state || state.messageId || state.provider?.messageId) return null;
+    const neverSubmitted = state.phase === "claimed" && draft.errorStage === "GATE" && draft.errorCode && !state.provider;
+    const rejected = state.phase === "submission_rejected" && state.provider?.kind === "rejected";
+    if (!neverSubmitted && !rejected) return null;
+    const sessionId = Number(draft.sessionId);
+    const [session] = rows(await tx.execute(sql`SELECT messageHistory FROM conversation_sessions WHERE id = ${sessionId} FOR UPDATE`));
+    let history: any;
+    try { history = json(session?.messageHistory); } catch { return null; }
+    if (!session || !Array.isArray(history) || history.some(message => message?.role === "assistant")) return null;
+    const [card] = rows(await tx.execute(sql`SELECT id FROM ops_chat_messages WHERE sessionId = ${sessionId} AND quickAction = 'new_lead' LIMIT 1`));
+    if (!card) return null;
+    const claim: FirstResponseClaim = { draftId: Number(draft.id), sessionId, cardId: Number(card.id), lead, fromNumberId: config.fromNumberId };
+    const updated = await tx.execute(sql`UPDATE madison_sms_drafts SET status = 'TOOLS_RUNNING',
+      capabilityResult = ${JSON.stringify({ phase: "claimed", startAt: config.startAt })}, errorStage = NULL, errorCode = NULL,
+      updatedAt = NOW(3) WHERE id = ${claim.draftId} AND status = ${draft.status}
+      AND dismissedAt IS NULL AND dismissedBy IS NULL AND outboundOpenPhoneId IS NULL`);
+    if (header(updated).affectedRows !== 1) return null;
+    return claim;
   }
   return {
     async loadCapture(id) {
@@ -65,13 +105,14 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
       const key = intakeKey(lead);
       let introductionAttempted = false;
       const attempt = (confirmedPhoneReceipt?: any) => db.transaction(async tx => {
-          if (rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${key} AND capability = ${intakeCapability} LIMIT 1`)).length) return null;
+          if (rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${key} AND capability = ${intakeCapability} LIMIT 1`)).length) return resume(tx, lead, config);
           const [exact] = rows(await tx.execute(sql`SELECT id, resolvedContext FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${lead.key} AND capability = ${capability} LIMIT 1`));
           // Older native receipts used negotiation/attempt hashes but persisted the same canonical phone.
           const older = lead.phone ? rows(await tx.execute(sql`SELECT id, resolvedContext FROM madison_sms_drafts WHERE fromPhone = ${lead.phone}
             AND capability = ${capability} AND inboundOpenPhoneId LIKE 'tt-first:v1:%'`)) : [];
           // Pre-fix claims already created their session/card atomically. Recognize those retries too.
-          if (confirmedPhoneReceipt || exact || older.some(receipt => isSameNegotiation(receipt, lead))) return null;
+          if (exact) return resume(tx, lead, config);
+          if (confirmedPhoneReceipt || older.some(receipt => isSameNegotiation(receipt, lead))) return null;
           const price = quote(lead), now = new Date();
           const phone = lead.phone ?? `no-phone-tt-${lead.capture.id}`;
           const sessionId = Number(header(await tx.insert(conversationSessions).values({ leadPhone: phone, leadName: lead.facts.name,
@@ -144,28 +185,64 @@ export function createClaudeThumbtackFirstResponseStore(db: Db, quote: (lead: El
     beginSend: (claim, result) => db.transaction(async tx => {
       if (!await fresh(tx, claim)) return false;
       const updated = await tx.execute(sql`UPDATE madison_sms_drafts SET status = 'SENDING', generatedDraft = ${result.replyText},
-        approvedText = ${result.replyText}, approvedBy = 'claude_thumbtack_auto', approvedAt = NOW(3),
+        approvedText = ${result.replyText}, approvedBy = ${result.agentId === CHATGPT_WORLDCLASS_GENERATOR_ID ? "chatgpt_thumbtack_auto" : "claude_thumbtack_auto"}, approvedAt = NOW(3),
         capabilityResult = ${JSON.stringify({ phase: "submission_started", result, fromNumberId: claim.fromNumberId })}, updatedAt = NOW(3)
         WHERE id = ${claim.draftId} AND status = 'TOOLS_RUNNING' AND dismissedAt IS NULL AND dismissedBy IS NULL`);
       return header(updated).affectedRows === 1;
     }),
-    accepted: (claim, result, messageId) => db.transaction(async tx => {
+    accepted: (claim, result: ThumbtackInitialLeadResult, messageId, provider?: ThumbtackQuoSmsResult) => db.transaction(async tx => {
       const [draft] = rows(await tx.execute(sql`SELECT * FROM madison_sms_drafts WHERE id = ${claim.draftId} FOR UPDATE`));
-      if (!draft || draft.inboundOpenPhoneId !== claim.lead.key || Number(draft.sessionId) !== claim.sessionId
-        || draft.generatedDraft !== result.replyText || json(draft.capabilityResult)?.phase !== "submission_started") throw new Error("ACCEPTANCE_BINDING_CHANGED");
+      if (!draft) throw new Error("ACCEPTANCE_SAVE_FAILED");
+      let state: any = {};
+      try { state = json(draft.capabilityResult) ?? {}; } catch { /* Mutable metadata must not discard a provider receipt. */ }
+      if (draft.outboundOpenPhoneId || state.messageId
+        || (state.provider?.kind === "accepted" && state.provider.messageId)) return;
+      const [session] = rows(await tx.execute(sql`SELECT messageHistory FROM conversation_sessions WHERE id = ${claim.sessionId} FOR UPDATE`));
+      if (!session) throw new Error("ACCEPTANCE_SESSION_SAVE_FAILED");
+      const history = json(session.messageHistory);
+      const alreadyAppended = Array.isArray(history) && history.some(message => message?.opMsgId === messageId);
       // Atomic SQL append uses current history, never the generation-time snapshot.
-      const appended = await tx.execute(sql`UPDATE conversation_sessions SET messageHistory = JSON_ARRAY_APPEND(messageHistory, '$', CAST(${JSON.stringify({ role: "assistant",
-        content: result.replyText, ts: Date.now(), senderName: "Madison", opMsgId: messageId, fromNumberId: claim.fromNumberId,
-        smsProvenance: automaticClaudeSmsProvenance(claim.draftId, messageId) })} AS JSON)),
-        lastMessageText = ${result.replyText.slice(0, 255)}, lastMessageTs = ${Date.now()}, lastMessageRole = 'assistant',
-        messageCount = messageCount + 1 WHERE id = ${claim.sessionId} AND leadPhone = ${claim.lead.phone} AND leadSource = 'thumbtack'`);
-      if (header(appended).affectedRows !== 1) throw new Error("ACCEPTANCE_SESSION_SAVE_FAILED");
+      if (!alreadyAppended) {
+        const appended = await tx.execute(sql`UPDATE conversation_sessions SET messageHistory = JSON_ARRAY_APPEND(messageHistory, '$', CAST(${JSON.stringify({ role: "assistant",
+          content: result.replyText, ts: Date.now(), senderName: "Madison", opMsgId: messageId, fromNumberId: claim.fromNumberId,
+          smsProvenance: (result.agentId === CHATGPT_WORLDCLASS_GENERATOR_ID ? automaticChatGptSmsProvenance : automaticClaudeSmsProvenance)(claim.draftId, messageId) })} AS JSON)),
+          lastMessageText = ${result.replyText.slice(0, 255)}, lastMessageTs = ${Date.now()}, lastMessageRole = 'assistant',
+          messageCount = messageCount + 1 WHERE id = ${claim.sessionId}`);
+        if (header(appended).affectedRows !== 1) throw new Error("ACCEPTANCE_SESSION_SAVE_FAILED");
+      }
+      const receipt = provider ? providerReceipt(provider) : undefined;
+      const failureCode = receipt?.providerStatus === "failed" ? "QUO_MESSAGE_FAILED"
+        : receipt?.providerStatus === "undelivered" ? "QUO_MESSAGE_UNDELIVERED" : null;
+      const errors = provider ? sql`errorStage = ${failureCode ? "SEND" : null}, errorCode = ${failureCode}` : sql`errorStage = NULL, errorCode = NULL`;
+      const outcome = provider ? { ...state, phase: "accepted", messageId, result, fromNumberId: claim.fromNumberId, provider: receipt }
+        : { phase: "accepted", messageId, result, fromNumberId: claim.fromNumberId };
       const saved = await tx.execute(sql`UPDATE madison_sms_drafts SET status = CASE WHEN status = 'DISMISSED' THEN 'DISMISSED' ELSE 'SENT' END,
-        outboundOpenPhoneId = ${messageId}, sentAt = NOW(3), capabilityResult = ${JSON.stringify({ phase: "accepted", messageId, result, fromNumberId: claim.fromNumberId })},
-        errorStage = NULL, errorCode = NULL, updatedAt = NOW(3) WHERE id = ${claim.draftId}`);
+        outboundOpenPhoneId = ${messageId}, sentAt = NOW(3), capabilityResult = ${JSON.stringify(outcome)},
+        ${errors}, updatedAt = NOW(3) WHERE id = ${claim.draftId}`);
       if (header(saved).affectedRows !== 1) throw new Error("ACCEPTANCE_SAVE_FAILED");
     }),
-    async blocked(claim, code, uncertain) {
+    async blocked(claim, code, uncertain, provider?: ThumbtackQuoSmsResult) {
+      if (provider) {
+        if (provider.kind === "accepted" && code !== "ACCEPTANCE_SAVE_FAILED") return;
+        await db.transaction(async tx => {
+          const [draft] = rows(await tx.execute(sql`SELECT * FROM madison_sms_drafts WHERE id = ${claim.draftId} FOR UPDATE`));
+          if (!draft) return;
+          let state: any = {};
+          try { state = json(draft.capabilityResult) ?? {}; } catch { /* Mutable metadata must not discard a provider receipt. */ }
+          if (draft.outboundOpenPhoneId || state.messageId
+            || (state.provider?.kind === "accepted" && state.provider.messageId)) return;
+          const phase = provider.kind === "rejected" ? "submission_rejected"
+            : provider.kind === "accepted" ? "provider_accepted_recording_failed" : "submission_started";
+          const status = provider.kind === "rejected" ? "DISMISSED" : "SENDING";
+          const receipt = providerReceipt(provider);
+          const outcome = { ...state, phase, provider: receipt, ...(provider.kind === "accepted" ? { messageId: provider.messageId } : {}) };
+          const knownId = provider.kind === "accepted" ? sql`, outboundOpenPhoneId = ${provider.messageId}` : sql``;
+          await tx.execute(sql`UPDATE madison_sms_drafts SET status = ${status}, capabilityResult = ${JSON.stringify(outcome)},
+            errorStage = 'SEND', errorCode = ${code} ${knownId}, updatedAt = NOW(3)
+            WHERE id = ${claim.draftId}`);
+        });
+        return;
+      }
       await db.execute(sql`UPDATE madison_sms_drafts SET status = CASE WHEN status = 'TOOLS_RUNNING' THEN 'DISMISSED' ELSE status END,
         errorStage = ${uncertain ? "SEND" : "GATE"}, errorCode = ${code}, updatedAt = NOW(3)
         WHERE id = ${claim.draftId} AND inboundOpenPhoneId = ${claim.lead.key} AND status IN ('TOOLS_RUNNING', 'SENDING', 'DISMISSED')`);

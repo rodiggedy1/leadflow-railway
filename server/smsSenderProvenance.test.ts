@@ -1,9 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { automaticClaudeSmsProvenance, claudeDraftSourceSchema, reviewedClaudeSmsProvenance, smsSenderLabel } from "../shared/smsSenderProvenance";
+import { automaticClaudeSmsProvenance, automaticChatGptSmsProvenance, claudeDraftSourceSchema, reviewedClaudeSmsProvenance, smsSenderLabel } from "../shared/smsSenderProvenance";
 const requestId = "00112233-4455-4677-8899-aabbccddeeff";
 const source = { requestId, kind: "initial_lead" as const };
 
 describe("internal SMS provenance labels", () => {
+  it("labels ChatGPT only with a valid automatic marker bound to the exact provider SMS", () => {
+    const message = { role: "assistant", senderName: "Madison", opMsgId: "OM-chatgpt", content: "Exact WorldClass draft",
+      smsProvenance: automaticChatGptSmsProvenance(72, "OM-chatgpt") };
+    expect(smsSenderLabel(message, "Rohan")).toBe("ChatGPT · Automatic");
+    expect(smsSenderLabel({ ...message, opMsgId: "other" }, "Rohan")).toBe("Madison");
+    expect(smsSenderLabel({ ...message, opMsgId: undefined }, "Rohan")).toBe("Madison");
+    expect(smsSenderLabel({ ...message, role: "user" }, "Rohan")).toBe("Madison");
+    expect(message.content).toBe("Exact WorldClass draft");
+    expect(() => automaticChatGptSmsProvenance(0, "OM-chatgpt")).toThrow();
+    expect(() => automaticChatGptSmsProvenance(72, "")).toThrow();
+    expect(smsSenderLabel({ ...message, smsProvenance: { ...message.smsProvenance, mode: "human_reviewed" } }, "Rohan")).toBe("Madison");
+  });
   it("labels only a server-created automatic marker bound to this exact provider message", () => {
     const message = { role: "assistant", content: "Original customer-facing text", senderName: "Madison", opMsgId: "OM-exact",
       smsProvenance: automaticClaudeSmsProvenance(71, "OM-exact") };

@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { buildThumbtackLeadDraftContext, THUMBTACK_FIRST_RESPONSE_PROMPT, claudeInitialLeadFactsSchema,
-  claudeInitialLeadResultSchema, type ClaudeInitialLeadFacts, type ClaudeInitialLeadInput, type ClaudeInitialLeadResult } from "../../shared/claudeInitialLead";
+  thumbtackInitialLeadResultSchema, type ClaudeInitialLeadFacts, type ClaudeInitialLeadInput, type ThumbtackInitialLeadResult } from "../../shared/claudeInitialLead";
 import { projectThumbtackNativeLead, type ThumbtackNativeLeadPayload, type ThumbtackNativeLead } from "../../shared/thumbtackNativeLead";
-import { normalizePhone } from "../utils/phone";
+import { normalizeThumbtackSmsPhone } from "../../shared/thumbtackSmsPhone";
+import type { ThumbtackQuoSmsResult } from "./thumbtackDirectQuoSms";
 
 export const THUMBTACK_FIRST_RESPONSE_CAPABILITY = "claude_thumbtack_first_response_v1";
 export const THUMBTACK_ACCOUNT = "default";
@@ -23,7 +24,7 @@ export function thumbtackFirstResponseConfig(env: NodeJS.ProcessEnv = process.en
 }
 /** Legacy phone-only identity retained for existing receipt compatibility. */
 export function thumbtackFirstResponseKey(phone: string): string {
-  const normalized = normalizePhone(phone);
+  const normalized = normalizeThumbtackSmsPhone(phone);
   if (!normalized) throw new Error("THUMBTACK_FIRST_RESPONSE_PHONE_INVALID");
   return "tt-first:v1:" + createHash("sha256").update(JSON.stringify(["thumbtack", THUMBTACK_ACCOUNT, normalized])).digest("hex");
 }
@@ -44,7 +45,7 @@ export function capturedThumbtackLead(capture: CapturedLead, _config: FirstRespo
       bathrooms: native.bathrooms, homeSize: native.homeSize, rooms: null, propertyType: null, frequency: native.frequency,
       extras: native.extras, pets: native.pets, description: native.description, summary: null, travelPreferences: native.travelPreferences,
       proposedTimes: native.proposedTimes, nativeDetails: native.nativeDetails });
-    const phone = normalizePhone(native.phone);
+    const phone = normalizeThumbtackSmsPhone(native.phone);
     const key = phone ? "tt-first:v1:" + createHash("sha256")
       .update(JSON.stringify(["thumbtack", THUMBTACK_ACCOUNT, native.negotiationId, phone])).digest("hex") : `tt-first:v1:no-phone:${capture.id}`;
     return { capture, native, payload, facts, key, phone, createdAt: createdAt ?? capture.receivedAt.getTime(), sendEligible: Boolean(phone) };
@@ -56,21 +57,23 @@ export function eligibleThumbtackLead(capture: CapturedLead, config: FirstRespon
 }
 export type FirstResponseClaim = { draftId: number; sessionId: number; cardId: number; lead: EligibleLead; fromNumberId: string };
 export type FirstResponseOutcome = { captureId: number; outcome: "disabled" | "duplicate" | "no_phone" | "suppressed" | "sent" | "failed" | "uncertain";
-  code?: string; draftId?: number; messageId?: string };
+  code?: string; draftId?: number; messageId?: string; providerStatus?: string };
 export type FirstResponseFailure = { captureId: number; lead: EligibleLead | null; claim: FirstResponseClaim | null;
-  stage: "capture" | "claim" | "generation" | "pre_send" | "submission" | "acceptance"; code: string; uncertain: boolean };
+  stage: "capture" | "claim" | "generation" | "pre_send" | "submission" | "acceptance"; code: string; uncertain: boolean;
+  provider?: ThumbtackQuoSmsResult; messageId?: string };
 export interface FirstResponseStore {
   loadCapture(id: number): Promise<CapturedLead | null>;
   claim(lead: EligibleLead, config: FirstResponseConfig): Promise<FirstResponseClaim | null>;
   fresh(claim: FirstResponseClaim): Promise<boolean>;
-  beginSend(claim: FirstResponseClaim, result: ClaudeInitialLeadResult): Promise<boolean>;
-  accepted(claim: FirstResponseClaim, result: ClaudeInitialLeadResult, messageId: string): Promise<void>;
-  blocked(claim: FirstResponseClaim, code: string, uncertain: boolean): Promise<void>;
+  beginSend(claim: FirstResponseClaim, result: ThumbtackInitialLeadResult): Promise<boolean>;
+  accepted(claim: FirstResponseClaim, result: ThumbtackInitialLeadResult, messageId: string, provider?: ThumbtackQuoSmsResult): Promise<void>;
+  blocked(claim: FirstResponseClaim, code: string, uncertain: boolean, provider?: ThumbtackQuoSmsResult): Promise<void>;
 }
 export function createClaudeThumbtackFirstResponseService(deps: {
   config: () => FirstResponseConfig | null; store: FirstResponseStore;
-  generate: (input: ClaudeInitialLeadInput) => Promise<ClaudeInitialLeadResult>;
-  send: (input: { to: string; content: string; fromNumberId: string }) => Promise<{ success: boolean; messageId?: string }>;
+  generate: (input: ClaudeInitialLeadInput) => Promise<ThumbtackInitialLeadResult>;
+  send: (input: { to: string; content: string; fromNumberId: string }, options?: { signal: AbortSignal; deadlineAt: number })
+    => Promise<ThumbtackQuoSmsResult | { success: boolean; messageId?: string }>;
   onFailure?: (failure: FirstResponseFailure) => Promise<void>;
 }) {
   return async (captureId: number): Promise<FirstResponseOutcome> => {
@@ -78,10 +81,12 @@ export function createClaudeThumbtackFirstResponseService(deps: {
     if (!config) return { captureId, outcome: "disabled", code: "DISABLED_OR_SENDER_UNAVAILABLE" };
     let lead: EligibleLead | null = null, claim: FirstResponseClaim | null = null;
     let dispatchStarted = false;
+    let provider: ThumbtackQuoSmsResult | undefined, knownMessageId: string | undefined;
     let stage: FirstResponseFailure["stage"] = "capture";
     const report = async (code: string, uncertain = false) => {
-      const failure = { captureId, lead, claim, stage, code, uncertain };
-      console.error("[ThumbtackClaude] introduction requires staff review", { captureId, draftId: claim?.draftId, stage, code, uncertain });
+      const details = { ...(provider ? { provider } : {}), ...(knownMessageId ? { messageId: knownMessageId } : {}) };
+      const failure = { captureId, lead, claim, stage, code, uncertain, ...details };
+      console.error("[ThumbtackClaude] introduction requires staff review", { captureId, draftId: claim?.draftId, stage, code, uncertain, ...details });
       try { await deps.onFailure?.(failure); }
       catch { console.error("[ThumbtackClaude] failure escalation could not be saved", { captureId, draftId: claim?.draftId, stage, code }); }
     };
@@ -99,13 +104,13 @@ export function createClaudeThumbtackFirstResponseService(deps: {
       }
       stage = "generation";
       const context = buildThumbtackLeadDraftContext(lead.facts), requestId = randomUUID();
-      const result = claudeInitialLeadResultSchema.parse(await deps.generate({ sessionId: claim.sessionId, customerPhone: lead.phone,
+      const result = thumbtackInitialLeadResultSchema.parse(await deps.generate({ sessionId: claim.sessionId, customerPhone: lead.phone,
         requestId, leadDetails: lead.facts, originalConversation: [], draftRequest: { conversationContext: "", customerName: lead.facts.name,
           jobContext: context, scenario: `${THUMBTACK_FIRST_RESPONSE_PROMPT}\n\nThumbtack lead:\n${context}` } }));
       if (result.sessionId !== claim.sessionId || result.customerPhone !== lead.phone || result.requestId !== requestId) throw new Error("GENERATION_BINDING_CHANGED");
       stage = "pre_send";
       const current = deps.config();
-      if (!current || current.fromNumberId !== config.fromNumberId) {
+      if (!current) {
         await deps.store.blocked(claim, "CONFIG_CHANGED", false);
         await report("CONFIG_CHANGED");
         return { captureId, draftId: claim.draftId, outcome: "failed", code: "CONFIG_CHANGED" };
@@ -118,26 +123,57 @@ export function createClaudeThumbtackFirstResponseService(deps: {
       stage = "submission";
       let timer: ReturnType<typeof setTimeout> | undefined;
       let sent: Awaited<ReturnType<typeof deps.send>>;
+      const controller = new AbortController();
+      const deadlineAt = Date.now() + THUMBTACK_INTRODUCTION_SEND_TIMEOUT_MS;
       try {
         sent = await Promise.race([
-          deps.send({ to: lead.phone, content: result.replyText, fromNumberId: claim.fromNumberId }),
-          new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("THUMBTACK_SMS_SUBMISSION_TIMEOUT")), THUMBTACK_INTRODUCTION_SEND_TIMEOUT_MS); }),
+          deps.send({ to: lead.phone, content: result.replyText, fromNumberId: claim.fromNumberId }, { signal: controller.signal, deadlineAt }),
+          new Promise<never>((_, reject) => { timer = setTimeout(() => {
+            controller.abort();
+            reject(new Error("THUMBTACK_SMS_SUBMISSION_TIMEOUT"));
+          }, Math.max(0, deadlineAt - Date.now())); }),
         ]);
-      } finally { if (timer) clearTimeout(timer); }
+      } finally { if (timer) clearTimeout(timer); controller.abort(); }
+      provider = "kind" in sent ? sent : undefined;
+      if (Date.now() >= deadlineAt && (!provider || provider.kind === "accepted")) {
+        provider = undefined;
+        throw new Error("THUMBTACK_SMS_SUBMISSION_TIMEOUT");
+      }
+      if (provider && provider.kind !== "accepted") {
+        const uncertain = provider.kind === "uncertain";
+        await deps.store.blocked(claim, provider.code, uncertain, provider);
+        await report(provider.code, uncertain);
+        return { captureId, draftId: claim.draftId, outcome: uncertain ? "uncertain" : "failed", code: provider.code };
+      }
       if (!sent.success || !sent.messageId?.trim()) {
         await deps.store.blocked(claim, "SUBMISSION_UNCERTAIN", true);
         await report("SUBMISSION_UNCERTAIN", true);
         return { captureId, draftId: claim.draftId, outcome: "uncertain", code: "SUBMISSION_UNCERTAIN" };
       }
+      knownMessageId = sent.messageId;
       stage = "acceptance";
-      await deps.store.accepted(claim, result, sent.messageId);
-      return { captureId, draftId: claim.draftId, outcome: "sent", messageId: sent.messageId };
+      if (provider) await deps.store.accepted(claim, result, knownMessageId, provider);
+      else await deps.store.accepted(claim, result, knownMessageId);
+      if (provider?.providerStatus === "failed" || provider?.providerStatus === "undelivered") {
+        const code = provider.providerStatus === "failed" ? "QUO_MESSAGE_FAILED" : "QUO_MESSAGE_UNDELIVERED";
+        await report(code);
+        return { captureId, draftId: claim.draftId, outcome: "failed", code, messageId: knownMessageId, providerStatus: provider.providerStatus };
+      }
+      return { captureId, draftId: claim.draftId, outcome: "sent", messageId: knownMessageId,
+        ...(provider?.providerStatus ? { providerStatus: provider.providerStatus } : {}) };
     } catch {
-      const code = dispatchStarted ? "SUBMISSION_UNCERTAIN" : stage === "claim" ? "CLAIM_FAILED" : stage === "capture" ? "CAPTURE_LOAD_FAILED" : "GENERATION_OR_SAVE_FAILED";
-      if (claim) await deps.store.blocked(claim, code, dispatchStarted)
-        .catch(() => console.error("[ThumbtackClaude] durable outcome save failed", { captureId, draftId: claim?.draftId, stage, code }));
-      await report(code, dispatchStarted);
-      return { captureId, draftId: claim?.draftId, outcome: dispatchStarted ? "uncertain" : "failed", code };
+      const uncertain = dispatchStarted && !knownMessageId && provider?.kind !== "rejected";
+      const code = knownMessageId ? "ACCEPTANCE_SAVE_FAILED" : provider?.code ?? (dispatchStarted ? "SUBMISSION_UNCERTAIN"
+        : stage === "claim" ? "CLAIM_FAILED" : stage === "capture" ? "CAPTURE_LOAD_FAILED" : "GENERATION_OR_SAVE_FAILED");
+      if (knownMessageId && !provider) provider = { kind: "accepted", success: true, code: "PROVIDER_ACCEPTED", messageId: knownMessageId };
+      if (claim) {
+        const save = provider ? deps.store.blocked(claim, code, uncertain, provider) : deps.store.blocked(claim, code, uncertain);
+        await save.catch(() => console.error("[ThumbtackClaude] durable outcome save failed", { captureId, draftId: claim?.draftId, stage, code,
+          ...(knownMessageId ? { messageId: knownMessageId } : {}) }));
+      }
+      await report(code, uncertain);
+      return { captureId, draftId: claim?.draftId, outcome: uncertain ? "uncertain" : "failed", code,
+        ...(knownMessageId ? { messageId: knownMessageId } : {}) };
     }
   };
 }

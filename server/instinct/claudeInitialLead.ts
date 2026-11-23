@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext,
-  claudeInitialLeadInputSchema, claudeInitialLeadResultSchema,
-  type ClaudeInitialLeadInput, type ClaudeInitialLeadResult,
+  claudeInitialLeadInputSchema, claudeInitialLeadResultSchema, thumbtackInitialLeadResultSchema,
+  type ClaudeInitialLeadInput, type ClaudeInitialLeadResult, type ThumbtackInitialLeadResult,
 } from "../../shared/claudeInitialLead";
 import { normalizePhone } from "../utils/phone";
 import { prepareCsReplyMessages } from "../csReplyStream";
@@ -27,7 +27,7 @@ function canonical(value: unknown): string {
   return encoded;
 }
 const callerSchema = z.object({ id: z.string().min(1), name: z.string(), isOwner: z.boolean(), email: z.string().optional() }).strict();
-export type InitialLeadRunner = (options: InitialLeadDraftOptions) => Promise<{ finalSmsText: string; agentId: string; sessionId: string }>;
+export type InitialLeadRunner = (options: InitialLeadDraftOptions) => Promise<{ finalSmsText: string; agentId: string; sessionId?: string }>;
 export interface ClaudeInitialLeadOptions {
   authorizeCaller(caller: OpsCaller): Promise<boolean>;
   /** The same complete message preparation as the primary CS drafting route. */
@@ -47,7 +47,10 @@ function legacyDraftRequest(input: ClaudeInitialLeadInput) {
     scenario: `${THUMBTACK_FIRST_RESPONSE_PROMPT}\n\nThumbtack lead:\n${leadContext}` };
 }
 
-export type ClaudeInitialLeadContentOptions = Pick<ClaudeInitialLeadOptions, "prepareMessages" | "runner">;
+export type ClaudeInitialLeadContentOptions = Pick<ClaudeInitialLeadOptions, "prepareMessages" | "runner"> & {
+  normalizeCustomerPhone?: (input: unknown) => string | null;
+  validateReply?: (text: string) => string;
+};
 
 const safeCodes = new Set([
   "INVALID_JSON", "INVALID_CUSTOMER_PHONE", "INVALID_PREPARED_MESSAGES", "UNAUTHORIZED", "TIMEOUT",
@@ -82,10 +85,14 @@ function logMetadata(level: "info" | "error", metadata: Record<string, unknown>)
 
 /** Shared generation body. Only the human wrapper supplies staff reauthorization;
  * the application dispatcher must enforce its own durable first-response claim. */
-async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeInitialLeadContentOptions,
-  reauthorize: () => Promise<unknown>): Promise<ClaudeInitialLeadResult> {
+async function generateContent<Result extends ClaudeInitialLeadResult | ThumbtackInitialLeadResult>(
+  input: ClaudeInitialLeadInput, options: ClaudeInitialLeadContentOptions,
+  reauthorize: () => Promise<unknown>, resultSchema: z.ZodType<Result>): Promise<Result> {
   const controller = new AbortController();
   const deadline = Date.now() + CLAUDE_INITIAL_LEAD_TIMEOUT_MS;
+  const native = Object.is(resultSchema, thumbtackInitialLeadResultSchema);
+  const normalizeCustomerPhone = native ? options.normalizeCustomerPhone : undefined;
+  const validateReply = native ? options.validateReply : undefined;
   let stage = "validate_input", timedOut = false, finished = false;
   let agentSessionId: string | undefined, status: number | undefined;
   const checkDeadline = () => {
@@ -111,11 +118,12 @@ async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeIni
     const stop = () => { timedOut = true; reject(new ClaudeInitialLeadError("TIMEOUT")); controller.abort(); };
     timer = setTimeout(stop, CLAUDE_INITIAL_LEAD_TIMEOUT_MS);
   });
-  let work: Promise<ClaudeInitialLeadResult>;
+  let work: Promise<Result>;
   try {
     work = (async () => {
       checkDeadline();
-      const customerPhone = normalizePhone(input.customerPhone);
+      const customerPhone = normalizeCustomerPhone
+        ? normalizeCustomerPhone(input.customerPhone) : normalizePhone(input.customerPhone);
       if (!customerPhone) return fail("INVALID_CUSTOMER_PHONE");
       const request = input.draftRequest ?? legacyDraftRequest(input);
       enterStage("prepare_messages");
@@ -135,15 +143,19 @@ async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeIni
       enterStage("validate_reply");
       // The model returns exactly the plain SMS requested by the primary prompt.
       // JSON is constructed locally for the unchanged non-sendable reply validator.
-      const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId]);
-      if (/\b(?:quote|pricing|message|SMS|text|link)\s+(?:has been|was|is)\s+(?:sent|texted|created|generated|processed)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
-      if (/\bquote\s+(?:id|code|number|reference)\s*[:#]/i.test(replyText)) return fail("UNSAFE_REPLY_PRESENTATION");
+      const replyText = validateReply ? validateReply(output.finalSmsText)
+        : validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId]);
+      if (!validateReply) {
+        if (/\b(?:quote|pricing|message|SMS|text|link)\s+(?:has been|was|is)\s+(?:sent|texted|created|generated|processed)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
+        if (/\bquote\s+(?:id|code|number|reference)\s*[:#]/i.test(replyText)) return fail("UNSAFE_REPLY_PRESENTATION");
+      }
       enterStage("reauthorize_before_return");
       await reauthorize();
       checkDeadline();
-      const result = claudeInitialLeadResultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
+      const result = resultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
         sessionId: input.sessionId, customerPhone, contextHash, replyText,
-        mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+        mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId,
+        ...(typeof output.sessionId === "string" ? { agentSessionId: output.sessionId } : {}) });
       enterStage("completed");
       return result;
     })();
@@ -163,7 +175,13 @@ async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeIni
  * A trusted native dispatcher owns eligibility, source reads and send authority. */
 export async function generateClaudeInitialLeadContent(raw: unknown,
   options: ClaudeInitialLeadContentOptions = {}): Promise<ClaudeInitialLeadResult> {
-  return generateContent(claudeInitialLeadInputSchema.parse(raw), options, async () => undefined);
+  return generateContent(claudeInitialLeadInputSchema.parse(raw), options, async () => undefined, claudeInitialLeadResultSchema);
+}
+
+/** Native-only result contract; manual Claude drafting keeps its original schema. */
+export async function generateThumbtackInitialLeadContent(raw: unknown,
+  options: ClaudeInitialLeadContentOptions): Promise<ThumbtackInitialLeadResult> {
+  return generateContent(claudeInitialLeadInputSchema.parse(raw), options, async () => undefined, thumbtackInitialLeadResultSchema);
 }
 
 /** Human-requested alternative only. Same primary instructions/context; no
@@ -177,7 +195,7 @@ export function createClaudeInitialLeadService(options: ClaudeInitialLeadOptions
   }
   async function run(input: ClaudeInitialLeadInput, caller: OpsCaller): Promise<ClaudeInitialLeadResult> {
     await authorize(caller);
-    return generateContent(input, options, () => authorize(caller));
+    return generateContent(input, options, () => authorize(caller), claudeInitialLeadResultSchema);
   }
   return {
     async generate(raw: unknown, rawCaller: unknown): Promise<ClaudeInitialLeadResult> {

@@ -81,4 +81,41 @@ describe("native introduction failure escalation offline", () => {
     const pending = h.report(h.failure); await vi.advanceTimersByTimeAsync(5_001); await pending;
     expect(h.state().tasks).toHaveLength(1); expect(vi.getTimerCount()).toBe(0);
   });
+  it("includes bounded provider rejection details in the existing task, notice and owner alert", async () => {
+    const h = fixture(); await h.report({ ...h.failure, stage: "submission", code: "QUO_HTTP_401", provider: {
+      kind: "rejected", success: false, code: "QUO_HTTP_401", httpStatus: 401,
+      providerReason: "Unauthorized\n" + "x".repeat(700), providerCode: "AUTH_DENIED", traceId: "offline-trace" } });
+    const details = JSON.parse(h.state().notices[0].metadata).responseFailure;
+    expect(details.provider).toMatchObject({ kind: "rejected", httpStatus: 401, traceId: "offline-trace", providerCode: "AUTH_DENIED" });
+    expect(details.provider.providerReason).toHaveLength(512); expect(details.provider.providerReason).not.toContain("\n");
+    expect(h.state().tasks[0].description).toContain("Quo HTTP 401"); expect(h.state().tasks[0].description).toContain("Quo trace: offline-trace");
+    expect(h.state().notices[0].body).toContain("Provider code: AUTH_DENIED");
+    expect(h.notify).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("Provider reason: Unauthorized") }));
+    expect(h.state().tasks).toHaveLength(1); expect(h.notify).toHaveBeenCalledOnce();
+  });
+  it("known acceptance followed by local recording failure preserves the ID and instructs staff not to resend", async () => {
+    const h = fixture(), messageId = "AC-" + "opaque".repeat(50);
+    await h.report({ ...h.failure, stage: "acceptance", code: "ACCEPTANCE_SAVE_FAILED", uncertain: false, messageId,
+      provider: { kind: "accepted", success: true, code: "QUO_ACCEPTED", messageId, httpStatus: 202, providerStatus: "queued" } });
+    expect(h.state().tasks[0].title).toBe("Record accepted Thumbtack introduction");
+    expect(h.state().tasks[0].description).toContain(messageId); expect(h.state().tasks[0].description).toContain("do not send a replacement");
+    expect(h.state().tasks[0].description).not.toContain("send the missing introduction");
+    const details = JSON.parse(h.state().notices[0].metadata).responseFailure;
+    expect(details).toMatchObject({ messageId, uncertain: false, provider: { providerStatus: "queued", httpStatus: 202 } });
+  });
+  it.each(["failed", "undelivered"])("a known provider status %s never instructs a blind replacement", async providerStatus => {
+    const h = fixture(); await h.report({ ...h.failure, code: "QUO_MESSAGE_FAILED", messageId: "AC-offline",
+      provider: { kind: "accepted", success: true, code: "QUO_ACCEPTED", messageId: "AC-offline", providerStatus } });
+    expect(h.state().tasks[0].description).toContain("do not send a replacement");
+    expect(h.state().tasks[0].description).toContain(`Provider status: ${providerStatus}`);
+  });
+  it("when storage is unavailable the existing diagnostic and owner alert still retain the known provider ID", async () => {
+    const h = fixture(), log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure: FirstResponseFailure = { ...h.failure, stage: "acceptance", code: "ACCEPTANCE_SAVE_FAILED", messageId: "AC-known",
+      provider: { kind: "accepted", success: true, code: "QUO_ACCEPTED", messageId: "AC-known", providerStatus: "queued" } };
+    await createNativeIntroductionFailureReporter({ db: null, notify: h.notify, refresh: h.refresh })(failure);
+    expect(log).toHaveBeenCalledWith("[ThumbtackClaude] CRITICAL: failure task could not be persisted", expect.objectContaining({ messageId: "AC-known" }));
+    expect(h.notify).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("AC-known") }));
+    expect(h.notify).toHaveBeenCalledWith(expect.objectContaining({ content: expect.stringContaining("do not send a replacement") }));
+  });
 });

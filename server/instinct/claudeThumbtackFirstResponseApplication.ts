@@ -16,8 +16,10 @@ export async function dispatchClaudeThumbtackFirstResponse(captureId: number): P
     await reportFailure({ captureId, lead: null, claim: null, stage: "claim", code: "THUMBTACK_FIRST_RESPONSE_DB_UNAVAILABLE", uncertain: false });
     return { captureId, outcome: "failed", code: "THUMBTACK_FIRST_RESPONSE_DB_UNAVAILABLE" };
   }
-  const { sendSms, estimatePrice } = await import("../openphone");
-  const { generateClaudeInitialLeadContent } = await import("./claudeInitialLead");
+  const { estimatePrice } = await import("../openphone");
+  const { ENV } = await import("../_core/env");
+  const { sendThumbtackDirectQuoSms } = await import("./thumbtackDirectQuoSms");
+  const { generateWorldClassThumbtackInitialLeadContent } = await import("./worldClassThumbtackInitialLead");
   const store = createClaudeThumbtackFirstResponseStore(db, (lead: EligibleLead) => {
     // Retain existing quote calculator only for source-confirmed fields. No guessed 3bd/2ba/default service.
     const { bedrooms, bathrooms, serviceType } = lead.facts;
@@ -27,7 +29,8 @@ export async function dispatchClaudeThumbtackFirstResponse(captureId: number): P
     return estimatePrice({ bedrooms: roomLabel(bedrooms, "Bedroom"), bathrooms: roomLabel(bathrooms, "Bathroom"), serviceType });
   });
   return createClaudeThumbtackFirstResponseService({ config: thumbtackFirstResponseConfig, store,
-    generate: generateClaudeInitialLeadContent, send: sendSms, onFailure: reportFailure })(captureId);
+    generate: generateWorldClassThumbtackInitialLeadContent,
+    send: (input, options) => sendThumbtackDirectQuoSms(input, { apiKey: ENV.openPhoneApiKey, ...options }), onFailure: reportFailure })(captureId);
 }
 
 /** Parent's existing two live-send routes call this before their original side effects. */

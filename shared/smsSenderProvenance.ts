@@ -7,8 +7,10 @@ export const claudeDraftSourceSchema = z.object({
 }).strict();
 export type ClaudeDraftSource = z.infer<typeof claudeDraftSourceSchema>;
 
+/** Truthful provider/model identity for the existing direct WorldClass call. */
+export const CHATGPT_WORLDCLASS_GENERATOR_ID = "openai:gpt-4o";
 const automaticSchema = z.object({
-  version: z.literal(1), generator: z.literal("claude"), mode: z.literal("automatic"),
+  version: z.literal(1), generator: z.enum(["claude", "chatgpt"]), mode: z.literal("automatic"),
   workflow: z.literal("thumbtack_first_response"),
   receiptId: z.number().int().positive(), providerMessageId: z.string().min(1),
 }).strict();
@@ -23,6 +25,11 @@ export type SmsSenderProvenance = z.infer<typeof smsSenderProvenanceSchema>;
 /** Only the existing server automatic acceptance path supplies this marker. */
 export function automaticClaudeSmsProvenance(receiptId: number, providerMessageId: string): SmsSenderProvenance {
   return automaticSchema.parse({ version: 1, generator: "claude", mode: "automatic",
+    workflow: "thumbtack_first_response", receiptId, providerMessageId });
+}
+
+export function automaticChatGptSmsProvenance(receiptId: number, providerMessageId: string): SmsSenderProvenance {
+  return automaticSchema.parse({ version: 1, generator: "chatgpt", mode: "automatic",
     workflow: "thumbtack_first_response", receiptId, providerMessageId });
 }
 
@@ -47,7 +54,7 @@ export function smsSenderLabel(message: SmsSenderLabelMessage, fallback: string)
   const provenance = parsed.data;
   if (provenance.mode === "automatic") {
     return message.opMsgId && message.opMsgId === provenance.providerMessageId
-      ? "Claude AI · Automatic" : sender;
+      ? provenance.generator === "chatgpt" ? "ChatGPT · Automatic" : "Claude AI · Automatic" : sender;
   }
   return `${message.senderName?.trim() || provenance.reviewedBy} · Claude draft`;
 }
