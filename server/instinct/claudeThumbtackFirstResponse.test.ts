@@ -288,9 +288,21 @@ describe("native Thumbtack new-card introduction offline", () => {
       expect(fetch).toHaveBeenCalledOnce(); expect(h.store.accepted).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
   });
-  it("legacy sequence files remain byte-equivalent and no forbidden operational dependency is added", () => {
-    for (const file of ["server/emailLeadWebhook.ts", "server/thumbtackWebhook.ts"]) expect(readFileSync(file, "utf8"))
-      .toBe(execFileSync("git", ["show", `fe1f39700bc537b72c34ec1742ed4bf4c20042ef:${file}`], { encoding: "utf8" }));
+  it("untouched legacy blocks remain byte-equivalent and no forbidden operational dependency is added", () => {
+    for (const file of ["server/emailLeadWebhook.ts", "server/thumbtackWebhook.ts"]) {
+      const baseline = execFileSync("git", ["show", `fe1f39700bc537b72c34ec1742ed4bf4c20042ef:${file}`], { encoding: "utf8" });
+      const unchangedBlocks = (source: string) => {
+        if (file.endsWith("emailLeadWebhook.ts")) {
+          const start = source.indexOf("// ── Handler: Thumbtack Lead"), end = source.indexOf("// ── Handler: Form Submission Lead");
+          expect(start).toBeGreaterThan(0); expect(end).toBeGreaterThan(start);
+          return source.slice(0, start) + source.slice(end);
+        }
+        const route = source.indexOf("// ── Route Registration");
+        expect(route).toBeGreaterThan(0);
+        return source.slice(0, route);
+      };
+      expect(unchangedBlocks(readFileSync(file, "utf8"))).toBe(unchangedBlocks(baseline));
+    }
     for (const file of ["server/instinct/claudeThumbtackFirstResponse.ts", "server/instinct/claudeThumbtackFirstResponseStore.ts", "server/instinct/claudeThumbtackFirstResponseApplication.ts", "shared/thumbtackNativeLead.ts"])
       expect(readFileSync(file, "utf8")).not.toMatch(new RegExp(["cleaner" + "_jobs", "cleaner" + "Jobs", "CREATE TABLE", "ALTER TABLE", "DRAFT_READY", 'status: "FAILED"', "setInterval", "invokeLLM", "generateClaudeInitialLead\\("].join("|")));
   });

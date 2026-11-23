@@ -520,6 +520,20 @@ export async function handleThumbTackLead(body: ThumbTackZapierPayload): Promise
  */
 export function registerThumbTackWebhookRoute(app: Express): void {
   app.post("/api/webhooks/thumbtack", async (req, res) => {
+    // Native deliveries carry the real phone in data.customer.phone, not the
+    // flat Zapier fields. Reuse the existing durable native owner end to end.
+    const nativeEventType = req.body?.event?.eventType ?? req.body?.event?.type ?? req.body?.eventType ?? req.body?.type;
+    if (typeof nativeEventType === "string" && req.body?.data && typeof req.body.data === "object") {
+      try {
+        const { handleThumbTackWebhookCapture } = await import("./thumbtackWebhookCapture");
+        await handleThumbTackWebhookCapture(req, res);
+      } catch (err) {
+        console.error("[ThumbTackWebhook] Native intake failed:", err);
+        if (!res.headersSent) res.status(500).json({ received: false, persisted: false });
+      }
+      return;
+    }
+
     // Respond immediately — Zapier expects a 200 within a few seconds
     res.status(200).json({ received: true });
 

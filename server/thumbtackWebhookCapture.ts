@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { handleNativeThumbTackLead, type ThumbTackNativePayload } from "./thumbtackWebhook";
@@ -218,7 +218,12 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
     }
   });
 
-  app.post("/api/webhooks/thumbtack-capture", async (req, res) => {
+  app.post("/api/webhooks/thumbtack-capture", handleThumbTackWebhookCapture);
+  console.log("[ThumbTackCapture] Routes registered: POST /api/webhooks/thumbtack-capture; GET /api/webhooks/thumbtack-capture/status; GET /api/webhooks/thumbtack-capture/events");
+}
+
+/** One durable native intake/dispatch path, shared by both Thumbtack webhook URLs. */
+export async function handleThumbTackWebhookCapture(req: Request, res: Response): Promise<void> {
     const summary = summarizeThumbTackWebhook(req.body);
     const body = isRecord(req.body) ? req.body : {};
     const eventId = firstStringAtPaths(body, [
@@ -279,7 +284,4 @@ export function registerThumbTackWebhookCaptureRoute(app: Express): void {
       console.error("[ThumbTackCapture] failed to persist payload:", error);
       if (!res.headersSent) res.status(500).json({ received: false, persisted: false });
     }
-  });
-
-  console.log("[ThumbTackCapture] Routes registered: POST /api/webhooks/thumbtack-capture; GET /api/webhooks/thumbtack-capture/status; GET /api/webhooks/thumbtack-capture/events");
 }
