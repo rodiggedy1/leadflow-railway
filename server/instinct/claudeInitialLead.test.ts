@@ -242,9 +242,15 @@ describe("actual existing human-authenticated Madison route", () => {
 const baselineFile = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 describe("exact protected source preservation", () => {
-  it("keeps the original shared lead prompt and builder body verbatim", () => {
+  it("changes only the welcome phone-number request and keeps the original builder body verbatim", () => {
     const old = baselineFile("client/src/pages/CommandChatExactLive.tsx"), shared = readFileSync("shared/claudeInitialLead.ts", "utf8");
-    expect(sha(THUMBTACK_FIRST_RESPONSE_PROMPT)).toBe(sha(old.match(/const THUMBTACK_FIRST_RESPONSE_PROMPT = `([\s\S]*?)`;/)![1]));
+    const originalPrompt = old.match(/const THUMBTACK_FIRST_RESPONSE_PROMPT = `([\s\S]*?)`;/)![1];
+    const approvedPrompt = originalPrompt
+      .replace("3. Close: ask them to send their phone number so we can text a quote and time options (Thumbtack's routing number can be unreliable). Otherwise ask:", "3. Close: do not ask for their phone number. Ask:")
+      .replace("Could you send over your phone number? ", "");
+    expect(sha(THUMBTACK_FIRST_RESPONSE_PROMPT)).toBe(sha(approvedPrompt));
+    expect(THUMBTACK_FIRST_RESPONSE_PROMPT).toContain("do not ask for their phone number");
+    expect(THUMBTACK_FIRST_RESPONSE_PROMPT).not.toContain("Could you send over your phone number?");
     expect(shared.match(/export function buildThumbtackLeadDraftContext\(lead: ClaudeInitialLeadFacts\): string \{([\s\S]*?)\n\}/)![1]).toBe(old.match(/function buildThumbtackLeadDraftContext\(lead: CommandLead\): string \{([\s\S]*?)\n\}/)![1]);
   });
   it("retains the existing validator and general Claude path without changes", () => {

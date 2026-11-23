@@ -77,7 +77,7 @@ Structure:
    - If the frequency is recurring: "[Weekly/Every 2 weeks/Monthly] is a great routine for keeping the home consistently fresh, and recurring clients get our best rate."
    - "We've cleaned hundreds of homes in [city], and our whole team is background checked and insured, so you can feel completely comfortable having us in your space."
    - If pets: "Pets are no problem at all."
-3. Close: ask them to send their phone number so we can text a quote and time options (Thumbtack's routing number can be unreliable). Otherwise ask: "Want me to check our team's availability [for their dates] and text you a couple of time options, or send pricing first?"
+3. Close: do not ask for their phone number. Ask: "Want me to check our team's availability [for their dates] and text you a couple of time options, or send pricing first?"
 
 Rules:
 
@@ -104,7 +104,7 @@ Here’s what your move in deep clean would include:
 
 We price by the home instead of by the hour, so you get one clear total, and we’ll size the team to your 4,300 sq ft. Our whole team is background checked and insured, and we’ve cleaned hundreds of homes in Frederick.
 
-Could you send over your phone number? We’ll text you a quote and availability for Oct 30 or 31 right away.`;
+We’ll text you a quote and availability for Oct 30 or 31 right away.`;
 
 export function buildThumbtackLeadDraftContext(lead: ClaudeInitialLeadFacts): string {
   const details = lead.nativeDetails
