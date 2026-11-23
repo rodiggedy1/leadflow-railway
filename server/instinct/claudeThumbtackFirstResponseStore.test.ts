@@ -86,16 +86,31 @@ describe("native first response real store offline transactions", () => {
     const h = port(); h.fail(table); await expect(h.store.claim(h.lead, cfg)).rejects.toThrow();
     expect(h.state().sessions).toHaveLength(0); expect(h.state().drafts).toHaveLength(0); expect(h.state().cards).toHaveLength(0);
   });
-  it("checks current optouts/activity and immutable native/session/card binding", async () => {
+  it("preserves real opt-outs and immutable binding but ignores engagement markers", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!; expect(await h.store.fresh(c)).toBe(true);
     h.extra.optout = [{ id: 1 }]; expect(await h.store.fresh(c)).toBe(false); h.extra.optout = [];
-    for (const change of [{ leadPhone: "+12025559876" }, { leadSource: "email" }, { smsOptOut: 1 }, { assignedAgentName: "Staff" }, { aiMode: 1 }, { messageHistory: '[{"role":"user","content":"STOP"}]' }]) {
+    for (const change of [{ leadPhone: "+12025559876" }, { leadSource: "email" }, { smsOptOut: 1 }]) {
       const before = { ...h.state().sessions[0] }; Object.assign(h.state().sessions[0], change); expect(await h.store.fresh(c)).toBe(false); Object.assign(h.state().sessions[0], before);
     }
-    h.extra.sibling = [{ leadPhone: c.lead.phone, messageHistory: JSON.stringify([{ role: "assistant", content: "staff text", ts: c.lead.createdAt + 1 }]) }]; expect(await h.store.fresh(c)).toBe(false); h.extra.sibling = [];
-    h.extra.messages = [{ raw_payload: "{}", created_at: new Date(c.lead.createdAt + 1) }]; expect(await h.store.fresh(c)).toBe(false); h.extra.messages = [];
-    h.extra.activity = [{ id: 9 }]; expect(await h.store.fresh(c)).toBe(false); h.extra.activity = [];
+    Object.assign(h.state().sessions[0], { assignedAgentId: 2, assignedAgentName: "Staff", aiMode: 1,
+      stage: "RESOLVED", isBooked: 1, lastCalledAt: new Date(), respondedAt: Date.now(), csResolvedAt: Date.now(),
+      madisonDeferredUntil: Date.now(), lastProcessedMessageId: "reply", lastCustomerReplyAt: Date.now(),
+      lastCustomerMessageTs: Date.now(), lastAiMessageAt: Date.now(), internalNotes: "Staff notes", messageCount: 2,
+      messageHistory: '[{"role":"user","content":"Reply"},{"role":"assistant","content":"Staff text"}]' });
+    const metadata = JSON.parse(h.state().cards[0].metadata);
+    h.state().cards[0].metadata = JSON.stringify({ ...metadata, claimedBy: "Staff" }); h.state().cards[0].cardStatus = "dismissed";
+    h.extra.sibling = [{ leadPhone: c.lead.phone, messageHistory: JSON.stringify([{ role: "assistant", content: "staff text", ts: c.lead.createdAt + 1 }]) }];
+    h.extra.messages = [{ raw_payload: "{}", created_at: new Date(c.lead.createdAt + 1) }]; h.extra.activity = [{ id: 9 }];
+    expect(await h.store.fresh(c)).toBe(true); expect(await h.store.beginSend(c, h.result)).toBe(true);
+    const b = port(), d = (await b.store.claim(b.lead, cfg))!;
+    b.state().drafts[0].dismissedBy = "Staff"; expect(await b.store.fresh(d)).toBe(false);
     h.state().drafts[0].resolvedContext.negotiationId = "different"; expect(await h.store.fresh(c)).toBe(false);
+  });
+  it.each(["stop", "unsubscribe", "cancel", "quit", "end", "remove me", "opt-out"])("request description/answer '%s' is not a real SMS opt-out", async word => {
+    const raw = JSON.stringify({ event: { eventType: "NegotiationCreatedV4" }, data: { negotiationID: "n1",
+      customer: { firstName: "Jane", phone: "+17035551234" }, request: { description: word, details: [{ question: "Anything else", answer: word }] } } });
+    const h = port(null, raw), c = (await h.store.claim(h.lead, cfg))!;
+    expect(await h.store.fresh(c)).toBe(true); expect(await h.store.beginSend(c, h.result)).toBe(true);
   });
   it("old same-phone history/bookings/notes/assignment never exclude a NEW negotiation; sibling optout remains global", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!, old = c.lead.createdAt - 1;
@@ -110,69 +125,79 @@ describe("native first response real store offline transactions", () => {
     h.extra.sibling[0].smsOptOut = 1; expect(await h.store.fresh(c)).toBe(false);
     expect(h.state().sessions).toHaveLength(1); expect(c.sessionId).not.toBe(h.extra.sibling[0].id);
   });
-  it.each(["user", "assistant", "note"])("only timestamped post-lead %s history blocks (not same instant/system data)", async role => {
+  it.each(["user", "assistant", "note"])("post-lead %s history does not suppress the introduction", async role => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
     h.extra.sibling = [{ leadPhone: c.lead.phone, messageHistory: JSON.stringify([{ role, ts: c.lead.createdAt }]) }];
     expect(await h.store.fresh(c)).toBe(true);
-    h.extra.sibling[0].messageHistory = JSON.stringify([{ role, ts: c.lead.createdAt + 1 }]); expect(await h.store.fresh(c)).toBe(false);
+    h.extra.sibling[0].messageHistory = JSON.stringify([{ role, ts: c.lead.createdAt + 1 }]); expect(await h.store.fresh(c)).toBe(true);
     h.extra.sibling[0].messageHistory = JSON.stringify([{ role: "system", ts: c.lead.createdAt + 1 }]); expect(await h.store.fresh(c)).toBe(true);
   });
-  it.each(["lastCalledAt", "respondedAt", "bookedAt", "lastCustomerReplyAt", "lastCustomerMessageTs"])("post-lead sibling %s blocks and older activity allows", async field => {
+  it.each(["lastCalledAt", "respondedAt", "bookedAt", "lastCustomerReplyAt", "lastCustomerMessageTs"])("sibling %s never suppresses the introduction", async field => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
     const dateField = field === "lastCalledAt" || field === "bookedAt";
     h.extra.sibling = [{ leadPhone: c.lead.phone, messageHistory: "[]", [field]: dateField ? new Date(c.lead.createdAt - 1) : String(c.lead.createdAt - 1) }];
     expect(await h.store.fresh(c)).toBe(true);
-    h.extra.sibling[0][field] = dateField ? new Date(c.lead.createdAt + 1) : String(c.lead.createdAt + 1); expect(await h.store.fresh(c)).toBe(false);
+    h.extra.sibling[0][field] = dateField ? new Date(c.lead.createdAt + 1) : String(c.lead.createdAt + 1); expect(await h.store.fresh(c)).toBe(true);
   });
-  it("old OpenPhone activity and delayed old delivery allow; post-lead inbound/outbound activity blocks with capture fallback", async () => {
+  it("OpenPhone inbound/outbound activity never suppresses the introduction", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
     const event = (createdAt: number | undefined, incoming: boolean, receivedAt: number) => ({ created_at: new Date(receivedAt),
       raw_payload: JSON.stringify({ data: { object: { createdAt: createdAt === undefined ? undefined : new Date(createdAt).toISOString(),
         from: incoming ? c.lead.phone : "+12025550000", to: incoming ? ["+12025550000"] : [c.lead.phone] } } }) });
     for (const incoming of [true, false]) {
       h.extra.openphone = [event(c.lead.createdAt - 1, incoming, c.lead.createdAt + 10)]; expect(await h.store.fresh(c)).toBe(true);
-      h.extra.openphone = [event(c.lead.createdAt + 1, incoming, c.lead.createdAt + 10)]; expect(await h.store.fresh(c)).toBe(false);
+      h.extra.openphone = [event(c.lead.createdAt + 1, incoming, c.lead.createdAt + 10)]; expect(await h.store.fresh(c)).toBe(true);
       h.extra.openphone = [event(undefined, incoming, c.lead.createdAt - 1)]; expect(await h.store.fresh(c)).toBe(true);
-      h.extra.openphone = [event(undefined, incoming, c.lead.createdAt + 1)]; expect(await h.store.fresh(c)).toBe(false);
+      h.extra.openphone = [event(undefined, incoming, c.lead.createdAt + 1)]; expect(await h.store.fresh(c)).toBe(true);
     }
+    expect(h.queries.some(q => q.sql.includes("source = 'openphone'"))).toBe(false);
   });
-  it("old native message allows even on delayed capture; post-lead message blocks", async () => {
+  it("native Thumbtack messages never suppress the introduction", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
     h.extra.messages = [{ raw_payload: JSON.stringify({ data: { createdAt: new Date(c.lead.createdAt - 1).toISOString() } }), created_at: new Date(c.lead.createdAt + 1) }];
     expect(await h.store.fresh(c)).toBe(true);
-    h.extra.messages[0].raw_payload = JSON.stringify({ data: { createdAt: new Date(c.lead.createdAt + 1).toISOString() } }); expect(await h.store.fresh(c)).toBe(false);
+    h.extra.messages[0].raw_payload = JSON.stringify({ data: { createdAt: new Date(c.lead.createdAt + 1).toISOString() } }); expect(await h.store.fresh(c)).toBe(true);
+    expect(h.queries.some(q => q.sql.includes("event_type = 'MessageCreatedV4'"))).toBe(false);
   });
   it.each(["{", '{"data":{}}', '{"data":{"negotiationID":12}}', '{"data":{"negotiationID":"  "}}'])("retained malformed identity %s cannot invent a claim or mutate its capture", async raw => {
     const h = port(null, raw); expect(await h.store.loadCapture(7)).toBeNull();
     expect(h.state().sessions).toHaveLength(0); expect(h.state().cards).toHaveLength(0); expect(h.state().drafts).toHaveLength(0);
     expect(h.queries).toHaveLength(1); expect(h.queries[0].sql).toMatch(/^SELECT/);
   });
-  it.each([null, "invalid", "2026-11-15T17:00:01Z"])("date-ineligible first capture %s preserves one session/card plus terminal claim and never calls model/SMS", async createdAt => {
+  it.each([null, "invalid", "2026-11-15T17:00:01Z", "2026-11-17T17:00:01Z"])("native date %s permits one generated and submitted introduction through the real store", async createdAt => {
     const h = port(createdAt); let generated = 0, sent = 0;
     const run = createClaudeThumbtackFirstResponseService({ config: () => cfg, store: h.store,
-      generate: async () => { generated++; throw new Error("model must not run"); },
-      send: async () => { sent++; throw new Error("SMS must not run"); } });
+      generate: async input => { generated++; return { kind: "initial_lead", requestId: input.requestId, sessionId: input.sessionId,
+        customerPhone: input.customerPhone, contextHash: "a".repeat(64), replyText: h.result.replyText,
+        mode: "review_only", smsSent: false, actionsExecuted: false, agentId: "same-agent", agentSessionId: "offline-session" }; },
+      send: async () => { sent++; return { success: true, messageId: "offline-provider-id" }; } });
     await run(7); await run(7);
     expect(h.state().sessions).toHaveLength(1); expect(h.state().cards).toHaveLength(1); expect(h.state().drafts).toHaveLength(1);
     expect(h.state().cards[0].quickAction).toBe("new_lead"); expect(h.state().sessions[0].leadSource).toBe("thumbtack");
-    expect(h.state().drafts[0]).toMatchObject({ status: "DISMISSED", errorCode: "SUPPRESSED_NATIVE_DATES" });
-    expect(generated).toBe(0); expect(sent).toBe(0);
+    expect(h.state().drafts[0]).toMatchObject({ status: "SENT", outboundOpenPhoneId: "offline-provider-id", errorCode: null });
+    expect(generated).toBe(1); expect(sent).toBe(1);
     const c = { draftId: h.state().drafts[0].id, sessionId: h.state().sessions[0].id, cardId: h.state().cards[0].id, lead: h.lead, fromNumberId: cfg.fromNumberId };
     expect(await h.store.beginSend(c, h.result)).toBe(false); expect(await h.store.claim({ ...h.lead, sendEligible: true }, cfg)).toBeNull();
   });
-  it("human dismissal or manual claim wins before send; SENDING cannot be reset", async () => {
+  it("a manual reply does not cancel the introduction; explicit dismissal and SENDING remain protected", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
-    await guardClaudeThumbtackManualSendInStore(h.db, { sessionId: c.sessionId }); expect(await h.store.beginSend(c, h.result)).toBe(false);
+    await guardClaudeThumbtackManualSendInStore(h.db, { sessionId: c.sessionId });
+    expect(h.state().drafts[0].status).toBe("TOOLS_RUNNING"); expect(await h.store.beginSend(c, h.result)).toBe(true);
+    const dismissed = port(), dismissedClaim = (await dismissed.store.claim(dismissed.lead, cfg))!;
+    dismissed.state().drafts[0].status = "DISMISSED"; expect(await dismissed.store.beginSend(dismissedClaim, dismissed.result)).toBe(false);
     const b = port(), d = (await b.store.claim(b.lead, cfg))!; expect(await b.store.beginSend(d, b.result)).toBe(true);
     await expect(guardClaudeThumbtackManualSendInStore(b.db, { phone: d.lead.phone! })).rejects.toThrow("AUTO_FIRST_RESPONSE_IN_FLIGHT");
     await b.store.blocked(d, "SUBMISSION_UNCERTAIN", true); expect(b.state().drafts[0].status).toBe("SENDING");
     await expect(guardClaudeThumbtackManualSendInStore(b.db, { phone: d.lead.phone! })).rejects.toThrow("AUTO_FIRST_RESPONSE_REVIEW_REQUIRED");
     expect(await b.store.beginSend(d, b.result)).toBe(false);
   });
-  it("atomic native/manual race has one winner, and legacy actions permanently protect namespaced records", async () => {
+  it("concurrent automatic submissions have one winner; manual activity never cancels a pending introduction", async () => {
     const h = port(), c = (await h.store.claim(h.lead, cfg))!;
-    const outcomes = await Promise.allSettled([h.store.beginSend(c, h.result), guardClaudeThumbtackManualSendInStore(h.db, { sessionId: c.sessionId })]);
-    expect(outcomes[0]).toEqual({ status: "fulfilled", value: true }); expect(outcomes[1].status).toBe("rejected");
+    const outcomes = await Promise.all([h.store.beginSend(c, h.result), h.store.beginSend(c, h.result)]);
+    expect(outcomes).toEqual([true, false]);
+    const b = port(), d = (await b.store.claim(b.lead, cfg))!;
+    await guardClaudeThumbtackManualSendInStore(b.db, { sessionId: d.sessionId });
+    expect(await b.store.beginSend(d, b.result)).toBe(true);
     await expect(guardClaudeThumbtackLegacyDraftActionInStore(h.db, c.draftId)).rejects.toThrow("AUTO_FIRST_RESPONSE_PROTECTED");
     await expect(guardClaudeThumbtackLegacyDraftActionInStore(h.db, 999)).resolves.toBeUndefined();
   });

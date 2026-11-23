@@ -42,35 +42,27 @@ describe("native Thumbtack first-response offline", () => {
     const h = harness(); await createClaudeThumbtackFirstResponseService({ ...h.deps, config: () => null })(7);
     expect(h.store.loadCapture).not.toHaveBeenCalled(); expect(h.generate).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled();
   });
-  it("excludes old captured/new delivery, old native creation/trigger, wrong event, missing identity and replay delivery", () => {
+  it("preserves old-capture, wrong-event, missing-identity and replay protections", () => {
     const c = fixture();
     for (const patch of [{ source: "email" }, { eventType: "MessageCreatedV4" }, { earliestId: 1 }, { earliestReceivedAt: new Date("2026-11-15T17:00:00Z") },
       { receivedAt: new Date("2026-11-15T17:00:00Z") }]) expect(eligibleThumbtackLead({ ...c, ...patch }, config)).toBeNull();
-    for (const field of ["createdAt", "triggeredAt"]) {
-      const p = JSON.parse(c.rawPayload); (field === "createdAt" ? p.data : p.event)[field] = "2026-11-15T00:00:00Z";
-      expect(eligibleThumbtackLead({ ...c, rawPayload: JSON.stringify(p) }, config)).toBeNull();
-    }
     const p = JSON.parse(c.rawPayload); delete p.data.negotiationID; expect(eligibleThumbtackLead({ ...c, rawPayload: JSON.stringify(p) }, config)).toBeNull();
   });
-  it.each([undefined, "invalid", "2026-02-30T17:00:01Z", "2026-11-15T17:00:01Z", "2026-11-17T17:00:01Z"])("keeps first-capture intake with creation %s but never generates/sends, even after date-corrected replay", async createdAt => {
-    const h = harness(), payload = JSON.parse(h.capture.rawPayload);
-    payload.data.createdAt = createdAt; h.capture.rawPayload = JSON.stringify(payload);
-    const intake = capturedThumbtackLead(h.capture, config)!;
-    expect(intake.sendEligible).toBe(false); expect(intake.createdAt).toBe(h.capture.receivedAt.getTime());
-    expect(eligibleThumbtackLead(h.capture, config)).toBeNull();
-    await h.run(7);
-    expect(h.store.claim).toHaveBeenCalledWith(expect.objectContaining({ sendEligible: false }), config);
-    expect(h.status()).toBe("DISMISSED");
-    expect(h.store.blocked).toHaveBeenCalledWith(expect.anything(), "SUPPRESSED_NATIVE_DATES", false);
-    payload.data.createdAt = "2026-11-16T17:00:01Z"; h.capture.rawPayload = JSON.stringify(payload);
-    await h.run(7); expect(h.generate).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled();
-  });
-  it("missing/invalid trigger keeps intake; old retention/replay never creates intake or sends", async () => {
-    for (const triggeredAt of [undefined, "invalid", "2026-11-15T17:00:02Z"]) {
-      const h = harness(), payload = JSON.parse(h.capture.rawPayload); payload.event.triggeredAt = triggeredAt; h.capture.rawPayload = JSON.stringify(payload);
-      await h.run(7); expect(h.store.claim).toHaveBeenCalledOnce();
-      expect(h.status()).toBe("DISMISSED"); expect(h.generate).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled();
+  it.each([undefined, null, "invalid", "2026-02-30T17:00:01Z", "2026-11-15T17:00:01Z", "2026-11-17T17:00:01Z"])("native timestamp %s never prevents the first introduction", async value => {
+    for (const field of ["createdAt", "triggeredAt"]) {
+      const h = harness(), payload = JSON.parse(h.capture.rawPayload);
+      (field === "createdAt" ? payload.data : payload.event)[field] = value;
+      h.capture.rawPayload = JSON.stringify(payload);
+      expect(eligibleThumbtackLead(h.capture, config)).toMatchObject({ sendEligible: true });
+      await h.run(7); await h.run(7);
+      expect(h.generate).toHaveBeenCalledOnce(); expect(h.send).toHaveBeenCalledOnce();
+      expect(h.store.blocked).not.toHaveBeenCalled(); expect(h.status()).toBe("SENT");
     }
+  });
+  it("both native dates may be absent; old retained captures and replay remain excluded", async () => {
+    const current = harness(), payload = JSON.parse(current.capture.rawPayload);
+    delete payload.data.createdAt; delete payload.event.triggeredAt; current.capture.rawPayload = JSON.stringify(payload);
+    await current.run(7); expect(current.generate).toHaveBeenCalledOnce(); expect(current.send).toHaveBeenCalledOnce();
     for (const patch of [{ earliestId: 1 }, { earliestReceivedAt: new Date("2026-11-15T17:00:00Z") }, { receivedAt: new Date("2026-11-15T17:00:00Z") }]) {
       const h = harness(); Object.assign(h.capture, patch); await h.run(7);
       expect(h.store.claim).not.toHaveBeenCalled(); expect(h.generate).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled();
@@ -100,7 +92,7 @@ describe("native Thumbtack first-response offline", () => {
   it("concurrent workers cannot generate twice on the same durable claim", async () => {
     const h = harness(); await Promise.all([h.run(7), h.run(7)]); expect(h.generate).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
   });
-  it("suppresses observed optout/staff/customer activity before model and fresh activity/dismissal before send", async () => {
+  it("preserves real opt-out/binding checks and explicit draft dismissal before send", async () => {
     const h = harness(); vi.mocked(h.store.fresh).mockResolvedValue(false); await h.run(7); expect(h.generate).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled();
     const late = harness(); late.generate.mockImplementation(async input => { late.dismiss(); return { ...await h.deps.generate(input), requestId: input.requestId }; });
     await late.run(7); expect(late.send).not.toHaveBeenCalled(); expect(late.status()).toBe("DISMISSED");

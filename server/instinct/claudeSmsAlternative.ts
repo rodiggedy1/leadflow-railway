@@ -88,11 +88,12 @@ function validateTurn(turn: Record<string, unknown>, binding: SavedInboundBindin
   if (!hasLine) return fail("MISSING_RECEIVING_LINE_PROVENANCE");
 }
 // Verbatim proven strict reply validator; no synthetic fallback or paraphrase.
-export function validateClaudeReviewReply(text: string, protectedIds: readonly string[] = []): string {
+export function validateClaudeReviewReply(text: string, protectedIds: readonly string[] = [], options: { allowFutureSendPromises?: boolean } = {}): string {
   const reply = claudeSmsAlternativeReplySchema.parse(JSON.parse(text)).replyText;
   // Conservative visible schema failure, not a synthetic fallback or claim that
   // offline tests establish semantic grounding for every possible model output.
-  if (/\b(?:(?:I|we)(?:['’]ve| have)?\s+(?:already\s+|successfully\s+)?(?:rescheduled|cancelled|canceled|moved|changed|updated|booked|scheduled|refunded|credited|escalated|notified|contacted|sent|forwarded|created|informed)|(?:I|we)\s+(?:will|['’]ll)\s+(?:contact|notify|escalate|schedule|book|cancel|reschedule|send|refund)|(?:I|we)(?:['’]ve| have)?\s+let\s+(?:the\s+)?(?:team|staff)\s+know|(?:booking|cleaning|appointment|visit|refund|request|ticket)\s+(?:(?:has been|was)\s+(?:rescheduled|cancelled|canceled|changed|updated|booked|scheduled|processed|escalated|created)|is\s+(?:rescheduled|cancelled|canceled|changed|updated|processed|escalated|created)))\b/i.test(reply)) return fail("UNSAFE_REPLY_CLAIM");
+  if (/\b(?:(?:I|we)(?:['’]ve| have)?\s+(?:already\s+|successfully\s+)?(?:rescheduled|cancelled|canceled|moved|changed|updated|booked|scheduled|refunded|credited|escalated|notified|contacted|sent|forwarded|created|informed)|(?:I|we)\s+(?:will|['’]ll)\s+(?:contact|notify|escalate|schedule|book|cancel|reschedule|refund)|(?:I|we)(?:['’]ve| have)?\s+let\s+(?:the\s+)?(?:team|staff)\s+know|(?:booking|cleaning|appointment|visit|refund|request|ticket)\s+(?:(?:has been|was)\s+(?:rescheduled|cancelled|canceled|changed|updated|booked|scheduled|processed|escalated|created)|is\s+(?:rescheduled|cancelled|canceled|changed|updated|processed|escalated|created)))\b/i.test(reply)) return fail("UNSAFE_REPLY_CLAIM");
+  if (!options.allowFutureSendPromises && /\b(?:I|we)\s+(?:will|['’]ll)\s+send\b/i.test(reply)) return fail("UNSAFE_REPLY_CLAIM");
   // Timezone wording is a prompt preference, never a reason to discard a reply.
   if (/\b(?:booking|confirmation)\s+(?:code|number|reference)\s*[:#]/i.test(reply)) return fail("UNSAFE_REPLY_PRESENTATION");
   for (const id of protectedIds) if (reply.includes(id)) return fail("UNSAFE_REPLY_PRESENTATION");

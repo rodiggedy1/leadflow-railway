@@ -25,7 +25,7 @@ export const thumbtackFirstResponseKey = (negotiationId: string) => "tt-first:v1
 export type CapturedLead = { id: number; source: string; eventType: string; receivedAt: Date; rawPayload: string; earliestId: number; earliestReceivedAt: Date };
 export type EligibleLead = { capture: CapturedLead; native: ThumbtackNativeLead; payload: ThumbtackNativeLeadPayload;
   facts: ClaudeInitialLeadFacts; key: string; phone: string | null; createdAt: number; sendEligible: boolean };
-/** Intake is first capture only; missing/old native dates suppress SMS, not the new session/card. */
+/** Intake is first capture only; native timestamps never suppress its introduction. */
 export function capturedThumbtackLead(capture: CapturedLead, config: FirstResponseConfig): EligibleLead | null {
   if (!Number.isFinite(capture.receivedAt.getTime()) || !Number.isFinite(capture.earliestReceivedAt.getTime())
     || capture.source !== "thumbtack" || capture.eventType !== "NegotiationCreatedV4" || capture.id !== capture.earliestId
@@ -33,9 +33,6 @@ export function capturedThumbtackLead(capture: CapturedLead, config: FirstRespon
   try {
     const payload = JSON.parse(capture.rawPayload) as ThumbtackNativeLeadPayload;
     if (payload.event?.eventType !== "NegotiationCreatedV4") return null;
-    const createdAt = fixedInstant(payload.data?.createdAt), triggeredAt = fixedInstant(payload.event.triggeredAt);
-    const sendEligible = createdAt !== null && triggeredAt !== null && createdAt >= config.startAt && triggeredAt >= config.startAt
-      && createdAt <= capture.receivedAt.getTime() && triggeredAt <= capture.receivedAt.getTime();
     const native = projectThumbtackNativeLead(payload);
     if (!native) return null;
     // Native-only UI projection leaves rooms/propertyType/summary absent. Do not substitute email/extraction defaults.
@@ -45,7 +42,7 @@ export function capturedThumbtackLead(capture: CapturedLead, config: FirstRespon
       extras: native.extras, pets: native.pets, description: native.description, summary: null, travelPreferences: native.travelPreferences,
       proposedTimes: native.proposedTimes, nativeDetails: native.nativeDetails });
     return { capture, native, payload, facts, key: thumbtackFirstResponseKey(native.negotiationId), phone: normalizePhone(native.phone),
-      createdAt: sendEligible ? createdAt! : capture.receivedAt.getTime(), sendEligible };
+      createdAt: capture.receivedAt.getTime(), sendEligible: true };
   } catch { return null; }
 }
 export function eligibleThumbtackLead(capture: CapturedLead, config: FirstResponseConfig): EligibleLead | null {
@@ -76,7 +73,6 @@ export function createClaudeThumbtackFirstResponseService(deps: {
     if (!claim) return;
     let dispatchStarted = false;
     try {
-      if (!lead.sendEligible) return await deps.store.blocked(claim, "SUPPRESSED_NATIVE_DATES", false);
       if (!lead.phone || !await deps.store.fresh(claim)) return await deps.store.blocked(claim, "SUPPRESSED_BEFORE_MODEL", false);
       const context = buildThumbtackLeadDraftContext(lead.facts), requestId = randomUUID();
       const result = claudeInitialLeadResultSchema.parse(await deps.generate({ sessionId: claim.sessionId, customerPhone: lead.phone,

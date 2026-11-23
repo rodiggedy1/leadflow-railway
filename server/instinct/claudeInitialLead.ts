@@ -50,7 +50,7 @@ export type ClaudeInitialLeadContentOptions = Pick<ClaudeInitialLeadOptions, "pr
 /** Shared generation body. Only the human wrapper supplies staff reauthorization;
  * the application dispatcher must enforce its own durable first-response claim. */
 async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeInitialLeadContentOptions,
-  reauthorize: () => Promise<unknown>): Promise<ClaudeInitialLeadResult> {
+  reauthorize: () => Promise<unknown>, allowFutureSendPromises = false): Promise<ClaudeInitialLeadResult> {
   const customerPhone = normalizePhone(input.customerPhone);
   if (!customerPhone) return fail("INVALID_CUSTOMER_PHONE");
   const request = input.draftRequest ?? legacyDraftRequest(input);
@@ -63,7 +63,7 @@ async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeIni
   const output = await (options.runner ?? runInitialLeadDraft)({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
   // The model returns exactly the plain SMS requested by the primary prompt.
   // JSON is constructed locally for the unchanged non-sendable reply validator.
-  const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId]);
+  const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId], { allowFutureSendPromises });
   if (/\b(?:quote|pricing|message|SMS|text|link)\s+(?:has been|was|is)\s+(?:sent|texted|created|generated|processed)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
   if (/\bquote\s+(?:id|code|number|reference)\s*[:#]/i.test(replyText)) return fail("UNSAFE_REPLY_PRESENTATION");
   await reauthorize();
@@ -77,7 +77,7 @@ async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeIni
  * A trusted native dispatcher owns eligibility, source reads and send authority. */
 export async function generateClaudeInitialLeadContent(raw: unknown,
   options: ClaudeInitialLeadContentOptions = {}): Promise<ClaudeInitialLeadResult> {
-  return generateContent(claudeInitialLeadInputSchema.parse(raw), options, async () => undefined);
+  return generateContent(claudeInitialLeadInputSchema.parse(raw), options, async () => undefined, true);
 }
 
 /** Human-requested alternative only. Same primary instructions/context; no

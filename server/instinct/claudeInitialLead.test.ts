@@ -199,6 +199,17 @@ describe("content-only reuse for the trusted native first-response dispatcher", 
     expect(prepareCsReplyMessages).toHaveBeenCalledWith(draftRequest);
     expect(runInitialLeadDraft).toHaveBeenCalledWith({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
   });
+  it.each(["We will send pricing and time options.", "I will send you a quote.", "We will send availability tomorrow."])("native introduction accepts future-send wording unchanged: %s", async text => {
+    const h = harness({ runner: async () => output(text) });
+    const result = await generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner: async () => output(text) });
+    expect(result.replyText).toBe(text);
+    expect(() => validateClaudeReviewReply(JSON.stringify({ replyText: text }))).toThrow("UNSAFE_REPLY_CLAIM");
+    await expect(h.service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
+  });
+  it.each(["I've sent your quote.", "Your quote was sent.", "We will refund your payment.", "We will cancel your booking."])("native wording exception does not allow false completion or unrelated operations: %s", async text => {
+    const h = harness();
+    await expect(generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner: async () => output(text) })).rejects.toThrow("UNSAFE_REPLY_CLAIM");
+  });
   it("preserves the same validation and refuses a blank or falsely completed action", async () => {
     const h = harness();
     await expect(generateClaudeInitialLeadContent({ ...input, requestId: "bad" }, h)).rejects.toThrow();
@@ -237,8 +248,13 @@ describe("exact protected source preservation", () => {
     expect(shared.match(/export function buildThumbtackLeadDraftContext\(lead: ClaudeInitialLeadFacts\): string \{([\s\S]*?)\n\}/)![1]).toBe(old.match(/function buildThumbtackLeadDraftContext\(lead: CommandLead\): string \{([\s\S]*?)\n\}/)![1]);
   });
   it("retains the existing validator and general Claude path without changes", () => {
-    for (const path of ["server/madisonKnowledgeRetrieval.ts", "server/knowledgeBase.ts", "server/utils/phone.ts", "shared/claudeSmsAlternative.ts", "server/instinct/claudeSmsAlternative.ts"])
+    for (const path of ["server/madisonKnowledgeRetrieval.ts", "server/knowledgeBase.ts", "server/utils/phone.ts", "shared/claudeSmsAlternative.ts"])
       expect(sha(readFileSync(path, "utf8"))).toBe(sha(execFileSync("git", ["show", `51c0565d6e2a371c28922fb0725cf997577e3b7c:${path}`], { encoding: "utf8" })));
+    const validator = readFileSync("server/instinct/claudeSmsAlternative.ts", "utf8");
+    const originalValidator = execFileSync("git", ["show", "32ae8f2db02e265495281e5085c3325ee879d289:server/instinct/claudeSmsAlternative.ts"], { encoding: "utf8" });
+    const outsideReplyValidator = (text: string) => text.split("export function validateClaudeReviewReply")[0]
+      + text.slice(text.indexOf("function safeReply("));
+    expect(outsideReplyValidator(validator)).toBe(outsideReplyValidator(originalValidator));
     const source = readFileSync("server/instinct/claudeInitialLead.ts", "utf8");
     expect(source).not.toContain("CLAUDE_INITIAL_LEAD_SAFETY_INSTRUCTIONS"); expect(source).not.toContain("get_customer_context");
     expect(source).not.toMatch(/sendSms\s*\(|setInterval\s*\(|\bdb\.(?:insert|update|delete)\s*\(|ensureAccount|CREATE TABLE|ALTER TABLE/);
