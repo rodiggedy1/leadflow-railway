@@ -1,99 +1,132 @@
-# Setting up the isolated STAGING site
+# The isolated STAGING site — how it is built, how it is protected, how to rebuild it
 
-Goal: a private copy of LeadFlow you can open in your browser — like Manus's preview — where you can click
-around and test changes **without any possibility of touching real customers, real data, real money or real messages**.
+Staging is a private, password-protected copy of LeadFlow where the owner can click around and test changes
+**without any possibility of touching real customers, real data, real money or real messages**.
+It was set up and verified on 2026-11-24. This document records exactly how, so it can be checked or rebuilt.
 
-How staging stays isolated:
+## What makes staging safe
 
-| Risk | How staging avoids it |
+| Risk | How staging avoids it | Verified |
+|---|---|---|
+| Real customer data | Its own database `leadflow_staging` on the TiDB cluster `instinct-db`, a **different cluster** from production's, containing only invented data | Owner compared cluster IDs; cluster held only TiDB's built-in databases before staging |
+| Real texts / calls / emails / payments / AI | **No** OpenPhone, Twilio, Vapi, Mailgun, Gmail, Stripe, Launch27, OpenAI or Anthropic keys | Local test: an SMS attempt returned `smsSent: false` ("OpenPhone credentials not configured") and the app made **zero** outbound connections |
+| Scheduled jobs | `PREVIEW_MODE=true` and `CRON_DISABLED=true` | Railway deploy log: "PREVIEW_MODE=true — all cron jobs and Vapi bootstrap disabled" |
+| Live webhooks | No outside service points at staging's address | — |
+| Unauthorised admin access | One-click login switched off; the owner signs in with their own email + password | Browser test: login page shown, wrong password refused, owner login works, `/api/preview-login` says "unavailable" |
+| Demo cleaner link (`/api/preview-seed-cleaner`) | A switched-off, password-less demo cleaner account is pre-created, so the link can never create the known-password one | Local test: after calling the link, login with the advertised password is refused |
+| Production / Preview | Staging deploys only from the `staging` branch. Production and Preview were not touched at any point | Branch commits checked before and after |
+
+Staging is **never** made by duplicating Production or Preview (that would copy their database connection and live keys).
+
+## Current configuration (as built)
+
+**Railway** — project `acceptable-essence`, environment **`staging`** (created as an *empty* environment), service **`leadflow-staging`**:
+
+| Setting | Value |
 |---|---|
-| Real customer data | Its own brand-new, empty database (TiDB Cloud, in **your** TiDB account), filled only with invented data |
-| Real texts / calls / emails | No OpenPhone, Twilio, Vapi, Mailgun or Gmail keys are given to staging. Sending fails safely with "credentials not configured" |
-| Real payments | No live Stripe key (test-mode keys may be added later, optionally) |
-| Scheduled jobs | `CRON_DISABLED=true` and `PREVIEW_MODE=true` switch every scheduled job off |
-| Live webhooks | No outside service is pointed at staging's address |
-| Production releases | Staging deploys only from the `staging` branch. `main` and `preview` are untouched |
+| Source | `rodiggedy1/leadflow-railway`, branch **`staging`**, root directory empty |
+| Config-as-code file | **none** (Railway deprecated config-as-code; settings below are entered in the service itself) |
+| Builder | Railpack (Nixpacks is deprecated) |
+| Build command | `pnpm run build` |
+| Start command | `node dist/index.js` |
+| Pre-deploy command | `node dist/runVersionedMigrations.js` |
+| Healthcheck path | `/api/trpc/system.health?input=%7B%22json%22%3A%7B%22timestamp%22%3A0%7D%7D` |
+| Restart policy | On failure, 3 retries |
+| Replicas | 1 |
+| Public domain | generated `…up.railway.app`, port 8080 |
 
-**Never** duplicate the Production or Preview environment to make staging — that would copy their database
-connection and live keys. Staging is built from an **empty** environment.
+Why the healthcheck differs from `railway.json`'s `/api/health`: `/api/health` returns 503 between 6 AM and 10 PM ET
+when no scheduled jobs have run, which is always the case on staging. The tRPC health check (the one Production uses) returns 200.
 
-What was verified before writing this guide (in Claude's sandbox, offline, against a throwaway local database):
-- `staging/staging-base-schema.sql` loads cleanly (106 tables) and can safely be run again (every statement is
-  `IF NOT EXISTS`). Note: the local rehearsal database is MariaDB, which is more permissive than TiDB. The first real
-  TiDB load found two TiDB-only incompatibilities (an expression default on 5 text/JSON columns and one over-long
-  index); both are corrected in the file and explained in its header. Neither affects production or `drizzle/schema.ts`.
-- All 79 database updates in `server/versioned-migrations` then apply cleanly and satisfy their own checks.
-- `staging/fake-data.sql` loads cleanly.
-- The app starts with only the staging variables below, switches its scheduled jobs off, and the one-click
-  login opens the Leads CRM, Day Board and Command Chat showing the fake data.
-- The normal `/api/health` check returns 503 during business hours when no scheduled jobs run, which would make
-  Railway reject a staging deploy. That is why staging uses `staging/railway.staging.json` (same as `railway.json`
-  but with Production's health check, which returns 200).
+**Variables** (exactly these six — nothing else):
+
+| Name | Value |
+|---|---|
+| `DATABASE_URL` | the `leadflow_staging` connection string from TiDB (`…/leadflow_staging?ssl={"rejectUnauthorized":true}`) |
+| `JWT_SECRET` | its own random value (not production's) |
+| `NODE_ENV` | `production` |
+| `PREVIEW_MODE` | `true` |
+| `CRON_DISABLED` | `true` |
+| `RUN_VERSIONED_MIGRATIONS` | `true` (read only by the database-update runner, never by the app) |
+
+`EMERGENCY_AGENT_EMAIL` was used only during setup and has been **removed** — that is what switches one-click login off.
+
+**Database** (`leadflow_staging`): 156 tables (106 from `staging/staging-base-schema.sql`, 49 created by the 79 database
+updates, plus the updates' ledger); 79 updates recorded as `applied`.
+
+**Accounts on staging**
+- The owner's own admin account (email + password, created directly in the database — see Part E).
+- "Staging Admin" (`staging-admin@example.com`) — **switched off** (`isActive = 0`).
+- "Sam Sample (agent)" — invented staff, cannot sign in (password unknown to anyone).
+- "Demo Cleaner (disabled)" (`demo@preview.local`) — **switched off, no password** (blocks the demo cleaner link).
 
 ---
 
-## Part A — Create the staging database (TiDB Cloud, about 10 minutes)
-1. Go to **tidbcloud.com** and sign in (or create a free account in your own name).
-2. Create a cluster: choose the free **Starter** (serverless) plan. Name it `leadflow-staging`. Pick a US East region.
-3. Open the cluster → **SQL Editor**. Run:
-   `CREATE DATABASE leadflow_staging;`
-4. Still in the SQL Editor, run `USE leadflow_staging;`, then paste **the whole content** of
-   `docs/claude/staging/staging-base-schema.sql` (open it on GitHub on the `claude/…` branch → **Raw** → select all → copy) and run it.
-   Then run `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'leadflow_staging';` — it should show **106**.
-   If the run stops partway, fix the cause and simply run the whole file again: tables that already exist are skipped.
-5. Click **Connect** on the cluster. Choose the connection string for **Node.js / mysql2** (or "General"), with
-   database `leadflow_staging`. Keep it ready for Part B — **do not send it to anyone, including Claude**.
+## Rebuilding staging from scratch (only if ever needed)
 
-## Part B — Create the staging environment in Railway (about 15 minutes)
-1. railway.com → the LeadFlow project → environment selector at the top → **New Environment**.
-2. Name it `staging` and choose **Empty environment** (NOT "Duplicate").
-3. In `staging`, add the web service from GitHub (repository `rodiggedy1/leadflow-railway`).
-   If Railway offers to add the existing LeadFlow service to this environment, that is fine too — but then
-   check step 5 very carefully, because variables must not be copied over.
-4. Service → **Settings**:
-   - **Source / Branch**: `staging`
-   - **Config-as-code / Railway config file path**: `docs/claude/staging/railway.staging.json`
-   - **Networking → Generate domain** (gives a `…up.railway.app` address)
-5. Service → **Variables**. Make sure the list contains **only** these (delete anything else):
+Every step happens only in the staging Railway environment and the staging TiDB database.
 
-   | Name | Value |
-   |---|---|
-   | `DATABASE_URL` | the TiDB connection string from Part A step 5 |
-   | `JWT_SECRET` | a new long random value (Railway's `${{secret(48)}}` generator, or a password manager). **Not** the production value |
-   | `NODE_ENV` | `production` |
-   | `PREVIEW_MODE` | `true` |
-   | `CRON_DISABLED` | `true` |
-   | `EMERGENCY_AGENT_EMAIL` | `staging-admin@example.com` (the invented staging admin — enables one-click login) |
+### Part A — Database tables (TiDB SQL Editor, database `leadflow_staging`)
+1. `CREATE DATABASE leadflow_staging;` (on a cluster that is **not** production's).
+2. `USE leadflow_staging;` then paste the whole of `docs/claude/staging/staging-base-schema.sql` and run it.
+   Safe to re-run: every statement is `IF NOT EXISTS`.
+3. Check: `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'leadflow_staging';` → **106**.
 
-   Must **not** be present: anything starting with `OPENPHONE_`, `TWILIO_`, `VAPI_`, `LAUNCH27_`, `GMAIL_`, `STRIPE_`,
-   `R2_`, `MAILGUN_`, `ZAPIER_`, `QUOTE_APP_`, `BUILT_IN_FORGE_`, `OAUTH_`, `OWNER_`, `VAPID_`, `NTFY_`, `DEEPGRAM_`,
-   `ANTHROPIC_`, `OPENAI_`, `EMERGENCY_AGENT_LOGIN_TOKEN`, `GOOGLE_MAPS_API_KEY`.
-6. Deploy (only the staging service). Watch the **Deploy Logs** for:
-   - `migration_applied` lines from the database-update runner (79 updates),
-   - `[Preview] PREVIEW_MODE=true — all cron jobs and Vapi bootstrap disabled`,
-   - `Server running on …`.
+### Part B — Railway environment and service
+1. New Environment → name `staging` → **Empty Environment**.
+2. Add → **Empty Service** → rename `leadflow-staging` → Details (only this service, only staging) → Deploy.
+3. Variables: exactly the six above (do **not** add `EMERGENCY_AGENT_EMAIL`; Part E creates the owner login directly).
+   Deploy (no code yet, nothing runs).
+4. Settings: source/branch, build, start, pre-deploy, healthcheck, restart, replicas exactly as in the table above.
+   Leave the config-as-code path empty. Details → Deploy.
+5. Deploy log must show the database-update runner finishing and
+   `[Preview] PREVIEW_MODE=true — all cron jobs and Vapi bootstrap disabled`.
+6. Check in TiDB: 156 tables; `SELECT state, COUNT(*) FROM app_versioned_migration_ledger GROUP BY state;` → `applied 79`
+   (the number grows as new database updates are added to the code).
 
-## Part C — Add the invented data (about 5 minutes)
-After the first successful staging deploy (the deploy creates the remaining tables):
-1. TiDB SQL Editor → `USE leadflow_staging;` → paste the whole content of `docs/claude/staging/fake-data.sql` → run.
+### Part C — Invented data
+Paste and run `docs/claude/staging/fake-data.sql` **once** (after Part B, because it uses tables the updates create).
+Check: staff 2, leads 3, jobs 3. Two jobs are dated the day the file runs, one the next day (database clock, UTC).
 
-## Part D — Open your preview
-1. Open `https://<your-staging-domain>/api/preview-login` — it signs you in as "Staging Admin" and opens the Leads CRM.
-2. You should see three invented leads (Alex Example, Bailey Sample, Casey Placeholder) and, on the Day Board, two jobs today.
-3. Bookmark that link. This is your "Manus-style" preview.
+### Part D — Lock the demo cleaner link
+```sql
+INSERT INTO cleaner_profiles (name, email, isActive, passwordHash)
+VALUES ('Demo Cleaner (disabled)', 'demo@preview.local', 0, NULL);
+```
 
-Note: anyone who learns the staging address can use the one-click login, but staging holds only invented data and
-has no keys that can reach real services.
+### Part E — Owner admin login, then one-click login off
+1. On your own Mac, create the scrambled (bcrypt) form of a new staging-only password:
+   `htpasswd -nBC 12 staging` → enter the password twice → copy everything after `staging:` (starts with `$2y$12$`).
+   The app's password checker accepts this format (verified with bcryptjs 3.0.3).
+2. In TiDB:
+   ```sql
+   INSERT INTO agents (name, email, passwordHash, isActive, isAdmin)
+   VALUES ('YOUR NAME', 'you@example.com', 'PASTE_THE_$2y$12$_TEXT', 1, 1);
+   UPDATE agents SET isActive = 0 WHERE email = 'staging-admin@example.com';
+   ```
+3. In Railway, make sure `EMERGENCY_AGENT_EMAIL` is **not** set on staging → Deploy.
+
+### Part F — Go public and verify (private browser window)
+1. Generate the domain (port 8080).
+2. `/api/preview-login` → "Preview login unavailable".
+3. `/admin/leads` → sign-in form; wrong password refused; your password works; three invented leads shown.
 
 ---
 
 ## Day-to-day use
-- Claude develops a change on a `claude/…` branch, tests it offline, then (with your approval) updates the
-  `staging` branch. Railway redeploys staging automatically; you test in your browser.
-- Production and Preview are untouched by anything that happens on staging.
-- To reset staging data: in TiDB, drop and recreate `leadflow_staging`, then repeat Parts A4, B6 (redeploy) and C.
+- Claude develops a change on a `claude/…` branch and tests it offline.
+- With the owner's approval, Claude updates the `staging` branch → Railway redeploys **staging only** → the owner tests at
+  the staging address, signed in with their staging password.
+- New database updates in the code are applied to the staging database automatically by staging's pre-deploy step.
+- Production and Preview are never involved.
 
-## Things that will look different on staging (expected)
-- Sending SMS, placing calls, charging cards, Gmail and Launch27 sync: they fail or show "not configured". That is the point.
-- AI-written drafts will not work (no AI keys on staging) unless you later approve adding separate, low-limit AI keys.
-- Some images hosted on Manus's servers may still load (they are public files), but nothing on staging writes to Manus.
+## Resetting staging data
+Ask Claude for the exact steps at the time. In outline: drop and recreate `leadflow_staging` (staging cluster only),
+then Parts A, B5–B6 (redeploy), C, D and E.
+
+## Known, accepted residuals (staging only)
+- Public pages that need no login (booking form, quote form, customer-portal sign-in) are reachable; they show or
+  store invented data only and cannot send anything.
+- Anyone can still call the demo cleaner link; with Part D in place it only adds two invented jobs and a "Team Demo"
+  team once, and creates no usable login.
+- Some images are hosted on Manus's servers (see the Objective B list in CLAUDE.md).

@@ -4,11 +4,12 @@
 -- staging deploy has finished (the deploy's migration runner creates the remaining tables).
 -- NEVER run this against production.
 
--- Staging admin. The password hash belongs to a random value that was thrown away, so nobody can
--- sign in with a password. Sign in through /api/preview-login (staging has PREVIEW_MODE=true and
--- EMERGENCY_AGENT_EMAIL=staging-admin@example.com).
+-- Invented staging admin, created SWITCHED OFF (isActive = 0). Its password hash belongs to a random value
+-- that was thrown away, so nobody can sign in with it, and because it is inactive the one-click
+-- /api/preview-login can never use it either. The owner signs in with their own account
+-- (docs/claude/STAGING_SETUP.md, Part E).
 INSERT INTO agents (name, email, passwordHash, isActive, isAdmin)
-VALUES ('Staging Admin', 'staging-admin@example.com', '$2b$10$0r0wwvnpGZXVOQWq.mnBbuuaSWkX3wSg0x/We03UDWRhXhZXmalqW', 1, 1);
+VALUES ('Staging Admin', 'staging-admin@example.com', '$2b$10$0r0wwvnpGZXVOQWq.mnBbuuaSWkX3wSg0x/We03UDWRhXhZXmalqW', 0, 1);
 
 INSERT INTO agents (name, email, passwordHash, isActive, isAdmin)
 VALUES ('Sam Sample (agent)', 'agent.sample@example.com', '$2b$10$0r0wwvnpGZXVOQWq.mnBbuuaSWkX3wSg0x/We03UDWRhXhZXmalqW', 1, 0);

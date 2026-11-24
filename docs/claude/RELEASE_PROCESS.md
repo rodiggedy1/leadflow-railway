@@ -23,6 +23,26 @@ database update file that reaches the `preview` branch changes the production da
 Consequence: nothing is merged to `main` or `preview` "just to try it" — not even documentation — without the owner's
 explicit, separate approval.
 
+### ⚠️ Deadline: Railway config-as-code ends 2026-12-01
+Railway showed (while staging was set up on 2026-11-24) that config-as-code is deprecated and existing config files
+work only until **December 1, 2026**. Production and Preview take their build/deploy settings from `railway.json`
+(and `nixpacks.toml`). After that date a deploy may run **without** the pre-deploy database-update runner, the
+custom start command and the health check — so new code that needs a database update would break.
+Before December 1 the owner should copy these into each service's Railway settings (no code change, no redeploy
+needed to enter them; they take effect on the next deploy):
+
+| Setting | Production (from `railway.json` / `nixpacks.toml`) |
+|---|---|
+| Build command | `rm -rf node_modules/.vite dist && pnpm run build` (or `pnpm run build`) |
+| Pre-deploy command | `RUN_VERSIONED_MIGRATIONS=true node dist/runVersionedMigrations.js` — or, as on staging, `node dist/runVersionedMigrations.js` plus variable `RUN_VERSIONED_MIGRATIONS=true` |
+| Start command | `node dist/index.js` |
+| Healthcheck path | `/api/trpc/system.health?input=%7B%22json%22%3A%7B%22timestamp%22%3A0%7D%7D` (Production) — note Preview's `railway.json` value is `/api/health` |
+| Restart policy | On failure, 3 retries |
+
+This is a production configuration change: it needs its own explicit approval, should be done in a quiet period,
+and Railway's builder change (Nixpacks → Railpack) should be confirmed against a staging deploy first (staging
+already builds successfully with Railpack). Until it is done, avoid production releases after December 1.
+
 ## 2. The existing release script — every safeguard
 `scripts/push-main-safe.sh` (owner-run; Claude Code is blocked from running it). Before pushing it checks that:
 1. The working tree is clean (nothing uncommitted is released).

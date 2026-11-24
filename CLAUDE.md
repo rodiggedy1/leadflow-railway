@@ -62,4 +62,9 @@ Self-test: `node .claude/hooks/guard-selftest.mjs` (all cases must PASS).
 ## Useful facts
 - Stack: Express + tRPC (server/_core/index.ts, server/routers.ts), React 19 + Vite (client/src), Drizzle (drizzle/schema.ts).
 - Build: `pnpm build`. Scheduled jobs: server/internalCron.ts (off when PREVIEW_MODE=true or CRON_DISABLED=true).
-- Staging files: docs/claude/staging/ (base schema, fake data, Railway config for staging only).
+- Staging: Railway environment `staging`, service `leadflow-staging`, deploys from the `staging` branch; database
+  `leadflow_staging` on a separate TiDB cluster; owner signs in with their own password (one-click login is off).
+  Setup, settings and rebuild steps: docs/claude/STAGING_SETUP.md. Files: docs/claude/staging/ (base schema, invented data).
+- Updating the `staging` branch redeploys staging only; do it only with the owner's approval for that change.
+- Railway is retiring config-as-code: `railway.json` is read only until 2026-12-01. Production/Preview deploy settings
+  must be moved into Railway's service settings by the owner before then (see docs/claude/RELEASE_PROCESS.md).
