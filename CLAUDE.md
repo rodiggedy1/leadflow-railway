@@ -48,6 +48,13 @@ Self-test: `node .claude/hooks/guard-selftest.mjs` (all cases must PASS).
 4. The owner tests on the isolated STAGING site (docs/claude/STAGING_SETUP.md) — never on Preview.
 5. Release only via docs/claude/RELEASE_PROCESS.md, by the owner (scripts/push-main-safe.sh on the owner's Mac).
    Staging replaces the Preview step for Claude Code work; never touch the `preview` branch or Preview environment.
+   Give the owner the filled-in commands from docs/claude/WORKFLOW.md step 5: branch, expected commit, live `main`
+   commit (read with `git ls-remote`), rollback tag name `pre-production-YYYYMMDD-<name>`. Always a dry run first.
+6. After the owner reports a release, verify `main` and the rollback tag on GitHub (read-only) and add an entry to
+   docs/claude/RELEASES.md.
+- Staging takes one task at a time and only moves forward (fast-forward from the task branch). If a staged change is
+  abandoned, revert it on staging with a forward commit; never force-push staging.
+- Owner's one-page guide: docs/claude/WORKFLOW.md. Release history: docs/claude/RELEASES.md.
 
 ## Landmines
 - Preview shares the PRODUCTION database and has some live keys; its public /api/preview-login is open

@@ -61,6 +61,10 @@ else (for example GitHub pull-request merges) requires showing that every point 
 and not proposed until the owner asks.
 
 ## 3. Recommended flow for a Claude Code change
+(The owner's step-by-step version, with the exact release commands and post-release checklist, is
+`docs/claude/WORKFLOW.md`. Completed releases are logged in `docs/claude/RELEASES.md`; the first one, on 2026-11-24,
+followed this flow end to end.)
+
 1. Owner describes the change in plain language.
 2. Claude investigates read-only and sends a plan: files, risk, tests, **code rollback**, **database rollback**. Owner approves.
 3. Claude builds it on a `claude/<name>` branch from the latest `main`.

@@ -8,6 +8,8 @@ unrelated work. The rule for every future change is simply:
 
 ## When and on what
 - Commit: `589990773ac260148c48c01d6a647eefbb0f283f` (`main`, 2026-11-24)
+- Still valid at `dde2450` (first Claude Code release): that release added one passing test file
+  (`server/dayBoardSchedulerTabLabel.test.ts`, 541 files in total) and the same 110 files fail; TypeScript count unchanged.
 - Node 22, pnpm 10.4.1, dependencies installed with `pnpm install --frozen-lockfile`
 - Run in Claude Code's sandbox with **internet switched off** (`unshare -n`) and **no environment variables or keys**,
   so no test could reach a real database, send a message, place a call or charge a card.
