@@ -95,6 +95,70 @@ describe("SMS-only additive quote generation", () => {
     expect(JSON.stringify(input)).toBe(before);
   });
 
+  it("supplies the approved possible-price-match guidance without overriding existing task or quote authority", () => {
+    for (const rule of [
+      "received a better or lower price from another service",
+      "will consult with our team to see if we can match their quote and get back to them",
+      "possible price match pending team review, never a promise",
+      "Do not change our price, offer an unapproved discount",
+      "A competing quote alone is not a cancellation request",
+      "do not suggest cancelling, assume cancellation or simply say goodbye",
+      "For this price objection alone, use bookingQuote:null",
+      "preserve the existing task rules and current-inbound evidence",
+      "explicitly requests cancellation or other staff work as well",
+      "in the customer's language, not as a fixed script",
+    ]) expect(SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS).toContain(rule);
+  });
+
+  it.each([
+    { incoming: "I received another quote for $320 so I will go with that service", replyText: "Thanks for letting me know, Maya. I'll check with our team to see whether we can match their quote and get back to you." },
+    { incoming: "Another cleaning company gave me a better price.", replyText: "Thanks for letting me know, Maya. We'll consult with our team to see if we can match their price and get back to you." },
+    { incoming: "Otra empresa me dio una cotización más baja y voy a elegirla.", replyText: "Gracias por avisarnos, Maya. Consultaremos con nuestro equipo para ver si podemos igualar su cotización y te avisaremos." },
+  ])("passes price-objection instructions and preserves the natural reply with and without a saved quote: $incoming", async ({ incoming, replyText }) => {
+    const priorInput = fixture();
+    const previous = advanceSmsBookingQuote(null, update(priorInput), {
+      binding: priorInput.context.binding as ClaudeCustomerSmsGenerationBinding,
+      originalConversation: priorInput.context.originalConversation as any[], nowMs: NOW,
+    }).state;
+    previous.link = { fingerprint: "synthetic-existing-quote", token: "mib-existing-quote", urlPath: "/book/mib-existing-quote", firstCleaningTotalCents: 26900 };
+    for (const state of [null, previous]) {
+      const input = fixture(incoming), before = JSON.stringify({ input, state });
+      const h = harness({ replyText, task: null, bookingQuote: null }, state);
+      const binding = input.context.binding as ClaudeCustomerSmsGenerationBinding;
+      const session = { contact: { sessionId: "42", rawPhone: binding.fromPhone, phone: binding.fromPhone, displayName: binding.customerName, contactGap: null },
+        messageHistory: input.context.originalConversation, lastInboundPhoneNumberId: binding.receivingPhoneNumberId };
+      const plan = await createClaudeCustomerSmsGeneratorWithReply(h.generate)(binding, session);
+      expect(plan).toEqual({ replyText, task: null });
+      expect(plan).not.toHaveProperty("smsBookingQuote");
+      expect(h.runner.mock.calls[0][0].systemPrompt).toContain("will consult with our team to see if we can match their quote");
+      const payload = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
+      expect(payload.incomingMessage).toBe(incoming);
+      expect(payload.context.smsBookingQuote.state).toEqual(state);
+      expect(payload.context.knowledgeBase).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+      expect(h.readKnowledge).toHaveBeenCalledWith(incoming);
+      expect(h.runner).toHaveBeenCalledTimes(1); expect(h.readState).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify({ input, state })).toBe(before);
+    }
+  });
+
+  it("preserves a separately requested cancellation task alongside a competing quote without converting it to a new quote", async () => {
+    const input = fixture("I got a lower quote. Please cancel my existing cleaning.");
+    const task = { title: "Review cancellation", items: [{ title: "Review requested cancellation", evidenceQuote: "cancel my existing cleaning" }] };
+    const replyText = "Thanks, Maya. We'll consult with our team about matching their quote and review your cancellation request.";
+    const h = harness({ replyText, task, bookingQuote: null });
+    expect(await h.generate(input)).toEqual({ replyText, task });
+    expect(h.runner).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the price-objection guidance SMS-only, leaving shared and email prompt generation unchanged", async () => {
+    const input = { incomingMessage: "Another service gave me a better price.", context: { email: { threadId: "synthetic-mail" } }, protectedIds: [] };
+    const runner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText: "Thanks for letting us know.", task: null }) }));
+    await createClaudeCustomerReplyGenerator({ runner, readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE })(input);
+    expect(runner.mock.calls[0][0].systemPrompt).not.toContain("PRICE OBJECTIONS (ordinary customer-service SMS");
+    expect(runner.mock.calls[0][0].systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     "Hello Maya! How can I help? 🧹✨",
     "5pm EST works as your requested preference.",
