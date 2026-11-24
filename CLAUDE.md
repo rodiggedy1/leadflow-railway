@@ -32,6 +32,12 @@ pushes, the release script, the Railway CLI, `db:push` and drizzle-kit push/migr
 or live-service hosts, remote database clients, and GitHub merges/workflow runs/writes to protected branches.
 If the guard blocks something, stop and explain to the owner — never work around it.
 Self-test: `node .claude/hooks/guard-selftest.mjs` (all cases must PASS).
+- NEVER check out, switch to or reset onto any branch or commit that does not contain `.claude/settings.json` and
+  `.claude/hooks/guard.mjs` (for example plain `main` before these files are released). Claude Code stops enforcing the
+  guard as soon as the files disappear and does not reload it when they come back. Create new work branches from a
+  branch that has the guard; to inspect other commits, use `git show <ref>:<path>` / `git diff`, not checkout.
+- At the start of every session, and after anything that changes branches, confirm the guard is active:
+  `: git push origin main` must be BLOCKED. If it is not, stop all GitHub pushes and tell the owner.
 
 ## How every change works
 1. Investigate read-only → plain-language plan (files, risk, tests, code rollback, DB rollback) → wait for "approved".
