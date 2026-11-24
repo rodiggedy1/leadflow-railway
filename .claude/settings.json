@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Bash(git push * main)",
+      "Bash(git push * main *)",
+      "Bash(git push * HEAD:main*)",
+      "Bash(git push * preview*)",
+      "Bash(git push * production*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(*push-main-safe.sh*)",
+      "Bash(railway *)",
+      "Bash(*db:push*)",
+      "Bash(*drizzle-kit push*)",
+      "Bash(*drizzle-kit migrate*)",
+      "Bash(*RUN_VERSIONED_MIGRATIONS=true*)",
+      "Bash(node send_*)",
+      "Bash(node backfill*)",
+      "Bash(node cancel_overdue*)",
+      "Bash(node run-migration*)",
+      "Bash(node run_sync*)",
+      "Bash(node seed-*)",
+      "mcp__github__merge_pull_request",
+      "mcp__github__enable_pr_auto_merge",
+      "mcp__github__actions_run_trigger",
+      "mcp__github__update_pull_request_branch",
+      "mcp__github__delete_file"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp__github__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.mjs\"",
+            "timeout": 15,
+            "onFailure": "block",
+            "statusMessage": "LeadFlow safety guard"
+          }
+        ]
+      }
+    ]
+  }
+}
