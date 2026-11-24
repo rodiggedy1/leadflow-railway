@@ -53,7 +53,7 @@ import { ENV } from "./_core/env";
 import { enqueueScoring } from "./csStatusScorer";
 import { computeSessionSummary } from "./sessionSummary";
 import { getConfiguredCsPhoneNumberIds, getCsOutboundDeliveryRecipient, reconcileDeliveredCsOutbound } from "./quoOutboundReconciliation";
-import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride } from "./instinct/claudeCustomerSms";
+import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride, logClaudeCustomerSmsDiagnostic } from "./instinct/claudeCustomerSms";
 import { dispatchClaudeStaffCallEvent, dispatchClaudeStaffCallTranscriptReady } from "./instinct/claudeStaffCallsApplication";
 
 // Own only a fresh, real pilot message. Missing metadata, STOP and other phones
@@ -81,15 +81,21 @@ async function dispatchPersistedClaudeCustomerSms(input: {
     || typeof input.receivingPhoneNumberId !== "string" || !input.receivingPhoneNumberId.trim()
     || !input.inboundText.trim() || /^\s*(stop|unsubscribe|quit|end|remove me|opt.?out)\s*$/i.test(input.inboundText)
     || createdAt === null || !Number.isFinite(input.receivedAt) || createdAt < config.startAt
-    || input.receivedAt < config.startAt || createdAt > input.receivedAt) return false;
+    || input.receivedAt < config.startAt || createdAt > input.receivedAt) {
+    logClaudeCustomerSmsDiagnostic(input, { stage: "dispatch", reason: "EVENT_GUARD_DECLINED", replyOwned: false, receiptClaimAttempted: false, generationReached: false });
+    return false;
+  }
   let customerOwnsReply = false;
   try {
     customerOwnsReply = true;
+    logClaudeCustomerSmsDiagnostic(input, { stage: "dispatch", reason: "APPLICATION_DISPATCH_REACHED", replyOwned: customerOwnsReply });
     const { dispatchClaudeCustomerSms } = await import("./instinct/claudeCustomerSmsApplication");
     const result = await dispatchClaudeCustomerSms({ ...input, providerMessageId: input.providerMessageId,
       receivingPhoneNumberId: input.receivingPhoneNumberId, isCleaner: input.isCleaner === true });
+    logClaudeCustomerSmsDiagnostic(input, { stage: "dispatch", outcome: result.outcome });
     return result.outcome !== "disabled" && result.outcome !== "excluded";
-  } catch {
+  } catch (error) {
+    logClaudeCustomerSmsDiagnostic(input, { stage: "dispatch", reason: "DISPATCH_EXCEPTION", replyOwned: customerOwnsReply, error });
     // Preserve normal intake. Once this customer capability owns the response,
     // an exception must not fall through to a competing native responder.
     console.warn("[ClaudeCustomerSMS] Additive dispatch stopped; existing inbound flow continues.");

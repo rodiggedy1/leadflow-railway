@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { createClaudeCustomerSmsService, claudeCustomerSmsConfig, isClaudeCustomerSmsPhoneEligible, type CustomerSmsInput } from "./claudeCustomerSms";
+import { createClaudeCustomerSmsService, claudeCustomerSmsConfig, isClaudeCustomerSmsPhoneEligible, logClaudeCustomerSmsDiagnostic, type CustomerSmsInput } from "./claudeCustomerSms";
 
 /** Trusted, post-persistence event entrypoint. Never mounted as a public send
  * endpoint. Existing application and agents are imported only after explicit
@@ -11,8 +11,12 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
   try {
     const { getDb } = await import("../db");
     db = await getDb();
-  } catch { db = null; }
+  } catch (error) {
+    logClaudeCustomerSmsDiagnostic(input, { stage: "database_acquisition", reason: "DATABASE_ACQUISITION_THREW", receiptClaimAttempted: false, generationReached: false, error });
+    db = null;
+  }
   if (!db) {
+    logClaudeCustomerSmsDiagnostic(input, { stage: "database_acquisition", outcome: "failed", reason: "CUSTOMER_REPLY_DATABASE_UNAVAILABLE", receiptClaimAttempted: false, generationReached: false });
     await notifyCustomerSmsFailure({ taskId: null, code: "CUSTOMER_REPLY_DATABASE_UNAVAILABLE", sessionId: input.sessionId });
     return { outcome: "failed" as const };
   }

@@ -75,6 +75,30 @@ export interface CustomerSmsOptions {
 }
 const excludedSenders = new Set(["+16505164957", "+16506469270", "+17259009272"]);
 const stopped = (text: string) => /^\s*(stop|unsubscribe|quit|end|remove me|opt.?out)\s*$/i.test(text);
+type DiagnosticStage = "dispatch" | "database_acquisition" | "session_read" | "receiving_line_read"
+  | "receipt_claim" | "generation" | "preparation" | "pre_send";
+interface SmsDiagnostic {
+  stage: DiagnosticStage; outcome?: "disabled" | "excluded" | "duplicate" | "suppressed" | "accepted" | "uncertain" | "failed";
+  reason?: string; receiptClaimAttempted?: boolean; generationReached?: boolean; replyOwned?: boolean; error?: unknown;
+}
+const preClaimDiagnosticCodes = new Set(["INVALID_SESSION", "DATABASE_UNAVAILABLE", "INVALID_SESSION_ROWS",
+  "SESSION_CONTACT_CONFLICT", "EXACT_SESSION_CONFLICT", "RECEIVING_LINE_UNAVAILABLE"]);
+/** Observation only; never emit private content or let logging change reply handling. */
+export function logClaudeCustomerSmsDiagnostic(input: { sessionId: number; providerMessageId: unknown }, detail: SmsDiagnostic): void {
+  try {
+    const error = detail.error && typeof detail.error === "object" ? detail.error : {};
+    const failure = detail.error === undefined ? null : describeCustomerSmsFailure(detail.error, "pre_send");
+    const originalCode = [Reflect.get(error, "code"), Reflect.get(error, "message")].find(value => typeof value === "string" && preClaimDiagnosticCodes.has(value));
+    console.log(JSON.stringify({ message: "[ClaudeCustomerSMS][Diagnostic]",
+      sessionId: Number.isSafeInteger(input.sessionId) && input.sessionId > 0 ? input.sessionId : null,
+      inboundMessageId: typeof input.providerMessageId === "string" && /^[A-Za-z0-9:_-]{1,160}$/.test(input.providerMessageId) ? input.providerMessageId : null,
+      stage: detail.stage, outcome: detail.outcome,
+      reason: typeof detail.reason === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(detail.reason) ? detail.reason : undefined,
+      receiptClaimAttempted: detail.receiptClaimAttempted, generationReached: detail.generationReached, replyOwned: detail.replyOwned,
+      ...(failure ? { errorCode: originalCode ?? failure.code, errorName: failure.name } : {}),
+    }));
+  } catch { /* Logging failure must never escape into the existing reply decision. */ }
+}
 function currentTurn(row: CustomerSmsSession, input: CustomerSmsInput): boolean {
   let history: unknown;
   try { history = typeof row.messageHistory === "string" ? JSON.parse(row.messageHistory) : row.messageHistory; } catch { return false; }
@@ -116,6 +140,8 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       || !phoneEligible(phone)
       || excludedSenders.has(phone) || stopped(input.inboundText) || createdAt === null || !Number.isFinite(input.receivedAt)
       || createdAt < config.startAt || input.receivedAt < config.startAt || createdAt > input.receivedAt) return { outcome: "excluded" };
+    let diagnosticStage: DiagnosticStage = "session_read";
+    let receiptClaimAttempted = false, generationReached = false;
     let claim: CustomerSmsClaim | null = null;
     let submissionStarted = false;
     let hasTask = false;
@@ -142,16 +168,21 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       }
     };
     try {
+      logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "SESSION_READ_REACHED", receiptClaimAttempted, generationReached });
       const session = await options.readSession(input.sessionId);
       if (!session || session.contact.sessionId !== String(input.sessionId) || session.contact.phone !== phone
         || normalizePhone(session.contact.rawPhone) !== phone || session.lastInboundPhoneNumberId !== input.receivingPhoneNumberId
         || Number(session.smsOptOut) === 1
         || !currentTurn(session, input)) return { outcome: "excluded" };
+      diagnosticStage = "receiving_line_read";
+      logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "RECEIVING_LINE_READ_REACHED", receiptClaimAttempted, generationReached });
       const receivingPhoneNumber = await options.readReceivingLine(input.receivingPhoneNumberId);
       if (normalizePhone(receivingPhoneNumber) !== receivingPhoneNumber || !receivingPhoneNumber || receivingPhoneNumber === phone) return { outcome: "excluded" };
       const binding: CustomerSmsBinding = { sessionId: input.sessionId, providerMessageId: input.providerMessageId, fromPhone: phone,
         receivingPhoneNumberId: input.receivingPhoneNumberId, receivingPhoneNumber, inboundText: input.inboundText,
         createdAt, receivedAt: input.receivedAt, customerName: session.contact.displayName, historyHash: customerHistoryHash(session.messageHistory), historyContextHash: customerSmsContextHash(session.messageHistory) ?? undefined };
+      diagnosticStage = "receipt_claim"; receiptClaimAttempted = true;
+      logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "RECEIPT_CLAIM_REACHED", receiptClaimAttempted, generationReached });
       claim = await options.store.claim(binding);
       if (!claim) return { outcome: "duplicate" };
       let plan: CustomerReplyPlan;
@@ -160,6 +191,8 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const controller = new AbortController();
         try {
+          diagnosticStage = "generation"; generationReached = true;
+          logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "GENERATION_REACHED", receiptClaimAttempted, generationReached });
           plan = await Promise.race([options.generate(binding, session, controller.signal), new Promise<never>((_, reject) => {
             timer = setTimeout(() => { reject(new Error("CUSTOMER_REPLY_GENERATION_TIMEOUT")); controller.abort(); }, options.generationTimeoutMs ?? 120_000);
           })]);
@@ -207,6 +240,7 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       await refreshTask();
       return { outcome: "accepted" };
     } catch (error) {
+      logClaudeCustomerSmsDiagnostic(input, { stage: claim ? failurePhase : diagnosticStage, reason: "EXCEPTION", receiptClaimAttempted, generationReached, error });
       if (claim) {
         try {
           if (submissionStarted) await options.store.markUncertain(claim);

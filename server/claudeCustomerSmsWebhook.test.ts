@@ -3,7 +3,7 @@ import vm from "node:vm";
 import ts from "typescript";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { normalizePhoneLegacy } from "./utils/phone";
-import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride } from "./instinct/claudeCustomerSms";
+import { claudeCustomerSmsConfig, customerSmsInstant, isClaudeCustomerSmsPilotPhone, isClaudeCustomerSmsPhoneEligible, isClaudeCustomerSmsPilotCustomerOverride, logClaudeCustomerSmsDiagnostic } from "./instinct/claudeCustomerSms";
 
 const source = readFileSync(new URL("./webhooks.ts", import.meta.url), "utf8");
 const ast = ts.createSourceFile("webhooks.ts", source, ts.ScriptTarget.Latest, true);
@@ -100,6 +100,7 @@ function fixture(options: FixtureOptions = {}, nonCs = false) {
     isClaudeCustomerSmsPilotPhone: (phone: string) => isClaudeCustomerSmsPilotPhone(phone, env),
     isClaudeCustomerSmsPhoneEligible: (phone: string) => isClaudeCustomerSmsPhoneEligible(phone, env),
     isClaudeCustomerSmsPilotCustomerOverride: (phone: string) => isClaudeCustomerSmsPilotCustomerOverride(phone, env),
+    logClaudeCustomerSmsDiagnostic,
     Date: class extends Date { static now() { return receivedAt; } },
     console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() }, setTimeout: vi.fn(), setImmediate: vi.fn(),
     getDb: vi.fn(async () => db), testImport,
@@ -383,5 +384,54 @@ describe("customer history sync precedes the exact Instinct snapshot", () => {
     const h = fixture({ allCustomers: true }, true); await h.runWebhook(message({ phoneNumberId: "PN-bark" }));
     expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledOnce();
     expect(h.sandbox.syncAllOutboundMessages).toHaveBeenCalledWith("+12025550123", 42);
+  });
+});
+
+describe("dispatch boundary diagnostic observations", () => {
+  function records(log: { mock: { calls: unknown[][] } }) {
+    return log.mock.calls.map(call => typeof call[0] === "string" ? JSON.parse(call[0]) : null)
+      .filter(value => value?.message === "[ClaudeCustomerSMS][Diagnostic]");
+  }
+  it.each(["accepted", "excluded", "disabled", "failed", "duplicate", "suppressed", "uncertain"] as const)("records the exact %s outcome without changing responder ownership", async dispatchOutcome => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const h = fixture({ allCustomers: true, dispatchOutcome });
+    await h.runWebhook(message({ from: "+12025559876" }));
+    const replyOwned = !["excluded", "disabled"].includes(dispatchOutcome);
+    expect(records(log)).toContainEqual(expect.objectContaining({ sessionId: 42, inboundMessageId: "provider-original", stage: "dispatch", outcome: dispatchOutcome }));
+    expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).toHaveBeenCalledTimes(replyOwned ? 0 : 1);
+    expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
+    expect(log.mock.calls.flat().join(" ")).not.toContain("Please change");
+    expect(log.mock.calls.flat().join(" ")).not.toContain("+12025559876");
+  });
+  it.each([
+    [{ disabled: true }, {}, "CONFIG_DISABLED"],
+    [{}, { id: "cs-fallback-untrusted" }, "INVALID_PROVIDER_MESSAGE_ID"],
+    [{}, { direction: "outgoing" }, "NOT_INCOMING"],
+    [{}, { text: "STOP" }, "STOP_STYLE_TEXT"],
+    [{}, { createdAt: undefined }, "INVALID_CREATED_AT"],
+    [{}, { createdAt: "2026-11-16T18:01:00Z" }, "CREATED_AFTER_RECEIPT"],
+  ] as const)("records a coarse guard decline %# before application invocation", async (options, patch) => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const h = fixture(options); await h.runCs(message(patch));
+    expect(h.dispatch).not.toHaveBeenCalled();
+    expect(records(log)).toContainEqual(expect.objectContaining({ stage: "dispatch", reason: "EVENT_GUARD_DECLINED", replyOwned: false, receiptClaimAttempted: false, generationReached: false }));
+    expect(h.testImport.mock.calls.flat()).not.toContain("./instinct/claudeCustomerSmsApplication");
+  });
+  it("keeps existing failure ownership and logs no raw exception", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const h = fixture({ allCustomers: true, dispatchThrows: true });
+    await h.runCs(message({ from: "+12025559876" }));
+    expect(records(log)).toContainEqual(expect.objectContaining({ stage: "dispatch", reason: "DISPATCH_EXCEPTION", replyOwned: true, errorCode: "UNCLASSIFIED_ERROR" }));
+    expect(log.mock.calls.flat().join(" ")).not.toContain("mock failure");
+    expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).not.toHaveBeenCalled();
+    expect(h.sandbox.console.warn).toHaveBeenCalledWith("[ClaudeCustomerSMS] Additive dispatch stopped; existing inbound flow continues.");
+  });
+  it.each(["accepted", "failed", "excluded"] as const)("a throwing diagnostic console cannot change the %s handoff", async dispatchOutcome => {
+    vi.spyOn(console, "log").mockImplementation(() => { throw new Error("synthetic logger failure"); });
+    const h = fixture({ allCustomers: true, dispatchOutcome });
+    await h.runWebhook(message({ from: "+12025559876" }));
+    expect(h.dispatch).toHaveBeenCalledOnce(); expect(h.madison).toHaveBeenCalledTimes(dispatchOutcome === "excluded" ? 1 : 0);
+    expect(h.sandbox.console.warn).not.toHaveBeenCalledWith("[ClaudeCustomerSMS] Additive dispatch stopped; existing inbound flow continues.");
+    expect(h.sandbox.tryHandleConfirmationSmsReply).toHaveBeenCalledOnce();
   });
 });
