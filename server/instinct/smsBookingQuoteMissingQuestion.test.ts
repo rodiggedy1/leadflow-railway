@@ -24,14 +24,18 @@ afterEach(() => { expect(globalThis.fetch).not.toHaveBeenCalled(); vi.unstubAllG
 
 describe("SMS authoritative missing-fact questions", () => {
   it.each(requiredFields)("asks the canonical missing %s without mutating, guessing, price math or a page claim", field => {
-    for (const serviceId of ["standard", "deep", "moveout"] as const) for (const language of ["en", "es"] as const) {
+    for (const serviceId of ["standard", "deep", "moveout"] as const) for (const language of ["en", "es"] as const)
+      for (const action of ["quote", "link"] as const) {
       const patch: SmsBookingQuoteFields = { ...structuredClone(fields), serviceId };
       delete patch[field];
-      const advanced = qualify(patch), before = JSON.stringify(advanced);
+      const advanced = qualify(patch, action), before = JSON.stringify(advanced);
       expect(advanced.missing[0]).toBe(field);
-      const question = createSmsBookingQuoteMissingQuestion(advanced, "link", language);
-      expect(question).toBeTypeOf("string"); expect(question!.split("\n")[0].endsWith("?")).toBe(true);
-      expect(question).not.toMatch(/page|página|https?:|\/book\/|\$|\{\{|booked|confirmed|reservad/i);
+      const question = createSmsBookingQuoteMissingQuestion(advanced, action, language);
+      if (action === "quote" && advanced.preview?.success) expect(question).toBeNull();
+      else {
+        expect(question).toBeTypeOf("string"); expect(question!.split("\n")[0].endsWith("?")).toBe(true);
+        expect(question).not.toMatch(/page|página|https?:|\/book\/|\$|\{\{|booked|confirmed|reservad/i);
+      }
       expect(advanced.input).toBeNull(); expect(advanced.state.fields).not.toHaveProperty(field);
       expect(JSON.stringify(advanced)).toBe(before);
       expect(createSmsBookingQuoteMissingQuestion(advanced, "collect", language)).toBeNull();
@@ -69,11 +73,12 @@ describe("SMS authoritative missing-fact questions", () => {
     }
   });
 
-  it("preserves canonical price-only quotes without requiring link-only facts", () => {
+  it("keeps internal pricing preview and the original reply for a price-ready quote without authorizing an incomplete link", () => {
     const patch: SmsBookingQuoteFields = { ...fields };
     for (const key of ["customerName", "address", "requestedLocalDate", "requestedLocalTime"] as const) delete patch[key];
     const advanced = qualify(patch, "quote");
     expect(advanced.preview?.success).toBe(true); expect(advanced.input).toBeNull();
+    expect(advanced.missing).toEqual(["customerName", "address", "requestedLocalDate", "requestedLocalTime"]);
     expect(createSmsBookingQuoteMissingQuestion(advanced, "quote")).toBeNull();
     expect(createSmsBookingQuoteMissingQuestion(advanced, "link")).toBe("What name would you like to use for your cleaning quote?");
   });

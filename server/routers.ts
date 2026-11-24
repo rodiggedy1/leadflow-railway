@@ -87,6 +87,7 @@ import { deactivateOpsSmsCard, deactivateOpsEmailCard } from './opsChatRouter';
 import { madisonSmsDrafts, madisonEmailDrafts } from '../drizzle/schema';
 import { normalizePhoneLegacy as normalizePhone, isValidUSPhone, extractUSDigits } from './utils/phone';
 import { claudeDraftSourceSchema, reviewedClaudeSmsProvenance, type SmsSenderProvenance } from '../shared/smsSenderProvenance';
+import { projectAcceptedCustomerSmsSenders } from './instinct/customerSmsAttribution';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -3677,7 +3678,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             sessionId: primary.id,
             leadPhone: primary.leadPhone,
             leadName: primary.leadName,
-            messageHistory: primary.messageHistory ?? "[]",
+            messageHistory: await projectAcceptedCustomerSmsSenders(db, [primary], primary.messageHistory ?? "[]"),
             calls: [] as any[],
           };
         }
@@ -3723,7 +3724,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             sessionId: primary.id,
             leadPhone: primary.leadPhone,
             leadName: primary.leadName,
-            messageHistory: primary.messageHistory ?? "[]",
+            messageHistory: await projectAcceptedCustomerSmsSenders(db, [primary], primary.messageHistory ?? "[]"),
             calls: singleCalls,
           };
         }
@@ -3792,7 +3793,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           sessionId: primary.id,
           leadPhone: primary.leadPhone,
           leadName: primary.leadName,
-          messageHistory: JSON.stringify(merged),
+          messageHistory: await projectAcceptedCustomerSmsSenders(db, [primary, ...siblings.map(s => ({ id: s.id, leadPhone: phone }))], JSON.stringify(merged)),
           calls: calls2,
         };
       }),

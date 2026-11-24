@@ -259,9 +259,9 @@ export function createSmsBookingQuoteStore(db: Db): SmsBookingQuoteStore {
       // A preference can become past between generation and this transaction.
       // Reuse only the exact server-owned presentation's locale, never model prose.
       const missingQuestionLanguage = options.missingQuestionLanguage ?? (advanced.preview?.success
-        && options.quoteTextTemplate === createSmsBookingQuotePresentation(advanced.preview.priceSnapshot, update.action === "link", "es") ? "es" : "en");
+        && options.quoteTextTemplate === createSmsBookingQuotePresentation(advanced.preview.priceSnapshot, true, "es") ? "es" : "en");
       let planReplyText = createSmsBookingQuoteMissingQuestion(advanced, update.action, missingQuestionLanguage) ?? base;
-      if (update.action === "link" && advanced.input && advanced.preview?.success) {
+      if ((update.action === "quote" || update.action === "link") && advanced.input && advanced.preview?.success) {
         const input = normalizeInput(advanced.input);
         if (!representedInput || canonicalJson(input) !== canonicalJson(representedInput)
           || input.customerPhone !== identity.customerPhone) return conflict();
@@ -279,11 +279,6 @@ export function createSmsBookingQuoteStore(db: Db): SmsBookingQuoteStore {
           || advanced.preview.futureVisitTotalCents !== snapshot.breakdown.futureVisitTotalCents) return conflict();
         planReplyText = renderQuoteText(base, options.quoteTextTemplate, snapshot, state.link, input, options.preserveTaskAcknowledgment === true);
         linkIncluded = true;
-      } else if (update.action === "quote" && advanced.preview?.success) {
-        const snapshot = createPublicBookingPriceSnapshot(advanced.preview.priceSnapshot.input);
-        if (advanced.preview.firstCleaningTotalCents !== snapshot.breakdown.firstCleaningTotalCents
-          || advanced.preview.futureVisitTotalCents !== snapshot.breakdown.futureVisitTotalCents) return conflict();
-        planReplyText = renderQuoteText(base, options.quoteTextTemplate, snapshot, null);
       }
       state = smsBookingQuoteStateSchema.parse(state);
       verifyState(state, identity);

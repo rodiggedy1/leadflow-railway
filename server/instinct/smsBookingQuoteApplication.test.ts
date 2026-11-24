@@ -357,19 +357,22 @@ afterEach(() => {
 });
 
 describe("SMS new-booking quote application: real generator → qualification → canonical link → original task/receipt → one sender", () => {
-  it("keeps the last valid pricing state after an invalid model price and answers the next price message normally", async () => {
+  it("keeps the last valid pricing state after an invalid model price and asks the first missing booking fact on the next quote message", async () => {
     const h = harness(), collected = { ...pricing, extrasConfirmed: true };
     expect((await h.turn("Deep home cleaning, 3 bedrooms, 2 bathrooms, House, condition 5, biweekly; no extras confirmed.", collected, "collect")).result.outcome).toBe("accepted");
     const before = structuredClone(h.quote());
     const bad = await h.turn("What is the price", {}, "quote", { replyText: "It costs $1." });
     expect(bad.result.outcome).toBe("failed"); expectInternalFailure(h, bad.input);
     expect(h.quote()).toEqual(before); expect(h.state().funnels).toEqual([]);
-    const next = await h.turn("Please tell me the actual quote price.", {}, "quote");
+    const next = await h.turn("Please tell me the actual quote price.", {}, "quote", { replyText: "What is the address for your cleaning?" });
     expect(next.result.outcome).toBe("accepted");
     const preview = previewCallBookingQuote({ pricing, extrasConfirmed: true });
     if (!preview.success) throw Error("Expected canonical price");
-    expect(h.send.mock.calls[1][0].content).toContain(preview.priceFormatted);
+    expect(h.send.mock.calls[1][0].content).toBe("What is the address for your cleaning?");
+    expect(h.send.mock.calls[1][0].content).not.toMatch(/\$|https?:|\/book\//);
+    expect(h.send.mock.calls[1][0].content).not.toContain(preview.priceFormatted);
     expect(h.send.mock.calls[1][0].content).not.toContain("couldn't finish");
+    expect(h.state().funnels).toEqual([]); expect(h.quote()?.link).toBeNull();
     expect(h.tasks()).toHaveLength(1); expect(h.runner).toHaveBeenCalledTimes(4); expectAcceptedHistory(h, next.input);
   });
   it("claims one receipt and records one internal failure without sending for concurrent duplicate deliveries of invalid model output", async () => {
@@ -398,7 +401,7 @@ describe("SMS new-booking quote application: real generator → qualification �
       if (change === "config-changed") expectInternalFailure(h, input);
       else expect(h.tasks()).toEqual([]);
     });
-  it("answers 'What is the price' with the canonical total before collecting date/address and continues to a valid SMS link", async () => {
+  it("withholds price/link for 'What is the price' until address/date/time are collected, then fulfills a legacy quote action with one complete summary", async () => {
     const h = harness();
     // Synthetic, explicit pricing inputs; this is not a reconstruction of Jody's unknown full quote state.
     const selections: CallBookingQuotePricing = { ...pricing, condition: 10, extras: [
@@ -408,24 +411,49 @@ describe("SMS new-booking quote application: real generator → qualification �
     const collect = await h.turn("Deep home clean, 3 bedrooms, 2 bathrooms, House, condition 10, biweekly. Inside oven 1, interior windows 3, organizing 1 hour, laundry 3 loads; those extras are confirmed.",
       { ...selections, extrasConfirmed: true }, "collect");
     expect(collect.result.outcome).toBe("accepted");
-    const quote = await h.turn("What is the price", {}, "quote");
+    const quote = await h.turn("What is the price", {}, "quote", { replyText: "What is the address for your cleaning?" });
     expect(quote.result.outcome).toBe("accepted");
     const preview = previewCallBookingQuote({ pricing: selections, extrasConfirmed: true });
     if (!preview.success) throw Error("Expected synthetic canonical price");
     const response = h.send.mock.calls[1][0].content;
-    expect(response).toContain(preview.priceFormatted); expect(response).toContain(preview.futureVisitPriceFormatted!);
-    expect(response).toContain("Inside Oven"); expect(response).toContain("Interior Windows");
-    expect(response).toContain("One Hour of Organizing"); expect(response).toContain("Laundry");
+    expect(response).toBe("What is the address for your cleaning?");
+    expect(response).not.toMatch(/\$|https?:|\/book\//);
+    expect(response).not.toContain(preview.priceFormatted); expect(response).not.toContain(preview.futureVisitPriceFormatted!);
     expect(response).not.toContain("couldn't finish"); expect(h.tasks()).toEqual([]); expect(h.state().funnels).toEqual([]);
     expect(h.quote()?.fields).not.toHaveProperty("requestedLocalDate"); expectAcceptedHistory(h, quote.input);
     const request = await h.turn("Can you send my booking link?", {}, "link");
     expect(request.result.outcome).toBe("accepted"); expect(h.state().funnels).toEqual([]);
-    expect(h.send.mock.calls[2][0].content).not.toMatch(/couldn't finish|https?:/);
-    const linked = await h.turn(`My name is ${NAME}, address ${ADDRESS}, November 20 at 10:30 am. Send the booking link.`,
-      { customerName: NAME, address: ADDRESS, requestedLocalDate: "2026-11-20", requestedLocalTime: "10:30" }, "link");
+    expect(h.send.mock.calls[2][0].content).toBe("What is the address for your cleaning?");
+    expect(h.send.mock.calls[2][0].content).not.toMatch(/couldn't finish|https?:|\$/);
+    const linked = await h.turn(`My name is ${NAME}, address ${ADDRESS}, November 20 at 10:30 am. Please show the complete new cleaning quote.`,
+      { customerName: NAME, address: ADDRESS, requestedLocalDate: "2026-11-20", requestedLocalTime: "10:30" }, "quote");
     expect(linked.result.outcome).toBe("accepted"); expect(h.state().funnels).toHaveLength(1);
-    expect(h.send.mock.calls[3][0].content).toContain(`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`);
+    const url = `${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`, content = h.send.mock.calls[3][0].content;
+    expect(content).toBe(renderSmsBookingQuoteSummary({ ...canonicalInput(), pricing: selections }, createPublicBookingPriceSnapshot(selections), url));
+    expect(content).toContain(preview.priceFormatted); expect(content).toContain(preview.futureVisitPriceFormatted!);
+    for (const extra of ["Inside Oven", "Interior Windows", "One Hour of Organizing", "Laundry"]) expect(content).toContain(extra);
+    expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([url]); expect(h.tasks()).toHaveLength(1);
     expect(h.runner).toHaveBeenCalledTimes(4); expect(h.send).toHaveBeenCalledTimes(4); expectAcceptedHistory(h, linked.input);
+  });
+  it.each([
+    { field: "customerName", question: "What name would you like to use for your cleaning quote?" },
+    { field: "address", question: "What is the address for your cleaning?" },
+    { field: "requestedLocalDate", question: "Which upcoming date would you prefer for your cleaning?" },
+    { field: "requestedLocalTime", question: "What time would you prefer for your cleaning?" },
+  ] as const)("keeps $field required for quote/link through the actual composed application and submits one question without price/link", async ({ field, question }) => {
+    for (const action of ["quote", "link"] as const) {
+      const h = harness(), fields = { ...fullFields }; delete fields[field];
+      if (field === "customerName") h.row().customerName = null;
+      const replyText = `Got it, María. ${question}`;
+      const value = await h.turn(FULL_TEXT, fields, action, { replyText: action === "quote" ? replyText : STALE_PAGE_RECAP });
+      expect(value.result).toEqual({ outcome: "accepted" }); expect(h.send).toHaveBeenCalledTimes(1);
+      const content = h.send.mock.calls[0][0].content;
+      expect(content).toBe(action === "quote" ? replyText : question); expect(content.match(/\?/g)).toHaveLength(1);
+      expect(content).not.toMatch(/\$|https?:|\/book\/|\{\{|complete your booking/i);
+      expect(h.quote()?.fields).not.toHaveProperty(field); expect(h.quote()?.link).toBeNull();
+      expect(h.state().funnels).toEqual([]); expect(h.tasks()).toEqual([]);
+      expect(h.runner).toHaveBeenCalledTimes(1); expectAcceptedHistory(h, value.input);
+    }
   });
   it("collects a multi-turn quote durably, never invents empty extras or re-asks known name/address/time, and matches call/shared canonical prices exactly", async () => {
     const h = harness();
@@ -448,18 +476,20 @@ describe("SMS new-booking quote application: real generator → qualification �
     expect(h.runner.mock.calls[1][0].systemPrompt).toContain("COMPLETE CURRENT CS WRITING PROMPT");
     expect(h.runner.mock.calls[1][0].systemPrompt).toContain("never repeat known usable fields");
     const third = await h.turn("No extras. Please show my quote.", { extras: [], extrasConfirmed: true }, "quote", { quoteTextTemplate: QUOTE_TEMPLATE });
-    expect(third.result).toEqual({ outcome: "accepted" }); expect(h.state().funnels).toEqual([]);
-    expect(h.quote()).toMatchObject({ quoteId, revision: 3, link: null, fields: fullFields });
+    expect(third.result).toEqual({ outcome: "accepted" }); expect(h.state().funnels).toHaveLength(1);
+    expect(h.quote()).toMatchObject({ quoteId, revision: 3, fields: fullFields });
+    const thirdLink = structuredClone(h.quote()!.link!); expect(thirdLink).not.toBeNull();
     expect(h.quote()?.evidence.extras).toEqual({ turnIndex: 4, quote: third.input.inboundText });
     const preview = previewCallBookingQuote({ pricing, extrasConfirmed: true }); expect(preview.success).toBe(true);
     if (!preview.success) throw Error("Canonical fixture must preview successfully");
     const quoteReply = h.send.mock.calls[2][0].content;
     expect(quoteReply).toContain(preview.priceFormatted); expect(quoteReply).toContain(preview.futureVisitPriceFormatted!);
-    expect(quoteReply).toContain("No add-ons selected"); expect(quoteReply).not.toContain("/book/");
-    expect(h.tasks()).toEqual([]);
+    expect(quoteReply).toContain("No add-ons selected"); expect(quoteReply).toContain(`${SMS_QUOTE_BOOKING_ORIGIN}${thirdLink.urlPath}`);
+    expect(h.tasks()).toHaveLength(1); expect(h.tasks()[0].sourceMessageId).toBe(third.input.providerMessageId);
     const fourth = await h.turn("Yes, please send my new cleaning booking link.", {}, "link", { quoteTextTemplate: LINK_TEMPLATE });
-    expect(fourth.result).toEqual({ outcome: "accepted" }); expect(h.state().funnels).toHaveLength(1); expect(h.tasks()).toHaveLength(1);
-    expect(h.tasks()[0]).toMatchObject({ title: FOLLOWUP_TITLE, status: "unclaimed", sourceMessageId: fourth.input.providerMessageId,
+    expect(fourth.result).toEqual({ outcome: "accepted" }); expect(h.state().funnels).toHaveLength(1); expect(h.tasks()).toHaveLength(2);
+    expect(h.quote()?.link).toEqual(thirdLink); expect(h.send.mock.calls[3][0].content).toBe(quoteReply);
+    expect(h.tasks()[1]).toMatchObject({ title: FOLLOWUP_TITLE, status: "unclaimed", sourceMessageId: fourth.input.providerMessageId,
       items: [{ title: FOLLOWUP_ITEM, evidenceQuote: fourth.input.inboundText, completedBy: null, completedAt: null }],
       reply: { text: h.send.mock.calls[3][0].content, status: "sent" } });
     const funnel = h.state().funnels[0], snapshot = createPublicBookingPriceSnapshot(pricing);
@@ -670,6 +700,60 @@ describe("SMS new-booking quote application: real generator → qualification �
     expect(h.runner).not.toHaveBeenCalled();
   });
 
+  it.each(["generated", "direct"] as const)("preserves scheduling and task acknowledgment for price-ready incomplete legacy quotes through %s", async path => {
+    for (const language of ["en", "es"] as const) for (const pricingMode of ["home", "hourly"] as const)
+      for (const withTask of [false, true]) {
+        const h = harness(), fields: SmsBookingQuoteFields = { ...pricing, pricingMode,
+          maidCount: pricingMode === "hourly" ? 2 : 1, hourCount: pricingMode === "hourly" ? 3 : 1,
+          customerName: NAME, requestedLocalDate: "2026-11-18", extrasConfirmed: true };
+        const text = `Please prepare my new ${pricingMode} cleaning quote. My name is ${NAME}. Wednesday in the morning. `
+          + "Deep cleaning, 3 bedrooms, 2 bathrooms, House, condition 5, biweekly, no extras confirmed."
+          + (pricingMode === "hourly" ? " I want 2 cleaners for 3 hours." : "")
+          + (withTask ? " Also use gate 1234 for my existing customer access note." : "");
+        const input = h.append(text);
+        const scheduling = language === "es"
+          ? "Entendido: el miércoles por la mañana. ¿A qué hora de la mañana prefieres y cuál es la dirección?"
+          : "Got it—Wednesday morning. What exact time that morning would you prefer, and what's the address?";
+        const acknowledgment = language === "es"
+          ? "Pasaré tu solicitud sobre el código de acceso al equipo."
+          : "I'll pass your access-note request to the team.";
+        const replyText = withTask ? `${scheduling}\n\n${acknowledgment}` : scheduling;
+        const task = withTask ? { title: "Update customer access note", items: [{ title: "Use the requested gate code", evidenceQuote: "use gate 1234" }] } : null;
+        const output = h.output(input, fields, "quote", { replyText, task, quoteTextTemplate: QUOTE_TEMPLATE, quotePresentationLanguage: language });
+        if (path === "generated") {
+          h.queue(output);
+          expect(await h.run(input)).toEqual({ outcome: "accepted" });
+          expect(h.runner).toHaveBeenCalledTimes(1);
+        } else {
+          const store = h.stores().taskStore, binding: CustomerSmsBinding = {
+            sessionId: input.sessionId, providerMessageId: input.providerMessageId, fromPhone: PHONE,
+            receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS, inboundText: input.inboundText,
+            createdAt: NOW, receivedAt: input.receivedAt, customerName: NAME,
+            historyHash: createHash("sha256").update(h.row().messageHistory).digest("hex"),
+          };
+          const claim = await store.claim(binding); expect(claim).not.toBeNull();
+          const prepared = await store.prepare(claim!, { replyText, task, smsBookingQuote: {
+            previous: null, update: output.bookingQuote, originalConversation: h.history(), quoteTextTemplate: null,
+          } } as any);
+          expect(prepared).toEqual({ replyText, task });
+          const accepted = await h.send({ to: PHONE, fromNumberId: LINE, content: prepared!.replyText });
+          expect(await store.recordAcceptance(claim!, accepted.messageId!)).toBe(true);
+          expect(h.runner).not.toHaveBeenCalled(); expect(h.readKnowledge).not.toHaveBeenCalled();
+        }
+        expect(h.send.mock.calls).toEqual([[{ to: PHONE, fromNumberId: LINE, content: replyText }]]);
+        expect(h.state().drafts[0]).toMatchObject({ status: "SENT", generatedDraft: replyText, approvedText: replyText });
+        expect(h.quote()).toMatchObject({ link: null, fields: { requestedLocalDate: "2026-11-18" } });
+        expect(h.quote()!.fields).not.toHaveProperty("requestedLocalTime"); expect(h.quote()!.fields).not.toHaveProperty("address");
+        expect(h.state().funnels).toEqual([]); expect(h.tasks()).toHaveLength(withTask ? 1 : 0);
+        if (withTask) expect(h.tasks()[0]).toMatchObject({ title: task!.title, status: "unclaimed", items: task!.items, reply: { text: replyText, status: "sent" } });
+        expect(replyText).not.toMatch(/\$|https?:|\/book\/|\{\{/);
+        expectAcceptedHistory(h, input);
+        const before = structuredClone(h.state());
+        expect(["excluded", "duplicate"]).toContain((await h.run(input)).outcome);
+        expect(h.state()).toEqual(before); expect(h.send).toHaveBeenCalledTimes(1);
+      }
+  });
+
   it.each(["en", "es"] as const)("keeps %s when a complete link preference becomes past before durable preparation", async language => {
     const crossings = [
       { receivedAt: Date.parse("2026-11-17T18:00:00Z"), preparedAt: Date.parse("2026-11-17T18:01:00Z"), time: "13:00",
@@ -703,44 +787,55 @@ describe("SMS new-booking quote application: real generator → qualification �
     }
   });
 
-  it("corrects pricing under the same quote id but creates a replacement personalized link only on a later explicit link request", async () => {
+  it("corrects pricing under the same quote id and includes the replacement personalized link with the revised legacy quote action", async () => {
     const h = harness(); expect((await h.turn()).result.outcome).toBe("accepted");
     const initial = structuredClone(h.quote()!), oldToken = initial.link!.token;
     const correction = await h.turn("Correction: it is 4 bedrooms. Please show the revised quote.", { bedrooms: 4 }, "quote", { quoteTextTemplate: QUOTE_TEMPLATE });
-    expect(correction.result.outcome).toBe("accepted"); expect(h.state().funnels).toHaveLength(1);
-    expect(h.quote()).toMatchObject({ quoteId: initial.quoteId, fields: { bedrooms: 4 }, link: null });
-    expect(h.tasks()).toHaveLength(1);
+    expect(correction.result.outcome).toBe("accepted"); expect(h.state().funnels).toHaveLength(2);
+    expect(h.quote()).toMatchObject({ quoteId: initial.quoteId, fields: { bedrooms: 4 } });
+    const revisedLink = structuredClone(h.quote()!.link!); expect(revisedLink.token).not.toBe(oldToken);
+    expect(h.tasks()).toHaveLength(2);
     const changed = { ...pricing, bedrooms: 4 }, expected = previewCallBookingQuote({ pricing: changed, extrasConfirmed: true });
     if (!expected.success) throw Error("Corrected fixture must preview successfully");
     expect(expected.firstCleaningTotalCents).not.toBe(initial.link!.firstCleaningTotalCents);
-    expect(h.send.mock.calls[1][0].content).toContain(expected.priceFormatted); expect(h.send.mock.calls[1][0].content).not.toContain("/book/");
+    expect(h.send.mock.calls[1][0].content).toBe(renderSmsBookingQuoteSummary(canonicalInput({ ...fullFields, bedrooms: 4 }),
+      createPublicBookingPriceSnapshot(changed), `${SMS_QUOTE_BOOKING_ORIGIN}${revisedLink.urlPath}`));
     expect((await h.turn("Please send the revised booking link now.", {}, "link")).result.outcome).toBe("accepted");
     expect(h.state().funnels).toHaveLength(2); expect(h.quote()?.quoteId).toBe(initial.quoteId);
-    expect(h.quote()?.link?.token).not.toBe(oldToken); expect(h.state().funnels[0].publicFunnelNumber).toBe(oldToken);
+    expect(h.quote()?.link).toEqual(revisedLink); expect(h.state().funnels[0].publicFunnelNumber).toBe(oldToken);
+    expect(h.send.mock.calls[2][0].content).toBe(h.send.mock.calls[1][0].content); expect(h.tasks()).toHaveLength(3);
     expect(h.state().funnels[1].priceSnapshot).toEqual(createPublicBookingPriceSnapshot(changed));
   });
 
-  it("does not append qualification-only follow-up tasks when collect or quote actions retain an already durable current link", async () => {
+  it("keeps collect qualification-only but includes a reused link and follow-up for a complete legacy quote action", async () => {
     const h = harness(); await h.turn(); const original = structuredClone(h.quote()!.link!);
     const collected = await h.turn("For that new quote, what remains to review?", {}, "collect", { replyText: "You can review the details on the booking page." });
     expect(collected.result.outcome).toBe("accepted"); expect(h.quote()?.link).toEqual(original);
     expect(h.tasks()).toHaveLength(1); expect(h.send.mock.calls[1][0].content).not.toContain("/book/");
     const quoted = await h.turn("Please show the price details for that same new quote.", {}, "quote");
     expect(quoted.result.outcome).toBe("accepted"); expect(h.quote()?.link).toEqual(original);
-    expect(h.tasks()).toHaveLength(1); expect(h.state().funnels).toHaveLength(1);
-    expect(h.send.mock.calls[2][0].content).not.toContain("/book/");
+    expect(h.tasks()).toHaveLength(2); expect(h.state().funnels).toHaveLength(1);
+    expect(h.send.mock.calls[2][0].content).toBe(h.send.mock.calls[0][0].content);
+    expect(h.tasks()[1].sourceMessageId).toBe(quoted.input.providerMessageId);
   });
 
-  it("reuses one saved personalized link for a distinct explicit message repeating the same quote and blocks repeated delivery of its original provider id", async () => {
-    const h = harness(), first = await h.turn(); expect(first.result.outcome).toBe("accepted");
+  it.each([
+    { firstAction: "quote", repeatAction: "quote" }, { firstAction: "quote", repeatAction: "link" },
+    { firstAction: "link", repeatAction: "quote" }, { firstAction: "link", repeatAction: "link" },
+  ] as const)("reuses one saved personalized link for $firstAction → $repeatAction and blocks repeated original provider delivery", async ({ firstAction, repeatAction }) => {
+    const h = harness(), first = await h.turn(FULL_TEXT, fullFields, firstAction); expect(first.result.outcome).toBe("accepted");
+    const originalLink = structuredClone(h.quote()!.link!), url = `${SMS_QUOTE_BOOKING_ORIGIN}${originalLink.urlPath}`;
+    expect(h.send.mock.calls[0][0].content).toBe(renderSmsBookingQuoteSummary(canonicalInput(), createPublicBookingPriceSnapshot(pricing), url));
     const before = structuredClone(h.state()), count = h.runner.mock.calls.length;
     expect(["excluded", "duplicate"]).toContain((await h.run(first.input)).outcome);
     expect(h.state()).toEqual(before); expect(h.runner).toHaveBeenCalledTimes(count); expect(h.send).toHaveBeenCalledTimes(1);
-    const repeated = await h.turn("Please send that exact same new cleaning quote link again.", {}, "link");
+    const repeated = await h.turn("Please send that exact same new cleaning quote link again.", {}, repeatAction);
     expect(repeated.result).toEqual({ outcome: "accepted" }); expect(h.state().funnels).toHaveLength(1);
-    expect(h.quote()?.link).toEqual(JSON.parse(before.cards.find(row => row.quickAction === SMS_BOOKING_QUOTE_ACTION)!.metadata).state.link);
+    expect(h.quote()?.link).toEqual(originalLink);
     expect(h.send).toHaveBeenCalledTimes(2); expect(h.runner).toHaveBeenCalledTimes(2); expectAcceptedHistory(h, repeated.input);
-    expect(h.send.mock.calls[1][0].content).toContain(h.state().funnels[0].publicFunnelNumber);
+    expect(h.send.mock.calls[1][0].content).toBe(h.send.mock.calls[0][0].content);
+    expect(h.send.mock.calls[1][0].content.match(/https?:\/\/[^\s]+/g)).toEqual([url]);
+    expect(JSON.parse(h.quoteRows()[0].metadata).quotes).toHaveLength(1);
     expect(h.tasks()).toHaveLength(2);
     expect(h.tasks().map(task => task.sourceMessageId)).toEqual([first.input.providerMessageId, repeated.input.providerMessageId]);
     expect(h.tasks()[1]).toMatchObject({ title: FOLLOWUP_TITLE, items: [{ title: FOLLOWUP_ITEM, evidenceQuote: repeated.input.inboundText }] });
@@ -961,16 +1056,15 @@ describe("SMS new-booking quote application: real generator → qualification �
       if (!preview.success) throw Error("Expected canonical parity fixture");
       const content = h.send.mock.calls[0][0].content;
       expect(preview.futureVisitPriceFormatted).not.toBe(preview.priceFormatted);
-      expect(content).toContain(action === "link" ? `💵 Total: ${preview.priceFormatted}` : `Your first-cleaning quote is ${preview.priceFormatted}.`);
+      expect(content).toContain(`💵 Total: ${preview.priceFormatted}`);
       expect(content).toMatch(new RegExp(`Your ${recurrence} (?:follow-up cleaning|future-visit) price is \\$${preview.futureVisitTotalCents! / 100}\\.`));
       expect(content.split(preview.priceFormatted)).toHaveLength(2);
       expect(content.split(preview.futureVisitPriceFormatted!)).toHaveLength(2);
       expect(content).toContain(extras.length ? "Inside Fridge" : "No add-ons selected");
       expect(content).not.toMatch(/\{\{|Weekly future visits:/);
-      expect(h.state().funnels).toHaveLength(action === "link" ? 1 : 0);
-      expect(h.tasks()).toHaveLength(action === "link" ? 1 : 0);
-      if (action === "link") expect(content).toContain(`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`);
-      else expect(content).not.toContain("/book/");
+      expect(h.state().funnels).toHaveLength(1); expect(h.tasks()).toHaveLength(1);
+      expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`]);
+      expect(content).toContain("📅 Requested date:"); expect(content).toContain(`📍 Address: ${ADDRESS}`);
       expectAcceptedHistory(h, value.input);
     }
   });
@@ -980,11 +1074,10 @@ describe("SMS new-booking quote application: real generator → qualification �
     h.row().customerName = name;
     const value = await h.turn(FULL_TEXT.replace(NAME, name), { ...fullFields, customerName: name }, action, { replyText });
     expect(value.result).toEqual({ outcome: "accepted" }); expect(h.send).toHaveBeenCalledTimes(1);
-    if (action === "quote") expect(h.send.mock.calls[0][0].content).toContain(replyText);
-    else expect(h.send.mock.calls[0][0].content).not.toContain(replyText);
-    expect(h.quote()?.fields.customerName).toBe(name); expect(h.state().funnels).toHaveLength(action === "link" ? 1 : 0);
-    if (action === "link") expect(h.state().funnels[0].customerName).toBe(name);
-    expect(h.tasks()).toHaveLength(action === "link" ? 1 : 0);
+    expect(h.send.mock.calls[0][0].content).not.toContain(replyText);
+    expect(h.quote()?.fields.customerName).toBe(name); expect(h.state().funnels).toHaveLength(1);
+    expect(h.state().funnels[0].customerName).toBe(name); expect(h.tasks()).toHaveLength(1);
+    expect(h.send.mock.calls[0][0].content.match(/https?:\/\/[^\s]+/g)).toEqual([`${SMS_QUOTE_BOOKING_ORIGIN}${h.quote()!.link!.urlPath}`]);
     expectAcceptedHistory(h, value.input);
   });
 

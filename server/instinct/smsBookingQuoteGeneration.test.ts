@@ -61,8 +61,8 @@ function active(input: ClaudeCustomerReplyInput, extra: Record<string, unknown> 
 function canonicalPresentation(input: ClaudeCustomerReplyInput, patch = update(input), language: "en" | "es" = "en", previous: SmsBookingQuoteState | null = null) {
   const advanced = advanceSmsBookingQuote(previous, patch, { binding: input.context.binding as ClaudeCustomerSmsGenerationBinding,
     originalConversation: input.context.originalConversation as any[], nowMs: NOW });
-  if (!advanced.preview?.success) throw Error("Expected complete synthetic pricing");
-  return createSmsBookingQuotePresentation(advanced.preview.priceSnapshot, patch.action === "link", language);
+  if (!advanced.input || !advanced.preview?.success) throw Error("Expected complete synthetic quote and booking facts");
+  return createSmsBookingQuotePresentation(advanced.preview.priceSnapshot, true, language);
 }
 let network: ReturnType<typeof vi.spyOn>;
 beforeEach(() => { network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("OFFLINE_ONLY")); });
@@ -216,23 +216,76 @@ describe("SMS-only additive quote generation", () => {
     expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt).context.smsBookingQuote).toMatchObject({ currentLocalDate: "2026-11-17", currentLocalTime: "12:00" });
   });
 
-  it("accepts a canonical quote with explicitly confirmed no extras and no invented staffing facts", async () => {
+  it("accepts a complete legacy quote action and adds the canonical booking-link presentation despite a price-only legacy template", async () => {
     const input = fixture(), bookingQuote = update(input, fields, { action: "quote" });
     const h = harness(active(input, { bookingQuote, quoteTextTemplate: quoteTemplate }));
     const plan = await h.generate(input);
     expect(plan.smsBookingQuote?.update.fields).toEqual(fields);
     expect(plan.smsBookingQuote?.quoteTextTemplate).toBe(canonicalPresentation(input, bookingQuote));
+    expect(plan.smsBookingQuote?.quoteTextTemplate?.split("{{bookingLink}}")).toHaveLength(2);
     expect(plan.smsBookingQuote?.update.fields).not.toHaveProperty("maidCount");
     expect(h.runner).toHaveBeenCalledTimes(1);
   });
 
-  it("lets incomplete quote/link actions ask a base question with no output template", async () => {
-    const input = fixture("Please send a new cleaning quote"), bookingQuote = update(input, {}, { action: "link", evidence: {} });
+  it.each(["quote", "link"] as const)("lets incomplete %s actions ask a base question with no output template", async action => {
+    const input = fixture("Please send a new cleaning quote"), bookingQuote = update(input, {}, { action, evidence: {} });
     const h = harness(active(input, { replyText: "How many bedrooms and bathrooms are in your home?", bookingQuote, quoteTextTemplate: null }));
     const plan = await h.generate(input);
     expect(plan.replyText).toBe("Would you like a standard, deep or move-out cleaning?");
     expect(plan.smsBookingQuote).toEqual({ previous: null, update: bookingQuote, originalConversation: input.context.originalConversation,
       quoteTextTemplate: null, missingQuestionLanguage: "en" });
+  });
+
+  it.each([
+    { field: "customerName", question: "What name would you like to use for your cleaning quote?" },
+    { field: "address", question: "What is the address for your cleaning?" },
+    { field: "requestedLocalDate", question: "Which upcoming date would you prefer for your cleaning?" },
+    { field: "requestedLocalTime", question: "What time would you prefer for your cleaning?" },
+  ] as const)("withholds price/link and asks only $field for incomplete quote and link actions despite successful internal pricing", async ({ field, question }) => {
+    for (const action of ["quote", "link"] as const) {
+      const input = fixture(fullText, undefined, { customerName: null });
+      const patch: SmsBookingQuoteFields = { ...fields, customerName: "Maya Lane" }; delete patch[field];
+      const bookingQuote = update(input, patch, { action });
+      const replyText = `Got it, Maya. ${question}`;
+      const h = harness(active(input, { bookingQuote, quoteTextTemplate: null,
+        replyText: action === "quote" ? replyText : "Please review and complete your booking on the page." }));
+      const plan = await h.generate(input), advanced = advanceSmsBookingQuote(null, bookingQuote, {
+        binding: input.context.binding as ClaudeCustomerSmsGenerationBinding, originalConversation: input.context.originalConversation as any[], nowMs: NOW,
+      });
+      expect(advanced.preview?.success).toBe(true); expect(advanced.input).toBeNull(); expect(advanced.missing).toEqual([field]);
+      expect(plan.replyText).toBe(action === "quote" ? replyText : question); expect(plan.replyText.match(/\?/g)).toHaveLength(1);
+      expect(plan.replyText).not.toMatch(/\$|https?:|\/book\/|\{\{|booking page/i);
+      expect(plan.smsBookingQuote?.quoteTextTemplate).toBeNull();
+      if (action === "quote") expect(plan.smsBookingQuote).not.toHaveProperty("missingQuestionLanguage");
+      else expect(plan.smsBookingQuote?.missingQuestionLanguage).toBe("en");
+      expect(h.runner).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it.each([
+    { field: "customerName", question: "What name would you like to use for your cleaning quote?" },
+    { field: "address", question: "What is the address for your cleaning?" },
+    { field: "requestedLocalDate", question: "Which upcoming date would you prefer for your cleaning?" },
+    { field: "requestedLocalTime", question: "What time would you prefer for your cleaning?" },
+  ] as const)("validates but discards safe legacy quote templates while asking missing $field in one attempt", async ({ field, question }) => {
+    for (const legacy of [quoteTemplate, linkTemplate]) {
+      const input = fixture(fullText, undefined, { customerName: null });
+      const patch: SmsBookingQuoteFields = { ...fields, customerName: "Maya Lane" }; delete patch[field];
+      const replyText = `Got it, Maya. ${question}`;
+      const h = harness(active(input, { bookingQuote: update(input, patch, { action: "quote" }), quoteTextTemplate: legacy, replyText }));
+      const plan = await h.generate(input);
+      expect(plan.replyText).toBe(replyText); expect(plan.smsBookingQuote?.quoteTextTemplate).toBeNull();
+      expect(plan.replyText).not.toMatch(/\$|https?:|\/book\/|\{\{/); expect(h.runner).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("leaves a complete collect action without a final price, link or canonical summary", async () => {
+    const input = fixture(), bookingQuote = update(input, fields, { action: "collect" });
+    const replyText = "Thanks, Maya. Is there anything else for this new cleaning quote?";
+    const h = harness(active(input, { bookingQuote, quoteTextTemplate: null, replyText }));
+    const plan = await h.generate(input);
+    expect(plan.replyText).toBe(replyText); expect(plan.smsBookingQuote?.quoteTextTemplate).toBeNull();
+    expect(plan.smsBookingQuote).not.toHaveProperty("missingQuestionLanguage"); expect(h.runner).toHaveBeenCalledTimes(1);
   });
 
   it.each(["home", "hourly"] as const)("replaces a premature %s-mode page recap with the authoritative missing condition across every service and locale", async pricingMode => {
@@ -800,9 +853,10 @@ describe("server-owned booking quote presentation", () => {
     const h = harness(active(input, { replyText, bookingQuote, quoteTextTemplate: null, quotePresentationLanguage: "es" }));
     const plan = await h.generate(input), snapshot = createPublicBookingPriceSnapshot(pricing({ recurrence: "biweekly",
       extras: [{ id: "inside-fridge", quantity: 1 }, { id: "interior-windows", quantity: 3 }] }));
-    const rendered = renderSmsBookingQuoteText(plan.replyText, plan.smsBookingQuote?.quoteTextTemplate, snapshot, null);
+    const rendered = renderSmsBookingQuoteText(plan.replyText, plan.smsBookingQuote?.quoteTextTemplate, snapshot, url);
     expect(plan.replyText).toBe(replyText);
-    expect(rendered).toBe(`${replyText}\n\nTu cotización para la primera limpieza es $344.\nPróximas visitas (cada dos semanas): $229.\nServicios adicionales:\nInterior del refrigerador\n3 × Ventanas interiores`);
+    expect(rendered).toBe(`${replyText}\n\nTu cotización para la primera limpieza es $344.\nPróximas visitas (cada dos semanas): $229.\nServicios adicionales:\nInterior del refrigerador\n3 × Ventanas interiores\nRevisa los detalles, elige tu horario y completa tu reserva en esta página:\n${url}`);
+    expect(rendered.match(/https?:\/\/[^\s]+/g)).toEqual([url]);
     expect(h.runner).toHaveBeenCalledTimes(1);
     expect(h.readKnowledge).toHaveBeenCalledTimes(1);
   });

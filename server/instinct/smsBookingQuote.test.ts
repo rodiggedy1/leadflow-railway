@@ -83,6 +83,10 @@ describe("strict flat SMS model contract", () => {
       ...Object.keys(pricing), "extrasConfirmed",
     ]);
   });
+  it.each(["collect", "quote", "link"] as const)("retains strict legacy %s action compatibility", action => {
+    expect(smsBookingQuoteUpdateSchema.parse(update({}, { action, evidence: {} })).action).toBe(action);
+    expect(smsBookingQuoteUpdateSchema.safeParse({ ...update({}, { action, evidence: {} }), priceOnly: true }).success).toBe(false);
+  });
   it.each(["customerPhone", "sender", "from", "to", "receivingPhoneNumberId", "price", "quotedPrice", "customPriceCents", "url", "bookingUrl", "token", "book", "smsNumberConfirmed", "pricing"])("rejects model-owned %s at every envelope", key => {
     expect(smsBookingQuoteUpdateSchema.safeParse({ ...update(), [key]: "untrusted" }).success).toBe(false);
     expect(smsBookingQuoteFieldsSchema.safeParse({ [key]: "untrusted" }).success).toBe(false);
@@ -151,8 +155,8 @@ describe("pure progressive qualification and canonical parity", () => {
     expect(result.missing).not.toContain("maidCount"); expect(result.missing).not.toContain("hourCount");
     expect(result.missing).toEqual(expect.arrayContaining(["extras", "recurrence", "extrasConfirmed"]));
   });
-  it("makes a complete canonical preview and bound link input with verified SMS identity", () => {
-    const result = run();
+  it.each(["quote", "link"] as const)("makes a complete canonical preview and bound link input with verified SMS identity for %s", action => {
+    const result = run(fullFields, { action });
     expect(result.missing).toEqual([]); expect(result.preview?.success).toBe(true);
     if (!result.preview?.success) throw new Error("Missing preview");
     expect(result.preview.priceSnapshot).toEqual(createPublicBookingPriceSnapshot(pricing));
@@ -173,21 +177,32 @@ describe("pure progressive qualification and canonical parity", () => {
     }
     expect(result.input).not.toHaveProperty("token"); expect(result.state.link).toBeNull();
   });
-  it.each(["collect", "quote"] as const)("does not return execution input for %s", action => {
-    const result = run(fullFields, { action });
+  it("does not return execution input for collect even with every required fact", () => {
+    const result = run(fullFields, { action: "collect" });
     expect(result.preview?.success).toBe(true); expect(result.input).toBeNull();
   });
-  it("can preview pricing while contact/date/time remain missing", () => {
-    const result = run({ ...pricing, extrasConfirmed: true }, { action: "quote" });
+  it.each(["quote", "link"] as const)("can internally preview %s pricing while contact/date/time remain missing without authorizing a link", action => {
+    const result = run({ ...pricing, extrasConfirmed: true }, { action });
     expect(result.preview?.success).toBe(true); expect(result.input).toBeNull();
-    if (!result.preview?.success) throw new Error("Price-only quote must remain valid");
+    if (!result.preview?.success) throw new Error("Internal canonical pricing preview must remain valid");
     expect(result.preview.priceSnapshot).toEqual(createPublicBookingPriceSnapshot(pricing));
     expect(result.missing).toEqual(["customerName", "address", "requestedLocalDate", "requestedLocalTime"]);
-    expect(createSmsBookingQuoteMissingQuestion(result, "quote")).toBeNull();
+    expect(createSmsBookingQuoteMissingQuestion(result, action)).toBe(action === "quote" ? null : "What name would you like to use for your cleaning quote?");
     for (const key of result.missing) expect(result.state.fields).not.toHaveProperty(key);
-    const link = run({ ...pricing, extrasConfirmed: true });
-    expect(link.input).toBeNull(); expect(link.preview?.success).toBe(true);
-    expect(createSmsBookingQuoteMissingQuestion(link, "link")).toBe("What name would you like to use for your cleaning quote?");
+  });
+  it.each([
+    { field: "customerName", question: "What name would you like to use for your cleaning quote?" },
+    { field: "address", question: "What is the address for your cleaning?" },
+    { field: "requestedLocalDate", question: "Which upcoming date would you prefer for your cleaning?" },
+    { field: "requestedLocalTime", question: "What time would you prefer for your cleaning?" },
+  ] as const)("requires $field before either quote or link can return execution input", ({ field, question }) => {
+    for (const action of ["quote", "link"] as const) {
+      const fields = { ...fullFields }; delete fields[field];
+      const result = run(fields, { action });
+      expect(result.preview?.success).toBe(true); expect(result.input).toBeNull();
+      expect(result.missing).toEqual([field]); expect(result.state.fields).not.toHaveProperty(field);
+      expect(createSmsBookingQuoteMissingQuestion(result, action)).toBe(action === "quote" ? null : question);
+    }
   });
   it.each(["home", "hourly"] as const)("matches every service and recurrence using the canonical engine in %s mode", pricingMode => {
     for (const serviceId of ["standard", "deep", "moveout"] as const) {
@@ -498,7 +513,8 @@ describe("additive SMS overlay and side-effect-free dependency surface", () => {
       "1 = already clean", "5 = light / normal", "10 = severe buildup", "Higher means more work",
       "maidCount:1/hourCount:1", "actual customer-provided maid and hour counts", "extras:[] requires explicit",
       "one-time, weekly, biweekly or monthly", "not predating the latest extras change", "source turn timing",
-      "MUST NOT contain ANY dollar price", "server appends only verified canonical", "customer must review and complete booking on the page",
+      "MUST NOT contain ANY dollar price", "server appends a verified personalized canonical quote with its booking link", "customer must review and complete booking on the page",
+      "Use collect until ALL required quote/link details are known", "there is no price-only SMS quote",
       "Never claim anything was saved, sent, booked", "same-day future", "never default tomorrow/noon", "zero-based",
     ]) expect(SMS_BOOKING_QUOTE_INSTRUCTIONS).toContain(clause);
     for (const id of Object.keys(PUBLIC_BOOKING_PRICED_EXTRAS)) expect(SMS_BOOKING_QUOTE_INSTRUCTIONS).toContain(id);
