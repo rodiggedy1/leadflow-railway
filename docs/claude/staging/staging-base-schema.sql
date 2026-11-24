@@ -1,8 +1,17 @@
 -- LeadFlow STAGING base schema (no data). Generated offline from drizzle/schema.ts.
 -- Tables created by server/versioned-migrations are intentionally omitted; Railway's migration runner creates them.
 -- Run ONLY against the empty staging database. Never against production.
+--
+-- TiDB compatibility adjustments (staging only; drizzle/schema.ts and production are unchanged):
+--  1. TiDB rejects a literal expression default such as DEFAULT ('[]') on TEXT/JSON columns. Removed it from
+--     follow_ups.history, madison_sms_drafts.observations/suggestedActions/followUps and system_config.pausedServices.
+--     Columns stay NOT NULL. Every app insert into follow_ups and madison_sms_drafts supplies these values itself;
+--     system_config is not used by the app.
+--  2. TiDB limits an index key to 3072 bytes. push_subscriptions.idx_ps_endpoint covers a varchar(2048) column
+--     (up to 8192 bytes), so it is a 768-character prefix index here (768 x 4 bytes = 3072). Lookups still use it.
+-- Safe to re-run: every statement uses IF NOT EXISTS, so tables already created are skipped.
 
-CREATE TABLE `activity_log` (
+CREATE TABLE IF NOT EXISTS `activity_log` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`eventType` enum('lead_reply','ai_sms_sent','silence_nudge','scheduled_followup','always_on_batch','nightly_sync','review_send','booking','new_lead') NOT NULL,
 	`title` varchar(255) NOT NULL,
@@ -12,7 +21,7 @@ CREATE TABLE `activity_log` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `activity_log_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `agents` (
+CREATE TABLE IF NOT EXISTS `agents` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(255) NOT NULL,
 	`email` varchar(320) NOT NULL,
@@ -33,7 +42,7 @@ CREATE TABLE `agents` (
 	CONSTRAINT `agents_id` PRIMARY KEY(`id`),
 	CONSTRAINT `agents_email_unique` UNIQUE(`email`)
 );
-CREATE TABLE `ai_call_templates` (
+CREATE TABLE IF NOT EXISTS `ai_call_templates` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`scenario` varchar(64) NOT NULL,
 	`audience` varchar(16) NOT NULL,
@@ -44,7 +53,7 @@ CREATE TABLE `ai_call_templates` (
 	CONSTRAINT `ai_call_templates_id` PRIMARY KEY(`id`),
 	CONSTRAINT `idx_act_scenario_audience` UNIQUE(`scenario`,`audience`)
 );
-CREATE TABLE `ai_insights_cache` (
+CREATE TABLE IF NOT EXISTS `ai_insights_cache` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`rangeKey` varchar(10) NOT NULL,
 	`payload` text NOT NULL,
@@ -52,7 +61,7 @@ CREATE TABLE `ai_insights_cache` (
 	CONSTRAINT `ai_insights_cache_id` PRIMARY KEY(`id`),
 	CONSTRAINT `ai_insights_cache_rangeKey_unique` UNIQUE(`rangeKey`)
 );
-CREATE TABLE `always_on_enrollments` (
+CREATE TABLE IF NOT EXISTS `always_on_enrollments` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`groupId` int NOT NULL,
 	`completedJobId` int NOT NULL,
@@ -71,7 +80,7 @@ CREATE TABLE `always_on_enrollments` (
 	`enrolledAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `always_on_enrollments_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `always_on_groups` (
+CREATE TABLE IF NOT EXISTS `always_on_groups` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`groupType` varchar(30) NOT NULL,
 	`name` varchar(100) NOT NULL,
@@ -88,7 +97,7 @@ CREATE TABLE `always_on_groups` (
 	CONSTRAINT `always_on_groups_id` PRIMARY KEY(`id`),
 	CONSTRAINT `always_on_groups_groupType_unique` UNIQUE(`groupType`)
 );
-CREATE TABLE `app_settings` (
+CREATE TABLE IF NOT EXISTS `app_settings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`key` varchar(100) NOT NULL,
 	`value` text NOT NULL,
@@ -99,7 +108,7 @@ CREATE TABLE `app_settings` (
 	CONSTRAINT `app_settings_id` PRIMARY KEY(`id`),
 	CONSTRAINT `app_settings_key_unique` UNIQUE(`key`)
 );
-CREATE TABLE `call_log` (
+CREATE TABLE IF NOT EXISTS `call_log` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int,
 	`teamId` int,
@@ -126,7 +135,7 @@ CREATE TABLE `call_log` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `call_log_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `call_templates` (
+CREATE TABLE IF NOT EXISTS `call_templates` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(255) NOT NULL,
 	`triggerType` enum('arrival_confirmation','late_team','no_access','parking','delay_update','checkin_reminder','lockout_warning','lockout_final','utility_issue','completion_walkthrough','manual') NOT NULL,
@@ -138,7 +147,7 @@ CREATE TABLE `call_templates` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `call_templates_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `callback_tasks` (
+CREATE TABLE IF NOT EXISTS `callback_tasks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`voiceCallId` int,
 	`sessionId` int,
@@ -152,7 +161,7 @@ CREATE TABLE `callback_tasks` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `callback_tasks_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `campaign_approval_batches` (
+CREATE TABLE IF NOT EXISTS `campaign_approval_batches` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`groupId` int NOT NULL,
 	`groupType` varchar(30) NOT NULL,
@@ -171,7 +180,7 @@ CREATE TABLE `campaign_approval_batches` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `campaign_approval_batches_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `campaign_blasts` (
+CREATE TABLE IF NOT EXISTS `campaign_blasts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`campaignType` varchar(50) NOT NULL,
 	`campaignTitle` varchar(200) NOT NULL,
@@ -185,7 +194,7 @@ CREATE TABLE `campaign_blasts` (
 	`firedBy` varchar(255) DEFAULT 'admin',
 	CONSTRAINT `campaign_blasts_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `candidates` (
+CREATE TABLE IF NOT EXISTS `candidates` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`firstName` varchar(128) NOT NULL,
 	`lastName` varchar(128) NOT NULL,
@@ -219,7 +228,7 @@ CREATE TABLE `candidates` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `candidates_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `card_auth_tokens` (
+CREATE TABLE IF NOT EXISTS `card_auth_tokens` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`token` varchar(64) NOT NULL,
 	`customerPhone` varchar(30) NOT NULL,
@@ -234,7 +243,7 @@ CREATE TABLE `card_auth_tokens` (
 	CONSTRAINT `card_auth_tokens_id` PRIMARY KEY(`id`),
 	CONSTRAINT `card_auth_tokens_token_unique` UNIQUE(`token`)
 );
-CREATE TABLE `chain_executions` (
+CREATE TABLE IF NOT EXISTS `chain_executions` (
 	`id` varchar(64) NOT NULL,
 	`agentId` int NOT NULL,
 	`originalMessage` text NOT NULL,
@@ -245,7 +254,7 @@ CREATE TABLE `chain_executions` (
 	`completedAt` datetime(3),
 	CONSTRAINT `chain_executions_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `chain_step_executions` (
+CREATE TABLE IF NOT EXISTS `chain_step_executions` (
 	`id` varchar(64) NOT NULL,
 	`chainExecutionId` varchar(64) NOT NULL,
 	`stepId` varchar(128) NOT NULL,
@@ -264,7 +273,7 @@ CREATE TABLE `chain_step_executions` (
 	CONSTRAINT `chain_step_executions_idempotencyKey_unique` UNIQUE(`idempotencyKey`),
 	CONSTRAINT `uq_chain_step` UNIQUE(`chainExecutionId`,`stepId`)
 );
-CREATE TABLE `channel_pins` (
+CREATE TABLE IF NOT EXISTS `channel_pins` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`channel` varchar(64) NOT NULL,
 	`body` text NOT NULL,
@@ -273,7 +282,7 @@ CREATE TABLE `channel_pins` (
 	`dismissedAt` timestamp,
 	CONSTRAINT `channel_pins_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `chat_super_alerts` (
+CREATE TABLE IF NOT EXISTS `chat_super_alerts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`messageId` int NOT NULL,
 	`channel` varchar(64) NOT NULL DEFAULT 'command',
@@ -284,7 +293,7 @@ CREATE TABLE `chat_super_alerts` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `chat_super_alerts_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `cleaner_job_custom_rules` (
+CREATE TABLE IF NOT EXISTS `cleaner_job_custom_rules` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`customPayRuleId` int NOT NULL,
@@ -294,7 +303,7 @@ CREATE TABLE `cleaner_job_custom_rules` (
 	`appliedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `cleaner_job_custom_rules_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `cleaner_jobs` (
+CREATE TABLE IF NOT EXISTS `cleaner_jobs` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`completedJobId` int NOT NULL,
 	`bookingId` int,
@@ -367,7 +376,7 @@ CREATE TABLE `cleaner_jobs` (
 	CONSTRAINT `cleaner_jobs_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_cleaner_jobs_booking_profile` UNIQUE(`bookingId`,`cleanerProfileId`)
 );
-CREATE TABLE `cleaner_magic_link_tokens` (
+CREATE TABLE IF NOT EXISTS `cleaner_magic_link_tokens` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerProfileId` int NOT NULL,
 	`token` varchar(128) NOT NULL,
@@ -377,7 +386,7 @@ CREATE TABLE `cleaner_magic_link_tokens` (
 	CONSTRAINT `cleaner_magic_link_tokens_id` PRIMARY KEY(`id`),
 	CONSTRAINT `cleaner_magic_link_tokens_token_unique` UNIQUE(`token`)
 );
-CREATE TABLE `cleaner_profiles` (
+CREATE TABLE IF NOT EXISTS `cleaner_profiles` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(255) NOT NULL,
 	`phone` varchar(20),
@@ -392,7 +401,7 @@ CREATE TABLE `cleaner_profiles` (
 	CONSTRAINT `cleaner_profiles_id` PRIMARY KEY(`id`),
 	CONSTRAINT `cleaner_profiles_launch27TeamId_unique` UNIQUE(`launch27TeamId`)
 );
-CREATE TABLE `cleaner_rating_sms_log` (
+CREATE TABLE IF NOT EXISTS `cleaner_rating_sms_log` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerPhone` varchar(20) NOT NULL,
 	`cleanerJobId` int NOT NULL,
@@ -401,7 +410,7 @@ CREATE TABLE `cleaner_rating_sms_log` (
 	`sentAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `cleaner_rating_sms_log_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `cleaner_streaks` (
+CREATE TABLE IF NOT EXISTS `cleaner_streaks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerProfileId` int NOT NULL,
 	`currentStreak` int NOT NULL DEFAULT 0,
@@ -411,7 +420,7 @@ CREATE TABLE `cleaner_streaks` (
 	CONSTRAINT `cleaner_streaks_id` PRIMARY KEY(`id`),
 	CONSTRAINT `cleaner_streaks_cleanerProfileId_unique` UNIQUE(`cleanerProfileId`)
 );
-CREATE TABLE `command_center_cache` (
+CREATE TABLE IF NOT EXISTS `command_center_cache` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cacheKey` varchar(50) NOT NULL,
 	`rangeKey` varchar(10) NOT NULL DEFAULT 'none',
@@ -419,7 +428,7 @@ CREATE TABLE `command_center_cache` (
 	`generatedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `command_center_cache_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `completed_job_batches` (
+CREATE TABLE IF NOT EXISTS `completed_job_batches` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`filename` varchar(255) NOT NULL,
 	`jobDate` varchar(20),
@@ -431,7 +440,7 @@ CREATE TABLE `completed_job_batches` (
 	`uploadedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `completed_job_batches_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `completed_jobs` (
+CREATE TABLE IF NOT EXISTS `completed_jobs` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`batchId` int NOT NULL,
 	`phone` varchar(20) NOT NULL,
@@ -457,7 +466,7 @@ CREATE TABLE `completed_jobs` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `completed_jobs_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `confirmation_calls` (
+CREATE TABLE IF NOT EXISTS `confirmation_calls` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int,
 	`leadflowJobId` int,
@@ -492,7 +501,7 @@ CREATE TABLE `confirmation_calls` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `confirmation_calls_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `conversation_sessions` (
+CREATE TABLE IF NOT EXISTS `conversation_sessions` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`leadPhone` varchar(30) NOT NULL,
 	`leadName` varchar(255),
@@ -575,7 +584,7 @@ CREATE TABLE `conversation_sessions` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `conversation_sessions_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `cron_heartbeats` (
+CREATE TABLE IF NOT EXISTS `cron_heartbeats` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`jobName` varchar(50) NOT NULL,
 	`resultSummary` varchar(500),
@@ -583,7 +592,7 @@ CREATE TABLE `cron_heartbeats` (
 	`ranAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `cron_heartbeats_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `cs_draft_examples` (
+CREATE TABLE IF NOT EXISTS `cs_draft_examples` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionId` int NOT NULL,
 	`pairIndex` int NOT NULL,
@@ -600,7 +609,7 @@ CREATE TABLE `cs_draft_examples` (
 	CONSTRAINT `cs_draft_examples_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_cs_draft_examples_session_pair` UNIQUE(`sessionId`,`pairIndex`)
 );
-CREATE TABLE `cs_missions` (
+CREATE TABLE IF NOT EXISTS `cs_missions` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionId` int NOT NULL,
 	`agentId` int NOT NULL,
@@ -624,7 +633,7 @@ CREATE TABLE `cs_missions` (
 	CONSTRAINT `cs_missions_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_cs_mission_active_dedup` UNIQUE(`activeDedupKey`)
 );
-CREATE TABLE `custom_pay_rules` (
+CREATE TABLE IF NOT EXISTS `custom_pay_rules` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`label` varchar(128) NOT NULL,
 	`type` varchar(16) NOT NULL DEFAULT 'bonus',
@@ -635,7 +644,7 @@ CREATE TABLE `custom_pay_rules` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `custom_pay_rules_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `drive_time_cache` (
+CREATE TABLE IF NOT EXISTS `drive_time_cache` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`routeKey` varchar(100) NOT NULL,
 	`durationSeconds` int NOT NULL,
@@ -643,7 +652,7 @@ CREATE TABLE `drive_time_cache` (
 	CONSTRAINT `drive_time_cache_id` PRIMARY KEY(`id`),
 	CONSTRAINT `drive_time_cache_routeKey_unique` UNIQUE(`routeKey`)
 );
-CREATE TABLE `field_mgmt_calls` (
+CREATE TABLE IF NOT EXISTS `field_mgmt_calls` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`clientStatusInquirySessionId` int,
 	`cleanerJobId` int NOT NULL,
@@ -666,7 +675,7 @@ CREATE TABLE `field_mgmt_calls` (
 	CONSTRAINT `field_mgmt_calls_id` PRIMARY KEY(`id`),
 	CONSTRAINT `field_mgmt_calls_vapiCallId_unique` UNIQUE(`vapiCallId`)
 );
-CREATE TABLE `field_mgmt_log` (
+CREATE TABLE IF NOT EXISTS `field_mgmt_log` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`step` varchar(100) NOT NULL,
@@ -679,7 +688,7 @@ CREATE TABLE `field_mgmt_log` (
 	`firedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `field_mgmt_log_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `follow_ups` (
+CREATE TABLE IF NOT EXISTS `follow_ups` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(255) NOT NULL,
 	`nextStep` varchar(255) NOT NULL,
@@ -689,14 +698,14 @@ CREATE TABLE `follow_ups` (
 	`priority` enum('High','Normal','Low') NOT NULL DEFAULT 'Normal',
 	`internalNote` text,
 	`customerFacingMove` text,
-	`history` text NOT NULL DEFAULT ('[]'),
+	`history` text NOT NULL,
 	`reminderSentAt` bigint,
 	`completedAt` bigint,
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `follow_ups_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `gbp_state` (
+CREATE TABLE IF NOT EXISTS `gbp_state` (
 	`id` int NOT NULL,
 	`refreshToken` text NOT NULL,
 	`accountName` varchar(128) DEFAULT '',
@@ -704,7 +713,7 @@ CREATE TABLE `gbp_state` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `gbp_state_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `gmail_sender_policies` (
+CREATE TABLE IF NOT EXISTS `gmail_sender_policies` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`senderEmail` varchar(255),
 	`senderDomain` varchar(255),
@@ -714,7 +723,7 @@ CREATE TABLE `gmail_sender_policies` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `gmail_sender_policies_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `gmail_sent_log` (
+CREATE TABLE IF NOT EXISTS `gmail_sent_log` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`threadId` varchar(255) NOT NULL,
 	`messageId` varchar(255) NOT NULL,
@@ -725,7 +734,7 @@ CREATE TABLE `gmail_sent_log` (
 	CONSTRAINT `gmail_sent_log_id` PRIMARY KEY(`id`),
 	CONSTRAINT `gmail_sent_log_messageId_unique` UNIQUE(`messageId`)
 );
-CREATE TABLE `gmail_state` (
+CREATE TABLE IF NOT EXISTS `gmail_state` (
 	`id` int NOT NULL,
 	`refreshToken` text NOT NULL,
 	`historyId` varchar(50) NOT NULL DEFAULT '0',
@@ -735,7 +744,7 @@ CREATE TABLE `gmail_state` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `gmail_state_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `gmail_thread_meta` (
+CREATE TABLE IF NOT EXISTS `gmail_thread_meta` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`threadId` varchar(255) NOT NULL,
 	`isIssue` int NOT NULL DEFAULT 0,
@@ -770,7 +779,7 @@ CREATE TABLE `gmail_thread_meta` (
 	CONSTRAINT `gmail_thread_meta_id` PRIMARY KEY(`id`),
 	CONSTRAINT `gmail_thread_meta_threadId_unique` UNIQUE(`threadId`)
 );
-CREATE TABLE `google_api_usage` (
+CREATE TABLE IF NOT EXISTS `google_api_usage` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`date` varchar(10) NOT NULL,
 	`geocodeCalls` int NOT NULL DEFAULT 0,
@@ -780,7 +789,7 @@ CREATE TABLE `google_api_usage` (
 	CONSTRAINT `google_api_usage_id` PRIMARY KEY(`id`),
 	CONSTRAINT `google_api_usage_date_unique` UNIQUE(`date`)
 );
-CREATE TABLE `inbound_sms` (
+CREATE TABLE IF NOT EXISTS `inbound_sms` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`fromPhone` varchar(32) NOT NULL,
 	`toPhone` varchar(32),
@@ -798,7 +807,7 @@ CREATE TABLE `inbound_sms` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `inbound_sms_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `interview_chunks` (
+CREATE TABLE IF NOT EXISTS `interview_chunks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionId` varchar(128) NOT NULL,
 	`chunkIndex` int NOT NULL,
@@ -806,7 +815,7 @@ CREATE TABLE `interview_chunks` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `interview_chunks_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `invoiceTemplates` (
+CREATE TABLE IF NOT EXISTS `invoiceTemplates` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`customerName` varchar(255) NOT NULL,
 	`billTo` text NOT NULL,
@@ -817,7 +826,7 @@ CREATE TABLE `invoiceTemplates` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `invoiceTemplates_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `invoices` (
+CREATE TABLE IF NOT EXISTS `invoices` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`invoiceNumber` int NOT NULL,
 	`templateId` int NOT NULL,
@@ -833,7 +842,7 @@ CREATE TABLE `invoices` (
 	CONSTRAINT `invoices_id` PRIMARY KEY(`id`),
 	CONSTRAINT `invoices_invoiceNumber_unique` UNIQUE(`invoiceNumber`)
 );
-CREATE TABLE `issue_comments` (
+CREATE TABLE IF NOT EXISTS `issue_comments` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`issue_key` varchar(255) NOT NULL,
 	`author_name` varchar(255) NOT NULL,
@@ -842,7 +851,7 @@ CREATE TABLE `issue_comments` (
 	`created_at` bigint NOT NULL,
 	CONSTRAINT `issue_comments_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `issue_engine` (
+CREATE TABLE IF NOT EXISTS `issue_engine` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`title` varchar(255) NOT NULL,
 	`issueType` enum('late_team','refund_request','angry_customer','no_show','access_problem','payment_problem','reschedule_needed','broken_item','manager_review','internal_task','other') NOT NULL DEFAULT 'other',
@@ -859,7 +868,7 @@ CREATE TABLE `issue_engine` (
 	`resolvedAt` bigint,
 	CONSTRAINT `issue_engine_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `issue_engine_timeline` (
+CREATE TABLE IF NOT EXISTS `issue_engine_timeline` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`issueId` int NOT NULL,
 	`event` varchar(512) NOT NULL,
@@ -867,7 +876,7 @@ CREATE TABLE `issue_engine_timeline` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `issue_engine_timeline_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `issue_flags` (
+CREATE TABLE IF NOT EXISTS `issue_flags` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`issueNote` text NOT NULL,
@@ -881,7 +890,7 @@ CREATE TABLE `issue_flags` (
 	`hasPhoto` int NOT NULL DEFAULT 0,
 	CONSTRAINT `issue_flags_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `issue_ownership` (
+CREATE TABLE IF NOT EXISTS `issue_ownership` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`issueKey` varchar(128) NOT NULL,
 	`claimedBy` varchar(128),
@@ -893,7 +902,7 @@ CREATE TABLE `issue_ownership` (
 	CONSTRAINT `issue_ownership_id` PRIMARY KEY(`id`),
 	CONSTRAINT `issue_ownership_issueKey_unique` UNIQUE(`issueKey`)
 );
-CREATE TABLE `job_alerts` (
+CREATE TABLE IF NOT EXISTS `job_alerts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`alertType` varchar(50) NOT NULL,
@@ -903,7 +912,7 @@ CREATE TABLE `job_alerts` (
 	CONSTRAINT `job_alerts_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_job_alert` UNIQUE(`cleanerJobId`,`alertType`)
 );
-CREATE TABLE `job_geo_cache` (
+CREATE TABLE IF NOT EXISTS `job_geo_cache` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`addressKey` varchar(500) NOT NULL,
 	`originalAddress` varchar(500) NOT NULL,
@@ -914,7 +923,7 @@ CREATE TABLE `job_geo_cache` (
 	CONSTRAINT `job_geo_cache_id` PRIMARY KEY(`id`),
 	CONSTRAINT `job_geo_cache_addressKey_unique` UNIQUE(`addressKey`)
 );
-CREATE TABLE `job_issues` (
+CREATE TABLE IF NOT EXISTS `job_issues` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`jobDate` varchar(20) NOT NULL,
@@ -928,7 +937,7 @@ CREATE TABLE `job_issues` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `job_issues_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `job_photos` (
+CREATE TABLE IF NOT EXISTS `job_photos` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`completedJobId` int NOT NULL,
@@ -942,7 +951,7 @@ CREATE TABLE `job_photos` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `job_photos_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `job_sms_replies` (
+CREATE TABLE IF NOT EXISTS `job_sms_replies` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`senderType` varchar(16) NOT NULL,
@@ -954,7 +963,7 @@ CREATE TABLE `job_sms_replies` (
 	CONSTRAINT `job_sms_replies_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_jsr_openphone_msg_id` UNIQUE(`openPhoneMessageId`)
 );
-CREATE TABLE `job_status_history` (
+CREATE TABLE IF NOT EXISTS `job_status_history` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`status` varchar(64) NOT NULL,
@@ -962,7 +971,7 @@ CREATE TABLE `job_status_history` (
 	`changedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `job_status_history_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `lead_assignments` (
+CREATE TABLE IF NOT EXISTS `lead_assignments` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionId` int NOT NULL,
 	`agentId` int NOT NULL,
@@ -976,7 +985,7 @@ CREATE TABLE `lead_assignments` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `lead_assignments_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `lead_call_logs` (
+CREATE TABLE IF NOT EXISTS `lead_call_logs` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionId` int NOT NULL,
 	`agentId` int NOT NULL,
@@ -986,7 +995,7 @@ CREATE TABLE `lead_call_logs` (
 	`calledAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `lead_call_logs_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `madison_action_items` (
+CREATE TABLE IF NOT EXISTS `madison_action_items` (
 	`id` bigint AUTO_INCREMENT NOT NULL,
 	`actionId` varchar(64) NOT NULL,
 	`readinessItemId` varchar(255) NOT NULL,
@@ -996,7 +1005,7 @@ CREATE TABLE `madison_action_items` (
 	CONSTRAINT `madison_action_items_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_action_item` UNIQUE(`actionId`,`readinessItemId`)
 );
-CREATE TABLE `madison_actions` (
+CREATE TABLE IF NOT EXISTS `madison_actions` (
 	`id` varchar(64) NOT NULL,
 	`conversationAgentId` int NOT NULL,
 	`actionType` varchar(64) NOT NULL,
@@ -1019,7 +1028,7 @@ CREATE TABLE `madison_actions` (
 	`undoExpiresAt` datetime(3),
 	CONSTRAINT `madison_actions_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `madison_conversation_context` (
+CREATE TABLE IF NOT EXISTS `madison_conversation_context` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`agentId` int NOT NULL,
 	`activeDomain` varchar(64),
@@ -1034,7 +1043,7 @@ CREATE TABLE `madison_conversation_context` (
 	CONSTRAINT `madison_conversation_context_id` PRIMARY KEY(`id`),
 	CONSTRAINT `madison_conversation_context_agentId_unique` UNIQUE(`agentId`)
 );
-CREATE TABLE `madison_email_drafts` (
+CREATE TABLE IF NOT EXISTS `madison_email_drafts` (
 	`id` bigint AUTO_INCREMENT NOT NULL,
 	`threadId` varchar(255) NOT NULL,
 	`inboundMessageId` varchar(255) NOT NULL,
@@ -1073,7 +1082,7 @@ CREATE TABLE `madison_email_drafts` (
 	CONSTRAINT `madison_email_drafts_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_email_draft_inbound` UNIQUE(`inboundMessageId`)
 );
-CREATE TABLE `madison_missions` (
+CREATE TABLE IF NOT EXISTS `madison_missions` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`missionId` varchar(64) NOT NULL,
 	`agentId` int NOT NULL,
@@ -1091,7 +1100,7 @@ CREATE TABLE `madison_missions` (
 	CONSTRAINT `madison_missions_id` PRIMARY KEY(`id`),
 	CONSTRAINT `madison_missions_missionId_unique` UNIQUE(`missionId`)
 );
-CREATE TABLE `madison_sms_drafts` (
+CREATE TABLE IF NOT EXISTS `madison_sms_drafts` (
 	`id` bigint AUTO_INCREMENT NOT NULL,
 	`inboundOpenPhoneId` varchar(128) NOT NULL,
 	`sessionId` bigint NOT NULL,
@@ -1106,9 +1115,9 @@ CREATE TABLE `madison_sms_drafts` (
 	`resolvedContext` json,
 	`capabilityArgs` json,
 	`capabilityResult` json,
-	`observations` json NOT NULL DEFAULT ('[]'),
-	`suggestedActions` json NOT NULL DEFAULT ('[]'),
-	`followUps` json NOT NULL DEFAULT ('[]'),
+	`observations` json NOT NULL,
+	`suggestedActions` json NOT NULL,
+	`followUps` json NOT NULL,
 	`qualityScore` json,
 	`originalMessage` text NOT NULL,
 	`intentSummary` text,
@@ -1132,7 +1141,7 @@ CREATE TABLE `madison_sms_drafts` (
 	CONSTRAINT `madison_sms_drafts_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_sms_draft_inbound` UNIQUE(`inboundOpenPhoneId`)
 );
-CREATE TABLE `message_integrity_checks` (
+CREATE TABLE IF NOT EXISTS `message_integrity_checks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionId` int NOT NULL,
 	`leadName` varchar(255),
@@ -1145,7 +1154,7 @@ CREATE TABLE `message_integrity_checks` (
 	`firstDetectedAt` bigint,
 	CONSTRAINT `message_integrity_checks_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `message_templates` (
+CREATE TABLE IF NOT EXISTS `message_templates` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`flowType` enum('reactivation','review') NOT NULL,
 	`stepKey` varchar(100) NOT NULL,
@@ -1158,14 +1167,14 @@ CREATE TABLE `message_templates` (
 	CONSTRAINT `message_templates_id` PRIMARY KEY(`id`),
 	CONSTRAINT `message_templates_stepKey_unique` UNIQUE(`stepKey`)
 );
-CREATE TABLE `metrics_ai_alerts` (
+CREATE TABLE IF NOT EXISTS `metrics_ai_alerts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`range` varchar(10) NOT NULL DEFAULT '12m',
 	`alertsJson` text NOT NULL,
 	`generatedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `metrics_ai_alerts_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `missed_calls` (
+CREATE TABLE IF NOT EXISTS `missed_calls` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`openphoneCallId` varchar(255) NOT NULL,
 	`callerPhone` varchar(20) NOT NULL,
@@ -1182,7 +1191,7 @@ CREATE TABLE `missed_calls` (
 	CONSTRAINT `missed_calls_id` PRIMARY KEY(`id`),
 	CONSTRAINT `missed_calls_openphoneCallId_unique` UNIQUE(`openphoneCallId`)
 );
-CREATE TABLE `nurture_enrollments` (
+CREATE TABLE IF NOT EXISTS `nurture_enrollments` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionId` int NOT NULL,
 	`leadPhone` varchar(30) NOT NULL,
@@ -1204,13 +1213,13 @@ CREATE TABLE `nurture_enrollments` (
 	CONSTRAINT `nurture_enrollments_id` PRIMARY KEY(`id`),
 	CONSTRAINT `nurture_enrollments_sessionId_unique` UNIQUE(`sessionId`)
 );
-CREATE TABLE `nurture_step_scripts` (
+CREATE TABLE IF NOT EXISTS `nurture_step_scripts` (
 	`step` int NOT NULL,
 	`body` text NOT NULL,
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `nurture_step_scripts_step` PRIMARY KEY(`step`)
 );
-CREATE TABLE `openphone_call_recordings` (
+CREATE TABLE IF NOT EXISTS `openphone_call_recordings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionId` int NOT NULL,
 	`openphoneCallId` varchar(255) NOT NULL,
@@ -1228,7 +1237,7 @@ CREATE TABLE `openphone_call_recordings` (
 	CONSTRAINT `openphone_call_recordings_id` PRIMARY KEY(`id`),
 	CONSTRAINT `openphone_call_recordings_openphoneCallId_unique` UNIQUE(`openphoneCallId`)
 );
-CREATE TABLE `ops_chat_messages` (
+CREATE TABLE IF NOT EXISTS `ops_chat_messages` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int,
 	`channel` varchar(64),
@@ -1251,7 +1260,7 @@ CREATE TABLE `ops_chat_messages` (
 	CONSTRAINT `ops_chat_messages_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_ops_active_sms_card` UNIQUE(`activeDedupKey`)
 );
-CREATE TABLE `ops_chat_reactions` (
+CREATE TABLE IF NOT EXISTS `ops_chat_reactions` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`messageId` int NOT NULL,
 	`callerId` varchar(128) NOT NULL,
@@ -1261,7 +1270,7 @@ CREATE TABLE `ops_chat_reactions` (
 	CONSTRAINT `ops_chat_reactions_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_ocreact` UNIQUE(`messageId`,`callerId`,`emoji`)
 );
-CREATE TABLE `ops_chat_reads` (
+CREATE TABLE IF NOT EXISTS `ops_chat_reads` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`callerId` varchar(128) NOT NULL,
 	`callerName` varchar(128) NOT NULL,
@@ -1271,7 +1280,7 @@ CREATE TABLE `ops_chat_reads` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `ops_chat_reads_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `ops_reminders` (
+CREATE TABLE IF NOT EXISTS `ops_reminders` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`channel` varchar(64) NOT NULL,
 	`body` text NOT NULL,
@@ -1284,7 +1293,7 @@ CREATE TABLE `ops_reminders` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `ops_reminders_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `ops_tasks` (
+CREATE TABLE IF NOT EXISTS `ops_tasks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`title` varchar(255) NOT NULL,
 	`description` text,
@@ -1301,7 +1310,7 @@ CREATE TABLE `ops_tasks` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ops_tasks_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `page_views` (
+CREATE TABLE IF NOT EXISTS `page_views` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`sessionKey` varchar(64) NOT NULL,
 	`utmSource` varchar(100),
@@ -1312,7 +1321,7 @@ CREATE TABLE `page_views` (
 	CONSTRAINT `page_views_id` PRIMARY KEY(`id`),
 	CONSTRAINT `page_views_sessionKey_unique` UNIQUE(`sessionKey`)
 );
-CREATE TABLE `payment_authorizations` (
+CREATE TABLE IF NOT EXISTS `payment_authorizations` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int,
 	`bookingPaymentProfileId` int,
@@ -1338,7 +1347,7 @@ CREATE TABLE `payment_authorizations` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `payment_authorizations_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `push_subscriptions` (
+CREATE TABLE IF NOT EXISTS `push_subscriptions` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`agentKey` varchar(128) NOT NULL,
 	`endpoint` varchar(2048) NOT NULL,
@@ -1347,7 +1356,7 @@ CREATE TABLE `push_subscriptions` (
 	`lastUsedAt` timestamp,
 	CONSTRAINT `push_subscriptions_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `quote_leads` (
+CREATE TABLE IF NOT EXISTS `quote_leads` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(255) NOT NULL,
 	`email` varchar(320),
@@ -1361,7 +1370,7 @@ CREATE TABLE `quote_leads` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `quote_leads_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `rating_sms_pending` (
+CREATE TABLE IF NOT EXISTS `rating_sms_pending` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`completedJobId` int NOT NULL,
 	`cleanerJobId` int,
@@ -1378,7 +1387,7 @@ CREATE TABLE `rating_sms_pending` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `rating_sms_pending_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `reactivation_campaigns` (
+CREATE TABLE IF NOT EXISTS `reactivation_campaigns` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(255) NOT NULL,
 	`messageTemplate` text NOT NULL,
@@ -1395,7 +1404,7 @@ CREATE TABLE `reactivation_campaigns` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `reactivation_campaigns_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `reactivation_contacts` (
+CREATE TABLE IF NOT EXISTS `reactivation_contacts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`campaignId` int NOT NULL,
 	`phone` varchar(20) NOT NULL,
@@ -1417,7 +1426,7 @@ CREATE TABLE `reactivation_contacts` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `reactivation_contacts_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `readiness_acknowledgements` (
+CREATE TABLE IF NOT EXISTS `readiness_acknowledgements` (
 	`id` bigint AUTO_INCREMENT NOT NULL,
 	`jobId` varchar(64) NOT NULL,
 	`serviceDate` date NOT NULL,
@@ -1431,7 +1440,7 @@ CREATE TABLE `readiness_acknowledgements` (
 	CONSTRAINT `readiness_acknowledgements_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_active_readiness_ack` UNIQUE(`jobId`,`serviceDate`,`issueType`,`activeMarker`)
 );
-CREATE TABLE `response_templates` (
+CREATE TABLE IF NOT EXISTS `response_templates` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`title` varchar(255) NOT NULL,
 	`category` varchar(100) NOT NULL,
@@ -1442,7 +1451,7 @@ CREATE TABLE `response_templates` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `response_templates_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `schedule_assignments` (
+CREATE TABLE IF NOT EXISTS `schedule_assignments` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`jobDate` varchar(20) NOT NULL,
 	`cleanerJobId` int NOT NULL,
@@ -1460,7 +1469,7 @@ CREATE TABLE `schedule_assignments` (
 	CONSTRAINT `schedule_assignments_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_schedule_job_date` UNIQUE(`cleanerJobId`,`jobDate`)
 );
-CREATE TABLE `schedule_job_locks` (
+CREATE TABLE IF NOT EXISTS `schedule_job_locks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`jobId` int NOT NULL,
 	`date` varchar(10) NOT NULL,
@@ -1469,7 +1478,7 @@ CREATE TABLE `schedule_job_locks` (
 	`lockedAt` bigint NOT NULL,
 	CONSTRAINT `schedule_job_locks_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `scheduling_teams` (
+CREATE TABLE IF NOT EXISTS `scheduling_teams` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(255) NOT NULL,
 	`launch27TeamId` int,
@@ -1490,7 +1499,7 @@ CREATE TABLE `scheduling_teams` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `scheduling_teams_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `sms_campaign_recipients` (
+CREATE TABLE IF NOT EXISTS `sms_campaign_recipients` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`campaignId` int NOT NULL,
 	`phone` varchar(30) NOT NULL,
@@ -1517,7 +1526,7 @@ CREATE TABLE `sms_campaign_recipients` (
 	CONSTRAINT `sms_campaign_recipients_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uq_campaign_phone` UNIQUE(`campaignId`,`phoneNormalized`)
 );
-CREATE TABLE `sms_campaign_send_log` (
+CREATE TABLE IF NOT EXISTS `sms_campaign_send_log` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`campaignId` int NOT NULL,
 	`recipientId` int NOT NULL,
@@ -1532,7 +1541,7 @@ CREATE TABLE `sms_campaign_send_log` (
 	`attemptedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `sms_campaign_send_log_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `sms_campaigns` (
+CREATE TABLE IF NOT EXISTS `sms_campaigns` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(255) NOT NULL,
 	`status` enum('DRAFT','FROZEN','APPROVED','SENDING','PAUSED','COMPLETED','CANCELLED') NOT NULL DEFAULT 'DRAFT',
@@ -1564,7 +1573,7 @@ CREATE TABLE `sms_campaigns` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `sms_campaigns_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `sms_opt_outs` (
+CREATE TABLE IF NOT EXISTS `sms_opt_outs` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`phone` varchar(20) NOT NULL,
 	`optedOutAt` timestamp NOT NULL DEFAULT (now()),
@@ -1573,7 +1582,7 @@ CREATE TABLE `sms_opt_outs` (
 	CONSTRAINT `sms_opt_outs_id` PRIMARY KEY(`id`),
 	CONSTRAINT `sms_opt_outs_phone_unique` UNIQUE(`phone`)
 );
-CREATE TABLE `step_locks` (
+CREATE TABLE IF NOT EXISTS `step_locks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerJobId` int NOT NULL,
 	`step` varchar(100) NOT NULL,
@@ -1581,7 +1590,7 @@ CREATE TABLE `step_locks` (
 	CONSTRAINT `step_locks_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_step_locks_job_step` UNIQUE(`cleanerJobId`,`step`)
 );
-CREATE TABLE `stripe_customers` (
+CREATE TABLE IF NOT EXISTS `stripe_customers` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`phone` varchar(30) NOT NULL,
 	`name` varchar(255),
@@ -1597,7 +1606,7 @@ CREATE TABLE `stripe_customers` (
 	CONSTRAINT `stripe_customers_id` PRIMARY KEY(`id`),
 	CONSTRAINT `stripe_customers_phone_unique` UNIQUE(`phone`)
 );
-CREATE TABLE `sync_runs` (
+CREATE TABLE IF NOT EXISTS `sync_runs` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`runType` enum('launch27-sync','always-on-send') NOT NULL,
 	`status` enum('success','partial','error','skipped') NOT NULL,
@@ -1615,13 +1624,13 @@ CREATE TABLE `sync_runs` (
 	`completedAt` timestamp,
 	CONSTRAINT `sync_runs_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `system_config` (
+CREATE TABLE IF NOT EXISTS `system_config` (
 	`id` int AUTO_INCREMENT NOT NULL,
-	`pausedServices` json NOT NULL DEFAULT ('[]'),
+	`pausedServices` json NOT NULL,
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `system_config_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `team_availability_checkins` (
+CREATE TABLE IF NOT EXISTS `team_availability_checkins` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`cleanerProfileId` int NOT NULL,
 	`submittedForDate` varchar(20) NOT NULL,
@@ -1633,7 +1642,7 @@ CREATE TABLE `team_availability_checkins` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `team_availability_checkins_id` PRIMARY KEY(`id`)
 );
-CREATE TABLE `team_day_config` (
+CREATE TABLE IF NOT EXISTS `team_day_config` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`teamId` int NOT NULL,
 	`date` varchar(20) NOT NULL,
@@ -1644,7 +1653,7 @@ CREATE TABLE `team_day_config` (
 	CONSTRAINT `team_day_config_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_team_day_config` UNIQUE(`teamId`,`date`)
 );
-CREATE TABLE `team_day_lock` (
+CREATE TABLE IF NOT EXISTS `team_day_lock` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`teamId` int NOT NULL,
 	`date` varchar(20) NOT NULL,
@@ -1652,7 +1661,7 @@ CREATE TABLE `team_day_lock` (
 	CONSTRAINT `team_day_lock_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_team_day_lock` UNIQUE(`teamId`,`date`)
 );
-CREATE TABLE `team_day_override` (
+CREATE TABLE IF NOT EXISTS `team_day_override` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`teamId` int NOT NULL,
 	`date` varchar(20) NOT NULL,
@@ -1663,7 +1672,7 @@ CREATE TABLE `team_day_override` (
 	CONSTRAINT `team_day_override_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_tdo_team_date` UNIQUE(`teamId`,`date`)
 );
-CREATE TABLE `team_day_unavailability` (
+CREATE TABLE IF NOT EXISTS `team_day_unavailability` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`teamId` int NOT NULL,
 	`date` varchar(20) NOT NULL,
@@ -1671,7 +1680,7 @@ CREATE TABLE `team_day_unavailability` (
 	CONSTRAINT `team_day_unavailability_id` PRIMARY KEY(`id`),
 	CONSTRAINT `uniq_team_day` UNIQUE(`teamId`,`date`)
 );
-CREATE TABLE `team_work_schedule` (
+CREATE TABLE IF NOT EXISTS `team_work_schedule` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`teamId` int NOT NULL,
 	`mon` tinyint NOT NULL DEFAULT 1,
@@ -1686,7 +1695,7 @@ CREATE TABLE `team_work_schedule` (
 	CONSTRAINT `team_work_schedule_id` PRIMARY KEY(`id`),
 	CONSTRAINT `team_work_schedule_teamId_unique` UNIQUE(`teamId`)
 );
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`openId` varchar(64) NOT NULL,
 	`name` text,
@@ -1700,7 +1709,7 @@ CREATE TABLE `users` (
 	CONSTRAINT `users_id` PRIMARY KEY(`id`),
 	CONSTRAINT `users_openId_unique` UNIQUE(`openId`)
 );
-CREATE TABLE `voice_calls` (
+CREATE TABLE IF NOT EXISTS `voice_calls` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`vapiCallId` varchar(128) NOT NULL,
 	`sessionId` int,
@@ -1717,96 +1726,96 @@ CREATE TABLE `voice_calls` (
 	CONSTRAINT `voice_calls_id` PRIMARY KEY(`id`),
 	CONSTRAINT `voice_calls_vapiCallId_unique` UNIQUE(`vapiCallId`)
 );
-CREATE INDEX `idx_cl_job_date` ON `call_log` (`jobDate`);
-CREATE INDEX `idx_cl_job_id` ON `call_log` (`cleanerJobId`);
-CREATE INDEX `idx_cl_vapi` ON `call_log` (`vapiCallId`);
-CREATE INDEX `idx_cand_phone` ON `candidates` (`phone`);
-CREATE INDEX `idx_cand_stage` ON `candidates` (`stage`);
-CREATE INDEX `idx_cand_created` ON `candidates` (`createdAt`);
-CREATE INDEX `idx_chain_exec_agent` ON `chain_executions` (`agentId`,`createdAt`);
-CREATE INDEX `idx_chain_step_chain` ON `chain_step_executions` (`chainExecutionId`,`stepId`);
-CREATE INDEX `idx_cp_channel` ON `channel_pins` (`channel`);
-CREATE INDEX `idx_csa_message` ON `chat_super_alerts` (`messageId`);
-CREATE INDEX `idx_csa_target` ON `chat_super_alerts` (`targetAgentName`);
-CREATE INDEX `idx_cjcr_cleaner_job` ON `cleaner_job_custom_rules` (`cleanerJobId`);
-CREATE INDEX `idx_cleaner_jobs_job_date` ON `cleaner_jobs` (`jobDate`);
-CREATE INDEX `idx_cmlt_cleaner_profile` ON `cleaner_magic_link_tokens` (`cleanerProfileId`);
-CREATE INDEX `idx_cmlt_token` ON `cleaner_magic_link_tokens` (`token`);
-CREATE INDEX `idx_crsl_phone` ON `cleaner_rating_sms_log` (`cleanerPhone`);
-CREATE INDEX `idx_crsl_job` ON `cleaner_rating_sms_log` (`cleanerJobId`);
-CREATE INDEX `idx_cc_job_date` ON `confirmation_calls` (`jobDate`);
-CREATE INDEX `idx_cc_job_id` ON `confirmation_calls` (`cleanerJobId`);
-CREATE INDEX `idx_cc_leadflow_job_id` ON `confirmation_calls` (`leadflowJobId`);
-CREATE INDEX `idx_cc_vapi` ON `confirmation_calls` (`vapiCallId`);
-CREATE INDEX `idx_cs_draft_examples_intent` ON `cs_draft_examples` (`primaryIntent`);
-CREATE INDEX `idx_cs_draft_examples_customer_type` ON `cs_draft_examples` (`customerType`);
-CREATE INDEX `idx_cs_draft_examples_msg_ts` ON `cs_draft_examples` (`msgTs`);
-CREATE INDEX `idx_cs_missions_session` ON `cs_missions` (`sessionId`);
-CREATE INDEX `idx_cs_missions_session_status` ON `cs_missions` (`sessionId`,`status`);
-CREATE INDEX `idx_dtc_route_key` ON `drive_time_cache` (`routeKey`);
-CREATE INDEX `idx_fmc_cleaner_job_id` ON `field_mgmt_calls` (`cleanerJobId`);
-CREATE INDEX `idx_fu_due_at` ON `follow_ups` (`dueAt`);
-CREATE INDEX `idx_fu_completed_at` ON `follow_ups` (`completedAt`);
-CREATE INDEX `idx_isms_from_phone` ON `inbound_sms` (`fromPhone`);
-CREATE INDEX `idx_isms_status` ON `inbound_sms` (`processingStatus`);
-CREATE INDEX `idx_isms_msg_id` ON `inbound_sms` (`openPhoneMessageId`);
-CREATE INDEX `idx_ichunk_session` ON `interview_chunks` (`sessionId`);
-CREATE INDEX `idx_invoices_templateId` ON `invoices` (`templateId`);
-CREATE INDEX `idx_invoices_customerName` ON `invoices` (`customerName`);
-CREATE INDEX `idx_ie_status` ON `issue_engine` (`status`);
-CREATE INDEX `idx_ie_session` ON `issue_engine` (`relatedSessionId`);
-CREATE INDEX `idx_iet_issue` ON `issue_engine_timeline` (`issueId`);
-CREATE INDEX `idx_if_job` ON `issue_flags` (`cleanerJobId`);
-CREATE INDEX `idx_if_open` ON `issue_flags` (`resolvedAt`);
-CREATE INDEX `idx_io_key` ON `issue_ownership` (`issueKey`);
-CREATE INDEX `idx_io_resolved` ON `issue_ownership` (`resolvedAt`);
-CREATE INDEX `idx_ja_job` ON `job_alerts` (`cleanerJobId`);
-CREATE INDEX `idx_ji_job_date` ON `job_issues` (`cleanerJobId`,`jobDate`);
-CREATE INDEX `idx_jsr_cleaner_job_id` ON `job_sms_replies` (`cleanerJobId`);
-CREATE INDEX `idx_jsh_cleaner_job_id` ON `job_status_history` (`cleanerJobId`);
-CREATE INDEX `idx_la_session` ON `lead_assignments` (`sessionId`);
-CREATE INDEX `idx_la_agent` ON `lead_assignments` (`agentId`);
-CREATE INDEX `idx_action_item_ack` ON `madison_action_items` (`acknowledgementId`);
-CREATE INDEX `idx_madison_actions_agent` ON `madison_actions` (`conversationAgentId`,`createdAt`);
-CREATE INDEX `idx_email_draft_status` ON `madison_email_drafts` (`status`);
-CREATE INDEX `idx_email_draft_thread` ON `madison_email_drafts` (`threadId`);
-CREATE INDEX `idx_email_draft_created` ON `madison_email_drafts` (`createdAt`);
-CREATE INDEX `idx_email_draft_status_created` ON `madison_email_drafts` (`status`,`createdAt`);
-CREATE INDEX `idx_madison_missions_agent_archived_created` ON `madison_missions` (`agentId`,`archivedAt`,`createdAt`);
-CREATE INDEX `idx_sms_draft_status` ON `madison_sms_drafts` (`status`);
-CREATE INDEX `idx_sms_draft_session` ON `madison_sms_drafts` (`sessionId`);
-CREATE INDEX `idx_sms_draft_capability` ON `madison_sms_drafts` (`capability`);
-CREATE INDEX `idx_sms_draft_created` ON `madison_sms_drafts` (`createdAt`);
-CREATE INDEX `idx_sms_draft_status_created` ON `madison_sms_drafts` (`status`,`createdAt`);
-CREATE INDEX `idx_sms_draft_outbound` ON `madison_sms_drafts` (`outboundOpenPhoneId`);
-CREATE INDEX `idx_mc_caller_phone` ON `missed_calls` (`callerPhone`);
-CREATE INDEX `idx_mc_called_at` ON `missed_calls` (`calledAt`);
-CREATE INDEX `idx_mc_called_back` ON `missed_calls` (`calledBack`);
-CREATE INDEX `idx_ocr_session` ON `openphone_call_recordings` (`sessionId`);
-CREATE INDEX `idx_ocr_call_id` ON `openphone_call_recordings` (`openphoneCallId`);
-CREATE INDEX `idx_ocm_job` ON `ops_chat_messages` (`cleanerJobId`);
-CREATE INDEX `idx_ocm_channel` ON `ops_chat_messages` (`channel`);
-CREATE INDEX `idx_ocm_created_at` ON `ops_chat_messages` (`createdAt`);
-CREATE INDEX `idx_ocm_channel_created_at` ON `ops_chat_messages` (`channel`,`createdAt`);
-CREATE INDEX `idx_ocreact_msg` ON `ops_chat_reactions` (`messageId`);
-CREATE INDEX `idx_ocreact_caller` ON `ops_chat_reactions` (`callerId`);
-CREATE INDEX `idx_ocr_caller` ON `ops_chat_reads` (`callerId`);
-CREATE INDEX `idx_ocr_channel` ON `ops_chat_reads` (`channel`);
-CREATE INDEX `idx_ocr_job` ON `ops_chat_reads` (`cleanerJobId`);
-CREATE INDEX `idx_or_trigger` ON `ops_reminders` (`triggerAt`);
-CREATE INDEX `idx_or_fired` ON `ops_reminders` (`firedAt`);
-CREATE INDEX `idx_ot_assignee` ON `ops_tasks` (`assigneeAgentId`);
-CREATE INDEX `idx_ot_status` ON `ops_tasks` (`status`);
-CREATE INDEX `idx_ot_due` ON `ops_tasks` (`dueAt`);
-CREATE INDEX `idx_ps_agent` ON `push_subscriptions` (`agentKey`);
-CREATE INDEX `idx_ps_endpoint` ON `push_subscriptions` (`endpoint`);
-CREATE INDEX `idx_readiness_ack_lookup` ON `readiness_acknowledgements` (`jobId`,`serviceDate`,`issueType`,`reversedAt`);
-CREATE INDEX `idx_readiness_ack_action` ON `readiness_acknowledgements` (`actionId`);
-CREATE INDEX `idx_campaign_recipients_campaign_id` ON `sms_campaign_recipients` (`campaignId`);
-CREATE INDEX `idx_campaign_recipients_status` ON `sms_campaign_recipients` (`campaignId`,`status`);
-CREATE INDEX `idx_send_log_campaign` ON `sms_campaign_send_log` (`campaignId`);
-CREATE INDEX `idx_send_log_phone` ON `sms_campaign_send_log` (`phoneNormalized`);
-CREATE INDEX `idx_sms_campaigns_status` ON `sms_campaigns` (`status`);
-CREATE INDEX `idx_sms_campaigns_created_at` ON `sms_campaigns` (`createdAt`);
-CREATE INDEX `idx_tac_cleaner_date` ON `team_availability_checkins` (`cleanerProfileId`,`availabilityDate`);
-CREATE INDEX `idx_tac_avail_date` ON `team_availability_checkins` (`availabilityDate`);
+CREATE INDEX IF NOT EXISTS `idx_cl_job_date` ON `call_log` (`jobDate`);
+CREATE INDEX IF NOT EXISTS `idx_cl_job_id` ON `call_log` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_cl_vapi` ON `call_log` (`vapiCallId`);
+CREATE INDEX IF NOT EXISTS `idx_cand_phone` ON `candidates` (`phone`);
+CREATE INDEX IF NOT EXISTS `idx_cand_stage` ON `candidates` (`stage`);
+CREATE INDEX IF NOT EXISTS `idx_cand_created` ON `candidates` (`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_chain_exec_agent` ON `chain_executions` (`agentId`,`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_chain_step_chain` ON `chain_step_executions` (`chainExecutionId`,`stepId`);
+CREATE INDEX IF NOT EXISTS `idx_cp_channel` ON `channel_pins` (`channel`);
+CREATE INDEX IF NOT EXISTS `idx_csa_message` ON `chat_super_alerts` (`messageId`);
+CREATE INDEX IF NOT EXISTS `idx_csa_target` ON `chat_super_alerts` (`targetAgentName`);
+CREATE INDEX IF NOT EXISTS `idx_cjcr_cleaner_job` ON `cleaner_job_custom_rules` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_cleaner_jobs_job_date` ON `cleaner_jobs` (`jobDate`);
+CREATE INDEX IF NOT EXISTS `idx_cmlt_cleaner_profile` ON `cleaner_magic_link_tokens` (`cleanerProfileId`);
+CREATE INDEX IF NOT EXISTS `idx_cmlt_token` ON `cleaner_magic_link_tokens` (`token`);
+CREATE INDEX IF NOT EXISTS `idx_crsl_phone` ON `cleaner_rating_sms_log` (`cleanerPhone`);
+CREATE INDEX IF NOT EXISTS `idx_crsl_job` ON `cleaner_rating_sms_log` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_cc_job_date` ON `confirmation_calls` (`jobDate`);
+CREATE INDEX IF NOT EXISTS `idx_cc_job_id` ON `confirmation_calls` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_cc_leadflow_job_id` ON `confirmation_calls` (`leadflowJobId`);
+CREATE INDEX IF NOT EXISTS `idx_cc_vapi` ON `confirmation_calls` (`vapiCallId`);
+CREATE INDEX IF NOT EXISTS `idx_cs_draft_examples_intent` ON `cs_draft_examples` (`primaryIntent`);
+CREATE INDEX IF NOT EXISTS `idx_cs_draft_examples_customer_type` ON `cs_draft_examples` (`customerType`);
+CREATE INDEX IF NOT EXISTS `idx_cs_draft_examples_msg_ts` ON `cs_draft_examples` (`msgTs`);
+CREATE INDEX IF NOT EXISTS `idx_cs_missions_session` ON `cs_missions` (`sessionId`);
+CREATE INDEX IF NOT EXISTS `idx_cs_missions_session_status` ON `cs_missions` (`sessionId`,`status`);
+CREATE INDEX IF NOT EXISTS `idx_dtc_route_key` ON `drive_time_cache` (`routeKey`);
+CREATE INDEX IF NOT EXISTS `idx_fmc_cleaner_job_id` ON `field_mgmt_calls` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_fu_due_at` ON `follow_ups` (`dueAt`);
+CREATE INDEX IF NOT EXISTS `idx_fu_completed_at` ON `follow_ups` (`completedAt`);
+CREATE INDEX IF NOT EXISTS `idx_isms_from_phone` ON `inbound_sms` (`fromPhone`);
+CREATE INDEX IF NOT EXISTS `idx_isms_status` ON `inbound_sms` (`processingStatus`);
+CREATE INDEX IF NOT EXISTS `idx_isms_msg_id` ON `inbound_sms` (`openPhoneMessageId`);
+CREATE INDEX IF NOT EXISTS `idx_ichunk_session` ON `interview_chunks` (`sessionId`);
+CREATE INDEX IF NOT EXISTS `idx_invoices_templateId` ON `invoices` (`templateId`);
+CREATE INDEX IF NOT EXISTS `idx_invoices_customerName` ON `invoices` (`customerName`);
+CREATE INDEX IF NOT EXISTS `idx_ie_status` ON `issue_engine` (`status`);
+CREATE INDEX IF NOT EXISTS `idx_ie_session` ON `issue_engine` (`relatedSessionId`);
+CREATE INDEX IF NOT EXISTS `idx_iet_issue` ON `issue_engine_timeline` (`issueId`);
+CREATE INDEX IF NOT EXISTS `idx_if_job` ON `issue_flags` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_if_open` ON `issue_flags` (`resolvedAt`);
+CREATE INDEX IF NOT EXISTS `idx_io_key` ON `issue_ownership` (`issueKey`);
+CREATE INDEX IF NOT EXISTS `idx_io_resolved` ON `issue_ownership` (`resolvedAt`);
+CREATE INDEX IF NOT EXISTS `idx_ja_job` ON `job_alerts` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_ji_job_date` ON `job_issues` (`cleanerJobId`,`jobDate`);
+CREATE INDEX IF NOT EXISTS `idx_jsr_cleaner_job_id` ON `job_sms_replies` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_jsh_cleaner_job_id` ON `job_status_history` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_la_session` ON `lead_assignments` (`sessionId`);
+CREATE INDEX IF NOT EXISTS `idx_la_agent` ON `lead_assignments` (`agentId`);
+CREATE INDEX IF NOT EXISTS `idx_action_item_ack` ON `madison_action_items` (`acknowledgementId`);
+CREATE INDEX IF NOT EXISTS `idx_madison_actions_agent` ON `madison_actions` (`conversationAgentId`,`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_email_draft_status` ON `madison_email_drafts` (`status`);
+CREATE INDEX IF NOT EXISTS `idx_email_draft_thread` ON `madison_email_drafts` (`threadId`);
+CREATE INDEX IF NOT EXISTS `idx_email_draft_created` ON `madison_email_drafts` (`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_email_draft_status_created` ON `madison_email_drafts` (`status`,`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_madison_missions_agent_archived_created` ON `madison_missions` (`agentId`,`archivedAt`,`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_sms_draft_status` ON `madison_sms_drafts` (`status`);
+CREATE INDEX IF NOT EXISTS `idx_sms_draft_session` ON `madison_sms_drafts` (`sessionId`);
+CREATE INDEX IF NOT EXISTS `idx_sms_draft_capability` ON `madison_sms_drafts` (`capability`);
+CREATE INDEX IF NOT EXISTS `idx_sms_draft_created` ON `madison_sms_drafts` (`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_sms_draft_status_created` ON `madison_sms_drafts` (`status`,`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_sms_draft_outbound` ON `madison_sms_drafts` (`outboundOpenPhoneId`);
+CREATE INDEX IF NOT EXISTS `idx_mc_caller_phone` ON `missed_calls` (`callerPhone`);
+CREATE INDEX IF NOT EXISTS `idx_mc_called_at` ON `missed_calls` (`calledAt`);
+CREATE INDEX IF NOT EXISTS `idx_mc_called_back` ON `missed_calls` (`calledBack`);
+CREATE INDEX IF NOT EXISTS `idx_ocr_session` ON `openphone_call_recordings` (`sessionId`);
+CREATE INDEX IF NOT EXISTS `idx_ocr_call_id` ON `openphone_call_recordings` (`openphoneCallId`);
+CREATE INDEX IF NOT EXISTS `idx_ocm_job` ON `ops_chat_messages` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_ocm_channel` ON `ops_chat_messages` (`channel`);
+CREATE INDEX IF NOT EXISTS `idx_ocm_created_at` ON `ops_chat_messages` (`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_ocm_channel_created_at` ON `ops_chat_messages` (`channel`,`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_ocreact_msg` ON `ops_chat_reactions` (`messageId`);
+CREATE INDEX IF NOT EXISTS `idx_ocreact_caller` ON `ops_chat_reactions` (`callerId`);
+CREATE INDEX IF NOT EXISTS `idx_ocr_caller` ON `ops_chat_reads` (`callerId`);
+CREATE INDEX IF NOT EXISTS `idx_ocr_channel` ON `ops_chat_reads` (`channel`);
+CREATE INDEX IF NOT EXISTS `idx_ocr_job` ON `ops_chat_reads` (`cleanerJobId`);
+CREATE INDEX IF NOT EXISTS `idx_or_trigger` ON `ops_reminders` (`triggerAt`);
+CREATE INDEX IF NOT EXISTS `idx_or_fired` ON `ops_reminders` (`firedAt`);
+CREATE INDEX IF NOT EXISTS `idx_ot_assignee` ON `ops_tasks` (`assigneeAgentId`);
+CREATE INDEX IF NOT EXISTS `idx_ot_status` ON `ops_tasks` (`status`);
+CREATE INDEX IF NOT EXISTS `idx_ot_due` ON `ops_tasks` (`dueAt`);
+CREATE INDEX IF NOT EXISTS `idx_ps_agent` ON `push_subscriptions` (`agentKey`);
+CREATE INDEX IF NOT EXISTS `idx_ps_endpoint` ON `push_subscriptions` (`endpoint`(768));
+CREATE INDEX IF NOT EXISTS `idx_readiness_ack_lookup` ON `readiness_acknowledgements` (`jobId`,`serviceDate`,`issueType`,`reversedAt`);
+CREATE INDEX IF NOT EXISTS `idx_readiness_ack_action` ON `readiness_acknowledgements` (`actionId`);
+CREATE INDEX IF NOT EXISTS `idx_campaign_recipients_campaign_id` ON `sms_campaign_recipients` (`campaignId`);
+CREATE INDEX IF NOT EXISTS `idx_campaign_recipients_status` ON `sms_campaign_recipients` (`campaignId`,`status`);
+CREATE INDEX IF NOT EXISTS `idx_send_log_campaign` ON `sms_campaign_send_log` (`campaignId`);
+CREATE INDEX IF NOT EXISTS `idx_send_log_phone` ON `sms_campaign_send_log` (`phoneNormalized`);
+CREATE INDEX IF NOT EXISTS `idx_sms_campaigns_status` ON `sms_campaigns` (`status`);
+CREATE INDEX IF NOT EXISTS `idx_sms_campaigns_created_at` ON `sms_campaigns` (`createdAt`);
+CREATE INDEX IF NOT EXISTS `idx_tac_cleaner_date` ON `team_availability_checkins` (`cleanerProfileId`,`availabilityDate`);
+CREATE INDEX IF NOT EXISTS `idx_tac_avail_date` ON `team_availability_checkins` (`availabilityDate`);

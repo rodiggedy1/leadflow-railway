@@ -18,7 +18,10 @@ How staging stays isolated:
 connection and live keys. Staging is built from an **empty** environment.
 
 What was verified before writing this guide (in Claude's sandbox, offline, against a throwaway local database):
-- `staging/staging-base-schema.sql` loads cleanly (106 tables).
+- `staging/staging-base-schema.sql` loads cleanly (106 tables) and can safely be run again (every statement is
+  `IF NOT EXISTS`). Note: the local rehearsal database is MariaDB, which is more permissive than TiDB. The first real
+  TiDB load found two TiDB-only incompatibilities (an expression default on 5 text/JSON columns and one over-long
+  index); both are corrected in the file and explained in its header. Neither affects production or `drizzle/schema.ts`.
 - All 79 database updates in `server/versioned-migrations` then apply cleanly and satisfy their own checks.
 - `staging/fake-data.sql` loads cleanly.
 - The app starts with only the staging variables below, switches its scheduled jobs off, and the one-click
@@ -36,7 +39,8 @@ What was verified before writing this guide (in Claude's sandbox, offline, again
    `CREATE DATABASE leadflow_staging;`
 4. Still in the SQL Editor, run `USE leadflow_staging;`, then paste **the whole content** of
    `docs/claude/staging/staging-base-schema.sql` (open it on GitHub on the `claude/…` branch → **Raw** → select all → copy) and run it.
-   Then run `SHOW TABLES;` — you should see **106** tables.
+   Then run `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'leadflow_staging';` — it should show **106**.
+   If the run stops partway, fix the cause and simply run the whole file again: tables that already exist are skipped.
 5. Click **Connect** on the cluster. Choose the connection string for **Node.js / mysql2** (or "General"), with
    database `leadflow_staging`. Keep it ready for Part B — **do not send it to anyone, including Claude**.
 
