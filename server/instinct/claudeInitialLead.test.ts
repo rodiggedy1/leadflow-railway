@@ -140,11 +140,20 @@ describe("preserved human authorization, review-only guards and request lifecycl
     }
   });
   it.each(["I've scheduled your cleaning.", "I've sent your quote.", "We created your booking.", "I've updated your notes.",
-    "We will contact the team.", "Your request was escalated.", "We let the team know.", "Your quote was sent.", "Your quote has been created."])("retains no-operation claim denial: %s", async text => {
-    await expect(harness({ runner: async () => output(text) }).service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
+    "We will contact the team.", "Your request was escalated.", "We let the team know.", "Your quote was sent.", "Your quote has been created.",
+    "I'll send you the quote.", "We've updated your booking.", "Your booking is confirmed", "Tomorrow is available", "You're all set", "We have reserved your slot."])("accepts exact claim wording while remaining review-only: %s", async text => {
+    const runner = vi.fn<InitialLeadRunner>(async () => output(text));
+    const result = await harness({ runner }).service.generate(input, staff);
+    expect(result.replyText).toBe(text);
+    expect(result).toMatchObject({ mode: "review_only", smsSent: false, actionsExecuted: false });
+    expect(runner).toHaveBeenCalledTimes(1);
   });
-  it.each(["Quote ID: Q-88.", "Quote code: Q-88.", "Booking code: LF-88.", `Request ${input.requestId}.`])("retains technical identifier/presentation denial: %s", async text => {
-    await expect(harness({ runner: async () => output(text) }).service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
+  it.each(["Quote ID: Q-88.", "Quote code: Q-88.", "Booking code: LF-88.", "Confirmation number: CONF-88.", `Request ${input.requestId}.`])("accepts exact technical references and protected IDs while remaining review-only: %s", async text => {
+    const runner = vi.fn<InitialLeadRunner>(async () => output(text));
+    const result = await harness({ runner }).service.generate(input, staff);
+    expect(result.replyText).toBe(text);
+    expect(result).toMatchObject({ mode: "review_only", smsSent: false, actionsExecuted: false });
+    expect(runner).toHaveBeenCalledTimes(1);
   });
   it("uses the unchanged current shared validator for ordinary time wording", async () => {
     const text = "Tomorrow at 10 AM Eastern.";
@@ -199,23 +208,40 @@ describe("content-only reuse for the trusted native first-response dispatcher", 
     expect(prepareCsReplyMessages).toHaveBeenCalledWith(draftRequest);
     expect(runInitialLeadDraft).toHaveBeenCalledWith({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
   });
-  it.each(["We will send pricing and time options.", "I will send you a quote.", "We will send availability tomorrow."])("native introduction accepts future-send wording unchanged: %s", async text => {
-    const h = harness({ runner: async () => output(text) });
-    const result = await generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner: async () => output(text) });
+  it.each(["We will send pricing and time options.", "I will send you a quote.", "We will send availability tomorrow."])("shared validator and both initial-lead paths accept future-send wording unchanged: %s", async text => {
+    const runner = vi.fn<InitialLeadRunner>(async () => output(text)), h = harness({ runner });
+    const result = await generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner });
     expect(result.replyText).toBe(text);
-    expect(() => validateClaudeReviewReply(JSON.stringify({ replyText: text }))).toThrow("UNSAFE_REPLY_CLAIM");
-    await expect(h.service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
+    expect(result).toMatchObject({ mode: "review_only", smsSent: false, actionsExecuted: false });
+    expect(validateClaudeReviewReply(JSON.stringify({ replyText: text }))).toBe(text);
+    const manual = await h.service.generate(input, staff);
+    expect(manual).toEqual(result);
+    expect(runner).toHaveBeenCalledTimes(2);
   });
-  it.each(["I've sent your quote.", "Your quote was sent.", "We will refund your payment.", "We will cancel your booking."])("native wording exception does not allow false completion or unrelated operations: %s", async text => {
-    const h = harness();
-    await expect(generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner: async () => output(text) })).rejects.toThrow("UNSAFE_REPLY_CLAIM");
+  it.each(["I've sent your quote.", "Your quote was sent.", "We will refund your payment.", "We will cancel your booking.",
+    "I'll send you the quote.", "We've updated your booking.", "Your booking is confirmed", "Tomorrow is available", "You're all set", "We have reserved your slot."])("native content accepts exact claim wording without sending or executing actions: %s", async text => {
+    const runner = vi.fn<InitialLeadRunner>(async () => output(text)), h = harness();
+    const result = await generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner });
+    expect(result.replyText).toBe(text);
+    expect(result).toMatchObject({ mode: "review_only", smsSent: false, actionsExecuted: false });
+    expect(runner).toHaveBeenCalledTimes(1);
   });
-  it("preserves the same validation and refuses a blank or falsely completed action", async () => {
+  it("preserves invalid-input rejection before model access", async () => {
     const h = harness();
     await expect(generateClaudeInitialLeadContent({ ...input, requestId: "bad" }, h)).rejects.toThrow();
     expect(h.runner).not.toHaveBeenCalled();
-    for (const text of ["", "I've scheduled your cleaning.", "Quote code: Q-88."])
-      await expect(generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner: async () => output(text) })).rejects.toThrow();
+  });
+  it.each(["", "   "])("native content still rejects blank output %s without another provider turn", async text => {
+    const runner = vi.fn<InitialLeadRunner>(async () => output(text)), h = harness();
+    await expect(generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner })).rejects.toThrow();
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+  it.each(["I've scheduled your cleaning.", "Quote code: Q-88.", `Request ${input.requestId}.`])("native content accepts formerly rejected phrase examples exactly: %s", async text => {
+    const runner = vi.fn<InitialLeadRunner>(async () => output(text)), h = harness();
+    const result = await generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner });
+    expect(result.replyText).toBe(text);
+    expect(result).toMatchObject({ mode: "review_only", smsSent: false, actionsExecuted: false });
+    expect(runner).toHaveBeenCalledTimes(1);
   });
 });
 describe("actual existing human-authenticated Madison route", () => {
@@ -234,9 +260,10 @@ describe("actual existing human-authenticated Madison route", () => {
     expect(await madisonRouter.createCaller(context()).claudeAlternative.generateInitialLead(input)).toMatchObject({ kind: "initial_lead" });
     expect(getAgentFromRequest).toHaveBeenCalled();
   });
-  it.each(["provider", "action"])("returns the existing fixed route error for %s", async kind => {
-    vi.mocked(runInitialLeadDraft).mockImplementation(async () => { if (kind === "provider") throw new Error("SECRET_PROVIDER_BODY"); return output("I've sent the quote.") as never; });
+  it.each(["provider", "blank output"])("returns the existing fixed route error for %s", async kind => {
+    vi.mocked(runInitialLeadDraft).mockImplementation(async () => { if (kind === "provider") throw new Error("SECRET_PROVIDER_BODY"); return output("") as never; });
     await expect(madisonRouter.createCaller(context({ openId: `error-${kind}`, name: null } as never)).claudeAlternative.generateInitialLead(input)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: "Claude could not produce a safe review-only initial lead draft. No SMS was sent and no actions were executed." });
+    expect(runInitialLeadDraft).toHaveBeenCalledTimes(1);
   });
 });
 const baselineFile = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });

@@ -64,8 +64,6 @@ async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeIni
   // The model returns exactly the plain SMS requested by the primary prompt.
   // JSON is constructed locally for the unchanged non-sendable reply validator.
   const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId], { allowFutureSendPromises });
-  if (/\b(?:quote|pricing|message|SMS|text|link)\s+(?:has been|was|is)\s+(?:sent|texted|created|generated|processed)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
-  if (/\bquote\s+(?:id|code|number|reference)\s*[:#]/i.test(replyText)) return fail("UNSAFE_REPLY_PRESENTATION");
   await reauthorize();
   return claudeInitialLeadResultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
     sessionId: input.sessionId, customerPhone, contextHash, replyText,

@@ -55,12 +55,6 @@ All originalConversation turns retain their original zero-based indices, includi
 /** Exposed for prompt-contract tests; the existing email/shared prompts are not changed. */
 export const SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS = `${SMS_BOOKING_QUOTE_INSTRUCTIONS}\n\n${TEMPLATE_INSTRUCTIONS}`;
 
-// These checks apply ONLY to active quote text, not ordinary existing CS replies.
-function assertNoBookingCompletion(text: string): void {
-  // The shared validators below retain all existing CS claims checks. This adds
-  // quote-specific reservation/availability wording, not a generic CS rewrite.
-  if (/\b(?:(?:you(?:['’]re| are)|your (?:booking|reservation|appointment|cleaning|slot|time)|the (?:booking|reservation|appointment|slot|time))\s+(?:(?:is|was|has been)\s+)?(?:now\s+|already\s+)?(?:booked|reserved|confirmed|guaranteed|all set)|(?:I|we)(?:['’]ve| have)?\s+(?:reserved|guaranteed)|(?:tu|su)\s+(?:reserva|cita|limpieza|horario)\s+(?:está|esta|ha sido|queda)\s+(?:confirmad[ao]|reservad[ao]|garantizad[ao])|(?:ya\s+)?estás\s+(?:reservad[ao]|confirmad[ao]))\b/i.test(text)) return fail("UNSAFE_REPLY_CLAIM");
-}
 function templateNeutralText(template: string): string {
   const neutral = template.replace(/\{\{([^{}]*)\}\}/g, (_token, name: string) => {
     if (!["firstCleaningPrice", "futureVisitPrice", "extras", "bookingLink"].includes(name)) return fail("SMS_QUOTE_TEMPLATE_PLACEHOLDER");
@@ -132,7 +126,6 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
     // Pure validation now; the durable preparation transaction repeats it later.
     const advanced = advanceSmsBookingQuote(previous, update, { binding, originalConversation, nowMs });
     assertNoQuotePriceOrUrl(plan.replyText);
-    assertNoBookingCompletion(plan.replyText);
     if (/[{}]/.test(plan.replyText)) return fail("SMS_QUOTE_TEMPLATE_IN_REPLY");
     const template = output.quoteTextTemplate;
     const complete = update.action === "quote" ? advanced.preview?.success === true
@@ -142,10 +135,9 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
       const neutral = templateNeutralText(template);
       if (template.split("{{bookingLink}}").length - 1 > 1) return fail("SMS_QUOTE_TEMPLATE_LINK_COUNT");
       assertNoQuotePriceOrUrl(neutral);
-      assertNoBookingCompletion(neutral);
       validateClaudeReviewReply(JSON.stringify({ replyText: neutral }), input.protectedIds);
       // Validation-only replay, NOT an agent/provider call: the unchanged shared
-      // generator checks its stricter completion and pending-task guards too.
+      // generator checks its strict schema and current-inbound task evidence too.
       await createClaudeCustomerReplyGenerator({
         readKnowledge: async () => capture.knowledgeBase!,
         runner: async () => ({ finalSmsText: JSON.stringify({ replyText: neutral, task: plan.task }) }),

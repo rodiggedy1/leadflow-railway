@@ -57,10 +57,12 @@ describe("content-only Claude customer SMS plan", () => {
     })).toEqual({ replyText: pendingReply, task });
     expect(h.runner).toHaveBeenCalledTimes(1);
     expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt).context).toEqual({ ...context, knowledgeBase: await h.readKnowledge.mock.results[0].value });
-    await expect(createClaudeCustomerReplyGenerator({ readKnowledge: h.readKnowledge,
-      runner: async () => ({ finalSmsText: JSON.stringify({ replyText: "Thanks, gmail-id", task: null }) }) })({
-      incomingMessage: inboundText, context, protectedIds: ["gmail-id"],
-    })).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
+    const protectedPlan = { replyText: "Thanks, gmail-id", task: null };
+    const protectedRunner = vi.fn(async () => ({ finalSmsText: JSON.stringify(protectedPlan) }));
+    expect(await createClaudeCustomerReplyGenerator({ readKnowledge: h.readKnowledge, runner: protectedRunner })({
+      incomingMessage: inboundText, context, protectedIds: ["gmail-id", "<actual@example.net>"],
+    })).toEqual(protectedPlan);
+    expect(protectedRunner).toHaveBeenCalledTimes(1);
   });
 
   it("uses one content-only saved-agent turn with complete approved knowledge and the exact complete session", async () => {
@@ -146,9 +148,10 @@ describe("content-only Claude customer SMS plan", () => {
     expect(await harness(plan).generate(f.binding, f.session)).toEqual(plan);
   });
 
-  it.each([pendingReply, "I'll take care of this for you.", "We will handle your request."])("requires a task before promising pending staff handling: %s", async replyText => {
-    const f = fixture();
-    await expect(harness({ replyText, task: null }).generate(f.binding, f.session)).rejects.toThrow("ACKNOWLEDGMENT_REQUIRES_TASK");
+  it.each([pendingReply, "I'll take care of this for you.", "We will handle your request."])("accepts exact pending staff acknowledgment with task:null: %s", async replyText => {
+    const f = fixture(), plan = { replyText, task: null }, h = harness(plan);
+    expect(await h.generate(f.binding, f.session)).toEqual(plan);
+    expect(h.runner).toHaveBeenCalledTimes(1);
   });
 
   it("has no character, token, history, checklist or concurrency cap", async () => {
@@ -182,9 +185,11 @@ describe("content-only Claude customer SMS plan", () => {
 
   it.each(["I've rescheduled your cleaning.", "We updated your notes.", "Your cleaning has been changed.", "I will contact the team.", "We notified staff.",
     "Notes are in — your crew has been briefed.", "Your request is completed.", "We've taken care of the change.",
-    "Your slot is guaranteed.", "Friday is available.", "We can fit you in."])("rejects false execution/action promises: %s", async replyText => {
-    const f = fixture();
-    await expect(harness({ replyText, task }).generate(f.binding, f.session)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
+    "Your slot is guaranteed.", "Friday is available.", "We can fit you in.", "I'll send you the quote.", "We've updated your booking.",
+    "Your booking is confirmed", "Tomorrow is available", "You're all set", "We have reserved your slot."])("accepts exact claim wording and preserves every proposed task item: %s", async replyText => {
+    const f = fixture(), plan = { replyText, task }, h = harness(plan);
+    expect(await h.generate(f.binding, f.session)).toEqual(plan);
+    expect(h.runner).toHaveBeenCalledTimes(1);
   });
 
   it("accepts the exact Spanish reply previously rejected for EST inside estés", async () => {
@@ -201,9 +206,10 @@ describe("content-only Claude customer SMS plan", () => {
     expect(await harness({ replyText, task: null }).generate(f.binding, f.session)).toEqual({ replyText, task: null });
   });
 
-  it.each(["Booking code: 123.", "Your message msg-current is noted.", "PN-actual is the line."])("rejects unsafe presentation: %s", async replyText => {
-    const f = fixture();
-    await expect(harness({ replyText, task }).generate(f.binding, f.session)).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
+  it.each(["Booking code: 123.", "Quote code: Q-88.", "Confirmation number: CONF-88.", "Your message msg-current is noted.", "PN-actual is the line."])("accepts exact presentation references and protected IDs without changing the task: %s", async replyText => {
+    const f = fixture(), plan = { replyText, task }, h = harness(plan);
+    expect(await h.generate(f.binding, f.session)).toEqual(plan);
+    expect(h.runner).toHaveBeenCalledTimes(1);
   });
 
   it.each([

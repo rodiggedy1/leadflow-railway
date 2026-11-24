@@ -102,6 +102,14 @@ describe("SMS-only additive quote generation", () => {
     "Votre question concerne quel service ?",
     "清掃サービスについて、何をお知りになりたいですか？",
     "ما الذي تود معرفته عن التنظيف؟",
+    "I'll send your link.",
+    "We've updated your notes.",
+    "Your booking is confirmed.",
+    "Tomorrow is available.",
+    "You're all set.",
+    "We have reserved your appointment.",
+    "We'll handle your request.",
+    "Booking code MIB-123, confirmation number ABC-456, msg-current, PN-actual. Requested time: 10:30 EST.",
   ])("preserves ordinary nonquote output byte-for-byte with no new quote guards: %s", async replyText => {
     const input = fixture("Ordinary question"), h = harness({ replyText, task: null, bookingQuote: null });
     expect(await h.generate(input)).toEqual({ replyText, task: null });
@@ -119,6 +127,19 @@ describe("SMS-only additive quote generation", () => {
     const runner = vi.fn(async () => ({ finalSmsText: '{"replyText":"¡Hola!","task":null}' }));
     expect(await createClaudeCustomerReplyGenerator({ runner, readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE })(input)).toEqual({ replyText: "¡Hola!", task: null });
     expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "I'll send your link.", "We've updated your notes.", "Your booking is confirmed.",
+    "Tomorrow is available.", "You're all set.", "We have reserved your appointment.",
+    "We'll handle your request. Booking code MIB-123, confirmation number ABC-456, msg-current, PN-actual. 10:30 EST.",
+  ])("preserves shared two-field replies with task:null and protected IDs without phrase or presentation rejection: %s", async replyText => {
+    const input = fixture("Please handle my existing booking request."), before = JSON.stringify(input);
+    const runner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText, task: null }) }));
+    const readKnowledge = vi.fn(async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+    expect(await createClaudeCustomerReplyGenerator({ runner, readKnowledge })(input)).toEqual({ replyText, task: null });
+    expect(runner).toHaveBeenCalledTimes(1); expect(readKnowledge).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(input)).toBe(before);
   });
 
   it("reads exact-bound complete durable state and complete large incoming/outgoing history without clipping or mutation", async () => {
@@ -305,6 +326,23 @@ describe("SMS-only additive quote generation", () => {
     expect(JSON.stringify(previous)).toBe(beforeState);
   });
 
+  it.each(["ordinary", "active link"] as const)("accepts %s phrase/presentation output after the one existing JSON recovery with no semantic retry", async mode => {
+    const input = fixture(), replyText = "I'll send your link. We've updated your notes. Your booking is confirmed. Tomorrow is available. You're all set. We have reserved your appointment. We'll handle your request. Booking code MIB-123, msg-current, PN-actual.";
+    const result = mode === "ordinary" ? { replyText, task: null, bookingQuote: null }
+      : active(input, { replyText, quoteTextTemplate: `${linkTemplate} ${replyText}` });
+    const h = harness(result), before = JSON.stringify(input);
+    h.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    const plan = await h.generate(input);
+    expect(plan.replyText).toBe(replyText); expect(plan.task).toBeNull();
+    if (mode === "ordinary") expect(plan).toEqual({ replyText, task: null });
+    else expect(plan.smsBookingQuote).toEqual({ previous: null, update: update(input),
+      originalConversation: input.context.originalConversation, quoteTextTemplate: canonicalPresentation(input) });
+    expect(h.runner).toHaveBeenCalledTimes(2);
+    expect(h.runner.mock.calls[1][0]).toBe(h.runner.mock.calls[0][0]);
+    expect(h.readKnowledge).toHaveBeenCalledTimes(1); expect(h.readState).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
   it.each([
     "Not JSON", '```json\n{"replyText":"Hello","task":null,"bookingQuote":null}\n```',
   ])("rejects repeated malformed JSON after exactly two actual turns: %j", async result => {
@@ -335,12 +373,10 @@ describe("SMS-only additive quote generation", () => {
     }, error: "SMS_QUOTE_EVIDENCE_NOT_CUSTOMER" },
     { name: "current-inbound task evidence", output: (input: ClaudeCustomerReplyInput) => active(input,
       { task: { title: "Review request", items: [{ title: "Review", evidenceQuote: "Historical customer quote" }] } }), error: "TASK_EVIDENCE_NOT_CURRENT_INBOUND" },
-    { name: "unsafe completion claim", output: (input: ClaudeCustomerReplyInput) => active(input,
-      { replyText: "Your booking is confirmed." }), error: "UNSAFE_REPLY_CLAIM" },
     { name: "model-owned price", output: (input: ClaudeCustomerReplyInput) => active(input,
       { replyText: "It is $250." }), error: "SMS_QUOTE_MODEL_PRICE" },
-    { name: "protected ID presentation", output: (input: ClaudeCustomerReplyInput) => active(input,
-      { quoteTextTemplate: `${linkTemplate} msg-current` }), error: "UNSAFE_REPLY_PRESENTATION" },
+    { name: "model-owned URL", output: (input: ClaudeCustomerReplyInput) => active(input,
+      { quoteTextTemplate: `${linkTemplate} https://example.com/book/fake` }), error: "SMS_QUOTE_MODEL_URL" },
   ])("retains $name validation without retry, including after one malformed output", async row => {
     const input = fixture(), result = row.output(input), h = harness(result);
     await expect(h.generate(input)).rejects.toThrow(row.error);
@@ -428,10 +464,22 @@ describe("SMS-only additive quote generation", () => {
     await expect(harness(active(input, { replyText: `Review ${text}` })).generate(input)).rejects.toThrow("SMS_QUOTE_MODEL_URL");
     await expect(harness(active(input, { quoteTextTemplate: `${linkTemplate} ${text}` })).generate(input)).rejects.toThrow("SMS_QUOTE_MODEL_URL");
   });
-  it.each(["Your booking is confirmed.", "Your slot is guaranteed.", "Your reservation is confirmed.", "Your time is reserved.", "I've reserved your appointment.", "Friday is available.", "Notes are in.", "We can fit you in.", "Tu reserva está confirmada."])("retains base and quote-specific no-completion safeguards for templates and replyText: %s", async text => {
+  it.each([
+    "I'll send your link.", "We've updated your notes.", "Your booking is confirmed.",
+    "Tomorrow is available.", "You're all set.", "We have reserved your appointment.",
+    "Your slot is guaranteed.", "Your reservation is confirmed.", "Your time is reserved.",
+    "I've reserved your appointment.", "Friday is available.", "Notes are in.", "We can fit you in.",
+    "Tu reserva está confirmada.", "We have processed your payment.",
+  ])("accepts active reply and template phrases with task:null while keeping the canonical quote presentation: %s", async text => {
     const input = fixture();
-    await expect(harness(active(input, { replyText: text })).generate(input)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
-    await expect(harness(active(input, { quoteTextTemplate: `${linkTemplate} ${text}` })).generate(input)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
+    for (const location of ["replyText", "quoteTextTemplate"] as const) {
+      const h = harness(active(input, { [location]: location === "replyText" ? text : `${linkTemplate} ${text}` }));
+      const plan = await h.generate(input);
+      expect(plan.replyText).toBe(location === "replyText" ? text : active(input).replyText);
+      expect(plan.task).toBeNull(); expect(plan.smsBookingQuote?.update).toEqual(update(input));
+      expect(plan.smsBookingQuote?.quoteTextTemplate).toBe(canonicalPresentation(input));
+      expect(h.runner).toHaveBeenCalledTimes(1);
+    }
   });
   it.each(["{{customPrice}}", "{{ firstCleaningPrice }}", "{{bookingLink", "{price}"])("rejects unapproved or malformed template placeholder %s", async token => {
     const input = fixture();
@@ -444,10 +492,16 @@ describe("SMS-only additive quote generation", () => {
     await expect(harness(active(input, { bookingQuote: update(input, fields, { action: "collect" }) })).generate(input)).rejects.toThrow("SMS_QUOTE_TEMPLATE_INCOMPLETE");
     await expect(harness(active(input, { replyText: "Your price is {{firstCleaningPrice}}" })).generate(input)).rejects.toThrow("SMS_QUOTE_TEMPLATE_IN_REPLY");
   });
-  it("applies protected-ID presentation and pending-task acknowledgement validation to the template too", async () => {
+  it.each([
+    "Booking code MIB-123, confirmation number ABC-456, msg-current, PN-actual. Requested time: 10:30 EST.",
+    "We'll handle your request.", "We'll review this.", "We'll take care of your change.",
+  ])("accepts reference/protected-ID presentation and pending-task acknowledgments in active replies and templates with task:null: %s", async text => {
     const input = fixture();
-    await expect(harness(active(input, { quoteTextTemplate: `${linkTemplate} msg-current` })).generate(input)).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
-    await expect(harness(active(input, { quoteTextTemplate: `${linkTemplate} We'll handle your request.` })).generate(input)).rejects.toThrow("ACKNOWLEDGMENT_REQUIRES_TASK");
+    const h = harness(active(input, { replyText: text, quoteTextTemplate: `${linkTemplate} ${text}` }));
+    expect(await h.generate(input)).toEqual({ replyText: text, task: null,
+      smsBookingQuote: { previous: null, update: update(input), originalConversation: input.context.originalConversation,
+        quoteTextTemplate: canonicalPresentation(input) } });
+    expect(h.runner).toHaveBeenCalledTimes(1);
   });
   it("does not block grounded room counts, condition-scale questions or timezone text in an active quote", async () => {
     const input = fixture(), replyText = "Your quote for 2 bedrooms is ready to review. You requested 10:30 EST.";

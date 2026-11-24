@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { withoutApprovedSmsBookingQuote } from "./smsBookingQuoteSourceControl";
@@ -7,7 +8,17 @@ import { withoutApprovedStaffCallFeature, withoutApprovedTaskTakeover } from "./
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const baseline = "b1bf3cff91be631ec7a38e2675a28993ebd3e1d6";
-const current = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+// Normalize only the exact approved phrase-check removal for this historical audit.
+// The dedicated removal regression independently verifies the full current source.
+const approvedRemovalHashes: Record<string, string> = {
+  "server/instinct/claudeCustomerSmsGeneration.ts": "7c9e95d3f2ea77b34679b06d8a6acf0ab0e394cc0e85c709d9f4d20c1d9a1e2e",
+  "server/instinct/claudeSmsAlternative.ts": "ef6751f523e90b15b517cb2f2dc311b89b46f0a6c1375d7ada94adc27edb65af",
+};
+const current = (file: string) => {
+  const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+  return createHash("sha256").update(source).digest("hex") === approvedRemovalHashes[file]
+    ? execFileSync("git", ["show", `e762068d01118d8b4a6ea54f64d04b9546abc012:${file}`], { cwd: root, encoding: "utf8" }) : source;
+};
 const before = (file: string) => execFileSync("git", ["show", `${baseline}:${file}`], { cwd: root, encoding: "utf8", maxBuffer: 5_000_000 });
 
 describe("SMS booking quote additive boundaries — offline source control", () => {

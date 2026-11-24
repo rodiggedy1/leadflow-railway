@@ -169,10 +169,14 @@ describe("stateless optional Claude SMS generation", () => {
     (h.history[2] as Record<string, ReviewJson>).content = malicious;
     expect((await h.service.generate(input, staff)).actionsExecuted).toBe(false);
   });
-  it.each(["I've rescheduled your cleaning.", "I've escalated this to the team.", "We notified the staff.", "Your refund was processed.", "We will contact the team.", "I've updated your notes.", "We let the team know."])
-    ("rejects action claims: %s", async reply => {
-      const h = harness({ runner: async () => output(reply) });
-      await expect(h.service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_CLAIM");
+  it.each(["I've rescheduled your cleaning.", "I've escalated this to the team.", "We notified the staff.", "Your refund was processed.", "We will contact the team.", "I've updated your notes.", "We let the team know.",
+    "I'll send you the quote.", "We've updated your booking.", "Your booking is confirmed", "Tomorrow is available", "You're all set", "We have reserved your slot."])
+    ("accepts claim wording exactly without sending or executing actions: %s", async reply => {
+      const runner = vi.fn<AlternativeRunner>(async () => output(reply)), h = harness({ runner });
+      const result = await h.service.generate(input, staff);
+      expect(result.replyText).toBe(reply);
+      expect(result).toMatchObject({ mode: "review_only", smsSent: false, actionsExecuted: false });
+      expect(runner).toHaveBeenCalledTimes(1);
     });
   it.each([
     "¡Qué alegría que estés emocionada! 😊 Puedes reservar en maidsinblack.com.",
@@ -186,10 +190,13 @@ describe("stateless optional Claude SMS generation", () => {
   it("keeps omitted timezone labels as writing guidance, not a delivery gate", () => {
     expect(CLAUDE_SMS_DRAFT_INSTRUCTIONS).toContain("time-zone labels (Eastern, ET, EST, EDT, UTC, IANA)");
   });
-  it.each(["Booking code: LF-88.", `For ${input.providerMessageId}.`, `From ${input.receivingPhoneNumberId}.`])
-    ("rejects unsafe presentation: %s", async reply => {
-      const h = harness({ runner: async () => output(reply) });
-      await expect(h.service.generate(input, staff)).rejects.toThrow("UNSAFE_REPLY_PRESENTATION");
+  it.each(["Booking code: LF-88.", "Quote code: Q-88.", "Confirmation number: CONF-88.", `For ${input.providerMessageId}.`, `From ${input.receivingPhoneNumberId}.`])
+    ("accepts presentation references and protected IDs exactly without sending or executing actions: %s", async reply => {
+      const runner = vi.fn<AlternativeRunner>(async () => output(reply)), h = harness({ runner });
+      const result = await h.service.generate(input, staff);
+      expect(result.replyText).toBe(reply);
+      expect(result).toMatchObject({ mode: "review_only", smsSent: false, actionsExecuted: false });
+      expect(runner).toHaveBeenCalledTimes(1);
     });
   it.each(["plain SMS", "{}", '{"replyText":"Fine","send_sms":true}', '{"replyText":""}'])
     ("rejects nonstrict provider output: %s", async finalSmsText => {

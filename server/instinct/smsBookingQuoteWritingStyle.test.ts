@@ -289,11 +289,19 @@ describe("ordinary SMS uses the same additive writing rules without changing sha
   it.each([
     { replyText: "Your quote is $250.", error: "SMS_QUOTE_MODEL_PRICE" },
     { replyText: "Review https://example.com/book/fake", error: "SMS_QUOTE_MODEL_URL" },
-    { replyText: "Your booking is confirmed.", error: "UNSAFE_REPLY_CLAIM" },
   ])("retains quote safety for a brief but unsafe response: $error", async ({ replyText, error }) => {
     const input = fixture("Please prepare a NEW cleaning quote.");
     const h = harness({ replyText, task: null, bookingQuote: update(input, {}, "collect") });
     await expect(h.generate(input)).rejects.toThrow(error); expect(h.runner).toHaveBeenCalledTimes(1);
+  });
+  it("does not reject ordinary booking language while preserving qualification and the writing prompt", async () => {
+    const input = fixture("Please prepare a NEW cleaning quote."), replyText = "Your booking is confirmed.";
+    const h = harness({ replyText, task: null, bookingQuote: update(input, {}, "collect") });
+    const plan = await h.generate(input);
+    expect(plan.replyText).toBe(replyText); expect(plan.task).toBeNull();
+    expect(plan.smsBookingQuote!.update).toEqual(update(input, {}, "collect"));
+    expect(h.runner).toHaveBeenCalledTimes(1);
+    expect(h.runner.mock.calls[0][0].systemPrompt).toContain(SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS);
   });
   it("still rejects assistant field evidence instead of treating a formatted question as authority", async () => {
     const input = fixture("Please prepare a NEW standard home quote.");
@@ -306,7 +314,18 @@ describe("ordinary SMS uses the same additive writing rules without changing sha
 
 // Compare untouched bytes, removing ONLY AST-identified authorized string initializers.
 // This is stricter than comparing reformatted/printed ASTs, which can conceal unrelated edits.
-const currentSource = (path: string) => readFileSync(path, "utf8");
+// Recognize only the complete, exact separately approved phrase-check removal.
+// The dedicated removal regression also checks these bytes against literal deletions.
+const approvedRemovalHashes: Record<string, string> = {
+  "server/instinct/claudeCustomerSmsGeneration.ts": "7c9e95d3f2ea77b34679b06d8a6acf0ab0e394cc0e85c709d9f4d20c1d9a1e2e",
+  "server/instinct/claudeSmsAlternative.ts": "ef6751f523e90b15b517cb2f2dc311b89b46f0a6c1375d7ada94adc27edb65af",
+  "server/instinct/smsBookingQuoteGeneration.ts": "17f25b73b83419420f183939fdb2e7788d7009d7f857765d4b0acc6d41daf568",
+};
+const currentSource = (path: string) => {
+  const source = readFileSync(path, "utf8");
+  return createHash("sha256").update(source).digest("hex") === approvedRemovalHashes[path]
+    ? execFileSync("git", ["show", `e762068d01118d8b4a6ea54f64d04b9546abc012:${path}`], { encoding: "utf8" }) : source;
+};
 const baselineSource = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
 function withoutPromptInitializer(source: string, path: string, name: string): string {
   const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);

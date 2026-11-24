@@ -6,6 +6,7 @@ import { CLAUDE_CUSTOMER_REPLY_CAPABILITY as capability, CLAUDE_CUSTOMER_TASK_AC
 import { createPublicBookingPriceSnapshot } from "../../shared/publicBookingPricing";
 import { createCustomerBookingLink } from "../customerBookingLinkService";
 import { previewCallBookingQuote, type CallBookingQuotePricing } from "./callBookingQuote";
+import { renderSmsBookingQuoteSummary } from "./bookingQuotePresentation";
 import { createClaudeCustomerSmsService, type CustomerSmsInput } from "./claudeCustomerSms";
 import { createClaudeCustomerSmsGeneratorWithReply } from "./claudeCustomerSmsGeneration";
 import { createClaudeCustomerTasksStore, type CustomerSmsBinding } from "./claudeCustomerTasksStore";
@@ -1084,6 +1085,66 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
   });
 
   it.each([
+    "I'll send your link.", "We've updated your notes.", "Your booking is confirmed.",
+    "Tomorrow is available.", "You're all set.", "We have reserved your appointment.",
+    "Your reservation is reserved.", "We have processed your payment.", "Tu reserva está confirmada.",
+    "We'll handle your request.",
+  ])("accepts active reply/template phrase %j with task:null without changing the verified canonical link, prices or native business state", async text => {
+    for (const location of ["replyText", "quoteTextTemplate"] as const) {
+      const h = harness(), input = h.append(FULL_TEXT), nativeBefore = structuredClone(h.state().nativeBookings);
+      h.queue(h.output(input, fullFields, "link", { [location]: location === "replyText" ? text : `${LINK_TEMPLATE} ${text}` }));
+      expect(await h.run(input)).toEqual({ outcome: "accepted" });
+      const snapshot = createPublicBookingPriceSnapshot(pricing), preview = previewCallBookingQuote({ pricing, extrasConfirmed: true });
+      if (!preview.success) throw Error("Expected canonical phrase acceptance fixture price");
+      expect(h.state().funnels).toHaveLength(1); expect(h.quoteRows()).toHaveLength(1);
+      const funnel = h.state().funnels[0], link = h.quote()!.link!, url = `${SMS_QUOTE_BOOKING_ORIGIN}${link.urlPath}`;
+      const content = renderSmsBookingQuoteSummary(canonicalInput(), snapshot, url);
+      expect(h.send.mock.calls).toEqual([[{ to: input.fromPhone, fromNumberId: input.receivingPhoneNumberId, content }]]);
+      expect(content).not.toContain(text); expect(content).not.toContain(LINK_TEMPLATE);
+      expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([url]);
+      expect(content).toContain(`💵 Total: ${preview.priceFormatted}`);
+      expect(content).toContain(`Your biweekly follow-up cleaning price is ${preview.futureVisitPriceFormatted}.`);
+      expect(funnel).toMatchObject({ customerPhone: PHONE, customerName: NAME, address: ADDRESS, stage: "lead",
+        requestedLocalDate: fullFields.requestedLocalDate, requestedLocalTime: fullFields.requestedLocalTime,
+        priceSnapshot: snapshot, firstCleaningTotalCents: preview.firstCleaningTotalCents,
+        futureVisitTotalCents: preview.futureVisitTotalCents });
+      expect(link).toMatchObject({ token: funnel.publicFunnelNumber, firstCleaningTotalCents: preview.firstCleaningTotalCents });
+      expect(h.quote()?.fields).toEqual(fullFields);
+      expect(h.tasks()).toHaveLength(1);
+      expect(h.tasks()[0]).toMatchObject({ title: FOLLOWUP_TITLE, sourceMessageId: input.providerMessageId, status: "unclaimed",
+        items: [{ title: FOLLOWUP_ITEM, evidenceQuote: input.inboundText }], reply: { text: content, status: "sent" } });
+      expect(h.state().nativeBookings).toEqual(nativeBefore);
+      expect(h.writes.every(write => ["madison_sms_drafts", "ops_chat_messages", "booking_funnel_records", "conversation_sessions"].includes(write.table))).toBe(true);
+      expect(h.writes.some(write => ["failure-detail", "failure-review", "suppress", "uncertain"].includes(write.kind))).toBe(false);
+      expectAcceptedHistory(h, input); expect(h.runner).toHaveBeenCalledTimes(1); expect(h.readKnowledge).toHaveBeenCalledTimes(1);
+      const accepted = structuredClone(h.state());
+      expect(["excluded", "duplicate"]).toContain((await h.run(input)).outcome);
+      expect(h.state()).toEqual(accepted); expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("accepts booking references and protected provider/line IDs in both active output locations but still sends only the canonical verified summary", async () => {
+    const h = harness(), input = h.append(FULL_TEXT);
+    const text = `We'll handle your request. Booking code MIB-123, confirmation number ABC-456, ${input.providerMessageId}, ${input.receivingPhoneNumberId}. Requested time: 10:30 EST.`;
+    h.queue(h.output(input, fullFields, "link", { replyText: text, task: null, quoteTextTemplate: `${LINK_TEMPLATE} ${text}` }));
+    expect(await h.run(input)).toEqual({ outcome: "accepted" });
+    const snapshot = createPublicBookingPriceSnapshot(pricing), link = h.quote()!.link!, url = `${SMS_QUOTE_BOOKING_ORIGIN}${link.urlPath}`;
+    const content = renderSmsBookingQuoteSummary(canonicalInput(), snapshot, url);
+    expect(h.send.mock.calls).toEqual([[{ to: PHONE, fromNumberId: LINE, content }]]);
+    for (const reference of [text, "MIB-123", "ABC-456", input.providerMessageId, LINE]) expect(content).not.toContain(reference);
+    expect(content.match(/https?:\/\/[^\s]+/g)).toEqual([url]);
+    expect(h.state().funnels).toHaveLength(1);
+    expect(h.state().funnels[0]).toMatchObject({ priceSnapshot: snapshot, stage: "lead",
+      firstCleaningTotalCents: snapshot.breakdown.firstCleaningTotalCents, futureVisitTotalCents: snapshot.breakdown.futureVisitTotalCents });
+    expect(h.state().nativeBookings).toEqual([{ id: 81, status: "untouched" }]);
+    expect(h.writes.every(write => ["madison_sms_drafts", "ops_chat_messages", "booking_funnel_records", "conversation_sessions"].includes(write.table))).toBe(true);
+    expectAcceptedHistory(h, input); expect(h.runner).toHaveBeenCalledTimes(1);
+    const accepted = structuredClone(h.state());
+    expect(["excluded", "duplicate"]).toContain((await h.run(input)).outcome);
+    expect(h.state()).toEqual(accepted); expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
     ["generated price", { replyText: "Your quote is $1." }],
     ["numeric currency words", { replyText: "Your first cleaning costs 383 dollars." }],
     ["spelled currency words", { replyText: "Your first cleaning costs three hundred dollars." }],
@@ -1091,18 +1152,13 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
     ["currency before numeric amount", { replyText: "The first visit will be dollars 250." }],
     ["currency code", { replyText: "Your first cleaning costs USD 383." }],
     ["generated URL", { replyText: "Review your quote at https://attacker.example.test/book/untrusted" }],
-    ["booking confirmation", { replyText: "Your booking is confirmed." }],
-    ["reservation confirmation", { replyText: "Your reservation is reserved." }],
-    ["payment completion", { replyText: "We have processed your payment." }],
-    ["Spanish fake confirmation", { replyText: "Tu reserva está confirmada." }],
     ["template price", { quoteTextTemplate: "Your quote is $1. {{firstCleaningPrice}} {{bookingLink}}" }],
     ["template numeric currency words", { quoteTextTemplate: "Your first cleaning costs 383 dollars. {{firstCleaningPrice}} {{bookingLink}}" }],
     ["template qualified numeric currency words", { quoteTextTemplate: "The first visit will be 250 US dollars. {{firstCleaningPrice}} {{bookingLink}}" }],
     ["template currency before amount", { quoteTextTemplate: "The first visit will be dollars 250. {{firstCleaningPrice}} {{bookingLink}}" }],
     ["template attacker URL", { quoteTextTemplate: "Your quote: {{firstCleaningPrice}} https://attacker.example.test {{bookingLink}}" }],
-    ["template fake confirmation", { quoteTextTemplate: "Your booking is confirmed. {{firstCleaningPrice}} {{bookingLink}}" }],
     ["unknown template placeholder", { quoteTextTemplate: "{{firstCleaningPrice}} {{bookingLink}} {{customPrice}}" }],
-  ])("rejects active %s rather than trusting the model with prices, links or completed-business claims", async (_label, patch) => {
+  ])("rejects active %s rather than trusting model-owned prices, links or placeholders", async (_label, patch) => {
     const h = harness(), input = h.append(FULL_TEXT); h.queue(h.output(input, fullFields, "link", patch as Row));
     expect(await h.run(input)).toEqual({ outcome: "failed" }); expectInternalFailure(h, input);
     expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]); expect(h.send).not.toHaveBeenCalled();
@@ -1204,6 +1260,35 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
 });
 
 describe("ordinary customer service and original human-task authority remain intact", () => {
+  it.each(["legacy two-field", "explicit bookingQuote:null"] as const)("sends exact ordinary phrase/reference/protected-ID text once with task:null for %s output and blocks duplicate original events", async mode => {
+    const h = harness(), input = h.append("Please handle my existing cleaning request and send its reference."), beforeHistory = structuredClone(h.history());
+    const replyText = `I'll send your reference. We've updated your notes. Your booking is confirmed. Tomorrow is available. You're all set. We have reserved your appointment. We'll handle your request. Booking code MIB-123, confirmation number ABC-456, ${input.providerMessageId}, ${input.receivingPhoneNumberId}. Requested time: 10:30 EST.`;
+    const beforeNative = structuredClone(h.state().nativeBookings);
+    h.queue({ replyText, task: null, ...(mode === "explicit bookingQuote:null" ? { bookingQuote: null } : {}) });
+    const results = await Promise.all([h.run(input), h.run(input), h.run(input)]);
+    expect(results.filter(value => value.outcome === "accepted")).toHaveLength(1);
+    expect(results.filter(value => value.outcome === "duplicate")).toHaveLength(2);
+    expect(h.send.mock.calls).toEqual([[{ to: input.fromPhone, fromNumberId: input.receivingPhoneNumberId, content: replyText }]]);
+    expect(h.runner).toHaveBeenCalledTimes(1); expect(h.readKnowledge.mock.calls).toEqual([[input.inboundText]]);
+    const prompt = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
+    expect(prompt.context.binding).toMatchObject({ providerMessageId: input.providerMessageId, fromPhone: PHONE,
+      receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS, inboundText: input.inboundText });
+    expect(prompt.context.originalConversation).toEqual(beforeHistory.map((turn, turnIndex) => ({ ...turn, turnIndex })));
+    expect(h.state().drafts).toHaveLength(1);
+    expect(h.state().drafts[0]).toMatchObject({ inboundOpenPhoneId: input.providerMessageId, generatedDraft: replyText, approvedText: replyText,
+      status: "SENT", outboundOpenPhoneId: "synthetic-outbound-1", errorCode: null, errorStage: null,
+      capabilityResult: { phase: "submission_started", taskId: null } });
+    expect(h.state().drafts[0].errorMessage ?? null).toBeNull();
+    expectAcceptedHistory(h, input); expect(h.history().slice(0, -1)).toEqual(beforeHistory);
+    expect(h.tasks()).toEqual([]); expect(h.quoteRows()).toEqual([]); expect(h.state().cards).toEqual([]); expect(h.state().funnels).toEqual([]);
+    expect(h.state().nativeBookings).toEqual(beforeNative);
+    expect(h.writes.every(write => ["madison_sms_drafts", "conversation_sessions"].includes(write.table))).toBe(true);
+    expect(h.writes.some(write => ["failure-detail", "failure-review", "suppress", "uncertain"].includes(write.kind))).toBe(false);
+    const accepted = structuredClone(h.state());
+    expect(["excluded", "duplicate"]).toContain((await h.run(input)).outcome);
+    expect(h.state()).toEqual(accepted); expect(h.runner).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["null", "valid saved"] as const)("accepts 'Yes that's fine' to a saved staff availability question exactly once with %s quote state", async stateCase => {
     const h = harness();
     if (stateCase === "valid saved") {

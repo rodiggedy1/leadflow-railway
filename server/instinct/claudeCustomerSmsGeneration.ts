@@ -110,11 +110,7 @@ export function createClaudeCustomerReplyGenerator(options: ClaudeCustomerSmsGen
     });
     const plan = customerReplyPlanSchema.parse(JSON.parse(output.finalSmsText));
     const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: plan.replyText }), protectedIds);
-    // Additional capability-specific failures, not synthetic rewrites. Current
-    // CS tone examples include completed actions; none occurred in generation.
-    if (/\b(?:notes? (?:are|is) in|(?:crew|team|staff) (?:has been|have been|was|were|is|are) briefed|(?:request|change|update|refund|cancellation|reschedule|booking|appointment) (?:is|was|has been) (?:done|complete|completed|confirmed|handled|processed)|(?:I|we)(?:['’]ve| have) (?:taken care of|handled|completed|processed)|(?:your|the) (?:slot|appointment|booking|cleaning) (?:is|has been) (?:available|guaranteed|confirmed)|(?:I|we) (?:can|will|guarantee) (?:fit you in|guarantee availability)|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|tomorrow) (?:is|will be) available)\b/i.test(replyText)) return fail("UNSAFE_REPLY_CLAIM");
     if (plan.task?.items.some(item => !incomingMessage.includes(item.evidenceQuote))) return fail("TASK_EVIDENCE_NOT_CURRENT_INBOUND");
-    if (plan.task === null && /\b(?:I|we)(?:['’]ll| will)\s+(?:take care of|handle|review)\s+(?:this|that|it|your (?:request|change)|the (?:request|change))\b/i.test(replyText)) return fail("ACKNOWLEDGMENT_REQUIRES_TASK");
     return { replyText, task: plan.task };
   };
 }
