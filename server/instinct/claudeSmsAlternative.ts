@@ -10,6 +10,7 @@ import { normalizePhone } from "../utils/phone";
 import { retrieveKnowledge } from "../madisonKnowledgeRetrieval";
 import { runGeneralSmsDraft, type GeneralSmsDraftOptions } from "./claudeAgentClient";
 import { createAlternativeSessionReader, type AlternativeSessionRow, type StoredSessionContact } from "./claudeSmsAlternativeSessionRead";
+import { createGenerationRecovery } from "./generationRecovery";
 export { claudeSmsAlternativeGenerateInputSchema, claudeSmsAlternativeResultSchema } from "../../shared/claudeSmsAlternative";
 
 export class ClaudeSmsAlternativeError extends Error {
@@ -108,8 +109,8 @@ export interface ClaudeSmsAlternativeOptions {
 }
 const callerSchema = z.object({ id: z.string().min(1), name: z.string(), isOwner: z.boolean(), email: z.string().optional() }).strict();
 
-/** Passive factory: no source/store writes, ownership changes, pipelines, retries,
- * booking reads or sends. Coalescing lasts only while this exact request runs. */
+/** Passive factory: no source/store writes, ownership changes, pipelines,
+ * booking reads or sends. One extra content attempt; coalescing lasts only while this exact request runs. */
 export function createClaudeSmsAlternativeService(options: ClaudeSmsAlternativeOptions) {
   const inFlight = new Map<string, Promise<ClaudeSmsAlternativeResult>>();
   async function authorize(raw: unknown): Promise<OpsCaller> {
@@ -161,28 +162,38 @@ export function createClaudeSmsAlternativeService(options: ClaudeSmsAlternativeO
       if (hash({ ...next, binding, bookingContext: null, knowledgeBase }) !== contextHash) return fail("STALE_CONTEXT");
     }
     const events = new Map<string, { signature: string; result: unknown }>();
+    let toolGuardError: unknown;
     const backend: GeneralSmsDraftOptions["backend"] = {
       tools: [{ name: "get_customer_context", description: "Read only the complete exact-session saved context, primary current incoming message and approved knowledge base. No operations or escalation occurred.",
         input_schema: z.toJSONSchema(emptyInput) as Record<string, unknown> }],
       async callTool(name, input, providerEventId) {
-        if (name !== "get_customer_context") return fail("UNSAFE_TOOL");
-        emptyInput.parse(input);
-        if (!providerEventId) return fail("INVALID_TOOL_EVENT");
-        const signature = canonicalSmsDraftJson({ name, input }), prior = events.get(providerEventId);
-        if (prior) { if (signature !== prior.signature) return fail("TOOL_REPLAY_CONFLICT"); return copy(prior.result); }
-        await fresh();
-        const result = { ...copy(ctx), incomingMessage: binding.inboundText, mode: "review_only", smsSent: false, actionsExecuted: false };
-        events.set(providerEventId, { signature, result }); return copy(result);
+        try {
+          if (name !== "get_customer_context") return fail("UNSAFE_TOOL");
+          emptyInput.parse(input);
+          if (!providerEventId) return fail("INVALID_TOOL_EVENT");
+          const signature = canonicalSmsDraftJson({ name, input }), prior = events.get(providerEventId);
+          if (prior) { if (signature !== prior.signature) return fail("TOOL_REPLAY_CONFLICT"); return copy(prior.result); }
+          await fresh();
+          const result = { ...copy(ctx), incomingMessage: binding.inboundText, mode: "review_only", smsSent: false, actionsExecuted: false };
+          events.set(providerEventId, { signature, result }); return copy(result);
+        } catch (error) { toolGuardError ??= error; throw error; }
       },
     };
-    // Fresh immediately before provider invocation as well as after completion.
+    const runnerRequest: GeneralSmsDraftOptions = { reviewOnly: true, backend,
+      reviewPayload: JSON.stringify({ mode: "review_only", instructions: CLAUDE_SMS_DRAFT_INSTRUCTIONS, incomingMessage: binding.inboundText, context: ctx }) };
+    const recovery = createGenerationRecovery();
+    // Fresh before each content attempt and after the complete result validates.
+    const result = await recovery.run(async () => {
+      const output = await (options.runner ?? runGeneralSmsDraft)(runnerRequest);
+      const replyText = safeReply(output.finalSmsText, ctx);
+      return claudeSmsAlternativeResultSchema.parse({ ...input, receivingPhoneNumber, replyText, contextHash,
+        mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+    }, async () => {
+      if (toolGuardError !== undefined) throw toolGuardError;
+      await fresh();
+    });
     await fresh();
-    const output = await (options.runner ?? runGeneralSmsDraft)({ reviewOnly: true, backend,
-      reviewPayload: JSON.stringify({ mode: "review_only", instructions: CLAUDE_SMS_DRAFT_INSTRUCTIONS, incomingMessage: binding.inboundText, context: ctx }) });
-    const replyText = safeReply(output.finalSmsText, ctx);
-    await fresh();
-    return claudeSmsAlternativeResultSchema.parse({ ...input, receivingPhoneNumber, replyText, contextHash,
-      mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+    return result;
   }
   return {
     async generate(raw: unknown, rawCaller: unknown): Promise<ClaudeSmsAlternativeResult> {

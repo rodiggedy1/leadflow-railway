@@ -172,15 +172,21 @@ describe("content-only Claude customer SMS plan", () => {
     { replyText: "Hello", task: { ...task, tool: "book" } },
     { replyText: "Hello", task: { title: "Work", items: [] } },
     { replyText: "Hello", task: { title: "Work", items: [{ title: "Work", evidenceQuote: "" }] } },
-  ])("rejects malformed or non-strict output without fallback: %j", async result => {
+    { replyText: " \n\t", task: null },
+  ])("rejects repeated malformed, non-strict or blank output after exactly two attempts without fallback: %j", async result => {
     const f = fixture(), h = harness(result);
     await expect(h.generate(f.binding, f.session)).rejects.toThrow();
-    expect(h.runner).toHaveBeenCalledTimes(1);
+    expect(h.runner).toHaveBeenCalledTimes(2);
+    expect(h.runner.mock.calls[1][0]).toBe(h.runner.mock.calls[0][0]);
+    expect(h.readKnowledge).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["Your prior visit is booked.", "move your cleaning to Friday", "Friday at 10 am"])("requires literal CURRENT inbound evidence, not historical/paraphrased/invented: %s", async evidenceQuote => {
+  it.each(["Your prior visit is booked.", "move your cleaning to Friday", "Friday at 10 am"])("requires literal CURRENT inbound evidence on both attempts, not historical/paraphrased/invented: %s", async evidenceQuote => {
     const f = fixture(), h = harness({ replyText: pendingReply, task: { title: "Work", items: [{ title: "Work", evidenceQuote }] } });
     await expect(h.generate(f.binding, f.session)).rejects.toThrow("TASK_EVIDENCE_NOT_CURRENT_INBOUND");
+    expect(h.runner).toHaveBeenCalledTimes(2);
+    expect(h.runner.mock.calls[1][0]).toBe(h.runner.mock.calls[0][0]);
+    expect(h.readKnowledge).toHaveBeenCalledTimes(1);
   });
 
   it.each(["I've rescheduled your cleaning.", "We updated your notes.", "Your cleaning has been changed.", "I will contact the team.", "We notified staff.",
@@ -232,14 +238,137 @@ describe("content-only Claude customer SMS plan", () => {
   ])("rejects contradictory or malformed stored inbound history: %j", async history => {
     const f = fixture(history), h = harness();
     await expect(h.generate(f.binding, f.session)).rejects.toThrow(); expect(h.runner).not.toHaveBeenCalled();
+    expect(h.readKnowledge).not.toHaveBeenCalled();
   });
 
-  it("stops on missing approved knowledge and propagates runner failure without another turn", async () => {
-    const f = fixture(), empty = harness(undefined, { readKnowledge: async () => " " });
+  it("keeps a successfully read empty knowledge snapshot fail-closed and bounds repeated provider failure to two turns", async () => {
+    const readKnowledge = vi.fn(async () => " "), f = fixture(), empty = harness(undefined, { readKnowledge });
     await expect(empty.generate(f.binding, f.session)).rejects.toThrow("KNOWLEDGE_UNAVAILABLE"); expect(empty.runner).not.toHaveBeenCalled();
+    expect(readKnowledge).toHaveBeenCalledTimes(1);
     const runner = vi.fn(async () => { throw new Error("mock-provider-failure"); });
     await expect(harness(undefined, { runner }).generate(f.binding, f.session)).rejects.toThrow("mock-provider-failure");
-    expect(runner).toHaveBeenCalledTimes(1);
+    expect(runner).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { name: "provider rejection", output: new Error("FIRST_PROVIDER_FAILURE") },
+    { name: "provider SyntaxError", output: new SyntaxError("FIRST_PROVIDER_SYNTAX_FAILURE") },
+    { name: "malformed JSON", output: "Not JSON" },
+    { name: "strict schema violation", output: { replyText: "Hello", task: null, sendSms: true } },
+    { name: "blank reply", output: { replyText: " \n\t", task: null } },
+    { name: "current-inbound task evidence", output: { replyText: pendingReply,
+      task: { title: "Review", items: [{ title: "Review", evidenceQuote: "Your prior visit is booked." }] } } },
+  ])("recovers $name once with the identical request, original signal and complete unchanged inputs", async row => {
+    const history = Array.from({ length: 650 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `Turn ${index} ${"z".repeat(600)}` }));
+    const f = fixture([...history, { role: "user", content: inboundText, opMsgId: "msg-current" }]);
+    const before = JSON.stringify(f), controller = new AbortController(), h = harness(undefined, { signal: controller.signal });
+    if (row.output instanceof Error) h.runner.mockRejectedValueOnce(row.output);
+    else h.runner.mockResolvedValueOnce({ finalSmsText: typeof row.output === "string" ? row.output : JSON.stringify(row.output) });
+    expect(await h.generate(f.binding, f.session)).toEqual({ replyText: pendingReply, task });
+    expect(h.runner).toHaveBeenCalledTimes(2);
+    expect(h.readKnowledge).toHaveBeenCalledTimes(1);
+    expect(h.readKnowledge).toHaveBeenCalledWith(inboundText);
+    const request = h.runner.mock.calls[0][0];
+    expect(h.runner.mock.calls[1][0]).toBe(request);
+    expect(request.signal).toBe(controller.signal);
+    expect(request.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
+    expect(request.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(JSON.parse(request.userPrompt)).toEqual({ incomingMessage: inboundText, context: { binding: f.binding,
+      contact: f.session.contact, originalConversation: f.session.messageHistory,
+      receivingPhoneNumberId: f.binding.receivingPhoneNumberId, receivingPhoneNumber: f.binding.receivingPhoneNumber,
+      bookingContext: null, knowledgeBase: await h.readKnowledge.mock.results[0].value } });
+    expect(JSON.stringify(f)).toBe(before);
+  });
+
+  it("retries a rejected knowledge read once, then generates once from the complete successful snapshot", async () => {
+    const f = fixture(), h = harness();
+    h.readKnowledge.mockRejectedValueOnce(new Error("KNOWLEDGE_READ_FAILURE"));
+    const generate = createClaudeCustomerSmsGenerator({ readKnowledge: h.readKnowledge, runner: h.runner });
+    expect(await generate(f.binding, f.session)).toEqual({ replyText: pendingReply, task });
+    expect(h.readKnowledge).toHaveBeenCalledTimes(2);
+    expect(h.readKnowledge.mock.calls).toEqual([[inboundText], [inboundText]]);
+    expect(h.runner).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt).context.knowledgeBase).toBe(await h.readKnowledge.mock.results[1].value);
+  });
+
+  it("does not grant a third attempt after a rejected knowledge read followed by invalid generation", async () => {
+    const f = fixture(), h = harness("Not JSON");
+    h.readKnowledge.mockRejectedValueOnce(new Error("KNOWLEDGE_READ_FAILURE"));
+    await expect(h.generate(f.binding, f.session)).rejects.toThrow(SyntaxError);
+    expect(h.readKnowledge).toHaveBeenCalledTimes(2);
+    expect(h.runner).toHaveBeenCalledTimes(1);
+    const repeated = harness();
+    repeated.readKnowledge.mockRejectedValue(new Error("REPEATED_KNOWLEDGE_FAILURE"));
+    await expect(repeated.generate(f.binding, f.session)).rejects.toThrow("REPEATED_KNOWLEDGE_FAILURE");
+    expect(repeated.readKnowledge).toHaveBeenCalledTimes(2);
+    expect(repeated.runner).not.toHaveBeenCalled();
+  });
+
+  it.each(["JSON then provider", "provider then bad evidence"])("keeps mixed failures bounded to two runner calls: %s", async mode => {
+    const f = fixture(), h = harness(), finalError = new Error("SECOND_PROVIDER_FAILURE");
+    if (mode === "JSON then provider") h.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" }).mockRejectedValueOnce(finalError);
+    else h.runner.mockRejectedValueOnce(new Error("FIRST_PROVIDER_FAILURE")).mockResolvedValueOnce({ finalSmsText: JSON.stringify({ replyText: pendingReply,
+      task: { title: "Review", items: [{ title: "Review", evidenceQuote: "Historical request" }] } }) });
+    await expect(h.generate(f.binding, f.session)).rejects.toThrow(mode === "JSON then provider" ? finalError.message : "TASK_EVIDENCE_NOT_CURRENT_INBOUND");
+    expect(h.runner).toHaveBeenCalledTimes(2);
+    expect(h.runner.mock.calls[1][0]).toBe(h.runner.mock.calls[0][0]);
+    expect(h.readKnowledge).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts no knowledge or runner call for an already aborted request", async () => {
+    const controller = new AbortController(); controller.abort(new Error("PRE_ABORTED"));
+    const f = fixture(), h = harness(undefined, { signal: controller.signal });
+    await expect(h.generate(f.binding, f.session)).rejects.toThrow("PRE_ABORTED");
+    expect(h.runner).not.toHaveBeenCalled(); expect(h.readKnowledge).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 2])("does not generate again after abort during pending attempt %s with a late invalid result", async pendingAttempt => {
+    const controller = new AbortController(), f = fixture(), h = harness(undefined, { signal: controller.signal });
+    let release!: () => void, started!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const start = new Promise<void>(resolve => { started = resolve; });
+    if (pendingAttempt === 2) h.runner.mockRejectedValueOnce(new Error("FIRST_PROVIDER_FAILURE"));
+    h.runner.mockImplementationOnce(async request => {
+      expect(request.signal).toBe(controller.signal); started(); await gate;
+      return { finalSmsText: "Late non-JSON result" };
+    });
+    const pending = h.generate(f.binding, f.session), rejected = expect(pending).rejects.toThrow(SyntaxError);
+    await start; expect(h.runner).toHaveBeenCalledTimes(pendingAttempt);
+    controller.abort(); release(); await rejected;
+    expect(h.runner).toHaveBeenCalledTimes(pendingAttempt);
+    expect(h.readKnowledge).toHaveBeenCalledTimes(1);
+  });
+
+  it("isolates recovery and knowledge snapshots across concurrent and later requests using the same factory", async () => {
+    const a = fixture(), textB = "Please add fridge cleaning.", b = fixture([{ role: "user", content: textB, opMsgId: "msg-other" }]);
+    Object.assign(b.session.contact, { sessionId: "43", rawPhone: "202-555-0124", phone: "+12025550124", displayName: "Lucia Lane" });
+    Object.assign(b.binding, { sessionId: 43, fromPhone: "+12025550124", customerName: "Lucia Lane", providerMessageId: "msg-other", inboundText: textB });
+    const before = JSON.stringify({ a, b }), counts = new Map<number, number>();
+    let startedA!: () => void, releaseA!: () => void;
+    const startA = new Promise<void>(resolve => { startedA = resolve; });
+    const gateA = new Promise<void>(resolve => { releaseA = resolve; });
+    const runner = vi.fn(async (request: InitialLeadDraftOptions) => {
+      const id = JSON.parse(request.userPrompt).context.binding.sessionId, count = (counts.get(id) ?? 0) + 1; counts.set(id, count);
+      if (id === 42 && count === 1) { startedA(); await gateA; }
+      if (count === 1) throw new Error(`FIRST_FAILURE_${id}`);
+      return { finalSmsText: JSON.stringify({ replyText: id === 42 ? "Thanks, Maya!" : "Thanks, Lucia!", task: null }) };
+    });
+    const readKnowledge = vi.fn(async (text: string) => `Complete approved knowledge for ${text}`);
+    const generate = createClaudeCustomerSmsGenerator({ runner, readKnowledge });
+    const pendingA = generate(a.binding, a.session); await startA;
+    expect(await generate(b.binding, b.session)).toEqual({ replyText: "Thanks, Lucia!", task: null });
+    releaseA(); expect(await pendingA).toEqual({ replyText: "Thanks, Maya!", task: null });
+    expect(runner).toHaveBeenCalledTimes(4); expect(readKnowledge).toHaveBeenCalledTimes(2);
+    for (const id of [42, 43]) {
+      const calls = runner.mock.calls.filter(([request]) => JSON.parse(request.userPrompt).context.binding.sessionId === id);
+      expect(calls).toHaveLength(2); expect(calls[1][0]).toBe(calls[0][0]);
+      expect(JSON.parse(calls[0][0].userPrompt).context.knowledgeBase).toBe(`Complete approved knowledge for ${id === 42 ? inboundText : textB}`);
+    }
+    counts.set(42, 0);
+    expect(await generate(a.binding, a.session)).toEqual({ replyText: "Thanks, Maya!", task: null });
+    expect(runner).toHaveBeenCalledTimes(6); expect(readKnowledge).toHaveBeenCalledTimes(3);
+    expect(runner.mock.calls[4][0]).not.toBe(runner.mock.calls[0][0]);
+    expect(JSON.stringify({ a, b })).toBe(before);
   });
 
   it("routes production generation to the existing no-tools content runner, not extra preparation calls", () => {

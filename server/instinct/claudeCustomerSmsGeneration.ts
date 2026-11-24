@@ -8,6 +8,7 @@ import { normalizePhone } from "../utils/phone";
 import { runInitialLeadDraft, type InitialLeadDraftOptions } from "./claudeAgentClient";
 import { CLAUDE_SMS_DRAFT_INSTRUCTIONS, validateClaudeReviewReply } from "./claudeSmsAlternative";
 import type { AlternativeSessionRow } from "./claudeSmsAlternativeSessionRead";
+import { createGenerationRecovery, type GenerationRecovery } from "./generationRecovery";
 
 export interface ClaudeCustomerSmsGenerationBinding {
   sessionId: number;
@@ -24,6 +25,7 @@ export interface ClaudeCustomerSmsGenerationBinding {
 export interface ClaudeCustomerSmsGenerationOptions {
   readKnowledge?: typeof retrieveKnowledge;
   runner?: (options: InitialLeadDraftOptions) => Promise<{ finalSmsText: string }>;
+  signal?: AbortSignal;
 }
 
 export interface ClaudeCustomerReplyInput {
@@ -97,21 +99,40 @@ function exactConversation(binding: ClaudeCustomerSmsGenerationBinding, session:
   return parsed.data;
 }
 
-/** Passive content factory. Exactly one saved-agent turn, session-local system
+/** The same strict output and current-inbound evidence checks, without generation. */
+export function validateClaudeCustomerReplyPlan(text: string, { incomingMessage, protectedIds }: ClaudeCustomerReplyInput): CustomerReplyPlan {
+  const plan = customerReplyPlanSchema.parse(JSON.parse(text));
+  const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: plan.replyText }), protectedIds);
+  if (plan.task?.items.some(item => !incomingMessage.includes(item.evidenceQuote))) return fail("TASK_EVIDENCE_NOT_CURRENT_INBOUND");
+  return { replyText, task: plan.task };
+}
+
+/** Passive content factory. At most two saved-agent turns, session-local system
  * instructions, no tools, no extra classifier/reranker, no truncation or writes.
  * Eligibility, durable intent, freshness and SMS authority remain in dispatch. */
-export function createClaudeCustomerReplyGenerator(options: ClaudeCustomerSmsGenerationOptions = {}) {
-  return async function generateClaudeCustomerReplyPlan({ incomingMessage, context, protectedIds }: ClaudeCustomerReplyInput): Promise<CustomerReplyPlan> {
-    const knowledgeBase = await (options.readKnowledge ?? retrieveKnowledge)(incomingMessage);
-    if (typeof knowledgeBase !== "string" || !knowledgeBase.trim()) return fail("KNOWLEDGE_UNAVAILABLE");
-    const output = await (options.runner ?? runInitialLeadDraft)({
-      systemPrompt: `=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${buildSystemPrompt()}`,
-      userPrompt: JSON.stringify({ incomingMessage, context: { ...context, knowledgeBase } }),
+export function createClaudeCustomerReplyGenerator(options: ClaudeCustomerSmsGenerationOptions = {},
+  invocation?: { recovery: GenerationRecovery; request?: InitialLeadDraftOptions }) {
+  return async function generateClaudeCustomerReplyPlan(input: ClaudeCustomerReplyInput): Promise<CustomerReplyPlan> {
+    const { incomingMessage, context } = input;
+    const scope = invocation ?? { recovery: createGenerationRecovery(options.signal), request: undefined as InitialLeadDraftOptions | undefined };
+    let knowledgeBase: unknown, knowledgeLoaded = false;
+    return scope.recovery.run(async () => {
+      if (!scope.request) {
+        if (!knowledgeLoaded) {
+          knowledgeBase = await (options.readKnowledge ?? retrieveKnowledge)(incomingMessage);
+          knowledgeLoaded = true;
+        }
+        if (typeof knowledgeBase !== "string" || !knowledgeBase.trim()) return fail("KNOWLEDGE_UNAVAILABLE");
+        scope.request = {
+          systemPrompt: `=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${buildSystemPrompt()}`,
+          userPrompt: JSON.stringify({ incomingMessage, context: { ...context, knowledgeBase } }),
+          ...(options.signal ? { signal: options.signal } : {}),
+        };
+      }
+      options.signal?.throwIfAborted();
+      const output = await (options.runner ?? runInitialLeadDraft)(scope.request);
+      return validateClaudeCustomerReplyPlan(output.finalSmsText, input);
     });
-    const plan = customerReplyPlanSchema.parse(JSON.parse(output.finalSmsText));
-    const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: plan.replyText }), protectedIds);
-    if (plan.task?.items.some(item => !incomingMessage.includes(item.evidenceQuote))) return fail("TASK_EVIDENCE_NOT_CURRENT_INBOUND");
-    return { replyText, task: plan.task };
   };
 }
 

@@ -10,6 +10,7 @@ import { normalizePhone } from "../utils/phone";
 import { prepareCsReplyMessages } from "../csReplyStream";
 import { runInitialLeadDraft, type InitialLeadDraftOptions } from "./claudeAgentClient";
 import { validateClaudeReviewReply, type OpsCaller } from "./claudeSmsAlternative";
+import { createGenerationRecovery } from "./generationRecovery";
 export { claudeInitialLeadInputSchema, claudeInitialLeadResultSchema } from "../../shared/claudeInitialLead";
 
 export class ClaudeInitialLeadError extends Error {
@@ -59,15 +60,19 @@ async function generateContent(input: ClaudeInitialLeadInput, options: ClaudeIni
     || !messages[0].content.trim() || !messages[1].content.trim()) return fail("INVALID_PREPARED_MESSAGES");
   const contextHash = createHash("sha256").update(canonical({ sessionId: input.sessionId, customerPhone,
     leadDetails: input.leadDetails, originalConversation: input.originalConversation, request, messages })).digest("hex");
+  const runnerRequest: InitialLeadDraftOptions = { systemPrompt: messages[0].content, userPrompt: messages[1].content };
+  const recovery = createGenerationRecovery();
+  const result = await recovery.run(async () => {
+    const output = await (options.runner ?? runInitialLeadDraft)(runnerRequest);
+    // The model returns exactly the plain SMS requested by the primary prompt.
+    // JSON is constructed locally for the unchanged non-sendable reply validator.
+    const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId], { allowFutureSendPromises });
+    return claudeInitialLeadResultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
+      sessionId: input.sessionId, customerPhone, contextHash, replyText,
+      mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+  }, reauthorize);
   await reauthorize();
-  const output = await (options.runner ?? runInitialLeadDraft)({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
-  // The model returns exactly the plain SMS requested by the primary prompt.
-  // JSON is constructed locally for the unchanged non-sendable reply validator.
-  const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: output.finalSmsText }), [input.requestId], { allowFutureSendPromises });
-  await reauthorize();
-  return claudeInitialLeadResultSchema.parse({ kind: "initial_lead", requestId: input.requestId,
-    sessionId: input.sessionId, customerPhone, contextHash, replyText,
-    mode: "review_only", smsSent: false, actionsExecuted: false, agentId: output.agentId, agentSessionId: output.sessionId });
+  return result;
 }
 
 /** Internal content-only entrypoint, not an API or permission bypass. No staff

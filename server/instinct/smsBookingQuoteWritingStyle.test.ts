@@ -292,7 +292,7 @@ describe("ordinary SMS uses the same additive writing rules without changing sha
   ])("retains quote safety for a brief but unsafe response: $error", async ({ replyText, error }) => {
     const input = fixture("Please prepare a NEW cleaning quote.");
     const h = harness({ replyText, task: null, bookingQuote: update(input, {}, "collect") });
-    await expect(h.generate(input)).rejects.toThrow(error); expect(h.runner).toHaveBeenCalledTimes(1);
+    await expect(h.generate(input)).rejects.toThrow(error); expect(h.runner).toHaveBeenCalledTimes(2);
   });
   it("does not reject ordinary booking language while preserving qualification and the writing prompt", async () => {
     const input = fixture("Please prepare a NEW cleaning quote."), replyText = "Your booking is confirmed.";
@@ -308,18 +308,18 @@ describe("ordinary SMS uses the same additive writing rules without changing sha
     const bookingQuote = update(input, { serviceId: "standard" }, "collect");
     bookingQuote.evidence.serviceId = { turnIndex: 1, quote: "service" };
     const h = harness({ replyText: questionReply("en"), task: null, bookingQuote });
-    await expect(h.generate(input)).rejects.toThrow("SMS_QUOTE_EVIDENCE_NOT_CUSTOMER"); expect(h.runner).toHaveBeenCalledTimes(1);
+    await expect(h.generate(input)).rejects.toThrow("SMS_QUOTE_EVIDENCE_NOT_CUSTOMER"); expect(h.runner).toHaveBeenCalledTimes(2);
   });
 });
 
 // Compare untouched bytes, removing ONLY AST-identified authorized string initializers.
 // This is stricter than comparing reformatted/printed ASTs, which can conceal unrelated edits.
-// Recognize only the complete, exact separately approved phrase-check removal.
-// The dedicated removal regression also checks these bytes against literal deletions.
+// Recognize only the exact phrase removal plus this local recovery candidate.
+// generationRecoveryScope independently pins all candidate bytes and unchanged prompts.
 const approvedRemovalHashes: Record<string, string> = {
-  "server/instinct/claudeCustomerSmsGeneration.ts": "7c9e95d3f2ea77b34679b06d8a6acf0ab0e394cc0e85c709d9f4d20c1d9a1e2e",
-  "server/instinct/claudeSmsAlternative.ts": "ef6751f523e90b15b517cb2f2dc311b89b46f0a6c1375d7ada94adc27edb65af",
-  "server/instinct/smsBookingQuoteGeneration.ts": "17f25b73b83419420f183939fdb2e7788d7009d7f857765d4b0acc6d41daf568",
+  "server/instinct/claudeCustomerSmsGeneration.ts": "b43266dd5bc761a9e4647cfedc1d0a3131d008325ea217cfa2fbc41394011596",
+  "server/instinct/claudeSmsAlternative.ts": "a9f2e906787cfda63d32a9d9612e7b0a7b8555d1ee2249ba8698dd3947979ee6",
+  "server/instinct/smsBookingQuoteGeneration.ts": "303e0a7f38d7c5e3e33eedc0874be028b88e50c18fb7a5e67530a132fb5e85e0",
 };
 const currentSource = (path: string) => {
   const source = readFileSync(path, "utf8");

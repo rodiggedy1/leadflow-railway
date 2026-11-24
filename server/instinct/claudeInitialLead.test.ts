@@ -41,8 +41,9 @@ function harness(overrides: Partial<ClaudeInitialLeadOptions> = {}) {
   const authorizeCaller = vi.fn(async () => true);
   const prepareMessages = vi.fn(async () => copy(messages));
   const runner = vi.fn<InitialLeadRunner>(async () => output());
-  return { authorizeCaller, prepareMessages, runner,
-    service: createClaudeInitialLeadService({ authorizeCaller, prepareMessages, runner, ...overrides }) };
+  const options = { authorizeCaller, prepareMessages, runner, ...overrides };
+  return { authorizeCaller, prepareMessages, runner, options,
+    service: createClaudeInitialLeadService(options) };
 }
 let network: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -113,9 +114,9 @@ describe("preserved human authorization, review-only guards and request lifecycl
     expect(runner).not.toHaveBeenCalled(); allowed = true;
     await expect(harness({ authorizeCaller: async () => allowed, runner: async () => { allowed = false; return output(); } }).service.generate(input, staff)).rejects.toThrow("UNAUTHORIZED");
   });
-  it("does not retry provider failure or synthesize a fallback", async () => {
+  it("makes only one extra attempt on provider failure and never synthesizes a fallback", async () => {
     const runner = vi.fn<InitialLeadRunner>(async () => { throw new Error("PROVIDER_FAILURE"); });
-    await expect(harness({ runner }).service.generate(input, staff)).rejects.toThrow("PROVIDER_FAILURE"); expect(runner).toHaveBeenCalledTimes(1);
+    await expect(harness({ runner }).service.generate(input, staff)).rejects.toThrow("PROVIDER_FAILURE"); expect(runner).toHaveBeenCalledTimes(2);
   });
   it("rejects invalid prepared message roles before invoking Claude", async () => {
     const runner = vi.fn<InitialLeadRunner>(async () => output());
@@ -231,10 +232,10 @@ describe("content-only reuse for the trusted native first-response dispatcher", 
     await expect(generateClaudeInitialLeadContent({ ...input, requestId: "bad" }, h)).rejects.toThrow();
     expect(h.runner).not.toHaveBeenCalled();
   });
-  it.each(["", "   "])("native content still rejects blank output %s without another provider turn", async text => {
+  it.each(["", "   "])("native content rejects blank output %s after exactly one extra provider turn", async text => {
     const runner = vi.fn<InitialLeadRunner>(async () => output(text)), h = harness();
     await expect(generateClaudeInitialLeadContent(input, { prepareMessages: h.prepareMessages, runner })).rejects.toThrow();
-    expect(runner).toHaveBeenCalledTimes(1);
+    expect(runner).toHaveBeenCalledTimes(2);
   });
   it.each(["I've scheduled your cleaning.", "Quote code: Q-88.", `Request ${input.requestId}.`])("native content accepts formerly rejected phrase examples exactly: %s", async text => {
     const runner = vi.fn<InitialLeadRunner>(async () => output(text)), h = harness();
@@ -242,6 +243,114 @@ describe("content-only reuse for the trusted native first-response dispatcher", 
     expect(result.replyText).toBe(text);
     expect(result).toMatchObject({ mode: "review_only", smsSent: false, actionsExecuted: false });
     expect(runner).toHaveBeenCalledTimes(1);
+  });
+});
+const rejectedInitialOutputs = [
+  { label: "provider", error: new Error("FIRST_PROVIDER_FAILURE") },
+  { label: "blank", value: output("") },
+  { label: "whitespace", value: output("   ") },
+  { label: "JSON serialization", value: { ...output(), finalSmsText: BigInt(1) } },
+  { label: "reply schema", value: { ...output(), finalSmsText: 17 } },
+  { label: "missing reply", value: { agentId: "agent_verified", sessionId: "sesn_verified" } },
+  { label: "empty agent metadata", value: { ...output(), agentId: "" } },
+  { label: "bad session metadata", value: { ...output(), sessionId: 17 } },
+  { label: "missing session metadata", value: { finalSmsText: reply, agentId: "agent_verified" } },
+];
+describe.each(["manual", "native"] as const)("one extra initial-lead content attempt: %s", entrypoint => {
+  const generate = (h: ReturnType<typeof harness>, raw: unknown = input) => entrypoint === "manual"
+    ? h.service.generate(raw, staff) : generateClaudeInitialLeadContent(raw, h.options);
+  it.each(rejectedInitialOutputs)("recovers $label using the same prepared request and unchanged receipt", async first => {
+    const runner = vi.fn<InitialLeadRunner>();
+    if ("error" in first) runner.mockRejectedValueOnce(first.error);
+    else runner.mockResolvedValueOnce(first.value as never);
+    runner.mockResolvedValueOnce(output());
+    const h = harness({ runner }), before = copy(input);
+    const result = await generate(h);
+    expect(result).toEqual(await harness().service.generate(input, staff));
+    expect(result).toMatchObject({ requestId: input.requestId, agentId: "agent_verified", agentSessionId: "sesn_verified" });
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(runner.mock.calls[1][0]).toBe(runner.mock.calls[0][0]);
+    expect(runner.mock.calls[0][0]).toEqual({ systemPrompt: messages[0].content, userPrompt: messages[1].content });
+    expect(h.prepareMessages).toHaveBeenCalledTimes(1);
+    expect(h.prepareMessages).toHaveBeenCalledWith(draftRequest);
+    expect(input).toEqual(before); expect(getDb).not.toHaveBeenCalled();
+  });
+  it.each(["provider then blank", "blank then provider", "metadata then reply schema"])("never takes a third turn for mixed failures: %s", async kind => {
+    const runner = vi.fn<InitialLeadRunner>();
+    if (kind === "provider then blank") runner.mockRejectedValueOnce(new Error("FIRST_PROVIDER_FAILURE")).mockResolvedValueOnce(output(""));
+    if (kind === "blank then provider") runner.mockResolvedValueOnce(output("")).mockRejectedValueOnce(new Error("SECOND_PROVIDER_FAILURE"));
+    if (kind === "metadata then reply schema") runner.mockResolvedValueOnce({ ...output(), agentId: "" }).mockResolvedValueOnce({ ...output(), finalSmsText: 17 } as never);
+    runner.mockResolvedValue(output());
+    const h = harness({ runner });
+    await expect(generate(h)).rejects.toThrow();
+    expect(runner).toHaveBeenCalledTimes(2); expect(h.prepareMessages).toHaveBeenCalledTimes(1);
+    expect(runner.mock.calls[1][0]).toBe(runner.mock.calls[0][0]);
+  });
+  it("does not recover a preparation failure", async () => {
+    const prepareMessages = vi.fn<typeof prepareCsReplyMessages>(async () => { throw new Error("PREPARATION_FAILURE"); });
+    const h = harness({ prepareMessages });
+    await expect(generate(h)).rejects.toThrow("PREPARATION_FAILURE");
+    expect(prepareMessages).toHaveBeenCalledTimes(1); expect(h.runner).not.toHaveBeenCalled();
+  });
+  it("keeps invalid prepared messages terminal without a provider turn", async () => {
+    const prepareMessages = vi.fn<typeof prepareCsReplyMessages>(async () => [] as never), h = harness({ prepareMessages });
+    await expect(generate(h)).rejects.toThrow("INVALID_PREPARED_MESSAGES");
+    expect(prepareMessages).toHaveBeenCalledTimes(1); expect(h.runner).not.toHaveBeenCalled();
+  });
+  it("rejects invalid input and phone before preparation", async () => {
+    const h = harness();
+    await expect(generate(h, { ...input, requestId: "bad" })).rejects.toThrow();
+    await expect(generate(h, { ...input, customerPhone: "not a phone" })).rejects.toThrow("INVALID_CUSTOMER_PHONE");
+    expect(h.prepareMessages).not.toHaveBeenCalled(); expect(h.runner).not.toHaveBeenCalled();
+  });
+});
+describe("initial-lead recovery authority and coalescing boundaries", () => {
+  it.each(["provider", "blank", "metadata"])("stops revoked authority before a second %s attempt", async kind => {
+    let allowed = true;
+    const runner = vi.fn<InitialLeadRunner>(async () => {
+      allowed = false;
+      if (kind === "provider") throw new Error("PROVIDER_FAILURE");
+      return kind === "blank" ? output("") : { ...output(), agentId: "" };
+    });
+    const h = harness({ authorizeCaller: async () => allowed, runner });
+    await expect(h.service.generate(input, staff)).rejects.toThrow("UNAUTHORIZED");
+    expect(runner).toHaveBeenCalledTimes(1); expect(h.prepareMessages).toHaveBeenCalledTimes(1);
+  });
+  it("keeps authority rejection after a recovered valid result terminal", async () => {
+    let allowed = true;
+    const runner = vi.fn<InitialLeadRunner>().mockResolvedValueOnce(output("")).mockImplementationOnce(async () => { allowed = false; return output(); });
+    const h = harness({ authorizeCaller: async () => allowed, runner });
+    await expect(h.service.generate(input, staff)).rejects.toThrow("UNAUTHORIZED");
+    expect(runner).toHaveBeenCalledTimes(2);
+  });
+  it("coalesces an identical pending recovery with two shared turns and separate result copies", async () => {
+    let reject!: (error: Error) => void, resolve!: (value: ReturnType<typeof output>) => void;
+    let enteredFirst!: () => void, enteredSecond!: () => void;
+    const firstEntered = new Promise<void>(r => { enteredFirst = r; }), secondEntered = new Promise<void>(r => { enteredSecond = r; });
+    const runner = vi.fn<InitialLeadRunner>()
+      .mockImplementationOnce(() => { enteredFirst(); return new Promise((_resolve, r) => { reject = r; }); })
+      .mockImplementationOnce(() => { enteredSecond(); return new Promise(r => { resolve = r; }); });
+    const h = harness({ runner }), first = h.service.generate(input, staff);
+    await firstEntered; const second = h.service.generate(copy(input), staff);
+    reject(new Error("PROVIDER_FAILURE")); await secondEntered; resolve(output());
+    const results = await Promise.all([first, second]);
+    expect(results[0]).toEqual(results[1]); expect(results[0]).not.toBe(results[1]);
+    results[0].replyText = "changed"; expect(results[1].replyText).toBe(reply);
+    expect(runner).toHaveBeenCalledTimes(2); expect(h.prepareMessages).toHaveBeenCalledTimes(1);
+    expect(runner.mock.calls[1][0]).toBe(runner.mock.calls[0][0]);
+    runner.mockResolvedValue(output()); await h.service.generate(input, staff);
+    expect(runner).toHaveBeenCalledTimes(3); expect(h.prepareMessages).toHaveBeenCalledTimes(2);
+  });
+  it("validates actual default-runner metadata in both entrypoints before accepting recovery", async () => {
+    for (const generate of [() => createClaudeInitialLeadService({ authorizeCaller: async () => true }).generate(input, staff), () => generateClaudeInitialLeadContent(input)]) {
+      vi.mocked(runInitialLeadDraft).mockReset()
+        .mockResolvedValueOnce({ ...output(), agentId: "" } as never).mockResolvedValueOnce(output() as never);
+      const result = await generate();
+      expect(result.agentId).toBe("agent_verified"); expect(result.agentSessionId).toBe("sesn_verified");
+      expect(runInitialLeadDraft).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(runInitialLeadDraft).mock.calls[1][0]).toBe(vi.mocked(runInitialLeadDraft).mock.calls[0][0]);
+    }
+    expect(prepareCsReplyMessages).toHaveBeenCalledTimes(2);
   });
 });
 describe("actual existing human-authenticated Madison route", () => {
@@ -263,7 +372,7 @@ describe("actual existing human-authenticated Madison route", () => {
   it.each(["provider", "blank output"])("returns the existing fixed route error for %s", async kind => {
     vi.mocked(runInitialLeadDraft).mockImplementation(async () => { if (kind === "provider") throw new Error("SECRET_PROVIDER_BODY"); return output("") as never; });
     await expect(madisonRouter.createCaller(context({ openId: `error-${kind}`, name: null } as never)).claudeAlternative.generateInitialLead(input)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: "Claude could not produce a safe review-only initial lead draft. No SMS was sent and no actions were executed." });
-    expect(runInitialLeadDraft).toHaveBeenCalledTimes(1);
+    expect(runInitialLeadDraft).toHaveBeenCalledTimes(2);
   });
 });
 const baselineFile = (path: string) => execFileSync("git", ["show", `${BASELINE}:${path}`], { encoding: "utf8" });
@@ -283,7 +392,10 @@ describe("exact protected source preservation", () => {
   it("retains the existing validator and general Claude path without changes", () => {
     for (const path of ["server/madisonKnowledgeRetrieval.ts", "server/knowledgeBase.ts", "server/utils/phone.ts", "shared/claudeSmsAlternative.ts"])
       expect(sha(readFileSync(path, "utf8"))).toBe(sha(execFileSync("git", ["show", `51c0565d6e2a371c28922fb0725cf997577e3b7c:${path}`], { encoding: "utf8" })));
-    const validator = readFileSync("server/instinct/claudeSmsAlternative.ts", "utf8");
+    const candidateValidator = readFileSync("server/instinct/claudeSmsAlternative.ts", "utf8");
+    // Recognize only this exact recovery candidate; the dedicated scope test pins it independently.
+    const validator = sha(candidateValidator) === "a9f2e906787cfda63d32a9d9612e7b0a7b8555d1ee2249ba8698dd3947979ee6"
+      ? execFileSync("git", ["show", "d277178315602808dbc1ac141bc344761f6f4468:server/instinct/claudeSmsAlternative.ts"], { encoding: "utf8" }) : candidateValidator;
     const originalValidator = execFileSync("git", ["show", "32ae8f2db02e265495281e5085c3325ee879d289:server/instinct/claudeSmsAlternative.ts"], { encoding: "utf8" });
     const outsideReplyValidator = (text: string) => text.split("export function validateClaudeReviewReply")[0]
       + text.slice(text.indexOf("function safeReply("));

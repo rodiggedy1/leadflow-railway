@@ -370,7 +370,7 @@ describe("SMS new-booking quote application: real generator â†’ qualification â†
     if (!preview.success) throw Error("Expected canonical price");
     expect(h.send.mock.calls[1][0].content).toContain(preview.priceFormatted);
     expect(h.send.mock.calls[1][0].content).not.toContain("couldn't finish");
-    expect(h.tasks()).toHaveLength(1); expect(h.runner).toHaveBeenCalledTimes(3); expectAcceptedHistory(h, next.input);
+    expect(h.tasks()).toHaveLength(1); expect(h.runner).toHaveBeenCalledTimes(4); expectAcceptedHistory(h, next.input);
   });
   it("claims one receipt and records one internal failure without sending for concurrent duplicate deliveries of invalid model output", async () => {
     const h = harness(), input = h.append("What is the price"); h.queue("invalid JSON output");

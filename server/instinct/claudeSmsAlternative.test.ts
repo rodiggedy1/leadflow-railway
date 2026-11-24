@@ -245,10 +245,156 @@ describe("stateless optional Claude SMS generation", () => {
     const h = harness({ authorizeCaller: async () => authorized, runner: async () => { authorized = false; return output(); } });
     await expect(h.service.generate(input, staff)).rejects.toThrow("UNAUTHORIZED");
   });
-  it("never automatically retries a failed provider invocation", async () => {
+  it("makes only one extra content attempt for a failed provider invocation", async () => {
     const runner = vi.fn<AlternativeRunner>(async () => { throw new Error("SECRET_PROVIDER_BODY"); });
     const h = harness({ runner });
-    await expect(h.service.generate(input, staff)).rejects.toThrow(); expect(runner).toHaveBeenCalledTimes(1);
+    await expect(h.service.generate(input, staff)).rejects.toThrow(); expect(runner).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("one extra shared human-review content attempt", () => {
+  it.each([
+    { label: "provider", error: new Error("FIRST_PROVIDER_FAILURE") },
+    { label: "JSON", value: { ...output(), finalSmsText: "not JSON" } },
+    { label: "reply schema", value: { ...output(), finalSmsText: '{}' } },
+    { label: "extra reply fields", value: { ...output(), finalSmsText: '{"replyText":"Fine","send_sms":true}' } },
+    { label: "blank", value: output("") },
+    { label: "whitespace", value: output("   ") },
+    { label: "empty agent metadata", value: { ...output(), agentId: "" } },
+    { label: "bad session metadata", value: { ...output(), sessionId: 17 } },
+    { label: "missing session metadata", value: { finalSmsText: output().finalSmsText, agentId: "agent_verified" } },
+  ])("recovers $label without rebuilding context, knowledge, payload or backend", async first => {
+    const runner = vi.fn<AlternativeRunner>();
+    if ("error" in first) runner.mockRejectedValueOnce(first.error);
+    else runner.mockResolvedValueOnce(first.value as never);
+    runner.mockResolvedValueOnce(output());
+    const readKnowledge = vi.fn(async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE), h = harness({ runner, readKnowledge }), before = copy(h.source);
+    const result = await h.service.generate(input, staff);
+    expect(result).toEqual(await harness({ runner: async () => output() }).service.generate(input, staff));
+    expect(result).toMatchObject({ ...input, agentId: "agent_verified", agentSessionId: "sesn_verified" });
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(runner.mock.calls[1][0]).toBe(runner.mock.calls[0][0]);
+    expect(runner.mock.calls[1][0].backend).toBe(runner.mock.calls[0][0].backend);
+    expect(runner.mock.calls[1][0].reviewPayload).toBe(runner.mock.calls[0][0].reviewPayload);
+    const payload = JSON.parse(runner.mock.calls[0][0].reviewPayload);
+    expect(payload.context.originalConversation).toEqual(h.history);
+    expect(payload.context.binding).toMatchObject({ providerMessageId: input.providerMessageId, receivingPhoneNumberId: input.receivingPhoneNumberId });
+    expect(payload.context.knowledgeBase).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+    expect(readKnowledge).toHaveBeenCalledTimes(1); expect(readKnowledge).toHaveBeenCalledWith(incomingMessage);
+    expect(h.readReceivingLine).toHaveBeenCalledTimes(1);
+    // One preparation snapshot, fresh before both attempts, fresh after validation.
+    expect(h.readSession).toHaveBeenCalledTimes(4); expect(h.source).toEqual(before);
+  });
+  it.each(["provider then JSON", "JSON then provider", "schema then metadata", "metadata then blank"])("does not stack a third attempt after mixed failures: %s", async kind => {
+    const runner = vi.fn<AlternativeRunner>();
+    if (kind === "provider then JSON") runner.mockRejectedValueOnce(new Error("FIRST_PROVIDER_FAILURE")).mockResolvedValueOnce({ ...output(), finalSmsText: "not JSON" });
+    if (kind === "JSON then provider") runner.mockResolvedValueOnce({ ...output(), finalSmsText: "not JSON" }).mockRejectedValueOnce(new Error("SECOND_PROVIDER_FAILURE"));
+    if (kind === "schema then metadata") runner.mockResolvedValueOnce({ ...output(), finalSmsText: '{}' }).mockResolvedValueOnce({ ...output(), agentId: "" });
+    if (kind === "metadata then blank") runner.mockResolvedValueOnce({ ...output(), agentId: "" }).mockResolvedValueOnce(output(""));
+    runner.mockResolvedValue(output());
+    const readKnowledge = vi.fn(async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE), h = harness({ runner, readKnowledge });
+    await expect(h.service.generate(input, staff)).rejects.toThrow();
+    expect(runner).toHaveBeenCalledTimes(2); expect(readKnowledge).toHaveBeenCalledTimes(1);
+    expect(h.readReceivingLine).toHaveBeenCalledTimes(1); expect(h.readSession).toHaveBeenCalledTimes(3);
+    expect(runner.mock.calls[1][0]).toBe(runner.mock.calls[0][0]);
+  });
+  it.each(["reject", "blank"])("does not recover %s knowledge preparation", async kind => {
+    const readKnowledge = vi.fn(async () => { if (kind === "reject") throw new Error("KNOWLEDGE_FAILURE"); return "   "; }), h = harness({ readKnowledge });
+    await expect(h.service.generate(input, staff)).rejects.toThrow(kind === "reject" ? "KNOWLEDGE_FAILURE" : "KNOWLEDGE_UNAVAILABLE");
+    expect(readKnowledge).toHaveBeenCalledTimes(1); expect(h.readSession).toHaveBeenCalledTimes(1); expect(h.runner).not.toHaveBeenCalled();
+  });
+  it("keeps snapshot/receiving-line preparation failures outside recovery", async () => {
+    const readSession = vi.fn(async () => { throw new Error("SNAPSHOT_FAILURE"); }), first = harness({ readSession });
+    await expect(first.service.generate(input, staff)).rejects.toThrow("SNAPSHOT_FAILURE");
+    expect(readSession).toHaveBeenCalledTimes(1); expect(first.runner).not.toHaveBeenCalled();
+    const readReceivingLine = vi.fn(async () => { throw new Error("LINE_FAILURE"); }), second = harness({ readReceivingLine });
+    await expect(second.service.generate(input, staff)).rejects.toThrow("LINE_FAILURE");
+    expect(readReceivingLine).toHaveBeenCalledTimes(1); expect(second.runner).not.toHaveBeenCalled();
+  });
+  it.each(["provider", "JSON", "metadata"])("rechecks revoked staff authority before recovering %s", async kind => {
+    let allowed = true;
+    const runner = vi.fn<AlternativeRunner>(async () => {
+      allowed = false;
+      if (kind === "provider") throw new Error("PROVIDER_FAILURE");
+      return kind === "JSON" ? { ...output(), finalSmsText: "not JSON" } : { ...output(), agentId: "" };
+    });
+    const h = harness({ authorizeCaller: async () => allowed, runner });
+    await expect(h.service.generate(input, staff)).rejects.toThrow("UNAUTHORIZED");
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+  it.each(["incoming", "old_history", "outgoing", "line", "name", "phone"])("stops changed %s context before the second turn", async change => {
+    const h = harness();
+    const runner = vi.fn<AlternativeRunner>(async () => {
+      if (change === "incoming") h.history.push({ role: "user", content: "Never mind.", opMsgId: "OP-NEW" });
+      if (change === "old_history") (h.history[0] as Record<string, ReviewJson>).content = "Changed old preference";
+      if (change === "outgoing") h.history.push({ role: "staff", content: "New staff reply" });
+      if (change === "line") h.source.lastInboundPhoneNumberId = "PN-OTHER";
+      if (change === "name") h.source.leadName = "Different Name";
+      if (change === "phone") h.source.leadPhone = "+12025550999";
+      throw new Error("PROVIDER_FAILURE");
+    });
+    await expect(createClaudeSmsAlternativeService({ ...h.options, runner }).generate(input, staff)).rejects.toThrow(
+      change === "incoming" ? "STALE_TURN" : change === "line" ? "SAVED_INBOUND_MISMATCH" : "STALE_CONTEXT");
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+  it.each(["authority", "context"])("keeps post-recovery %s rejection terminal", async kind => {
+    let allowed = true; const h = harness({ authorizeCaller: async () => allowed });
+    const runner = vi.fn<AlternativeRunner>().mockResolvedValueOnce(output(""))
+      .mockImplementationOnce(async () => { if (kind === "authority") allowed = false; else h.source.leadName = "Changed Name"; return output(); });
+    await expect(createClaudeSmsAlternativeService({ ...h.options, runner }).generate(input, staff)).rejects.toThrow(kind === "authority" ? "UNAUTHORIZED" : "STALE_CONTEXT");
+    expect(runner).toHaveBeenCalledTimes(2);
+  });
+  it.each(["unsafe tool", "invalid input", "missing event", "authority", "context"])("preserves wrapped %s guard provenance and never retries", async kind => {
+    let allowed = true, originalError: unknown;
+    const h = harness({ authorizeCaller: async () => allowed });
+    const runner = vi.fn<AlternativeRunner>(async options => {
+      if (kind === "authority") allowed = false;
+      if (kind === "context") h.source.leadName = "Changed Name";
+      try {
+        await options.backend.callTool(kind === "unsafe tool" ? "send_sms" : "get_customer_context",
+          kind === "invalid input" ? { write: true } : {}, kind === "missing event" ? "" : "evt-guard");
+      } catch (error) { originalError = error; throw new Error("TRANSPORT_WRAPPED_TOOL_FAILURE"); }
+      throw new Error("EXPECTED_TOOL_GUARD_FAILURE");
+    });
+    const service = createClaudeSmsAlternativeService({ ...h.options, runner });
+    const error = await service.generate(input, staff).catch(error => error);
+    expect(originalError).toBeInstanceOf(Error); expect(error).toBe(originalError);
+    expect(runner).toHaveBeenCalledTimes(1);
+    // Guard provenance and recovery budget belong only to this invocation.
+    allowed = true; h.source.leadName = "Jamie Doe"; runner.mockResolvedValue(output());
+    expect((await service.generate(input, staff)).replyText).toBe(replyText);
+    expect(runner).toHaveBeenCalledTimes(2);
+  });
+  it("reuses tool event results and the same backend across recovery without rebuilding saved context", async () => {
+    const contexts: unknown[] = [];
+    const runner = vi.fn<AlternativeRunner>(async options => {
+      contexts.push(await options.backend.callTool("get_customer_context", {}, "same-provider-event"));
+      if (contexts.length === 1) throw new Error("PROVIDER_FAILURE");
+      return output();
+    });
+    const readKnowledge = vi.fn(async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE), h = harness({ runner, readKnowledge });
+    const result = await h.service.generate(input, staff);
+    expect(result.requestId).toBe(input.requestId); expect(contexts[0]).toEqual(contexts[1]); expect(contexts[0]).not.toBe(contexts[1]);
+    expect(runner.mock.calls[1][0]).toBe(runner.mock.calls[0][0]); expect(runner).toHaveBeenCalledTimes(2);
+    expect(h.readSession).toHaveBeenCalledTimes(5); expect(readKnowledge).toHaveBeenCalledTimes(1); expect(h.readReceivingLine).toHaveBeenCalledTimes(1);
+  });
+  it("coalesces pending recovery into two shared turns and leaves no permanent cache", async () => {
+    let reject!: (error: Error) => void, resolve!: (value: ReturnType<typeof output>) => void;
+    let enteredFirst!: () => void, enteredSecond!: () => void;
+    const firstEntered = new Promise<void>(r => { enteredFirst = r; }), secondEntered = new Promise<void>(r => { enteredSecond = r; });
+    const runner = vi.fn<AlternativeRunner>()
+      .mockImplementationOnce(() => { enteredFirst(); return new Promise((_resolve, r) => { reject = r; }); })
+      .mockImplementationOnce(() => { enteredSecond(); return new Promise(r => { resolve = r; }); });
+    const readKnowledge = vi.fn(async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE), h = harness({ runner, readKnowledge });
+    const first = h.service.generate(input, staff); await firstEntered;
+    const second = h.service.generate(copy(input), staff); reject(new Error("PROVIDER_FAILURE"));
+    await secondEntered; resolve(output());
+    const results = await Promise.all([first, second]); expect(results[0]).toEqual(results[1]); expect(results[0]).not.toBe(results[1]);
+    results[0].replyText = "changed"; expect(results[1].replyText).toBe(replyText);
+    expect(runner).toHaveBeenCalledTimes(2); expect(readKnowledge).toHaveBeenCalledTimes(1); expect(h.readReceivingLine).toHaveBeenCalledTimes(1);
+    expect(runner.mock.calls[1][0]).toBe(runner.mock.calls[0][0]);
+    runner.mockResolvedValue(output()); await h.service.generate(input, staff);
+    expect(runner).toHaveBeenCalledTimes(3); expect(readKnowledge).toHaveBeenCalledTimes(2);
   });
 });
 

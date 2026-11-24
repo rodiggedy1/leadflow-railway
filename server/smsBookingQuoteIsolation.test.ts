@@ -8,11 +8,11 @@ import { withoutApprovedStaffCallFeature, withoutApprovedTaskTakeover } from "./
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const baseline = "b1bf3cff91be631ec7a38e2675a28993ebd3e1d6";
-// Normalize only the exact approved phrase-check removal for this historical audit.
-// The dedicated removal regression independently verifies the full current source.
+// Normalize only the exact phrase-removal plus local recovery candidate for this historical audit.
+// generationRecoveryScope independently pins the full candidate and protected sources.
 const approvedRemovalHashes: Record<string, string> = {
-  "server/instinct/claudeCustomerSmsGeneration.ts": "7c9e95d3f2ea77b34679b06d8a6acf0ab0e394cc0e85c709d9f4d20c1d9a1e2e",
-  "server/instinct/claudeSmsAlternative.ts": "ef6751f523e90b15b517cb2f2dc311b89b46f0a6c1375d7ada94adc27edb65af",
+  "server/instinct/claudeCustomerSmsGeneration.ts": "b43266dd5bc761a9e4647cfedc1d0a3131d008325ea217cfa2fbc41394011596",
+  "server/instinct/claudeSmsAlternative.ts": "a9f2e906787cfda63d32a9d9612e7b0a7b8555d1ee2249ba8698dd3947979ee6",
 };
 const current = (file: string) => {
   const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");

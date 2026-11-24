@@ -374,7 +374,7 @@ describe("future-only SMS replies for every valid recipient and role", () => {
   });
 });
 
-describe("syntax-only recovery composed with the existing SMS coordinator", () => {
+describe("one extra content attempt composed with the existing SMS coordinator", () => {
   let network: ReturnType<typeof vi.spyOn>;
   beforeEach(() => { network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("OFFLINE_ONLY")); });
   afterEach(() => { expect(network).not.toHaveBeenCalled(); });
@@ -384,6 +384,16 @@ describe("syntax-only recovery composed with the existing SMS coordinator", () =
     bookingQuote: null,
   };
   const validOutput = { finalSmsText: JSON.stringify(validPlan) };
+  const quoteUpdate = { action: "collect", intentEvidenceQuote: input.inboundText,
+    fields: { bedrooms: 2 }, evidence: { bedrooms: { turnIndex: 2, quote: input.inboundText } } };
+  const invalidFirstOutputs = [
+    { name: "syntax", output: "Not JSON" },
+    { name: "blank reply", output: JSON.stringify({ ...validPlan, replyText: " " }) },
+    { name: "strict schema", output: JSON.stringify({ ...validPlan, unexpected: true }) },
+    { name: "task evidence", output: JSON.stringify({ ...validPlan, task: { title: "Invented work", items: [{ title: "Do work", evidenceQuote: "Not the current inbound" }] } }) },
+    { name: "quote evidence", output: JSON.stringify({ ...validPlan, bookingQuote: { ...quoteUpdate, evidence: { bedrooms: { turnIndex: 1, quote: "Earlier staff reply" } } } }) },
+    { name: "model price", output: JSON.stringify({ ...validPlan, replyText: "The price is $100.", bookingQuote: quoteUpdate }) },
+  ];
   function recoveryFixture() {
     const f = fixture();
     const readKnowledge = vi.fn(async () => "Synthetic approved customer-service knowledge.");
@@ -392,18 +402,20 @@ describe("syntax-only recovery composed with the existing SMS coordinator", () =
     const generate = vi.fn<CustomerSmsOptions["generate"]>((binding, session, signal) =>
       createClaudeCustomerSmsGeneratorWithReply(createSmsBookingQuoteReplyGenerator({
         signal, readKnowledge, smsBookingQuote: { readState },
-        runner: request => runner({ ...request, signal }),
+        runner,
       }))(binding, session));
     return { ...f, readKnowledge, readState, runner, generate,
       run: createClaudeCustomerSmsService({ ...f, generate }) };
   }
-  it("recovers once, keeps the original context, and prepares and sends exactly once", async () => {
+  it.each([{ name: "provider error", output: null }, ...invalidFirstOutputs])("recovers from $name once with the original context and only one preparation and send", async ({ output }) => {
     const f = recoveryFixture(), session = snapshot(), before = JSON.stringify(session);
     f.readSession.mockResolvedValue(session);
-    f.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    if (output === null) f.runner.mockRejectedValueOnce(new Error("Synthetic provider unavailable"));
+    else f.runner.mockResolvedValueOnce({ finalSmsText: output });
     expect(await f.run(input)).toEqual({ outcome: "accepted" });
     expect(f.runner).toHaveBeenCalledTimes(2); expect(f.generate).toHaveBeenCalledTimes(1);
     const first = f.runner.mock.calls[0][0], second = f.runner.mock.calls[1][0];
+    expect(second).toBe(first);
     expect(second.systemPrompt).toBe(first.systemPrompt); expect(second.userPrompt).toBe(first.userPrompt);
     expect(second.signal).toBe(first.signal); expect(second.signal?.aborted).toBe(false);
     const payload = JSON.parse(second.userPrompt);
@@ -466,14 +478,34 @@ describe("syntax-only recovery composed with the existing SMS coordinator", () =
       expect(f.send).not.toHaveBeenCalled(); expect(f.store.reportFailure).toHaveBeenCalledTimes(1);
     } finally { vi.useRealTimers(); }
   });
-  it("keeps two malformed outputs in the existing human-review flow without any preparation or SMS", async () => {
-    const f = recoveryFixture(); f.runner.mockResolvedValue({ finalSmsText: "Not JSON" });
+  it.each(["provider", "schema", "nested-validation"])("exhausts %s content recovery at two attempts without preparation or SMS", async failure => {
+    const f = recoveryFixture();
+    if (failure === "provider") f.runner.mockRejectedValue(new Error("Synthetic provider unavailable"));
+    else if (failure === "schema") f.runner.mockResolvedValue({ finalSmsText: "Not JSON" });
+    else f.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" }).mockResolvedValue({ finalSmsText: invalidFirstOutputs.at(-1)!.output });
     expect(await f.run(input)).toEqual({ outcome: "failed" });
-    expect(f.runner).toHaveBeenCalledTimes(2); expect(f.store.claim).toHaveBeenCalledTimes(1);
+    expect(f.runner).toHaveBeenCalledTimes(2); expect(f.generate).toHaveBeenCalledTimes(1); expect(f.store.claim).toHaveBeenCalledTimes(1);
+    expect(f.readKnowledge).toHaveBeenCalledTimes(1); expect(f.readState).toHaveBeenCalledTimes(1);
     expect(f.store.prepare).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    expect(f.store.recordAcceptance).not.toHaveBeenCalled();
     expect(f.store.reportFailure).toHaveBeenCalledTimes(1);
     expect(f.store.reportFailure).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_PERSISTENCE_FAILED", false);
     expect(f.onFailure).toHaveBeenCalledWith({ taskId: 101, code: "GENERATION_OR_PERSISTENCE_FAILED", sessionId: input.sessionId });
+  });
+  it("keeps concurrent duplicate receipts to one successful claim, recovered generation and send", async () => {
+    const f = recoveryFixture(); let claimed = false;
+    f.store.claim.mockImplementation(async binding => {
+      if (claimed) return null as never;
+      claimed = true; return { draftId: 5, binding } as CustomerSmsClaim;
+    });
+    f.runner.mockRejectedValueOnce(new Error("Synthetic provider unavailable"));
+    expect(await Promise.all([f.run(input), f.run(input)])).toEqual([{ outcome: "accepted" }, { outcome: "duplicate" }]);
+    expect(f.store.claim).toHaveBeenCalledTimes(2);
+    expect((await Promise.all(f.store.claim.mock.results.map(result => result.value))).filter(Boolean)).toHaveLength(1);
+    expect(f.generate).toHaveBeenCalledTimes(1); expect(f.runner).toHaveBeenCalledTimes(2);
+    expect(f.readKnowledge).toHaveBeenCalledTimes(1); expect(f.readState).toHaveBeenCalledTimes(1);
+    expect(f.store.prepare).toHaveBeenCalledTimes(1); expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.store.recordAcceptance).toHaveBeenCalledTimes(1);
   });
   it.each(["duplicate", "config-disabled", "human-won", "stale"])("preserves the %s guard on the recovered path", async guard => {
     const f = recoveryFixture(); f.runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
@@ -499,6 +531,15 @@ describe("syntax-only recovery composed with the existing SMS coordinator", () =
     expect(await f.run(input)).toEqual({ outcome: "uncertain" });
     expect(f.runner).toHaveBeenCalledTimes(2); expect(f.store.prepare).toHaveBeenCalledTimes(1);
     expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.recordAcceptance).not.toHaveBeenCalled();
+    expect(f.store.markUncertain).toHaveBeenCalledTimes(1);
+  });
+  it("does not regenerate, reprepare or resend after acceptance persistence fails on the recovered path", async () => {
+    const f = recoveryFixture(); f.runner.mockRejectedValueOnce(new Error("Synthetic provider unavailable"));
+    f.store.recordAcceptance.mockRejectedValue(new Error("Synthetic acceptance save uncertain"));
+    expect(await f.run(input)).toEqual({ outcome: "uncertain" });
+    expect(f.generate).toHaveBeenCalledTimes(1); expect(f.runner).toHaveBeenCalledTimes(2);
+    expect(f.store.claim).toHaveBeenCalledTimes(1); expect(f.store.prepare).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledTimes(1); expect(f.store.recordAcceptance).toHaveBeenCalledTimes(1);
     expect(f.store.markUncertain).toHaveBeenCalledTimes(1);
   });
 });

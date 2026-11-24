@@ -2,12 +2,14 @@ import { z } from "zod";
 import { customerReplyPlanSchema, type CustomerReplyPlan } from "../../shared/claudeCustomerTasks";
 import {
   createClaudeCustomerReplyGenerator,
+  validateClaudeCustomerReplyPlan,
   type ClaudeCustomerReplyInput,
   type ClaudeCustomerSmsGenerationBinding,
   type ClaudeCustomerSmsGenerationOptions,
 } from "./claudeCustomerSmsGeneration";
-import { runInitialLeadDraft } from "./claudeAgentClient";
+import { runInitialLeadDraft, type InitialLeadDraftOptions } from "./claudeAgentClient";
 import { validateClaudeReviewReply } from "./claudeSmsAlternative";
+import { createGenerationRecovery } from "./generationRecovery";
 import { createSmsBookingQuotePresentation } from "./bookingQuotePresentation";
 import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQuestion";
 import {
@@ -66,13 +68,20 @@ function templateNeutralText(template: string): string {
 
 /** Passive SMS-only wrapper. The caller must first verify exactConversation.
  * All captures are invocation-local. One saved-agent call plus at most one
- * syntax-only recovery; no persistence, sends, classifier or price math. */
+ * content recovery; no persistence, sends, classifier or price math. */
 export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGenerationOptions) {
   return async function generateSmsBookingQuoteReply(input: ClaudeCustomerReplyInput): Promise<SmsBookingQuoteReplyPlan> {
+    const recovery = createGenerationRecovery(options.signal);
+    const invocation = { recovery, request: undefined as InitialLeadDraftOptions | undefined };
     const binding = input.context.binding as ClaudeCustomerSmsGenerationBinding | undefined;
     const originalConversation = input.context.originalConversation;
     if (!binding || !Array.isArray(originalConversation) || input.incomingMessage !== binding.inboundText) return fail("SMS_QUOTE_GENERATION_CONTEXT");
-    const loaded = await options.smsBookingQuote.readState(binding);
+    let loaded: SmsBookingQuoteState | null = null, stateLoaded = false;
+    let setup: { previous: SmsBookingQuoteState | null; nowMs: number; quoteContext: Record<string, unknown>; baseInput: ClaudeCustomerReplyInput } | undefined;
+    let request: InitialLeadDraftOptions | undefined;
+    return recovery.run(async () => {
+    if (!stateLoaded) { loaded = await options.smsBookingQuote.readState(binding); stateLoaded = true; }
+    if (!setup) {
     const previous = loaded === null ? null : smsBookingQuoteStateSchema.parse(loaded);
     if (previous && (previous.sessionId !== binding.sessionId || previous.customerPhone !== binding.fromPhone
       || previous.receivingPhoneNumberId !== binding.receivingPhoneNumberId)) return fail("SMS_QUOTE_STATE_IDENTITY_MISMATCH");
@@ -83,39 +92,37 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
       currentLocalDate: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(instant),
       currentLocalTime: new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant),
     };
-    const capture: { output: ExtendedReply | null; knowledgeBase: string | null } = { output: null, knowledgeBase: null };
+    setup = { previous, nowMs, quoteContext, baseInput: { ...input, context: { ...input.context, smsBookingQuote: quoteContext } } };
+    }
+    const { previous, nowMs, baseInput } = setup;
+    const capture: { output: ExtendedReply | null } = { output: null };
     const generateBase = createClaudeCustomerReplyGenerator({
       ...options,
       runner: async runnerOptions => {
         // The original generator retrieved complete knowledge and assembled its
         // complete approved system prompt. Keep both, adding only this overlay.
+        if (!request) {
         const payload = JSON.parse(runnerOptions.userPrompt);
-        capture.knowledgeBase = payload.context.knowledgeBase;
         // Labels exist only in the model payload. Hashes, qualification and durable
         // preparation still use the complete, unmodified original conversation.
         const indexedPayload = { ...payload, context: { ...payload.context,
           originalConversation: originalConversation.map((turn, turnIndex) => ({ ...turn, turnIndex })),
         } };
-        const request = { ...runnerOptions,
+        request = { ...runnerOptions,
           systemPrompt: `=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${runnerOptions.systemPrompt}`,
           userPrompt: JSON.stringify(indexedPayload),
         };
+        }
+        capture.output = null;
+        options.signal?.throwIfAborted();
         const runner = options.runner ?? runInitialLeadDraft;
         const output = await runner(request);
-        const rawText = output.finalSmsText;
-        let rawValue: unknown;
-        try { rawValue = JSON.parse(rawText); }
-        catch (error) {
-          if (!(error instanceof SyntaxError) || options.signal?.aborted) throw error;
-          const secondOutput = await runner(request);
-          rawValue = JSON.parse(secondOutput.finalSmsText);
-        }
-        const parsed = extendedReplySchema.parse(rawValue);
+        const parsed = extendedReplySchema.parse(JSON.parse(output.finalSmsText));
         capture.output = parsed;
         return { finalSmsText: JSON.stringify({ replyText: parsed.replyText, task: parsed.task }) };
       },
-    });
-    const plan = await generateBase({ ...input, context: { ...input.context, smsBookingQuote: quoteContext } });
+    }, invocation);
+    const plan = await generateBase(baseInput);
     const output = capture.output;
     if (output === null) return fail("SMS_QUOTE_GENERATION_OUTPUT");
     if (output.bookingQuote === null) {
@@ -136,12 +143,8 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
       if (template.split("{{bookingLink}}").length - 1 > 1) return fail("SMS_QUOTE_TEMPLATE_LINK_COUNT");
       assertNoQuotePriceOrUrl(neutral);
       validateClaudeReviewReply(JSON.stringify({ replyText: neutral }), input.protectedIds);
-      // Validation-only replay, NOT an agent/provider call: the unchanged shared
-      // generator checks its strict schema and current-inbound task evidence too.
-      await createClaudeCustomerReplyGenerator({
-        readKnowledge: async () => capture.knowledgeBase!,
-        runner: async () => ({ finalSmsText: JSON.stringify({ replyText: neutral, task: plan.task }) }),
-      })(input);
+      // Pure shared validation, not another generation or recovery budget.
+      validateClaudeCustomerReplyPlan(JSON.stringify({ replyText: neutral, task: plan.task }), input);
     }
     // New output uses only the structured locale hint. Recognize the two existing
     // Spanish legacy quote forms without a classifier or another model turn;
@@ -154,5 +157,6 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
     return { ...plan, replyText: missingQuestion ?? plan.replyText,
       smsBookingQuote: { previous, update, originalConversation, quoteTextTemplate: presentation,
         ...(missingQuestion !== null ? { missingQuestionLanguage: language } : {}) } };
+    });
   };
 }

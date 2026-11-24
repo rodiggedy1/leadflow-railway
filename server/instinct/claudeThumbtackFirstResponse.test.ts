@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { capturedThumbtackLead, eligibleThumbtackLead, thumbtackFirstResponseConfig, thumbtackFirstResponseKey, createClaudeThumbtackFirstResponseService,
   type CapturedLead, type FirstResponseStore, type FirstResponseClaim } from "./claudeThumbtackFirstResponse";
 import { THUMBTACK_FIRST_RESPONSE_PROMPT, buildThumbtackLeadDraftContext, type ClaudeInitialLeadInput } from "../../shared/claudeInitialLead";
+import { generateClaudeInitialLeadContent, type ClaudeInitialLeadContentOptions, type InitialLeadRunner } from "./claudeInitialLead";
 const env = { THUMBTACK_CLAUDE_FIRST_RESPONSE_ENABLED: "true", THUMBTACK_CLAUDE_FIRST_RESPONSE_START_AT: "2026-11-16T17:00:00Z", OPENPHONE_PHONE_NUMBER_ID: "PN-lead" };
 const config = thumbtackFirstResponseConfig(env)!;
 export function fixture(): CapturedLead {
@@ -124,5 +125,92 @@ describe("native Thumbtack first-response offline", () => {
     }
     for (const file of ["server/instinct/claudeThumbtackFirstResponse.ts", "server/instinct/claudeThumbtackFirstResponseStore.ts", "server/instinct/claudeThumbtackFirstResponseApplication.ts", "shared/thumbtackNativeLead.ts"])
       expect(readFileSync(file, "utf8")).not.toMatch(new RegExp(["cleaner" + "_jobs", "cleaner" + "Jobs", "CREATE TABLE", "ALTER TABLE", "DRAFT_READY", 'status: "FAILED"', "setTimeout", "setInterval", "invokeLLM", "generateClaudeInitialLead\\("].join("|")));
+  });
+});
+
+describe("native first response composed with actual content recovery, no network", () => {
+  let network: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("OFFLINE_ONLY")); });
+  afterEach(() => { expect(network).not.toHaveBeenCalled(); vi.restoreAllMocks(); });
+  const output = { finalSmsText: "Hey Jane! Exact original native response.", agentId: "synthetic-agent", sessionId: "synthetic-agent-session" };
+  function contentHarness() {
+    const h = harness(); let optedOut = false;
+    const currentConfig = vi.fn<() => typeof config | null>(() => ({ ...config }));
+    const prepareMessages = vi.fn<NonNullable<ClaudeInitialLeadContentOptions["prepareMessages"]>>(async request => [
+      { role: "system", content: "Complete synthetic approved initial-response instructions." },
+      { role: "user", content: JSON.stringify(request) },
+    ]);
+    const runner = vi.fn<InitialLeadRunner>(async () => output);
+    const generate = vi.fn((input: ClaudeInitialLeadInput) => generateClaudeInitialLeadContent(input, { prepareMessages, runner }));
+    const beginSend = h.store.beginSend;
+    h.store.beginSend = vi.fn(async (...args: Parameters<FirstResponseStore["beginSend"]>) =>
+      !optedOut && await beginSend(...args));
+    return { ...h, prepareMessages, runner, generate, currentConfig, optOut: () => { optedOut = true; },
+      run: createClaudeThumbtackFirstResponseService({ ...h.deps, config: currentConfig, generate }) };
+  }
+  it.each(["provider", "blank", "result-schema"])("recovers %s content failure once under one original UUID, claim and send", async failure => {
+    const h = contentHarness(), originalPayload = h.capture.rawPayload;
+    if (failure === "provider") h.runner.mockRejectedValueOnce(new Error("Synthetic provider unavailable"));
+    if (failure === "blank") h.runner.mockResolvedValueOnce({ ...output, finalSmsText: " " });
+    if (failure === "result-schema") h.runner.mockResolvedValueOnce({ ...output, agentId: "" });
+    await h.run(7);
+    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.generate).toHaveBeenCalledTimes(1);
+    expect(h.prepareMessages).toHaveBeenCalledTimes(1);
+    const first = h.runner.mock.calls[0][0], second = h.runner.mock.calls[1][0];
+    expect(second).toBe(first); expect(second).toEqual(first);
+    const request = h.generate.mock.calls[0][0];
+    expect(request.requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(request).toMatchObject({ sessionId: 11, customerPhone: "+17035551234", originalConversation: [] });
+    expect(h.prepareMessages).toHaveBeenCalledWith(request.draftRequest);
+    expect(JSON.parse(second.userPrompt)).toEqual(request.draftRequest);
+    expect(h.capture.rawPayload).toBe(originalPayload);
+    expect(h.store.claim).toHaveBeenCalledTimes(1);
+    expect((await Promise.all(vi.mocked(h.store.claim).mock.results.map(result => result.value))).filter(Boolean)).toHaveLength(1);
+    expect(h.store.beginSend).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1); expect(h.store.accepted).toHaveBeenCalledTimes(1);
+    const claim = vi.mocked(h.store.beginSend).mock.calls[0][0], result = vi.mocked(h.store.beginSend).mock.calls[0][1];
+    expect(result).toMatchObject({ requestId: request.requestId, sessionId: request.sessionId, customerPhone: request.customerPhone,
+      replyText: output.finalSmsText, mode: "review_only", smsSent: false, actionsExecuted: false });
+    expect(h.send).toHaveBeenCalledWith({ to: request.customerPhone, content: output.finalSmsText, fromNumberId: "PN-lead" });
+    expect(h.store.accepted).toHaveBeenCalledWith(claim, result, "provider-1"); expect(h.store.blocked).not.toHaveBeenCalled();
+  });
+  it("exhausts two content failures without beginning send or releasing the original claim", async () => {
+    const h = contentHarness(); h.runner.mockRejectedValue(new Error("Synthetic provider unavailable"));
+    await h.run(7); await h.run(7);
+    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.generate).toHaveBeenCalledTimes(1); expect(h.prepareMessages).toHaveBeenCalledTimes(1);
+    expect(h.store.beginSend).not.toHaveBeenCalled(); expect(h.send).not.toHaveBeenCalled(); expect(h.store.accepted).not.toHaveBeenCalled();
+    expect(h.store.blocked).toHaveBeenCalledWith(expect.anything(), "GENERATION_OR_SAVE_FAILED", false); expect(h.status()).toBe("DISMISSED");
+  });
+  it("keeps concurrent duplicates to one successful claim and one recovered response", async () => {
+    const h = contentHarness(); h.runner.mockRejectedValueOnce(new Error("Synthetic provider unavailable"));
+    await Promise.all([h.run(7), h.run(7)]);
+    expect(h.store.claim).toHaveBeenCalledTimes(2);
+    expect((await Promise.all(vi.mocked(h.store.claim).mock.results.map(result => result.value))).filter(Boolean)).toHaveLength(1);
+    expect(h.generate).toHaveBeenCalledTimes(1); expect(h.prepareMessages).toHaveBeenCalledTimes(1); expect(h.runner).toHaveBeenCalledTimes(2);
+    expect(h.store.beginSend).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(1); expect(h.store.accepted).toHaveBeenCalledTimes(1);
+  });
+  it.each(["opt-out", "dismissal", "config-change"])("preserves the unchanged dispatcher/store %s stop during recovery", async guard => {
+    const h = contentHarness(); h.runner.mockRejectedValueOnce(new Error("Synthetic provider unavailable"));
+    h.runner.mockImplementationOnce(async () => {
+      if (guard === "opt-out") h.optOut();
+      if (guard === "dismissal") h.dismiss();
+      if (guard === "config-change") h.currentConfig.mockReturnValue({ ...config, fromNumberId: "PN-changed" });
+      return output;
+    });
+    await h.run(7);
+    expect(h.runner).toHaveBeenCalledTimes(2); expect(h.generate).toHaveBeenCalledTimes(1); expect(h.prepareMessages).toHaveBeenCalledTimes(1);
+    expect(h.store.beginSend).toHaveBeenCalledTimes(guard === "config-change" ? 0 : 1);
+    expect(h.send).not.toHaveBeenCalled(); expect(h.store.accepted).not.toHaveBeenCalled();
+    expect(h.store.blocked).toHaveBeenCalledWith(expect.anything(), "SUPPRESSED_BEFORE_SEND", false);
+  });
+  it.each(["preparation", "submission", "acceptance"])("never regenerates or retries %s after recovered content", async phase => {
+    const h = contentHarness(); h.runner.mockRejectedValueOnce(new Error("Synthetic provider unavailable"));
+    if (phase === "preparation") vi.mocked(h.store.beginSend).mockRejectedValue(new Error("Synthetic durable preparation failure"));
+    if (phase === "submission") h.send.mockRejectedValue(new Error("Synthetic transport uncertainty"));
+    if (phase === "acceptance") vi.mocked(h.store.accepted).mockRejectedValue(new Error("Synthetic acceptance save uncertainty"));
+    await h.run(7); await h.run(7);
+    expect(h.generate).toHaveBeenCalledTimes(1); expect(h.runner).toHaveBeenCalledTimes(2); expect(h.prepareMessages).toHaveBeenCalledTimes(1);
+    expect(h.store.beginSend).toHaveBeenCalledTimes(1); expect(h.send).toHaveBeenCalledTimes(phase === "preparation" ? 0 : 1);
+    expect(h.store.accepted).toHaveBeenCalledTimes(phase === "acceptance" ? 1 : 0);
+    expect(h.status()).toBe(phase === "preparation" ? "DISMISSED" : "SENDING");
   });
 });

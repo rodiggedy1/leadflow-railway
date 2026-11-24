@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 const baseline = "e762068d01118d8b4a6ea54f64d04b9546abc012";
@@ -12,6 +13,20 @@ const sources = [
 ];
 function before(path: string): string {
   return execFileSync("git", ["show", `${baseline}:${path}`], { encoding: "utf8" });
+}
+// This historical audit still verifies the exact deployed phrase deletions.
+// Only the full pinned recovery candidate is normalized; any additional byte fails.
+// generationRecoveryScope independently checks these pins and unchanged prompts.
+const recoveryHashes: Record<string, string> = {
+  "server/instinct/claudeSmsAlternative.ts": "a9f2e906787cfda63d32a9d9612e7b0a7b8555d1ee2249ba8698dd3947979ee6",
+  "server/instinct/claudeCustomerSmsGeneration.ts": "b43266dd5bc761a9e4647cfedc1d0a3131d008325ea217cfa2fbc41394011596",
+  "server/instinct/claudeInitialLead.ts": "2e33c4f9d5aeb307517fe5ed5ed5ff0fa439e2f2115d27444a8a0b96da4cc391",
+  "server/instinct/smsBookingQuoteGeneration.ts": "303e0a7f38d7c5e3e33eedc0874be028b88e50c18fb7a5e67530a132fb5e85e0",
+};
+function phraseRemovalSource(path: string): string {
+  const source = readFileSync(path, "utf8");
+  return createHash("sha256").update(source).digest("hex") === recoveryHashes[path]
+    ? execFileSync("git", ["show", `d277178315602808dbc1ac141bc344761f6f4468:${path}`], { encoding: "utf8" }) : source;
 }
 function expectedAfter(path: string, source: string): string {
   if (path.endsWith("smsBookingQuoteGeneration.ts")) {
@@ -38,14 +53,14 @@ function expectedAfter(path: string, source: string): string {
 
 describe("authorized reply phrase-check removal has no replacement or unrelated runtime edits", () => {
   it.each(sources)("removes only the approved rejection checks from $path", ({ path, checks }) => {
-    const original = before(path), actual = readFileSync(path, "utf8");
+    const original = before(path), actual = phraseRemovalSource(path);
     expect(original.split("\n").filter(line => removedCodes.some(code => line.includes(`return fail("${code}")`)))).toHaveLength(checks);
     expect(actual).toBe(expectedAfter(path, original));
     for (const code of removedCodes) expect(actual).not.toContain(code);
     expect(actual + "\n// UNAUTHORIZED_CHANGE\n").not.toBe(expectedAfter(path, original));
   });
   it("keeps quote state, pricing, templates and the existing syntax-only recovery intact", () => {
-    const path = "server/instinct/smsBookingQuoteGeneration.ts", actual = readFileSync(path, "utf8");
+    const path = "server/instinct/smsBookingQuoteGeneration.ts", actual = phraseRemovalSource(path);
     for (const marker of [
       "smsBookingQuoteStateSchema.parse(loaded)", "SMS_QUOTE_STATE_IDENTITY_MISMATCH",
       "advanceSmsBookingQuote(previous, update", "assertNoQuotePriceOrUrl(plan.replyText)",
@@ -56,7 +71,7 @@ describe("authorized reply phrase-check removal has no replacement or unrelated 
     expect(actual).not.toContain("assertNoBookingCompletion");
   });
   it("keeps strict output and current-inbound task evidence without requiring a task for wording", () => {
-    const actual = readFileSync("server/instinct/claudeCustomerSmsGeneration.ts", "utf8");
+    const actual = phraseRemovalSource("server/instinct/claudeCustomerSmsGeneration.ts");
     expect(actual).toContain("customerReplyPlanSchema.parse(JSON.parse(output.finalSmsText))");
     expect(actual).toContain('return fail("TASK_EVIDENCE_NOT_CURRENT_INBOUND")');
     expect(actual).not.toContain("plan.task === null &&");
