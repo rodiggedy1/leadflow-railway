@@ -100,9 +100,11 @@ const textarea = (tree: unknown) => elements(tree).find((node) => node.type === 
 
 function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: string; history?: string;
   lead?: LeadSnapshot | null; snapshot?: LeadSnapshot | null; leadDraft?: Props["leadDraft"]; noDetail?: boolean; taskRows?: Record<string, string[]>;
-  historyQueryState?: { isLoading?: boolean; isError?: boolean } } = {}) {
+  historyQueryState?: { isLoading?: boolean; isError?: boolean }; thumbtackHistory?: Detail | null;
+  thumbtackHistoryQueryState?: { isLoading?: boolean; isError?: boolean } } = {}) {
   let selected = conversation(options.selected);
   let detail: Detail | null | undefined = options.noDetail ? undefined : { sessionId: selected.id, leadPhone: selected.leadPhone, messageHistory: options.history ?? history() };
+  let thumbtackHistory = options.thumbtackHistory;
   let snapshot = options.snapshot;
   let leadCardPhone = options.leadCardPhone;
   let leadDraft = options.leadDraft;
@@ -121,9 +123,13 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   const useUtils = () => ({ commandCenter: { listCommandChatInbox: { invalidate: vi.fn() } }, leads: { getCsConversation: { invalidate: vi.fn() } } });
   const trpc = {
     useUtils,
-    leads: { getCsConversation: { useQuery: vi.fn((_input: { sessionId: number }, query: { enabled: boolean }) => ({ data: detail,
-      isLoading: query.enabled && (options.historyQueryState?.isLoading ?? (detail === undefined && !options.historyQueryState?.isError)),
-      isError: query.enabled && Boolean(options.historyQueryState?.isError) })) }, sendMessage: { useMutation: () => ({ isPending: false, mutate: send }) }, sendWorkspaceMessage: { useMutation: () => ({ isPending: false, mutate: workspaceSend }) } },
+    leads: { getCsConversation: { useQuery: vi.fn((input: { sessionId: number }, query: { enabled: boolean }) => {
+      const fallback = selected.id === 0 && input.sessionId > 0;
+      const data = fallback ? thumbtackHistory : detail;
+      const state = fallback ? options.thumbtackHistoryQueryState : options.historyQueryState;
+      return { data, isLoading: query.enabled && (state?.isLoading ?? (data === undefined && !state?.isError)),
+        isError: query.enabled && Boolean(state?.isError) };
+    }) }, sendMessage: { useMutation: () => ({ isPending: false, mutate: send }) }, sendWorkspaceMessage: { useMutation: () => ({ isPending: false, mutate: workspaceSend }) } },
     leadflowJobs: { customerProfile: { useQuery: () => ({ data: null }) }, teamIdentityByPhone: { useQuery: () => ({ data: null }) } },
     leadflowSchedule: { getSchedule: { useQuery: () => ({ data: null }) } },
     opsChat: { csReply: { useMutation: fallbackUseMutation } },
@@ -208,6 +214,7 @@ function workspace(options: { selected?: Partial<Conversation>; leadCardPhone?: 
   return { render, settle, html: () => renderToStaticMarkup(render()), edit, generate, claudeResponse, generateInitial, initialResponse, uuid, fetchMock, fallbackUseMutation, fallback, send, workspaceSend,
     historyQuery: trpc.leads.getCsConversation.useQuery,
     setDetail: (value: Detail | null | undefined) => { detail = value; }, setLive: (value: Conversation[]) => { live = value; }, setSelected: (value: Conversation) => { selected = value; },
+    setThumbtackHistory: (value: Detail | null | undefined) => { thumbtackHistory = value; },
     setSnapshot: (value: LeadSnapshot | null) => { snapshot = value; }, setPhone: (value: string | undefined) => { leadCardPhone = value; },
     setLeadDraft: (value: Props["leadDraft"]) => { leadDraft = value; },
     dispose: () => { slots.forEach((slot) => slot.cleanup?.()); dead = true; }, get lateWrites() { return lateWrites; },
@@ -685,6 +692,81 @@ describe("optional Claude first lead draft in the existing workspace", () => {
 });
 
 describe("actual SMS drawer history display states — offline", () => {
+  const native = (overrides: Partial<LeadSnapshot> = {}) => leadSnapshot({ sessionId: 42, negotiationId: "SYNTHETIC_NATIVE_NEGOTIATION", ...overrides } as Partial<LeadSnapshot>);
+  const introduction = { sessionId: 42, leadPhone: "+13015550123", messageHistory: JSON.stringify([
+    { role: "assistant", content: "Saved automatic Thumbtack introduction", ts: 1800000000001, senderName: "Madison", opMsgId: "SYNTHETIC_INTRO" },
+  ]) };
+  const openNative = (clicked = native(), options: Parameters<typeof workspace>[0] = {}) => {
+    const opened = clickedLeadDraft(clicked);
+    expect(opened.selected!.id).toBe(0);
+    return workspace({ selected: opened.selected!, snapshot: clicked, leadCardPhone: clicked.phone,
+      leadDraft: opened.draft, noDetail: true, ...options });
+  };
+  it("loads saved native introduction-only history without an inbox match, leaving drafting and sending identity unchanged", async () => {
+    const clicked = native(), work = openNative(clicked);
+    expect(work.historyQuery).toHaveBeenCalledWith({ sessionId: 42 }, expect.objectContaining({ enabled: true, refetchOnWindowFocus: false }));
+    const fallbackOptions = work.historyQuery.mock.calls.find(([input, query]) => input.sessionId === 42 && query.enabled)![1];
+    expect(fallbackOptions).not.toHaveProperty("refetchInterval");
+    expect(text(work.render())).toContain("Loading text history…");
+    work.setThumbtackHistory(introduction);
+    expect(text(work.render())).toContain("Saved automatic Thumbtack introduction");
+    expect(text(work.render())).not.toContain("No text history yet.");
+    expect(text(work.render())).not.toContain("Loading text history…");
+    expect(work.generateInitial).not.toHaveBeenCalled(); expect(work.generate).not.toHaveBeenCalled();
+    expect(work.send).not.toHaveBeenCalled(); expect(work.workspaceSend).not.toHaveBeenCalled();
+    click(findButton(work.render(), "Get Claude draft"));
+    expect(work.generateInitial.mock.calls[0][0]).toMatchObject({ sessionId: 0, customerPhone: clicked.phone,
+      originalConversation: [], draftRequest: { conversationContext: "" } });
+    work.initialResponse.resolve(initialResult(work.generateInitial.mock.calls[0][0])); await work.settle();
+    work.edit("Reviewed manual response"); click(elements(work.render()).find(node => node.props["aria-label"] === "Send text reply"));
+    expect(work.workspaceSend).toHaveBeenCalledWith({ phone: clicked.phone, message: "Reviewed manual response", name: clicked.name });
+    expect(work.send).not.toHaveBeenCalled(); work.dispose();
+  });
+  it.each(["phone", "session"] as const)("never displays a fallback response with a mismatched %s", mismatch => {
+    const work = openNative(native(), { thumbtackHistory: { ...introduction,
+      ...(mismatch === "phone" ? { leadPhone: "+13015550124" } : { sessionId: 99 }) } });
+    expect(text(work.render())).not.toContain("Saved automatic Thumbtack introduction");
+    expect(text(work.render())).toContain("No text history yet."); work.dispose();
+  });
+  it("rejects old cached fallback history when changing the clicked phone or saved session", () => {
+    const work = openNative(native(), { thumbtackHistory: introduction });
+    expect(text(work.render())).toContain("Saved automatic Thumbtack introduction");
+    work.setSnapshot(native({ id: 502, sessionId: 43, phone: "3015550124" })); work.setPhone("3015550124");
+    work.setSelected(conversation({ id: 0, leadPhone: "3015550124" }));
+    expect(text(work.render())).not.toContain("Saved automatic Thumbtack introduction");
+    expect(work.send).not.toHaveBeenCalled(); expect(work.workspaceSend).not.toHaveBeenCalled(); work.dispose();
+  });
+  it.each([
+    { sessionId: null }, { sessionId: 0 }, { sessionId: -1 }, { sessionId: 1.5 },
+    { negotiationId: null }, { sourceLabel: "Quote form" }, { phone: "12345" },
+  ])("does not add a display lookup for a card without a valid native session/phone %#", overrides => {
+    const clicked = native(overrides as Partial<LeadSnapshot>);
+    const work = workspace({ selected: { id: 0, leadPhone: clicked.phone }, snapshot: clicked, leadCardPhone: clicked.phone, noDetail: true });
+    expect(work.historyQuery.mock.calls.some(([, query]) => query.enabled)).toBe(false);
+    expect(findButton(work.render(), "Get Claude draft")!.props.disabled).toBe(false); work.dispose();
+  });
+  it.each(["empty", "missing", "error"] as const)("completes a saved native history read with the existing %s display state", state => {
+    const work = openNative(native(), state === "error" ? { thumbtackHistoryQueryState: { isError: true } }
+      : { thumbtackHistory: state === "missing" ? null : { ...introduction, messageHistory: "[]" } });
+    expect(text(work.render())).toContain(state === "error" ? "Text history could not be loaded." : "No text history yet.");
+    expect(text(work.render())).not.toContain("Loading text history…"); work.dispose();
+  });
+  it("retains verified saved native texts during a read refresh/error and does not reinterpret them as task anchors", () => {
+    const work = openNative(native(), { thumbtackHistory: introduction, thumbtackHistoryQueryState: { isLoading: true, isError: true },
+      taskRows: { SYNTHETIC_INTRO: ["Must not invent a session-zero task anchor"] } });
+    expect(text(work.render())).toContain("Saved automatic Thumbtack introduction");
+    expect(text(work.render())).not.toContain("Loading text history…");
+    expect(text(work.render())).not.toContain("Text history could not be loaded.");
+    expect(text(work.render())).not.toContain("Must not invent a session-zero task anchor"); work.dispose();
+  });
+  it("keeps inbox-matched native cards and ordinary saved sessions on their original history query", () => {
+    const clicked = native(), matched = conversation({ id: 43 }), opened = clickedLeadDraft(clicked, [matched]);
+    expect(opened.selected).toBe(matched);
+    const work = workspace({ selected: opened.selected!, snapshot: clicked, leadCardPhone: clicked.phone, leadDraft: opened.draft });
+    expect(work.historyQuery).toHaveBeenCalledWith({ sessionId: 43 }, expect.objectContaining({ enabled: true, refetchInterval: 30_000 }));
+    expect(work.historyQuery.mock.calls.filter(([, query]) => query.enabled).every(([input]) => input.sessionId === 43)).toBe(true);
+    expect(text(work.render())).toContain("Please confirm Friday."); work.dispose();
+  });
   it("shows empty history, not endless loading, for a new Thumbtack card without a saved conversation", async () => {
     const clicked = leadSnapshot(), opened = clickedLeadDraft(clicked);
     const work = workspace({ selected: opened.selected!, snapshot: clicked, leadCardPhone: clicked.phone, leadDraft: opened.draft, noDetail: true });

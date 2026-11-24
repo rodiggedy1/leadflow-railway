@@ -2435,6 +2435,24 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     { sessionId: conversation.id },
     { enabled: conversation.id > 0, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 30_000 },
   );
+  // Native intro-only sessions may be absent from the inbox. Read their saved
+  // history for display only; keep the existing draft/send conversation identity.
+  const thumbtackHistorySessionId = conversation.id === 0 && leadCardSnapshot?.sourceLabel === "Thumbtack"
+    && Boolean(leadCardSnapshot.negotiationId) && leadCardSnapshot.sessionId !== null
+    && Number.isSafeInteger(leadCardSnapshot.sessionId) && leadCardSnapshot.sessionId > 0
+    && normalizedLeadPhone(leadCardSnapshot.phone).length === 10
+    && normalizedLeadPhone(leadCardSnapshot.phone) === normalizedLeadPhone(leadCardPhone ?? null)
+    && normalizedLeadPhone(leadCardSnapshot.phone) === normalizedLeadPhone(conversation.leadPhone)
+    ? leadCardSnapshot.sessionId : 0;
+  const { data: thumbtackHistory, isLoading: thumbtackHistoryLoading, isError: thumbtackHistoryError } = trpc.leads.getCsConversation.useQuery(
+    { sessionId: thumbtackHistorySessionId },
+    { enabled: thumbtackHistorySessionId > 0, staleTime: 0, refetchOnWindowFocus: false },
+  );
+  const verifiedThumbtackHistory = thumbtackHistorySessionId > 0 && thumbtackHistory?.sessionId === thumbtackHistorySessionId
+    && normalizedLeadPhone(thumbtackHistory.leadPhone) === normalizedLeadPhone(leadCardPhone ?? null)
+    ? thumbtackHistory : null;
+  const displayHistoryLoading = thumbtackHistorySessionId > 0 ? thumbtackHistoryLoading : historyLoading;
+  const displayHistoryError = thumbtackHistorySessionId > 0 ? thumbtackHistoryError : historyError;
   const { data: clientProfile } = trpc.leadflowJobs.customerProfile.useQuery(
     { phone: contextPhone },
     { enabled: !isTeamConversation && Boolean(conversation.leadPhone), staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 60_000 },
@@ -2467,6 +2485,18 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     ));
     return [...persisted, ...notYetPersisted].sort((left, right) => (left.ts ?? 0) - (right.ts ?? 0));
   }, [confirmedOutgoing, detail?.messageHistory]);
+  const displayMessages = useMemo(() => {
+    if (!verifiedThumbtackHistory) return messages;
+    try {
+      const parsed: unknown = JSON.parse(verifiedThumbtackHistory.messageHistory ?? "[]");
+      if (!Array.isArray(parsed)) return messages;
+      const persisted = (parsed as SmsInboxMessage[]).filter((message) => Boolean(message.content?.trim()));
+      const notYetPersisted = messages.filter((outgoing) => !persisted.some((message) =>
+        message.role === outgoing.role && message.content === outgoing.content && Math.abs((message.ts ?? 0) - (outgoing.ts ?? 0)) < 15_000,
+      ));
+      return [...persisted, ...notYetPersisted].sort((left, right) => (left.ts ?? 0) - (right.ts ?? 0));
+    } catch { return messages; }
+  }, [messages, verifiedThumbtackHistory?.messageHistory]);
   const smsTaskAnchors = useMemo(() => {
     if (detail?.sessionId !== conversation.id) return [];
     try {
@@ -2721,7 +2751,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     if (smsComposerRef.current) resizeSmsComposer(smsComposerRef.current);
   }, [draft, resizeSmsComposer]);
   useEffect(() => {
-    if (!detail || (initialBottomScrollDone.current && !scrollAfterSendRef.current)) return;
+    if (!(detail || verifiedThumbtackHistory) || (initialBottomScrollDone.current && !scrollAfterSendRef.current)) return;
     const animationFrame = requestAnimationFrame(() => {
       if (!messageListRef.current) return;
       messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
@@ -2729,7 +2759,7 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
       scrollAfterSendRef.current = false;
     });
     return () => cancelAnimationFrame(animationFrame);
-  }, [conversation.id, detail, messages.length]);
+  }, [conversation.id, detail, verifiedThumbtackHistory, displayMessages.length]);
   const sendReply = trpc.leads.sendMessage.useMutation({
     onSuccess: (result, variables) => {
       smsDraftAttribution.clear();
@@ -2779,11 +2809,11 @@ function SmsConversationDrawer({ conversation, conversations, callerName, caller
     {!isTeamConversation && <button type="button" className="ccc-live-sms-quote-assistant-trigger" onClick={openQuoteAssistant} disabled={prepareQuoteAssistant.isPending}><Sparkles />{prepareQuoteAssistant.isPending ? "Reading lead details…" : "Create quote with AI"}</button>}
     {isTeamConversation && activeScheduleTeam && <section className="ccc-live-sms-team-schedule" aria-label={`${activeScheduleTeam.name} schedule for today`}><header><span><CalendarClock />Today&apos;s schedule</span><b>{teamRoute.length} {teamRoute.length === 1 ? "stop" : "stops"}</b></header>{teamRoute.length ? <ol>{teamRoute.slice(0, 4).map((job) => { const etaLabel = teamRouteEtaLabel(job.jobStatus, job.etaTimestamp); return <li key={job.id}><time>{scheduleTimeLabel(job.serviceDateTime)}</time><strong>{job.customerName || "Customer"}</strong><span className={`ccc-live-sms-job-status ${teamRouteStatusClass(job.jobStatus)}`}><TeamRouteStatusIcon status={job.jobStatus} /><b>{teamRouteStatusLabel(job.jobStatus)}</b>{etaLabel && <small>{etaLabel}</small>}</span></li>; })}</ol> : <p>No scheduled stops today.</p>}{teamRoute.length > 4 && <a href="/admin/schedule">View all {teamRoute.length} stops <ChevronRight /></a>}</section>}
     {conversation.aiSummary?.trim() && <div className="ccc-live-sms-summary"><Sparkles /><span><b>AI summary</b><small>{conversation.aiSummary}</small></span></div>}
-    <div className="ccc-live-sms-messages" ref={messageListRef}><ClaudeSmsConversationTasks sessionId={conversation.id} key={conversation.id}>{afterMessage => messages.length === 0 && conversation.id > 0 && historyLoading
+    <div className="ccc-live-sms-messages" ref={messageListRef}><ClaudeSmsConversationTasks sessionId={conversation.id} key={conversation.id}>{afterMessage => displayMessages.length === 0 && (conversation.id > 0 || thumbtackHistorySessionId > 0) && displayHistoryLoading
       ? <div className="ccc-live-empty"><Loader2 className="animate-spin" />Loading text history…</div>
-      : messages.length === 0 && conversation.id > 0 && historyError
+      : displayMessages.length === 0 && (conversation.id > 0 || thumbtackHistorySessionId > 0) && displayHistoryError
         ? <div className="ccc-live-empty" role="status">Text history could not be loaded.</div>
-        : messages.length === 0 ? <div className="ccc-live-empty" role="status">No text history yet.</div> : messages.map((message, index) => {
+        : displayMessages.length === 0 ? <div className="ccc-live-empty" role="status">No text history yet.</div> : displayMessages.map((message, index) => {
       const outgoing = message.role !== "user";
       const senderName = message.senderName?.trim() || callerName;
       const senderLabel = smsSenderLabel(message, callerName);
