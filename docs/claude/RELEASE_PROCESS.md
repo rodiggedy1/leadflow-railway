@@ -66,8 +66,10 @@ and not proposed until the owner asks.
 3. Claude builds it on a `claude/<name>` branch from the latest `main`.
 4. Claude runs the offline tests and type check and compares with `docs/claude/BASELINE.md`.
 5. With approval, Claude updates the `staging` branch → Railway redeploys **staging only** → owner tests in the browser.
-6. When the owner is satisfied, the release follows the **existing** process (Preview first, then `push-main-safe.sh`),
-   performed by the owner or by Manus — never by Claude.
+6. When the owner is satisfied, the owner releases with `scripts/push-main-safe.sh` from their own Mac — never Claude.
+   **Owner decision (2026-11-24): staging replaces the Preview step for all Claude Code work.** Preview shares the
+   production database and has live keys, so Claude Code changes are tested on staging and released straight to `main`.
+   The Preview environment and its branch are left untouched for Manus.
 
 Because Manus may also change `main`, Claude always starts from the latest `main` and re-checks right before handing over.
 

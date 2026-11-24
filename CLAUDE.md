@@ -46,7 +46,8 @@ Self-test: `node .claude/hooks/guard-selftest.mjs` (all cases must PASS).
 3. Test OFFLINE (no internet, no keys) and compare with docs/claude/BASELINE.md:
    `unshare -n env -i PATH="$PATH" HOME="$HOME" TZ=America/New_York npx vitest run <files>`
 4. The owner tests on the isolated STAGING site (docs/claude/STAGING_SETUP.md) — never on Preview.
-5. Release only via docs/claude/RELEASE_PROCESS.md, by the owner.
+5. Release only via docs/claude/RELEASE_PROCESS.md, by the owner (scripts/push-main-safe.sh on the owner's Mac).
+   Staging replaces the Preview step for Claude Code work; never touch the `preview` branch or Preview environment.
 
 ## Landmines
 - Preview shares the PRODUCTION database and has some live keys; its public /api/preview-login is open
