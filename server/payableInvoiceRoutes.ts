@@ -88,6 +88,20 @@ export function registerPayableInvoiceRoutes(app: Express, options: Options = {}
     if (req.headers.origin === origin) return true;
     res.status(403).json({ success: false, error: "ORIGIN_REQUIRED", message: "This invoice action must be submitted from its configured LeadFlow domain." }); return false;
   };
+  const lineId = (value: string): number | null => /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+  const serviceDatePdf = async (req: Request, res: express.Response, lineValue: string) => {
+    const id = lineId(lineValue);
+    if (id === null) return void res.status(400).json({ success: false, error: "INVALID_INPUT", message: "Invoice line unavailable." });
+    try {
+      const invoice = await service().view(req.params.token);
+      const line = invoice.lines.find(item => item.id === id);
+      if (!line) return void res.status(404).json({ success: false, error: "NOT_FOUND", message: "Invoice line unavailable." });
+      const url = `${origin}/invoice/${req.params.token}`;
+      const pdf = await generatePayableInvoicePdf(invoice, url, { lineId: id });
+      res.set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="Invoice-${invoice.id}-${line.date}-line-${line.id}.pdf"` });
+      res.send(Buffer.from(pdf));
+    } catch (error) { fail(res, error); }
+  };
   router.get("/admin/status", (_req, res) => { res.json({ paymentsReady: ready(), message: paymentMessage() }); });
   router.post("/admin/existing/search", async (req, res) => {
     if (!requireOrigin(req, res)) return;
@@ -139,6 +153,7 @@ export function registerPayableInvoiceRoutes(app: Express, options: Options = {}
   router.get("/:token", async (req, res) => {
     try { res.json({ invoice: await service().refresh(req.params.token), paymentsReady: ready(), message: ready() ? "" : "Secure invoice payment setup is incomplete. Please contact Maids in Black." }); } catch (error) { fail(res, error); }
   });
+  router.get("/:token/lines/:lineId/pdf", (req, res) => { void serviceDatePdf(req, res, req.params.lineId); });
   router.post("/:token/resume", async (req, res) => {
     if (!requireOrigin(req, res)) return;
     try { requirePayments(); res.json(await service().resume(req.params.token)); } catch (error) { fail(res, error); }

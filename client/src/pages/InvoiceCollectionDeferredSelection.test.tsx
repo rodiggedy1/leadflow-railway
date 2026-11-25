@@ -65,7 +65,7 @@ const selectedIds = () => rowInputs().filter(node => node.props.checked).map(nod
 const expectSelection = (ids: number[], amount: string) => {
   expect(selectedIds()).toEqual(ids);
   expect(text(tree)).toContain(`Selected service dates${ids.length}`);
-  expect(text(tree)).toContain(`Total to pay${amount}`);
+  expect(text(tree)).toContain(`Total to pay selected${amount}`);
 };
 const line = (id: number, amountCents: number, paidCents = 0): PayableInvoice["lines"][number] => ({ id, occurrenceKey: `job:${id}`, date: `2026-11-${String(id % 10 + 1).padStart(2, "0")}`, description: `Service ${id}`, address: "Test address", amountCents, paidCents });
 const invoice = (): PayableInvoice => ({ id: 901, number: "TEST-DEFERRED", clientId: 0, clientName: "Matched customer", from: "2026-11-01", to: "2026-11-09", dueDate: "2026-11-16", currency: "usd", status: "partially_paid", receipts: [], activeAttemptId: null, lines: [line(11, 500, 500), line(12, 500), line(13, 700, 200)] });
@@ -106,6 +106,15 @@ describe("customer invoice deferred functional selection", () => {
     expect(path).toBe("/api/payable-invoices/first-token/checkout");
     expect(JSON.parse(options.body)).toEqual({ requestId: expect.any(String), lineIds: [12, 13] });
     expect(window.location.assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/test_deferred");
+  });
+
+  it("pays a row by its exact ID while a deferred deselection is still pending", async () => {
+    await firstLoad();
+    rowInputs()[1].props.onChange();
+    expect(hooks.pending).toHaveLength(1);
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/exact" }));
+    await button("Pay this date").props.onClick(); render();
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body).lineIds).toEqual([12]);
   });
 
   it("later refresh preserves deselection, does not add new unpaid IDs, and removes newly paid selected IDs", async () => {

@@ -61,7 +61,7 @@ const expectOnlyAdminCalls = (...paths: string[]) => {
   expect(window.location.assign).not.toHaveBeenCalled();
 };
 
-const serviceRow = (index: number) => elements().filter(node => node.type === "label" && node.props.className?.includes("ic-service-row"))[index];
+const serviceRow = (index: number) => elements().filter(node => node.props?.className?.includes("ic-service-row"))[index];
 const rowPrice = (index: number) => elements(serviceRow(index)).find(node => node.props?.className === "ic-row-price")!;
 const expectRowPrice = (index: number, amount: string, label: string | RegExp) => {
   expect(text(elements(rowPrice(index)).find(node => node.type === "b"))).toBe(amount);
@@ -655,6 +655,56 @@ describe("local customer invoice", () => {
     fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/example" })); await button("Pay $125.00").props.onClick(); render();
     const [url, options] = fetchMock.mock.calls.at(-1)!; expect(url).toBe("/api/payable-invoices/token/checkout"); expect(JSON.parse(options.body)).toEqual({ requestId: expect.any(String), lineIds: [3] });
     expect(window.location.assign).toHaveBeenCalledTimes(1); expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+  it("pays one date with its explicit line ID and exposes a no-referrer PDF", async () => {
+    page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: sampleInvoice, paymentsReady: true })); render(); await flush(); render();
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/row" })); await button("Pay this date").props.onClick(); render();
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toMatchObject({ lineIds: [2] });
+    const pdf = elements().find(node => node.type === "a" && text(node) === "Download PDF")!; expect(pdf.props.href).toBe("/api/payable-invoices/token/lines/1/pdf"); expect(pdf.props.referrerPolicy).toBe("no-referrer");
+  });
+  it("shows and charges only the partial date's remainder without changing the checkbox selection", async () => {
+    const invoice = { ...sampleInvoice, lines: sampleInvoice.lines.map(row => row.id === 3 ? { ...row, paidCents: 10000 } : row) };
+    page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice, paymentsReady: true })); render(); await flush(); render();
+    const row = serviceRow(2); const payRow = elements(row).find(node => node.props?.className === "ic-row-pay")!;
+    expect(text(payRow)).toContain("$125.00"); expectRowPrice(2, "$225.00", /\$125\.00/);
+    expect(elements(row).filter(node => node.type === "label").some(label => elements(label).some(node => node.type === "button" || node.type === "a"))).toBe(false);
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/partial_date" })); await payRow.props.onClick(); render();
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toEqual({ requestId: expect.any(String), lineIds: [3] });
+    expect(summary("Selected service dates")).toBe("Selected service dates2");
+  });
+  it("disables individual payment when setup is unavailable but keeps paid-date PDFs downloadable", async () => {
+    page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: sampleInvoice, paymentsReady: false })); render(); await flush(); render();
+    const payRow = button("Pay this date"); expect(payRow.props.disabled).toBe(true); await payRow.props.onClick();
+    expect(fetchMock).toHaveBeenCalledTimes(1); expect(window.location.assign).not.toHaveBeenCalled();
+    expect(elements(serviceRow(0)).some(node => node.props?.className === "ic-row-pay")).toBe(false);
+    expect(elements(serviceRow(0)).find(node => node.type === "a")!.props.href).toBe("/api/payable-invoices/token/lines/1/pdf");
+  });
+  it("offers only resume for an active checkout while retaining all date downloads", async () => {
+    page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: { ...sampleInvoice, activeAttemptId: "existing", activeLineIds: [3] }, paymentsReady: true })); render(); await flush(); render();
+    expect(elements().filter(node => node.props?.className === "ic-row-pay")).toHaveLength(0);
+    expect(elements().filter(node => node.type === "a" && node.props.className === "ic-row-pdf")).toHaveLength(3);
+    expect(button("Resume secure checkout").props.disabled).toBe(false);
+  });
+  it("identifies the opening date and prevents another row request during the pending checkout", async () => {
+    page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: sampleInvoice, paymentsReady: true })); render(); await flush(); render();
+    let resolve!: (value: any) => void; fetchMock.mockImplementation(() => new Promise(value => { resolve = value; }));
+    const pending = button("Pay this date").props.onClick(); render();
+    expect(text(serviceRow(1))).toContain("Opening this date…$225.00");
+    expect(button("Opening this date only…").props.disabled).toBe(true);
+    const other = elements(serviceRow(2)).find(node => node.props?.className === "ic-row-pay")!; expect(other.props.disabled).toBe(true); await other.props.onClick();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    resolve({ ok: true, json: async () => ({ url: "https://checkout.stripe.com/c/pay/pending_date" }) }); await pending; render();
+    expect(window.location.assign).toHaveBeenCalledTimes(1);
+  });
+  it("does not expose real row PDF links or make payment requests in review mode", () => {
+    page = () => CustomerInvoicePage({ review: true }); render();
+    expect(elements().some(node => node.type === "a" && text(node) === "Download PDF")).toBe(false); expect(elements().filter(node => node.type === "button" && node.props.className === "ic-row-pay")).toHaveLength(0); expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("keeps the retry key for the same row and rotates it for a different row", async () => {
+    page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: sampleInvoice, paymentsReady: true })); render(); await flush(); render();
+    fetchMock.mockImplementation(() => response({ message: "retry" }, false)); await button("Pay this date").props.onClick(); render(); const first = JSON.parse(fetchMock.mock.calls.at(-1)![1].body);
+    await button("Pay this date").props.onClick(); render(); const retry = JSON.parse(fetchMock.mock.calls.at(-1)![1].body); expect(retry).toEqual(first);
+    const second = elements().filter(node => node.type === "button" && node.props.className === "ic-row-pay")[1]; fetchMock.mockImplementation(() => response({ message: "retry" }, false)); await second.props.onClick(); render(); const changed = JSON.parse(fetchMock.mock.calls.at(-1)![1].body); expect(changed.lineIds).toEqual([3]); expect(changed.requestId).not.toBe(first.requestId);
   });
   it("labels fully Stripe-paid customer rows Paid without falsely attributing payment to staff", () => {
     const invoice = { ...sampleInvoice, status: "paid" as const, lines: sampleInvoice.lines.map(row => ({ ...row, paidCents: row.amountCents, manualPaidCents: 0 })) };

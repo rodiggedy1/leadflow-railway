@@ -10,15 +10,16 @@ const ORIGIN = "https://invoice.example.test";
 const TOKEN = "a".repeat(64);
 const UUID = "11111111-1111-4111-8111-111111111111";
 const LOOKUP = { phone: "+12025550100", email: "example@example.test", from: "2026-11-01", to: "2026-11-07" };
-function fixture(isAdmin = true) {
-  const fake = { lookup: vi.fn().mockResolvedValue({ client: { id: 1, name: "Example" }, services: [] }), issue: vi.fn().mockResolvedValue({ url: `${ORIGIN}/invoice/${TOKEN}` }), view: vi.fn().mockResolvedValue({ id: 1, lines: [] }), checkout: vi.fn().mockResolvedValue({ url: "https://checkout.stripe.com/c/pay/cs_test_invoice" }), resume: vi.fn().mockResolvedValue({ refresh: true }), reconcile: vi.fn().mockResolvedValue(undefined) };
+function fixture(isAdmin = true, paymentsReady = true) {
+  const invoice = { id: 1, number: "TEST-0001", clientId: 1, clientName: "Example", from: "2026-11-01", to: "2026-11-07", dueDate: "2026-11-20", currency: "usd" as const, status: "partially_paid" as const, activeAttemptId: null, lines: [{ id: 1, occurrenceKey: "owned:1", date: "2026-11-02", description: "Cleaning service 1", address: "Synthetic address", amountCents: 12345, paidCents: 345 }], receipts: [{ paymentId: "synthetic-payment", amountCents: 345, paidAt: "2026-11-03T01:30:00Z", lineIds: [1] }] };
+  const fake = { lookup: vi.fn().mockResolvedValue({ client: { id: 1, name: "Example" }, services: [] }), issue: vi.fn().mockResolvedValue({ url: `${ORIGIN}/invoice/${TOKEN}` }), view: vi.fn().mockResolvedValue(invoice), checkout: vi.fn().mockResolvedValue({ url: "https://checkout.stripe.com/c/pay/cs_test_invoice" }), resume: vi.fn().mockResolvedValue({ refresh: true }), reconcile: vi.fn().mockResolvedValue(undefined) };
   const refresh = vi.fn(async (token: string) => fake.view(token));
   const constructEvent = vi.fn().mockReturnValue({ type: "checkout.session.completed", data: { object: { id: "cs_test_invoice", metadata: { leadflowInvoice: "leadflow_invoice_v1" } } }, livemode: false });
   const app = express();
-  registerPayableInvoiceRoutes(app, { origin: ORIGIN, admin: async () => isAdmin ? 17 : false, service: { ...fake, refresh } as unknown as PayableInvoiceService, stripe: () => ({ webhooks: { constructEvent } }) as unknown as Stripe, webhookSecret: "test-only-signature-secret", paymentsReady: true });
+  registerPayableInvoiceRoutes(app, { origin: ORIGIN, admin: async () => isAdmin ? 17 : false, service: { ...fake, refresh } as unknown as PayableInvoiceService, stripe: () => ({ webhooks: { constructEvent } }) as unknown as Stripe, webhookSecret: "test-only-signature-secret", paymentsReady });
   // A permissive global CORS imitates the old app after this route: it must never bypass invoice protection.
   app.use((_req, res, _next) => res.setHeader("Access-Control-Allow-Origin", "*"));
-  return { app, fake, constructEvent };
+  return { app, fake, refresh, constructEvent };
 }
 describe("invoice API boundary", () => {
   it("the functioning configured service is payment ready rather than permanently disabled", async () => { const f = fixture(); const r = await request(f.app).get(`${INVOICE_API}/admin/status`).expect(200); expect(r.body.paymentsReady).toBe(true); });
@@ -36,6 +37,33 @@ describe("invoice API boundary", () => {
   it("does not accept an invoice ID for another customer in checkout payload", async () => { const f = fixture(); await request(f.app).post(`${INVOICE_API}/${TOKEN}/checkout`).set("Origin", ORIGIN).send({ requestId: UUID, lineIds: [1], invoiceId: 999 }).expect(400); expect(f.fake.checkout).not.toHaveBeenCalled(); });
   it("passes only token, request UUID and selected lines to checkout", async () => { const f = fixture(); await request(f.app).post(`${INVOICE_API}/${TOKEN}/checkout`).set("Origin", ORIGIN).send({ requestId: UUID, lineIds: [1, 2] }).expect(200); expect(f.fake.checkout).toHaveBeenCalledWith(TOKEN, UUID, [1,2]); });
   it("allows read-only customer view by opaque capability without admin login", async () => { const f = fixture(false); await request(f.app).get(`${INVOICE_API}/${TOKEN}`).expect(200); expect(f.fake.view).toHaveBeenCalledWith(TOKEN); });
+  it("downloads a per-date PDF through view without admin, Stripe, email, or payment readiness", async () => {
+    const f = fixture(false, false);
+    const line = await request(f.app).get(`${INVOICE_API}/${TOKEN}/lines/1/pdf`).expect(200);
+    expect(line.headers["content-type"]).toMatch(/application\/pdf/);
+    expect(line.headers["cache-control"]).toBe("no-store");
+    expect(line.headers["referrer-policy"]).toBe("no-referrer");
+    expect(line.headers["x-content-type-options"]).toBe("nosniff");
+    expect(line.body.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(line.headers["content-disposition"]).toBe('attachment; filename="Invoice-1-2026-11-02-line-1.pdf"');
+    expect(line.headers["cache-control"]).toBe("no-store");
+    expect(line.headers["referrer-policy"]).toBe("no-referrer");
+    expect(f.fake.view).toHaveBeenCalledWith(TOKEN);
+    expect(f.refresh).not.toHaveBeenCalled();
+    expect(f.fake.checkout).not.toHaveBeenCalled();
+    expect(f.fake.resume).not.toHaveBeenCalled();
+    expect(f.fake.reconcile).not.toHaveBeenCalled();
+    expect(f.constructEvent).not.toHaveBeenCalled();
+  });
+  it("rejects malformed and foreign line IDs safely and expired tokens without PDF generation", async () => {
+    const f = fixture(false);
+    await request(f.app).get(`${INVOICE_API}/${TOKEN}/lines/nope/pdf`).expect(400);
+    await request(f.app).get(`${INVOICE_API}/${TOKEN}/lines/999/pdf`).expect(404);
+    f.fake.view.mockRejectedValueOnce(new InvoiceError("NOT_FOUND", 404, "Invoice link unavailable or expired."));
+    await request(f.app).get(`${INVOICE_API}/${TOKEN}/lines/1/pdf`).expect(404);
+    await request(f.app).get(`${INVOICE_API}/${TOKEN}/lines/1/pdf?lineId=999`).expect(400);
+    expect(f.refresh).not.toHaveBeenCalled();
+  });
   it("resumes only the token's existing payment", async () => { const f = fixture(); await request(f.app).post(`${INVOICE_API}/${TOKEN}/resume`).set("Origin", ORIGIN).send({}).expect(200); expect(f.fake.resume).toHaveBeenCalledWith(TOKEN); expect(f.fake.checkout).not.toHaveBeenCalled(); });
   it("does not leak SQL, contact or provider failures to customer", async () => { const f = fixture(); f.fake.view.mockRejectedValue(new Error("private SQL containing example@example.test")); const r = await request(f.app).get(`${INVOICE_API}/${TOKEN}`).expect(503); expect(JSON.stringify(r.body)).not.toMatch(/private|example@example/); });
   it("shows a useful normalized collection guard error without charging", async () => { const f = fixture(); f.fake.checkout.mockRejectedValue(new InvoiceError("COLLECTION_REVIEW_REQUIRED", 503, "Collection review required.")); const r = await request(f.app).post(`${INVOICE_API}/${TOKEN}/checkout`).set("Origin", ORIGIN).send({ requestId: UUID, lineIds: [1] }).expect(503); expect(r.body.error).toBe("COLLECTION_REVIEW_REQUIRED"); });

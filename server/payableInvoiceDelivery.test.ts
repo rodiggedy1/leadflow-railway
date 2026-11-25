@@ -47,6 +47,65 @@ describe("payable invoice PDF: memory-only snapshot rendering", () => {
     expect(text).toContain("Nov 2, 2026, 8:30 PM EST");
   });
 
+  it("renders an isolated service-date detail without other lines or parent receipts", async () => {
+    const invoice = fixture();
+    invoice.lines[0].address = "First date address";
+    invoice.lines[1].address = "Other date address";
+    const { text } = await readPdf(await generatePayableInvoicePdf(invoice, URL, { lineId: 1 }));
+    expect(text).toContain("Service-date invoice detail");
+    expect(text).toContain("Parent invoice: TEST-0042");
+    expect(text).toContain("2026-11-02");
+    expect(text).toContain("First date address");
+    expect(text).toContain("Original amount: $123.45");
+    expect(text).toContain("Payments applied (selected service): $3.45");
+    expect(text).toContain("Residual balance (selected service): $120.00");
+    expect(text).toContain("Selected service status: partially paid");
+    expect(text).toContain("not a new issued invoice");
+    expect(text).not.toContain("Cleaning service 2");
+    expect(text).not.toContain("Other date address");
+    expect(text).not.toContain("Payment received (gross):");
+    expect(text).not.toContain("All-service total:");
+  });
+
+  it("shows a paid date without implying the whole invoice is paid or allocating another date's receipt", async () => {
+    const invoice = fixture();
+    invoice.lines[0].paidCents = invoice.lines[0].amountCents;
+    invoice.receipts = [{ paymentId: "combined-payment", amountCents: 20000, paidAt: "2026-11-03T01:30:00Z", lineIds: [1, 2] }];
+    invoice.activeLineIds = [2];
+    const { text } = await readPdf(await generatePayableInvoicePdf(invoice, URL, { lineId: 1 }));
+    expect(text).toContain("Payments applied (selected service): $123.45");
+    expect(text).toContain("Residual balance (selected service): $0.00");
+    expect(text).toContain("Selected service status: paid");
+    expect(text).not.toContain("$200.00");
+    expect(text).not.toContain("Selected service balance:");
+    expect(invoice.status).toBe("partially_paid");
+  });
+
+  it.each(["void", "payment_review"] as const)("keeps %s date PDFs explicitly non-payable", async status => {
+    const invoice = fixture();
+    invoice.status = status;
+    const { text } = await readPdf(await generatePayableInvoicePdf(invoice, URL, { lineId: 1 }));
+    expect(text).toContain("not payable");
+    expect(text).toContain(status === "void" ? "Selected service status: void" : "Selected service status: payment review");
+    expect(text).not.toContain("choose services to pay securely");
+  });
+
+  it.each([-1, 12346, 1.5, Number.MAX_SAFE_INTEGER + 1])("rejects invalid scoped paid cents %s", async paidCents => {
+    const invoice = fixture();
+    invoice.lines[0].paidCents = paidCents;
+    await expect(generatePayableInvoicePdf(invoice, URL, { lineId: 1 })).rejects.toThrow("Invoice amounts need review");
+  });
+
+  it("uses explicit line identity when duplicate service dates exist and rejects invalid scope IDs", async () => {
+    const invoice = fixture();
+    invoice.lines[1].date = invoice.lines[0].date;
+    const { text } = await readPdf(await generatePayableInvoicePdf(invoice, URL, { lineId: 2 }));
+    expect(text).toContain("Cleaning service 2");
+    expect(text).not.toContain("Cleaning service 1");
+    await expect(generatePayableInvoicePdf(invoice, URL, { lineId: 999 })).rejects.toThrow("Invoice line unavailable");
+    await expect(generatePayableInvoicePdf(invoice, URL, { lineId: 0 })).rejects.toThrow("Invoice line unavailable");
+  });
+
   it.each([41, 100])("paginates %i service rows and keeps all text/totals on-page", async count => {
     const { doc, streams, text } = await readPdf(await generatePayableInvoicePdf(fixture(count), URL));
     expect(doc.getPageCount()).toBeGreaterThan(1);
