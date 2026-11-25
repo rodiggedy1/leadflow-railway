@@ -142,18 +142,18 @@ describe("customer invoice deferred functional selection", () => {
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual(["/api/payable-invoices/first-token", "/api/payable-invoices/second-token"]);
   });
 
-  it("active attempts retain their exact unpaid IDs on first load and later refresh and resume instead of checkout", async () => {
+  it("active attempts never override first-load defaults or later customer selections, and payment sends those selections", async () => {
     await firstLoad({ ...invoice(), activeAttemptId: "active", activeLineIds: [12, 11, 999] });
-    expectSelection([12], "$5.00");
-    expect(rowInputs().every(node => node.props.disabled)).toBe(true);
-    rowInputs()[1].props.onChange(); render(); expectSelection([12], "$5.00");
+    expectSelection([12, 13], "$10.00");
+    expect(rowInputs().map(node => node.props.disabled)).toEqual([true, false, false]);
+    rowInputs()[2].props.onChange(); render(); expectSelection([12], "$5.00");
     await refresh({ ...invoice(), activeAttemptId: "active", activeLineIds: [13, 11, 999] });
-    expectSelection([13], "$5.00"); expect(button("Resume secure checkout").props.disabled).toBe(false);
-    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/test_resume" }));
-    await button("Resume secure checkout").props.onClick(); render();
+    expectSelection([12], "$5.00"); expect(button("Pay $5.00").props.disabled).toBe(false);
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/test_selection" }));
+    await button("Pay $5.00").props.onClick(); render();
     const [path, options] = fetchMock.mock.calls.at(-1)!;
-    expect(path).toBe("/api/payable-invoices/first-token/resume"); expect(JSON.parse(options.body)).toEqual({});
-    expect(fetchMock.mock.calls.some(([path]) => path.endsWith("/checkout"))).toBe(false);
+    expect(path).toBe("/api/payable-invoices/first-token/checkout"); expect(JSON.parse(options.body)).toEqual({ requestId: expect.any(String), lineIds: [12] });
+    expect(fetchMock.mock.calls.some(([path]) => path.endsWith("/resume"))).toBe(false);
     expect(window.location.assign).toHaveBeenCalledTimes(1);
   });
 });

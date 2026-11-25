@@ -103,6 +103,8 @@ describe("matched-contact invoice creation without a portal account", () => {
     expect(checkout.url).toBe("https://checkout.stripe.com/c/pay/test_matched");
     expect(h.create.mock.calls[0][0].line_items).toEqual([{ price_data: { currency: "usd", unit_amount: 500, product_data: { name: "Maids in Black invoice TEST-MATCHED-901", description: "1 selected service date" } }, quantity: 1 }]);
     expect(h.create.mock.calls[0][1]).toEqual({ idempotencyKey: "leadflow:invoice:901:attempt:attempt-matched-1" });
+    // Replay is an open unpaid checkout; the following signed-event phase is paid.
+    h.retrieve.mockResolvedValueOnce({ id: "cs_test_matched", object: "checkout.session", mode: "payment", livemode: false, status: "open", payment_status: "unpaid", url: checkout.url, amount_total: 500, currency: "usd", client_reference_id: "attempt-matched-1", metadata: { leadflowInvoice: INVOICE_PAYMENT_MARKER, invoiceId: "901", invoiceAttemptId: "attempt-matched-1" } } as Stripe.Checkout.Session);
     expect(await h.service.checkout(token, CHECKOUT_REQUEST, [1])).toEqual(checkout); expect(h.create).toHaveBeenCalledTimes(1);
     expect(h.repo.allocationEffects).toBe(0);
     const event = { id: "evt_test_matched", object: "event", type: "checkout.session.completed", livemode: false, data: { object: { id: "cs_test_matched", metadata: { leadflowInvoice: INVOICE_PAYMENT_MARKER }, payment_status: "unpaid", amount_total: 1 } } } as unknown as Stripe.Event;

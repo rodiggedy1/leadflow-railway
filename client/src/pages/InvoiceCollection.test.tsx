@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import type Stripe from "stripe";
-import { invoiceBalance, invoiceCheckoutSchema, invoiceIssueSchema, invoiceLookupSchema, invoiceMarkPaidSchema, selectedBalance, type InvoiceAttempt, type InvoiceClient, type InvoiceService, type PayableInvoice } from "../../../shared/payableInvoice";
+import { InvoiceError, invoiceBalance, invoiceCheckoutSchema, invoiceIssueSchema, invoiceLookupSchema, invoiceMarkPaidSchema, selectedBalance, type InvoiceAttempt, type InvoiceClient, type InvoiceService, type PayableInvoice } from "../../../shared/payableInvoice";
 import { INVOICE_PAYMENT_MARKER, PayableInvoiceService, type InvoiceIssueInput, type InvoiceMarkPaidInput, type InvoiceRepository } from "../../../server/payableInvoiceService";
 import { invoiceReviewHash } from "../../../server/payableInvoiceReview";
 
@@ -679,11 +679,20 @@ describe("local customer invoice", () => {
     expect(elements(serviceRow(0)).some(node => node.props?.className === "ic-row-pay")).toBe(false);
     expect(elements(serviceRow(0)).find(node => node.type === "a")!.props.href).toBe("/api/payable-invoices/token/lines/1/pdf");
   });
-  it("offers only resume for an active checkout while retaining all date downloads", async () => {
+  it("keeps every unpaid date payable and editable despite an earlier checkout, retaining all PDFs", async () => {
     page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: { ...sampleInvoice, activeAttemptId: "existing", activeLineIds: [3] }, paymentsReady: true })); render(); await flush(); render();
-    expect(elements().filter(node => node.props?.className === "ic-row-pay")).toHaveLength(0);
+    expect(elements().filter(node => node.props?.className === "ic-row-pay")).toHaveLength(2);
     expect(elements().filter(node => node.type === "a" && node.props.className === "ic-row-pdf")).toHaveLength(3);
-    expect(button("Resume secure checkout").props.disabled).toBe(false);
+    expect(button("Pay $450.00").props.disabled).toBe(false);
+    expect(text(tree)).not.toContain("A checkout is already in progress"); expect(text(tree)).not.toContain("Resume secure checkout");
+    const inputs = elements().filter(node => node.type === "input" && node.props["aria-label"]?.startsWith("Pay "));
+    expect(inputs.map(node => node.props.disabled)).toEqual([true, false, false]);
+    inputs[2].props.onChange(); render(); expect(button("Pay $225.00").props.disabled).toBe(false);
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/individual" }));
+    await button("Pay this date").props.onClick(); render();
+    expect(fetchMock.mock.calls.at(-1)![0]).toBe("/api/payable-invoices/token/checkout");
+    expect(lastPayload()).toEqual({ requestId: expect.any(String), lineIds: [2] });
+    expect(window.location.assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/individual");
   });
   it("identifies the opening date and prevents another row request during the pending checkout", async () => {
     page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: sampleInvoice, paymentsReady: true })); render(); await flush(); render();
@@ -723,7 +732,115 @@ describe("local customer invoice", () => {
   it("review mode displays every date, defaults unpaid selection, and makes no payment calls", async () => { page = () => CustomerInvoicePage({ review: true }); render(); expect(text(tree)).toContain("Oct 3, 2026"); expect(text(tree)).toContain("Oct 17, 2026"); expect(text(tree)).toContain("Oct 31, 2026"); expect(text(tree)).toContain("Paid — recorded by staff"); const paid = elements().find(node => node.type === "input" && node.props["aria-label"] === "Pay Oct 3, 2026 service")!; expect(paid.props.checked).toBe(false); expect(paid.props.disabled).toBe(true); expect(text(tree)).toContain("Already paid$225.00"); await button("Preview $450.00").props.onClick(); render(); expect(text(tree)).toContain("No payment request was made."); expect(fetchMock).not.toHaveBeenCalled(); });
   it("shows adjustment review, retains paid history with qualifier, and has no Pay button", () => { const adjusted = { ...sampleInvoice, status: "payment_review" as const }; page = () => CustomerInvoicePage({ review: true, reviewInvoice: adjusted }); render(); expect(text(tree)).toContain("Payment under review — not payable"); expect(text(tree)).toContain("adjustment under review"); expect(text(tree)).toContain("does not confirm that every service is paid"); expect(elements().filter(node => node.type === "button" && node.props.className === "ic-primary")).toHaveLength(0); expect(isInvoicePayable(adjusted)).toBe(false); expect(invoiceStatusLabel(adjusted)).not.toBe("Paid"); });
   it("opens exactly one total checkout and refreshes only on explicit status check", async () => { page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: sampleInvoice, paymentsReady: true })); render(); await flush(); render(); expect(fetchMock).toHaveBeenCalledTimes(1); fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/example" })); await button("Pay $450.00").props.onClick(); render(); const [url, options] = fetchMock.mock.calls.at(-1)!; expect(url).toBe("/api/payable-invoices/token/checkout"); expect(JSON.parse(options.body).lineIds).toEqual([2, 3]); expect(window.location.assign).toHaveBeenCalledTimes(1); expect(fetchMock).toHaveBeenCalledTimes(2); fetchMock.mockImplementation(() => response({ invoice: sampleInvoice, paymentsReady: true })); await button("Check payment status").props.onClick(); expect(fetchMock).toHaveBeenCalledTimes(3); expect(fetchMock.mock.calls.at(-1)![0]).toBe("/api/payable-invoices/token"); });
-  it("resumes the existing checkout instead of creating another attempt", async () => { page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: { ...sampleInvoice, activeAttemptId: "existing", activeLineIds: [2] }, paymentsReady: true })); render(); await flush(); render(); fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/example" })); await button("Resume secure checkout").props.onClick(); expect(fetchMock.mock.calls.at(-1)![0]).toBe("/api/payable-invoices/token/resume"); });
+  it("submits current selected IDs, not the earlier checkout IDs, for the summary payment", async () => { page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => response({ invoice: { ...sampleInvoice, activeAttemptId: "existing", activeLineIds: [2] }, paymentsReady: true })); render(); await flush(); render(); fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/example" })); await button("Pay $450.00").props.onClick(); expect(fetchMock.mock.calls.at(-1)![0]).toBe("/api/payable-invoices/token/checkout"); expect(lastPayload()).toEqual({ requestId: expect.any(String), lineIds: [2, 3] }); });
   it("ignores requests completed after unmount", async () => { let resolve!: (value: any) => void; page = () => CustomerInvoicePage({}); fetchMock.mockImplementation(() => new Promise(value => { resolve = value; })); render(); hooks.cleanups.forEach(cleanup => cleanup()); resolve({ ok: true, json: async () => ({ invoice: sampleInvoice, paymentsReady: true }) }); await flush(); expect(hooks.slots[0]).toBe(null); });
   it("identifies staff payment only using the structured manual amount", () => { const stripeLine = { ...sampleInvoice.lines[0], manualPaidCents: 0 }; expect(linePaymentLabel(stripeLine, sampleInvoice)).toBe("Paid"); expect(linePaymentLabel(sampleInvoice.lines[0], sampleInvoice)).toBe("Paid — recorded by staff"); expect(serviceBalance({ ...lookup.services[0], paidCents: 10000 } as any)).toBe(12500); });
+});
+
+describe("customer checkout selection terminal recovery", () => {
+  const start = async () => {
+    page = () => CustomerInvoicePage({});
+    fetchMock.mockImplementation(() => response({ invoice: { ...sampleInvoice, activeAttemptId: "earlier", activeLineIds: [2, 3] }, paymentsReady: true }));
+    render(); await flush(); render();
+  };
+  it("connects an existing all-date checkout to an individual row payment and records only that paid date through the real service", async () => {
+    const h = matchedFlow([matchedBooking(), matchedBooking({ id: "job:902", occurrenceKey: "job:902", amountCents: 700 })]);
+    await h.start(); change("Payment due date", "2026-11-16"); await button("Create invoice page").props.onClick(); render();
+    const publicUrl = find("a", "Open customer page").props.href, token = publicUrl.split("/").pop()!;
+    const attempts = new Map<string, InvoiceAttempt>(), sessions = new Map<string, Stripe.Checkout.Session>(), keys = new Map<string, string>(), trace: string[] = [];
+    vi.mocked(h.repo.reserve).mockImplementation(async (invoiceId, requestId, lineIds) => {
+      const previous = [...attempts.values()].find(row => row.requestId === requestId);
+      if (previous) {
+        if (JSON.stringify(previous.lineIds) !== JSON.stringify(lineIds)) throw new Error("Test UUID selection changed");
+        return previous;
+      }
+      if (h.state.invoice!.activeAttemptId) throw new InvoiceError("CHECKOUT_IN_PROGRESS", 409, "Existing checkout");
+      const attempt: InvoiceAttempt = { id: `connected-${attempts.size + 1}`, invoiceId, requestId, lineIds: lineIds.slice(), amountCents: selectedBalance(h.state.invoice!, lineIds), currency: "usd", state: "pending", sessionId: null, sessionUrl: null, createdAt: Date.parse(`${matchedDay}T12:00:00Z`) };
+      attempts.set(attempt.id, attempt); h.state.attempt = attempt; h.state.invoice!.activeAttemptId = attempt.id; trace.push(`reserve:${attempt.id}`); return attempt;
+    });
+    vi.mocked(h.repo.attempt).mockImplementation(async id => attempts.get(id) || null);
+    h.create.mockImplementation(async (params, options) => {
+      const prior = keys.get(options!.idempotencyKey!); if (prior) return sessions.get(prior)! as any;
+      const id = `cs_test_connected_${sessions.size + 1}`;
+      const session = { id, object: "checkout.session", mode: "payment", status: "open", payment_status: "unpaid", livemode: false, currency: "usd", client_reference_id: params.client_reference_id, metadata: params.metadata, amount_total: params.line_items![0].price_data!.unit_amount, payment_intent: `pi_test_connected_${sessions.size + 1}`, url: `https://checkout.stripe.com/c/pay/connected_${sessions.size + 1}` } as Stripe.Checkout.Session;
+      sessions.set(id, session); keys.set(options!.idempotencyKey!, id); trace.push(`create:${id}`); return session as any;
+    });
+    h.retrieve.mockImplementation(async id => structuredClone(sessions.get(id)!));
+    const expire = vi.fn(async (id: string) => { const session = sessions.get(id)!; expect(session.payment_status).toBe("unpaid"); session.status = "expired"; trace.push(`remote-expire:${id}`); return structuredClone(session); });
+    h.stripe.mockImplementation(() => ({ checkout: { sessions: { create: h.create, retrieve: h.retrieve, expire } } } as unknown as Stripe));
+    h.repo.expire = vi.fn(async (id, sessionId) => { const attempt = attempts.get(id)!; expect(sessions.get(sessionId)!.status).toBe("expired"); expect(attempt.state).not.toBe("paid"); attempt.state = "expired"; if (h.state.invoice!.activeAttemptId === id) h.state.invoice!.activeAttemptId = null; trace.push(`local-expire:${id}`); });
+    await h.service.checkout(token, "11111111-1111-4111-8111-111111111111", [1, 2]);
+    const old = h.state.attempt!; expect(old.amountCents).toBe(1200);
+    resetHarness(); window.location.pathname = new URL(publicUrl).pathname; page = () => CustomerInvoicePage({}); render(); await flush(); await flush(); render();
+    expect(text(tree)).not.toContain("Invoice unavailable");
+    expect(button("Pay $12.00").props.disabled).toBe(false); expect(button("Pay this date").props.disabled).toBe(false);
+    await button("Pay this date").props.onClick(); render();
+    expect(lastPayload().lineIds).toEqual([1]); expect(old.state).toBe("expired"); expect(h.state.attempt!.lineIds).toEqual([1]); expect(h.state.attempt!.amountCents).toBe(500);
+    expect(expire).toHaveBeenCalledWith(old.sessionId); expect(trace.indexOf(`local-expire:${old.id}`)).toBeGreaterThan(trace.indexOf(`remote-expire:${old.sessionId}`)); expect(trace.indexOf(`reserve:${h.state.attempt!.id}`)).toBeGreaterThan(trace.indexOf(`local-expire:${old.id}`));
+    expect(window.location.assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/connected_2"); expect(sessions.size).toBe(2);
+    const paid = sessions.get(h.state.attempt!.sessionId!)!; paid.status = "complete"; paid.payment_status = "paid";
+    await h.service.reconcile({ id: "evt_test_connected", type: "checkout.session.completed", livemode: false, data: { object: paid } } as unknown as Stripe.Event);
+    await button("Check payment status").props.onClick(); render();
+    expect(h.state.invoice!.lines.map(row => row.paidCents)).toEqual([500, 0]); expect(h.state.invoice!.receipts[0].lineIds).toEqual([1]); expect(h.state.allocations).toBe(1);
+    expect(summary("Remaining invoice balance")).toBe("Remaining invoice balance$7.00"); expect(elements().filter(node => node.props?.className === "ic-row-pay")).toHaveLength(1);
+    expect(fetchMock.mock.calls.some(call => call[0].endsWith("/resume"))).toBe(false);
+  });
+  it("keeps active-checkout select-all editable and submits just the chosen date without an unlock request", async () => {
+    await start(); const all = checkbox("Select all unpaid"); expect(all.props.disabled).toBe(false);
+    all.props.onChange(); render(); expect(button("Pay $0.00").props.disabled).toBe(true);
+    elements(serviceRow(2)).find(node => node.type === "input")!.props.onChange(); render();
+    expect(summary("Total to pay selected")).toBe("Total to pay selected$225.00");
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/only_selected" }));
+    await button("Pay $225.00").props.onClick(); render(); expect(lastPayload().lineIds).toEqual([3]);
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(["/api/payable-invoices/token", "/api/payable-invoices/token/checkout"]);
+  });
+  it("recovers a confirmed expired same-selection attempt within one click, with a new key and unchanged exact row IDs", async () => {
+    await start(); fetchMock.mockReset();
+    fetchMock.mockImplementationOnce(() => response({ refresh: true }))
+      .mockImplementationOnce(() => response({ invoice: sampleInvoice, paymentsReady: true }))
+      .mockImplementationOnce(() => response({ url: "https://checkout.stripe.com/c/pay/new_key" }));
+    await button("Pay this date").props.onClick(); render();
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual(["/api/payable-invoices/token/checkout", "/api/payable-invoices/token", "/api/payable-invoices/token/checkout"]);
+    const first = JSON.parse(fetchMock.mock.calls[0][1].body), second = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(first.lineIds).toEqual([2]); expect(second.lineIds).toEqual(first.lineIds); expect(second.requestId).not.toBe(first.requestId);
+    expect(summary("Selected service dates")).toBe("Selected service dates2");
+    expect(window.location.assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/new_key");
+  });
+  it.each(["paid date", "void", "unconfigured"])("never retries or shrinks the submitted selection after terminal refresh reports %s", async kind => {
+    await start(); const latest = { ...sampleInvoice, lines: sampleInvoice.lines.map(row => kind === "paid date" && row.id === 2 ? { ...row, paidCents: row.amountCents } : row), ...(kind === "void" ? { status: "void" as const } : {}) };
+    fetchMock.mockReset(); fetchMock.mockImplementationOnce(() => response({ refresh: true })).mockImplementationOnce(() => response({ invoice: latest, paymentsReady: kind !== "unconfigured" }));
+    await button("Pay this date").props.onClick(); render();
+    expect(fetchMock).toHaveBeenCalledTimes(2); expect(JSON.parse(fetchMock.mock.calls[0][1].body).lineIds).toEqual([2]); expect(window.location.assign).not.toHaveBeenCalled();
+  });
+  it("bounds confirmed-terminal recovery to one fresh-key submission instead of an automatic loop", async () => {
+    await start(); fetchMock.mockReset();
+    fetchMock.mockImplementationOnce(() => response({ refresh: true }))
+      .mockImplementationOnce(() => response({ invoice: sampleInvoice, paymentsReady: true }))
+      .mockImplementationOnce(() => response({ refresh: true }))
+      .mockImplementationOnce(() => response({ invoice: sampleInvoice, paymentsReady: true }));
+    await button("Pay this date").props.onClick(); render();
+    expect(fetchMock.mock.calls.filter(call => call[1].method === "POST")).toHaveLength(2); expect(fetchMock).toHaveBeenCalledTimes(4); expect(window.location.assign).not.toHaveBeenCalled();
+  });
+  it("retains the same uncertain retry UUID through a status refresh while the same checkout is active", async () => {
+    await start(); fetchMock.mockImplementation(() => response({ message: "Provider outcome unknown" }, false));
+    await button("Pay this date").props.onClick(); render(); const first = lastPayload();
+    fetchMock.mockImplementation(() => response({ invoice: { ...sampleInvoice, activeAttemptId: "earlier", activeLineIds: [2, 3] }, paymentsReady: true }));
+    await button("Check payment status").props.onClick(); render();
+    fetchMock.mockImplementation(() => response({ message: "Provider outcome unknown" }, false)); await button("Pay this date").props.onClick(); render();
+    expect(lastPayload()).toEqual(first);
+  });
+  it("retires an uncertain retry UUID only after status refresh confirms the known active attempt has ended", async () => {
+    await start(); fetchMock.mockImplementation(() => response({ message: "Provider outcome unknown" }, false));
+    await button("Pay this date").props.onClick(); render(); const first = lastPayload();
+    fetchMock.mockImplementation(() => response({ invoice: sampleInvoice, paymentsReady: true })); await button("Check payment status").props.onClick(); render();
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/retired" })); await button("Pay this date").props.onClick(); render();
+    expect(lastPayload().lineIds).toEqual(first.lineIds); expect(lastPayload().requestId).not.toBe(first.requestId);
+  });
+  it("does not submit the terminal fresh-key retry after the customer page has unmounted", async () => {
+    await start(); let resolve!: (value: any) => void;
+    fetchMock.mockReset(); fetchMock.mockImplementationOnce(() => response({ refresh: true })).mockImplementationOnce(() => new Promise(value => { resolve = value; }));
+    const pending = button("Pay this date").props.onClick(); await flush(); hooks.cleanups.forEach(cleanup => cleanup());
+    resolve({ ok: true, json: async () => ({ invoice: sampleInvoice, paymentsReady: true }) }); await pending;
+    expect(fetchMock).toHaveBeenCalledTimes(2); expect(fetchMock.mock.calls[1][1].signal.aborted).toBe(true); expect(window.location.assign).not.toHaveBeenCalled();
+  });
 });
