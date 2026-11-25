@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createClaudeCustomerEmailApplication } from "./claudeCustomerEmailApplication";
-import { CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS } from "./claudeCustomerSmsGeneration";
+import { CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS, CLAUDE_KNOWLEDGE_BASE_HEADING } from "./claudeCustomerSmsGeneration";
+/** Token trim: the model binding keeps the people, addresses, subject and times; never the raw thread, its hash or internal IDs. */
+const modelBinding = (bound: CustomerEmailBinding) => ({ mailboxEmail: bound.mailboxEmail, fromEmail: bound.fromEmail, replyToEmail: bound.replyToEmail,
+  recipientEmail: bound.recipientEmail, senderName: bound.senderName, subject: bound.subject, createdAt: bound.createdAt, receivedAt: bound.receivedAt });
+const KNOWLEDGE_AT_END = `${CLAUDE_KNOWLEDGE_BASE_HEADING}COMPLETE EXISTING APPROVED KNOWLEDGE`;
 import type { CustomerEmailBinding, CustomerEmailStore } from "./claudeCustomerEmail";
 import { buildSystemPrompt } from "../csReplyStream";
 function rawThread(text = "Please add a key note.") {
@@ -39,11 +43,13 @@ describe("actual email counterpart application, no network", () => {
     const x = setup(); expect(await x.app.captured(x.event)).toBe(true);
     expect(x.trace).toEqual(["claim", "existing-agent", "durable-task-and-reply", "existing-Gmail-sender", "receipt"]);
     const request = x.runner.mock.calls[0][0] as any;
-    expect(request.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS); expect(request.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(request.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS); expect(request.systemPrompt.endsWith(`${buildSystemPrompt()}${KNOWLEDGE_AT_END}`)).toBe(true);
     const input = JSON.parse(request.userPrompt);
-    expect(input.incomingMessage).toBe("Please add a key note."); expect(input.context.knowledgeBase).toBe("COMPLETE EXISTING APPROVED KNOWLEDGE");
-    expect(input.context.binding.threadId).toBe("real-thread"); expect(input.context.binding.inboundMessageId).toBe("original-gmail-id");
-    expect(input.context.binding.rfcMessageId).toBe("<original-rfc-id@example.net>");
+    expect(input.incomingMessage).toBe("Please add a key note."); expect(input.context).not.toHaveProperty("knowledgeBase");
+    expect(input.context.binding).toEqual(modelBinding(x.bound()));
+    for (const hidden of ["real-thread", "original-gmail-id", "<original-rfc-id@example.net>", "snapshot", "UNREAD"]) expect(request.userPrompt).not.toContain(hidden);
+    // The real thread binding still drives the send.
+    expect(x.bound().threadId).toBe("real-thread"); expect(x.bound().rfcMessageId).toBe("<original-rfc-id@example.net>");
     expect(x.send).toHaveBeenCalledWith(x.bound(), "Hi Alex! We'll take care of the key note 🧹");
   });
   it.each(["provider", "strict-schema"])("recovers %s failure through the shared ordinary factory with one complete input, knowledge read and send", async failure => {
@@ -60,15 +66,17 @@ describe("actual email counterpart application, no network", () => {
     const first = x.runner.mock.calls[0][0] as any, second = x.runner.mock.calls[1][0] as any;
     expect(second).toBe(first); expect(second.systemPrompt).toBe(first.systemPrompt); expect(second.userPrompt).toBe(first.userPrompt);
     expect(second.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
-    expect(second.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(second.systemPrompt.endsWith(`${buildSystemPrompt()}${KNOWLEDGE_AT_END}`)).toBe(true);
     const input = JSON.parse(second.userPrompt);
     expect(input.incomingMessage).toBe("Please add a key note.");
-    expect(input.context.knowledgeBase).toBe("COMPLETE EXISTING APPROVED KNOWLEDGE");
-    expect(input.context.binding).toEqual(x.bound());
+    expect(input.context).not.toHaveProperty("knowledgeBase");
+    expect(input.context.binding).toEqual(modelBinding(x.bound()));
     expect(input.context.contact).toEqual({ displayName: "Alex", email: "customer@example.net" });
     expect(input.context.originalConversation).toHaveLength(2);
     expect(input.context.originalConversation[0].content).toBe(fullEarlier);
-    expect(input.context.originalConversation[1]).toMatchObject({ role: "user", content: "Please add a key note.", providerMessageId: "original-gmail-id" });
+    expect(input.context.originalConversation[1]).toEqual({ role: "user", content: "Please add a key note.", timestamp: 1000,
+      fromEmail: "customer@example.net", subject: "Cleaning request" });
+    expect(second.userPrompt.split(fullEarlier)).toHaveLength(2); // the earlier email appears once, not again in a raw snapshot
     expect(JSON.stringify(x.raw)).toBe(sourceBefore); expect(sourceBefore).not.toBe(before);
     expect(x.store.claim).toHaveBeenCalledTimes(1); expect(x.store.prepare).toHaveBeenCalledTimes(1);
     expect(x.send).toHaveBeenCalledTimes(1); expect(x.store.recordAcceptance).toHaveBeenCalledTimes(1);

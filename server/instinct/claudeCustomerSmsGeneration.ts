@@ -107,6 +107,9 @@ export function validateClaudeCustomerReplyPlan(text: string, { incomingMessage,
   return { replyText, task: plan.task };
 }
 
+/** Heading used only when the retrieved knowledge is not already in the CS writing prompt. */
+export const CLAUDE_KNOWLEDGE_BASE_HEADING = "\n\n=== APPROVED KNOWLEDGE BASE ===\n";
+
 /** Passive content factory. At most two saved-agent turns, session-local system
  * instructions, no tools, no extra classifier/reranker, no truncation or writes.
  * Eligibility, durable intent, freshness and SMS authority remain in dispatch. */
@@ -123,9 +126,13 @@ export function createClaudeCustomerReplyGenerator(options: ClaudeCustomerSmsGen
           knowledgeLoaded = true;
         }
         if (typeof knowledgeBase !== "string" || !knowledgeBase.trim()) return fail("KNOWLEDGE_UNAVAILABLE");
+        const writingPrompt = buildSystemPrompt();
+        // The approved knowledge base belongs in the fixed (cacheable) instructions, not in
+        // every message. The CS writing prompt already contains it; any other text is appended.
+        const knowledgeSection = writingPrompt.includes(knowledgeBase) ? "" : `${CLAUDE_KNOWLEDGE_BASE_HEADING}${knowledgeBase}`;
         scope.request = {
-          systemPrompt: `=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${buildSystemPrompt()}`,
-          userPrompt: JSON.stringify({ incomingMessage, context: { ...context, knowledgeBase } }),
+          systemPrompt: `=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${writingPrompt}${knowledgeSection}`,
+          userPrompt: JSON.stringify({ incomingMessage, context }),
           ...(options.signal ? { signal: options.signal } : {}),
         };
       }

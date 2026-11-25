@@ -6,7 +6,7 @@ import type { InitialLeadDraftOptions } from "./claudeAgentClient";
 import { buildSystemPrompt } from "../csReplyStream";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "../knowledgeBase";
 import {
-  CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS, CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS, createClaudeCustomerSmsGenerator, createClaudeCustomerReplyGenerator,
+  CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS, CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS, CLAUDE_KNOWLEDGE_BASE_HEADING, createClaudeCustomerSmsGenerator, createClaudeCustomerReplyGenerator,
   type ClaudeCustomerSmsGenerationBinding, type ClaudeCustomerSmsGenerationOptions,
 } from "./claudeCustomerSmsGeneration";
 import type { AlternativeSessionRow } from "./claudeSmsAlternativeSessionRead";
@@ -30,8 +30,17 @@ function fixture(history?: unknown) {
     customerName: "Maya Lane", historyHash: createHash("sha256").update(typeof messageHistory === "string" ? messageHistory : JSON.stringify(messageHistory)).digest("hex") };
   return { binding, session };
 }
+const HARNESS_KNOWLEDGE = "THE COMPLETE APPROVED KNOWLEDGE BASE\nFinal section: approved detail.";
+/** Token trim: the approved knowledge sits once in the fixed instructions, never in the per-message payload. */
+function knowledgeIn(request: { systemPrompt: string; userPrompt: string }): string | undefined {
+  expect(JSON.parse(request.userPrompt).context).not.toHaveProperty("knowledgeBase");
+  const at = request.systemPrompt.lastIndexOf(CLAUDE_KNOWLEDGE_BASE_HEADING);
+  if (at >= 0) return request.systemPrompt.slice(at + CLAUDE_KNOWLEDGE_BASE_HEADING.length);
+  return request.systemPrompt.includes(MAIDS_IN_BLACK_KNOWLEDGE_BASE) ? MAIDS_IN_BLACK_KNOWLEDGE_BASE : undefined;
+}
+const withKnowledge = (knowledge: string) => buildSystemPrompt().includes(knowledge) ? buildSystemPrompt() : `${buildSystemPrompt()}${CLAUDE_KNOWLEDGE_BASE_HEADING}${knowledge}`;
 function harness(result: unknown = { replyText: pendingReply, task }, options: ClaudeCustomerSmsGenerationOptions = {}) {
-  const readKnowledge = vi.fn(async () => "THE COMPLETE APPROVED KNOWLEDGE BASE\nFinal section: approved detail.");
+  const readKnowledge = vi.fn(async () => HARNESS_KNOWLEDGE);
   const runner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: typeof result === "string" ? result : JSON.stringify(result) }));
   return { readKnowledge, runner, generate: createClaudeCustomerSmsGenerator({ readKnowledge, runner, ...options }) };
 }
@@ -46,7 +55,7 @@ describe("content-only Claude customer SMS plan", () => {
       incomingMessage: f.binding.inboundText, context, protectedIds: [f.binding.providerMessageId, f.binding.receivingPhoneNumberId],
     });
     expect(shared.runner.mock.calls[0][0]).toEqual(sms.runner.mock.calls[0][0]);
-    expect(sms.runner.mock.calls[0][0].systemPrompt).toBe(`=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${buildSystemPrompt()}`);
+    expect(sms.runner.mock.calls[0][0].systemPrompt).toBe(`=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${withKnowledge(HARNESS_KNOWLEDGE)}`);
   });
 
   it("accepts full actual email context without a new agent/prompt, clipping or evidence source", async () => {
@@ -56,7 +65,8 @@ describe("content-only Claude customer SMS plan", () => {
       incomingMessage: inboundText, context, protectedIds: ["gmail-id", "<actual@example.net>"],
     })).toEqual({ replyText: pendingReply, task });
     expect(h.runner).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt).context).toEqual({ ...context, knowledgeBase: await h.readKnowledge.mock.results[0].value });
+    expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt).context).toEqual(context);
+    expect(knowledgeIn(h.runner.mock.calls[0][0])).toBe(await h.readKnowledge.mock.results[0].value);
     const protectedPlan = { replyText: "Thanks, gmail-id", task: null };
     const protectedRunner = vi.fn(async () => ({ finalSmsText: JSON.stringify(protectedPlan) }));
     expect(await createClaudeCustomerReplyGenerator({ readKnowledge: h.readKnowledge, runner: protectedRunner })({
@@ -75,7 +85,7 @@ describe("content-only Claude customer SMS plan", () => {
     const options = h.runner.mock.calls[0][0] as unknown as { systemPrompt: string; userPrompt: string };
     expect(Object.keys(options).sort()).toEqual(["systemPrompt", "userPrompt"]);
     expect(options.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
-    expect(options.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(options.systemPrompt.endsWith(withKnowledge(HARNESS_KNOWLEDGE))).toBe(true);
     expect(options.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(options.systemPrompt.indexOf(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS)).toBeLessThan(options.systemPrompt.indexOf(buildSystemPrompt()));
     const payload = JSON.parse(options.userPrompt);
@@ -83,7 +93,7 @@ describe("content-only Claude customer SMS plan", () => {
     expect(payload.context.originalConversation).toEqual(JSON.parse(session.messageHistory as string));
     expect(payload.context.contact).toEqual(session.contact);
     expect(payload.context.binding).toEqual(binding);
-    expect(payload.context.knowledgeBase).toBe(await h.readKnowledge.mock.results[0].value);
+    expect(knowledgeIn(options)).toBe(await h.readKnowledge.mock.results[0].value);
     expect(payload.context.bookingContext).toBeNull();
     expect(JSON.stringify(session)).toBe(original);
   });
@@ -97,7 +107,8 @@ describe("content-only Claude customer SMS plan", () => {
       const options = runner.mock.calls[0][0];
       expect(options.systemPrompt).toContain(buildSystemPrompt());
       expect(options.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
-      expect(JSON.parse(options.userPrompt).context.knowledgeBase).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+      expect(knowledgeIn(options)).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+      expect(options.systemPrompt.split(MAIDS_IN_BLACK_KNOWLEDGE_BASE)).toHaveLength(2); // exactly once
       expect(runner).toHaveBeenCalledTimes(1);
       expect(fetch).not.toHaveBeenCalled();
     } finally { fetch.mockRestore(); }
@@ -119,7 +130,7 @@ describe("content-only Claude customer SMS plan", () => {
     expect(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS.endsWith("\n\n" + CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toBe(true);
     expect(prompt.split(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toHaveLength(2);
     expect(prompt.indexOf(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toBeLessThan(prompt.indexOf(buildSystemPrompt()));
-    expect(prompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(prompt.endsWith(withKnowledge(HARNESS_KNOWLEDGE))).toBe(true);
     for (const instruction of ["not friendliness", "Do not impose a character limit", "Use emojis naturally wherever they fit", "Vary them to suit the actual message and cleaning context", "rather than defaulting to the same smiley face", "There is no fixed emoji count", "use multiple emojis", "or none when they do not fit", "Avoid playful emojis for complaints or sensitive issues", "Do not use em dashes (U+2014), en dashes (U+2013)", "dash-separated phrases or dash bullet lists", "Do not change task titles, checklist content or evidence quotes"]) {
       expect(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS).toContain(instruction);
     }
@@ -162,7 +173,7 @@ describe("content-only Claude customer SMS plan", () => {
     await h.generate(f.binding, f.session);
     const payload = JSON.parse((h.runner.mock.calls[0][0] as unknown as { userPrompt: string }).userPrompt);
     expect(payload.context.originalConversation).toEqual(history);
-    expect(payload.context.knowledgeBase).toBe(knowledge);
+    expect(knowledgeIn(h.runner.mock.calls[0][0] as unknown as { systemPrompt: string; userPrompt: string })).toBe(knowledge);
     expect(payload.context.originalConversation[0].content).toBe(history[0].content);
   });
 
@@ -272,11 +283,12 @@ describe("content-only Claude customer SMS plan", () => {
     expect(h.runner.mock.calls[1][0]).toBe(request);
     expect(request.signal).toBe(controller.signal);
     expect(request.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
-    expect(request.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(request.systemPrompt.endsWith(withKnowledge(HARNESS_KNOWLEDGE))).toBe(true);
     expect(JSON.parse(request.userPrompt)).toEqual({ incomingMessage: inboundText, context: { binding: f.binding,
       contact: f.session.contact, originalConversation: f.session.messageHistory,
       receivingPhoneNumberId: f.binding.receivingPhoneNumberId, receivingPhoneNumber: f.binding.receivingPhoneNumber,
-      bookingContext: null, knowledgeBase: await h.readKnowledge.mock.results[0].value } });
+      bookingContext: null } });
+    expect(knowledgeIn(request)).toBe(await h.readKnowledge.mock.results[0].value);
     expect(JSON.stringify(f)).toBe(before);
   });
 
@@ -288,7 +300,7 @@ describe("content-only Claude customer SMS plan", () => {
     expect(h.readKnowledge).toHaveBeenCalledTimes(2);
     expect(h.readKnowledge.mock.calls).toEqual([[inboundText], [inboundText]]);
     expect(h.runner).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt).context.knowledgeBase).toBe(await h.readKnowledge.mock.results[1].value);
+    expect(knowledgeIn(h.runner.mock.calls[0][0])).toBe(await h.readKnowledge.mock.results[1].value);
   });
 
   it("does not grant a third attempt after a rejected knowledge read followed by invalid generation", async () => {
@@ -362,7 +374,7 @@ describe("content-only Claude customer SMS plan", () => {
     for (const id of [42, 43]) {
       const calls = runner.mock.calls.filter(([request]) => JSON.parse(request.userPrompt).context.binding.sessionId === id);
       expect(calls).toHaveLength(2); expect(calls[1][0]).toBe(calls[0][0]);
-      expect(JSON.parse(calls[0][0].userPrompt).context.knowledgeBase).toBe(`Complete approved knowledge for ${id === 42 ? inboundText : textB}`);
+      expect(knowledgeIn(calls[0][0])).toBe(`Complete approved knowledge for ${id === 42 ? inboundText : textB}`);
     }
     counts.set(42, 0);
     expect(await generate(a.binding, a.session)).toEqual({ replyText: "Thanks, Maya!", task: null });

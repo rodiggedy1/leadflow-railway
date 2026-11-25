@@ -66,6 +66,18 @@ function templateNeutralText(template: string): string {
   return neutral;
 }
 
+/** Model-facing copy of one saved SMS turn: who, what, when, plus the turn index.
+ * The saved conversation itself is never changed. */
+function modelSmsTurn(turn: any, turnIndex: number): Record<string, unknown> {
+  const media = Array.isArray(turn?.media) ? turn.media.length : 0;
+  return {
+    turnIndex, role: turn?.role, content: turn?.content,
+    ...(turn?.ts != null ? { ts: turn.ts } : {}),
+    ...(typeof turn?.senderName === "string" && turn.senderName.trim() ? { senderName: turn.senderName } : {}),
+    ...(media > 0 ? { attachments: media } : {}),
+  };
+}
+
 /** Passive SMS-only wrapper. The caller must first verify exactConversation.
  * All captures are invocation-local. One saved-agent call plus at most one
  * content recovery; no persistence, sends, classifier or price math. */
@@ -105,8 +117,13 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
         const payload = JSON.parse(runnerOptions.userPrompt);
         // Labels exist only in the model payload. Hashes, qualification and durable
         // preparation still use the complete, unmodified original conversation.
-        const indexedPayload = { ...payload, context: { ...payload.context,
-          originalConversation: originalConversation.map((turn, turnIndex) => ({ ...turn, turnIndex })),
+        // Token trim (model payload only): internal IDs, hashes, provider metadata and
+        // duplicate identity fields are left out; attachment links become a count.
+        const { receivingPhoneNumberId: _lineId, ...modelContext } = payload.context;
+        const indexedPayload = { ...payload, context: { ...modelContext,
+          binding: { fromPhone: binding.fromPhone, customerName: binding.customerName },
+          contact: { displayName: payload.context.contact?.displayName ?? null, phone: payload.context.contact?.phone ?? null },
+          originalConversation: originalConversation.map((turn, turnIndex) => modelSmsTurn(turn, turnIndex)),
         } };
         request = { ...runnerOptions,
           systemPrompt: `=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${runnerOptions.systemPrompt}`,
