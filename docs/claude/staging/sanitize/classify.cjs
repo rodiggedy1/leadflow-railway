@@ -251,12 +251,12 @@ function classify(table, col, type, isJson) {
 
 const json = new Set(fs.readFileSync(jsonColsPath, "utf8").trim().split("\n").map(l => l.split("\t").join(".")));
 const rows = fs.readFileSync(inventoryPath, "utf8").trim().split("\n").map(l => l.split("\t"));
-const out = ["table\tcolumn\tcolumn_type\trule\tnote"];
+const out = ["table\tcolumn\tcolumn_type\trule\tnote\tnullable"];
 const counts = {};
-for (const [table, col, columnType, dataType] of rows) {
+for (const [table, col, columnType, dataType, isNullable] of rows) {
   const [rule, note] = classify(table, col, dataType, json.has(`${table}.${col}`));
   counts[rule] = (counts[rule] || 0) + 1;
-  out.push([table, col, columnType, rule, note || ""].join("\t"));
+  out.push([table, col, columnType, rule, note || "", isNullable].join("\t"));
 }
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, out.join("\n") + "\n");

@@ -1,0 +1,45 @@
+{
+  "_note": "Invented SMS conversations for staging. {first} = the lead's invented first name. role 'user' = customer/cleaner, 'assistant' = Maids in Black. No real people, numbers or addresses.",
+  "scenarios": {
+    "new_booking": [
+      [["user", "Hi, do you have anything this Friday for a 2 bed 2 bath?"], ["assistant", "Hi {first}! Yes, we have a 10am or 1pm arrival window this Friday. A standard clean for 2 bed / 2 bath is $165. Which works best?"], ["user", "10am please"], ["assistant", "You're booked for Friday with a 10–12 arrival window. We'll text you when your team is on the way!"], ["user", "Perfect, thank you"]],
+      [["user", "I'd like to book a deep clean before my parents visit next week"], ["assistant", "Happy to help, {first}! How many bedrooms and bathrooms, and which day works for you?"], ["user", "3 bed 2 bath, Tuesday or Wednesday"], ["assistant", "Wednesday 9am is open. A deep clean for 3 bed / 2 bath is $310 including inside the fridge and oven. Shall I lock it in?"], ["user", "Yes please book it"], ["assistant", "Done! Wednesday 9–11am arrival. You'll get a reminder the day before."]],
+      [["user", "Can I get a cleaning tomorrow afternoon?"], ["assistant", "Hi {first}, we have one spot tomorrow at 2pm. Is it a standard clean? How many bedrooms?"], ["user", "Standard, 1 bedroom 1 bath"], ["assistant", "Great, that's $120. You're booked for tomorrow 2–4pm arrival."]]
+    ],
+    "quote": [
+      [["user", "How much for a move-out clean? 2 bed 1 bath apartment"], ["assistant", "Hi {first}! A move-out clean for 2 bed / 1 bath is $245 and includes inside cabinets, fridge and oven. What date are you moving out?"], ["user", "End of the month, let me check with my landlord"], ["assistant", "Sounds good, just reply here when you have a date and we'll hold a spot for you."]],
+      [["user", "What do you charge for a regular cleaning?"], ["assistant", "Hi {first}, it depends on the size of your home. How many bedrooms and bathrooms?"], ["user", "4 bed 3 bath"], ["assistant", "A standard clean is $225, and every two weeks it drops to $195 per visit. Want me to send available times?"], ["user", "Sure, send me some times"], ["assistant", "We have Monday 9am, Tuesday 1pm or Thursday 10am. Any of those work?"]],
+      [["user", "Quote for 3 bed 2.5 bath plus inside windows?"], ["assistant", "Hi {first}! That's $195 for the clean plus $40 for inside windows, $235 total. Would you like to book?"], ["user", "That's a bit more than I expected, I'll think about it"], ["assistant", "No problem at all. The quote is good for 14 days, just reply whenever you're ready."]]
+    ],
+    "reschedule": [
+      [["user", "Something came up, can we move Thursday's cleaning?"], ["assistant", "Of course, {first}. We can do Friday at 10am or Monday at 1pm. Which is better?"], ["user", "Monday 1pm"], ["assistant", "All set, you're moved to Monday with a 1–3pm arrival window. Thursday is cancelled."]],
+      [["user", "Can the team come an hour later tomorrow?"], ["assistant", "Let me check with the team, {first}. One moment."], ["assistant", "Good news, they can arrive between 11am and 1pm instead. I've updated your booking."], ["user", "Thanks so much"]],
+      [["user", "I need to reschedule, I'll be traveling next week"], ["assistant", "Safe travels, {first}! Would the following week work? We have Tuesday or Wednesday morning."], ["user", "Wednesday morning"], ["assistant", "Done, you're booked for Wednesday 9–11am. Enjoy your trip!"]]
+    ],
+    "cancellation": [
+      [["user", "I need to cancel my cleaning on Saturday"], ["assistant", "Sorry to hear that, {first}. I've cancelled Saturday's visit. Would you like to pick a new date?"], ["user", "Not right now, thanks"], ["assistant", "No problem, we're here whenever you need us."]],
+      [["user", "Please cancel my recurring cleanings, I'm moving out of the area"], ["assistant", "Thanks for letting us know, {first}, and best of luck with the move! Your recurring visits are cancelled. Need a move-out clean before you go?"], ["user", "Actually yes, how much would that be?"], ["assistant", "For your home it's $275. We have next Saturday open if that helps."]],
+      [["user", "Cancel"], ["assistant", "Hi {first}, just to confirm, would you like to cancel your booking on the 14th?"], ["user", "Yes"], ["assistant", "Your booking on the 14th has been cancelled. Thank you!"]]
+    ],
+    "complaint": [
+      [["user", "The team missed the kitchen floor and the bathroom mirror today"], ["assistant", "I'm really sorry, {first}. That's not our standard. We'd like to send the team back to fix it free of charge. Would tomorrow morning work?"], ["user", "Tomorrow at 9 is ok"], ["assistant", "Booked for 9am tomorrow at no charge. Thank you for telling us, and sorry again."]],
+      [["user", "The cleaner arrived almost 2 hours late"], ["assistant", "I apologize, {first}. There was a delay at the previous job and we should have let you know sooner. I've applied a $25 credit to your next clean."], ["user", "Ok thanks, please just text me next time"], ["assistant", "Absolutely, we've added a note to always text you if the team is running late."]],
+      [["user", "I think a vase was broken during the clean"], ["assistant", "I'm so sorry, {first}. Could you send a photo? We'll make this right."], ["user", "Sent it in the email"], ["assistant", "Thank you, we received it. Our manager will call you today to arrange a replacement."]]
+    ],
+    "recurring": [
+      [["user", "Can we set up cleanings every two weeks?"], ["assistant", "Definitely, {first}! Every two weeks on Wednesdays at 10am works for your team. Your rate becomes $175 per visit."], ["user", "Great, start next Wednesday"], ["assistant", "You're all set for every other Wednesday starting next week."]],
+      [["user", "Can I switch from monthly to weekly?"], ["assistant", "Of course, {first}. Weekly visits are $150 each. Same day and time as now?"], ["user", "Yes same time"], ["assistant", "Updated! You're now weekly on Mondays at 1pm."]],
+      [["user", "Can I skip next week's recurring clean?"], ["assistant", "No problem, {first}. Next week is skipped and your regular schedule resumes the week after."], ["user", "Perfect"]]
+    ],
+    "cleaner_coordination": [
+      [["assistant", "Hi {first}, you're scheduled tomorrow at 9am and 1pm. Please confirm."], ["user", "Confirmed, see you tomorrow"], ["assistant", "Thanks! The 1pm client asked for extra attention on the oven."]],
+      [["user", "I'm running about 20 minutes late, traffic is bad"], ["assistant", "Thanks for the heads up, {first}. I'll let the client know you'll arrive around 10:20."], ["user", "Thank you"]],
+      [["user", "Finished the 9am job, the client wasn't home so I locked up as instructed"], ["assistant", "Great work, {first}. Please upload the after photos when you can."], ["user", "Uploaded"]]
+    ],
+    "general": [
+      [["user", "Do you bring your own supplies?"], ["assistant", "Hi {first}! Yes, our teams bring all supplies and equipment. If you prefer eco-friendly products just let us know."], ["user", "Good to know, thanks"]],
+      [["user", "Are you available on weekends?"], ["assistant", "Yes, {first}, we clean on Saturdays from 9am to 5pm. Would you like to book a Saturday visit?"], ["user", "Maybe later this month"]],
+      [["user", "Hi, is this Maids in Black?"], ["assistant", "Hi {first}, yes it is! How can we help you today?"], ["user", "I'll call you later about a quote"], ["assistant", "Sounds good, talk soon!"]]
+    ]
+  }
+}
