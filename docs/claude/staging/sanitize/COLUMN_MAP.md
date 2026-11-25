@@ -1,5 +1,7 @@
 # Staging replica — column map (step A1)
 
+> **Not used (owner decision 2026-11-25):** staging receives an unsanitized copy of production. These files are kept for reference only.
+
 Status: **draft for owner review** (2026-11-25). Nothing has been exported, copied or changed.
 
 This map decides, for every column in LeadFlow's database, what happens to it when a production snapshot is turned into

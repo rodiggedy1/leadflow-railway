@@ -25,6 +25,25 @@ one step at a time, and wait for approval before acting.
   live webhooks or active scheduled jobs.
 - Releases to `main` use scripts/push-main-safe.sh, run by the owner (or Manus), unless an equivalent is proven and approved.
 
+## Owner priorities (decided 2026-11-25, in this order)
+1. A functional replica of production running on staging.
+2. Staging must never send real SMS or emails, place calls or process payments.
+3. Staging must never be able to modify the production database.
+4. Existing production functionality and Manus infrastructure stay untouched.
+5. Get Claude Code developing, testing and releasing features as quickly as possible.
+- **Staging holds an unsanitized copy of production data. That is the owner's decision.** Do not propose
+  anonymization, sanitization or extra customer-data requirements. (docs/claude/staging/sanitize/ is kept for
+  reference only and is not used.)
+- **Staging protection is exactly:**
+  - the outbound simulator and firewall (docs/claude/staging/sim/, loaded by the staging start command);
+  - its own database, `leadflow_staging`, on a separate cluster;
+  - scheduled jobs off;
+  - no real keys.
+
+  Keep these.
+- **Do not add architecture, safeguards, refactoring or requirements** unless they are absolutely necessary for
+  these priorities.
+
 ## Enforced safety guard
 `.claude/settings.json` + `.claude/hooks/guard.mjs` block, before they run: pushes to main/preview/production, force
 pushes, the release script, the Railway CLI, `db:push` and drizzle-kit push/migrate/generate, the migration runner
@@ -76,9 +95,12 @@ Self-test: `node .claude/hooks/guard-selftest.mjs` (all cases must PASS).
 ## Useful facts
 - Stack: Express + tRPC (server/_core/index.ts, server/routers.ts), React 19 + Vite (client/src), Drizzle (drizzle/schema.ts).
 - Build: `pnpm build`. Scheduled jobs: server/internalCron.ts (off when PREVIEW_MODE=true or CRON_DISABLED=true).
-- Staging: Railway environment `staging`, service `leadflow-staging`, deploys from the `staging` branch; database
-  `leadflow_staging` on a separate TiDB cluster; owner signs in with their own password (one-click login is off).
-  Setup, settings and rebuild steps: docs/claude/STAGING_SETUP.md. Files: docs/claude/staging/ (base schema, invented data).
+- Staging: Railway environment `staging`, service `leadflow-staging`, deploys from the `staging` branch.
+  - **Database:** `leadflow_staging` on a separate TiDB cluster, holding a copy of production data. Refresh it with
+    docs/claude/staging/refresh/ (B3 export with Dumpling, then B4 load).
+  - **Sign-in:** staff use their production email and password (one-click login is off).
+  - **Outgoing services are simulated:** docs/claude/staging/sim/README.md.
+  - **Setup:** docs/claude/STAGING_SETUP.md.
 - Updating the `staging` branch redeploys staging only; do it only with the owner's approval for that change.
 - Railway is retiring config-as-code: `railway.json` is read only until 2026-12-01. Production/Preview deploy settings
   must be moved into Railway's service settings by the owner before then (see docs/claude/RELEASE_PROCESS.md).

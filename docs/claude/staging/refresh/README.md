@@ -1,30 +1,26 @@
-# Staging refresh from production (Part B): overview
+# Staging refresh from production
 
-**Goal:** give staging a realistic, **sanitized** copy of production data.
-- Raw production data never goes to staging or to Claude.
-- Production is only read, never changed.
-- Each step waits for the owner's approval.
+**Owner decision, 2026-11-25:** staging gets a straight copy of production. There is no sanitization.
+- **Protection** is the outbound simulator and firewall (`../sim/`), staging's own database (`leadflow_staging` on a separate cluster), scheduled jobs off and no real keys.
+- **Production** is only ever read.
 
-| Step | Who / where | What happens | Touches production? |
+| Step | Where | What | Touches production? |
 |---|---|---|---|
-| **B1** | Owner's Mac | `b1-check-production.sh`: read-only check of size, permissions, database updates, and structure vs the sanitizer's column map. Exports nothing | Reads table **information** only (milliseconds) |
-| B2 | Owner's TiDB account | Prepare a temporary, private "cleaning" database (exact choice after B1, based on size) | No |
-| B3 | Owner's Mac | Export production with TiDB's own tool **Dumpling** (`b3-export-production.sh`): all table structures, contents of all tables except the 51 the sanitizer empties, one TiDB snapshot for everything, no locks, no writes. (mysqldump was dropped: its savepoint use fails on TiDB Cloud.) | Reads (one pass) |
-| B4 | Cleaning database | `prepare.sql` → `verify.sql` → `sanitize.sql` → `verify.sql` (must show **no** failing rows; counts only are shared with Claude) | No |
-| B5 | Cleaning → staging | Export the cleaned copy without the sanitizer's helper tables, and load it into `leadflow_staging`, replacing it, so staging gets **production's exact structure** (B1 showed production has 6 tables and 95 columns that are not in the code). Re-apply the owner's staging login and the locked demo accounts | No |
-| B6 | Railway staging | Redeploy staging; check `[staging-sim] ACTIVE`, sign-in and pages | No |
-| B7 | Owner | Delete the raw export file and the cleaning database | No |
+| B1 | Owner's Mac | `b1-check-production.sh`: read-only size and structure check (only needed if something looks wrong) | Reads table information only |
+| **B3** | Owner's Mac | `b3-export-production.sh`: Dumpling export. All table structures, plus the contents of all tables except 51 that hold only tokens, caches, logs and AI history. One TiDB snapshot, no locks, no writes. Files go to `~/leadflow-refresh` | Reads (one pass, about 3 minutes) |
+| **B4** | Owner's Mac → staging | `b4-load-staging.sh`: replaces the contents of `leadflow_staging` with the export, then re-applies the demo-cleaner lock. It refuses any database not named `leadflow_staging` | No |
+| **B5** | Railway staging | Redeploy staging. Check `[staging-sim] ACTIVE`, sign in with your production email and password, check pages | No |
+| B6 (optional) | Owner | Delete `~/leadflow-refresh`. Delete the TiDB cluster `leadflow-cleaning` (no longer needed) | No |
 
-**Safety:**
-- **Lock.** The sanitizer only runs where `prepare.sql` created its marker table, which happens only in the cleaning database. Run against anything else, every statement is refused.
-- **Structure check.** It refuses to run if a column isn't in the map.
-- **Simulator.** Staging's simulator and firewall stay on throughout.
+First refresh:
+- **B3** was done on 2026-11-25: snapshot `470714634006167577`, 162 structures, 102 tables with contents, 274 MB, 183 seconds.
+- **B2 and B4 from the earlier plan** (a separate cleaning database and sanitizing) are dropped.
 
 **Rollback:**
-- **Code:** none. No application code changes in B.
-- **Database:** staging can be rebuilt with invented data (STAGING_SETUP.md). Production is never written to.
+- **Code:** none.
+- **Staging data:** re-run B4 with an older export, or rebuild staging with invented data (STAGING_SETUP.md).
 
-Tested locally on a TiDB 8.5 server built from source (`test/tidb-roundtrip.sh`):
-- **Read-only:** the statement log shows 0 writes during the export.
-- **Export:** all 162 structures, skipped contents excluded, and an identical round trip.
-- **Cleaning on TiDB:** 658 leak-check failures before, 0 after, with links and totals unchanged.
+**Tested locally on a TiDB 8.5 server** built from source (`test/tidb-roundtrip.sh`, plus a B4 run):
+- **Export:** sends 0 write statements to the database; 162 structures; skipped contents excluded.
+- **B4:** refuses a database with the wrong name; replaces old staging tables; every table matches the export; an
+  active demo-cleaner account copied from production is switched off.

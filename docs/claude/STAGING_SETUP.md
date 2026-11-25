@@ -8,7 +8,7 @@ It was set up and verified on 2026-11-24. This document records exactly how, so 
 
 | Risk | How staging avoids it | Verified |
 |---|---|---|
-| Real customer data | Its own database `leadflow_staging` on the TiDB cluster `instinct-db`, a **different cluster** from production's, containing only invented data | Owner compared cluster IDs; cluster held only TiDB's built-in databases before staging |
+| Changing production data | Its own database `leadflow_staging` on the TiDB cluster `instinct-db`, a **different cluster** from production's. Since 2026-11-25 it holds a **copy of production data**, unsanitized by the owner's decision (refresh: `staging/refresh/README.md`). The simulator refuses to start if staging points at any other database | Owner compared cluster IDs |
 | Real texts / calls / emails / payments / AI | Part C: outbound firewall + simulator (`staging/sim/README.md`). **No real** OpenPhone, Twilio, Vapi, Mailgun, Gmail, Stripe, Launch27, OpenAI or Anthropic keys | Local test: an SMS attempt returned `smsSent: false` ("OpenPhone credentials not configured") and the app made **zero** outbound connections |
 | Scheduled jobs | `PREVIEW_MODE=true` and `CRON_DISABLED=true` | Railway deploy log: "PREVIEW_MODE=true — all cron jobs and Vapi bootstrap disabled" |
 | Live webhooks | No outside service points at staging's address | — |
@@ -51,10 +51,12 @@ when no scheduled jobs have run, which is always the case on staging. The tRPC h
 
 `EMERGENCY_AGENT_EMAIL` was used only during setup and has been **removed** — that is what switches one-click login off.
 
-**Database** (`leadflow_staging`): 156 tables (106 from `staging/staging-base-schema.sql`, 49 created by the 79 database
-updates, plus the updates' ledger); 79 updates recorded as `applied`.
+**Database** (`leadflow_staging`): after a refresh from production (`staging/refresh/`) it has production's 162 tables
+and data. 51 tables start empty: login tokens, caches, logs and AI history, which are not exported. The staff
+accounts are production's, so staff sign in with their production email and password. The demo-cleaner lock
+below is re-applied by the refresh.
 
-**Accounts on staging**
+**Accounts on staging (original invented setup, before the first refresh)**
 - The owner's own admin account (email + password, created directly in the database — see Part E).
 - "Staging Admin" (`staging-admin@example.com`) — **switched off** (`isActive = 0`).
 - "Sam Sample (agent)" — invented staff, cannot sign in (password unknown to anyone).
