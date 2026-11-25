@@ -79,7 +79,10 @@ const s = [];
 const SAN_HEADER = `-- LeadFlow staging sanitizer — SANITIZE. Run ONLY in the temporary cleaning database, after prepare.sql.
 -- Every statement joins the marker table; on any other database it fails before changing anything.`;
 // 0. drift check
-const unmapped = `SELECT ic.table_name AS t, ic.column_name AS c FROM information_schema.columns ic LEFT JOIN __column_map cm ON cm.t = ic.table_name AND cm.c = ic.column_name WHERE ic.table_schema = DATABASE() AND ic.table_name NOT LIKE '\\_\\_%' AND cm.t IS NULL`;
+// the sanitizer's own helper tables (exact names). Every other table, including production's own "__" tables, must be mapped.
+const helpers = [M, "__column_map", "__name_first", "__name_last", "__streets", "__team_words", "__synthetic_conversations",
+  ...["phone", "email", "name", "team"].flatMap(n => [`__src_${n}`, `__map_${n}`])];
+const unmapped = `SELECT ic.table_name AS t, ic.column_name AS c FROM information_schema.columns ic LEFT JOIN __column_map cm ON cm.t = ic.table_name AND cm.c = ic.column_name WHERE ic.table_schema = DATABASE() AND ic.table_name NOT IN (${helpers.map(q).join(", ")}) AND cm.t IS NULL`;
 const missing = `SELECT cm.t, cm.c FROM __column_map cm LEFT JOIN information_schema.columns ic ON ic.table_schema = DATABASE() AND ic.table_name = cm.t AND ic.column_name = cm.c WHERE ic.column_name IS NULL`;
 s.push(`UPDATE ${M} m SET m.drift_ok = IF((SELECT COUNT(*) FROM (${unmapped}) u) = 0 AND (SELECT COUNT(*) FROM (${missing}) x) = 0, 1, 0)`);
 s.push(`SELECT 'STRUCTURE CHECK' AS step, m.drift_ok AS ok_1_means_safe_to_continue FROM ${M} m`);
@@ -261,8 +264,6 @@ SELECT 'LEAK CHECK SUMMARY' AS step, ${v.length} AS checks_run;
 `;
 
 // ---------- cleanup.sql ----------
-const helpers = [M, "__column_map", "__name_first", "__name_last", "__streets", "__team_words", "__synthetic_conversations",
-  ...["phone", "email", "name", "team"].flatMap(n => [`__src_${n}`, `__map_${n}`])];
 const cleanup = `-- Drops the sanitizer helper tables (they hold the original->fake maps). Run after verify.sql passes, before export.\n` +
   helpers.slice(1).map(h => `DROP TABLE IF EXISTS ${h};`).join("\n") + `\nDROP TABLE IF EXISTS ${M};\n`;
 

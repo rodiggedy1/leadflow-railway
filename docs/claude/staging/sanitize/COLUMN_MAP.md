@@ -10,7 +10,26 @@ not from production. Files:
   database structure changes; any column without a rule comes out as `REVIEW`, and the sanitizer will refuse to run
   while a `REVIEW` exists or while production has a column that is not in the map.
 
-## Totals
+## Updated to production's real structure after B1 (2026-11-25)
+The map now matches production exactly: **2,078 columns in 162 tables**. The structure B1 reported is in
+`schema/production-b1-*.txt`, and `schema/apply-b1.py` applies it. The totals table below is from A1; `column-map.tsv`
+holds the current numbers.
+- **Production-only tables, emptied:** `webhook_events` (≈257k raw incoming messages with phone numbers), `cs_threads`,
+  `sms_shadow_evaluations`, `sms_card_diag`, `gmail_thread_cache`.
+- **`booking_apple_pay_payments`:** handled like the other payment tables. Card last 4 → 4242, Stripe id → fake,
+  error text replaced, amounts and statuses kept.
+- **`__drizzle_migrations`:** kept (only old database-update fingerprints). The structure check now skips only the
+  sanitizer's own helper tables, by exact name.
+- **New columns:**
+  - `confirmation_calls.manual_override_by` (staff name) → fake name;
+  - `manual_outcome_label` and `issue_ownership.resolutionNote` → replaced;
+  - the rest are statuses, dates and labels and are kept.
+- **Not in production, removed from the map:** `system_config`, and 6 columns of `chain_step_executions` (a table that
+  is emptied anyway).
+- **Also covered:** the database-update ledger (its error text is replaced).
+- **Tests:** all re-run on a local database shaped exactly like production (`test/run-all.sh`). All pass.
+
+## Totals (A1)
 
 | Rule | Columns | What happens |
 |---|---|---|

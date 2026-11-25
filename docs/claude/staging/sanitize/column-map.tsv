@@ -1,4 +1,7 @@
 table	column	column_type	rule	note	nullable
+__drizzle_migrations	created_at	bigint	KEEP		YES
+__drizzle_migrations	hash	text	KEEP	checked by hand: business data	NO
+__drizzle_migrations	id	bigint unsigned	KEEP		NO
 activity_log	id	int(11)	KEEP		NO
 activity_log	eventType	enum('lead_reply','ai_sms_sent','silence_nudge','scheduled_followup','always_on_batch','nightly_sync','review_send','booking','new_lead')	KEEP	checked by hand: business data	NO
 activity_log	title	varchar(255)	FREE_TEXT		NO
@@ -97,6 +100,22 @@ applicant_portal_handoff_tokens	usedAt	datetime(3)	TRUNCATE_TABLE	login tokens	Y
 applicant_portal_handoff_tokens	reusable	tinyint(4)	TRUNCATE_TABLE	login tokens	NO
 applicant_portal_handoff_tokens	reusableToken	varchar(64)	TRUNCATE_TABLE	login tokens	YES
 applicant_portal_handoff_tokens	createdAt	datetime(3)	TRUNCATE_TABLE	login tokens	NO
+booking_apple_pay_payments	amountCents	int	KEEP		NO
+booking_apple_pay_payments	attempt	int	KEEP		NO
+booking_apple_pay_payments	bookingId	int	KEEP		NO
+booking_apple_pay_payments	bookingPaymentProfileId	int	KEEP		NO
+booking_apple_pay_payments	cardBrand	varchar(40)	KEEP	checked by hand: business data	YES
+booking_apple_pay_payments	cardLast4	varchar(4)	CARD_LAST4	card last 4	YES
+booking_apple_pay_payments	createdAt	datetime(3)	KEEP		NO
+booking_apple_pay_payments	currency	varchar(3)	KEEP	checked by hand: business data	NO
+booking_apple_pay_payments	failureCode	varchar(128)	KEEP	checked by hand: business data	YES
+booking_apple_pay_payments	failureMessage	text	FREE_TEXT	payment error text	YES
+booking_apple_pay_payments	idempotencyKey	varchar(160)	KEEP	checked by hand: business data	NO
+booking_apple_pay_payments	id	bigint	KEEP		NO
+booking_apple_pay_payments	paidAt	bigint	KEEP		YES
+booking_apple_pay_payments	status	varchar(32)	KEEP	checked by hand: business data	NO
+booking_apple_pay_payments	stripePaymentIntentId	varchar(255)	PAYMENT_REF	payment reference	NO
+booking_apple_pay_payments	updatedAt	datetime(3)	KEEP		NO
 booking_assignments	id	int(11)	KEEP		NO
 booking_assignments	bookingId	int(11)	KEEP		NO
 booking_assignments	teamId	int(11)	KEEP		YES
@@ -239,6 +258,7 @@ bookings	bookedByAgentId	int(11)	KEEP		YES
 bookings	bookedByAgentName	varchar(255)	PERSON_NAME		YES
 bookings	homeType	varchar(32)	KEEP	checked by hand: business data	YES
 bookings	manualAmountOverrides	longtext	KEEP	checked by hand: business data	YES
+bookings	paymentMethod	varchar(20)	KEEP	checked by hand: business data	NO
 call_log	id	int(11)	KEEP		NO
 call_log	cleanerJobId	int(11)	KEEP		YES
 call_log	teamId	int(11)	KEEP		YES
@@ -377,15 +397,10 @@ chain_step_executions	chainExecutionId	varchar(64)	TRUNCATE_TABLE	AI chain steps
 chain_step_executions	stepId	varchar(128)	TRUNCATE_TABLE	AI chain steps	NO
 chain_step_executions	capabilityId	varchar(128)	TRUNCATE_TABLE	AI chain steps	NO
 chain_step_executions	status	enum('planned','running','succeeded','failed','skipped','cancelled')	TRUNCATE_TABLE	AI chain steps	NO
-chain_step_executions	resolvedArgs	longtext	TRUNCATE_TABLE	AI chain steps	YES
 chain_step_executions	result	longtext	TRUNCATE_TABLE	AI chain steps	YES
-chain_step_executions	verificationResult	longtext	TRUNCATE_TABLE	AI chain steps	YES
-chain_step_executions	idempotencyKey	varchar(128)	TRUNCATE_TABLE	AI chain steps	YES
-chain_step_executions	externalResultId	varchar(255)	TRUNCATE_TABLE	AI chain steps	YES
-chain_step_executions	errorMessage	text	TRUNCATE_TABLE	AI chain steps	YES
-chain_step_executions	createdAt	datetime(3)	TRUNCATE_TABLE	AI chain steps	NO
 chain_step_executions	startedAt	datetime(3)	TRUNCATE_TABLE	AI chain steps	YES
 chain_step_executions	completedAt	datetime(3)	TRUNCATE_TABLE	AI chain steps	YES
+chain_step_executions	error	text	TRUNCATE_TABLE	AI chain steps	YES
 channel_pins	id	int(11)	KEEP		NO
 channel_pins	channel	varchar(64)	KEEP	checked by hand: business data	NO
 channel_pins	body	text	FREE_TEXT		NO
@@ -533,6 +548,7 @@ cleaner_profiles	language	varchar(5)	KEEP	checked by hand: business data	NO
 cleaner_profiles	launch27TeamId	int(11)	KEEP		YES
 cleaner_profiles	createdAt	timestamp	KEEP		NO
 cleaner_profiles	updatedAt	timestamp	KEEP		NO
+cleaner_profiles	profileSource	varchar(20)	KEEP	checked by hand: business data	NO
 cleaner_rating_sms_log	id	int(11)	KEEP		NO
 cleaner_rating_sms_log	cleanerPhone	varchar(20)	PHONE		NO
 cleaner_rating_sms_log	cleanerJobId	int(11)	KEEP		NO
@@ -614,6 +630,10 @@ confirmation_calls	sms_replies	longtext	JSON_EMPTY	structured data that may embe
 confirmation_calls	smsConfirmedAt	bigint(20)	KEEP		YES
 confirmation_calls	createdAt	timestamp	KEEP		NO
 confirmation_calls	updatedAt	timestamp	KEEP		NO
+confirmation_calls	manual_outcome_label	varchar(128)	FREE_TEXT		YES
+confirmation_calls	manual_outcome	varchar(32)	KEEP	checked by hand: business data	YES
+confirmation_calls	manual_override_at	bigint	KEEP		YES
+confirmation_calls	manual_override_by	varchar(64)	PERSON_NAME	staff name who overrode a call outcome	YES
 conversation_sessions	id	int(11)	KEEP		NO
 conversation_sessions	leadPhone	varchar(30)	PHONE		NO
 conversation_sessions	leadName	varchar(255)	PERSON_NAME		YES
@@ -732,6 +752,20 @@ cs_missions	customerPhone	varchar(32)	PHONE		YES
 cs_missions	customerName	varchar(160)	PERSON_NAME		YES
 cs_missions	activeDedupKey	varchar(128)	EXTERNAL_ID		YES
 cs_missions	failureReason	varchar(255)	FREE_TEXT		YES
+cs_threads	agentNote	text	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	YES
+cs_threads	aiDraft	text	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	YES
+cs_threads	createdAt	timestamp	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
+cs_threads	customerName	varchar(128)	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	YES
+cs_threads	flagged	tinyint	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
+cs_threads	id	int	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
+cs_threads	lastMessageAt	timestamp	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
+cs_threads	launch27Snapshot	longtext	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	YES
+cs_threads	messageHistory	longtext	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
+cs_threads	phone	varchar(30)	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
+cs_threads	sessionId	int	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	YES
+cs_threads	status	varchar(32)	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
+cs_threads	unreadCount	int	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
+cs_threads	updatedAt	timestamp	TRUNCATE_TABLE	old copy of customer conversations (production-only table)	NO
 custom_pay_rules	id	int(11)	KEEP		NO
 custom_pay_rules	label	varchar(128)	KEEP	business template/label/code: no customer data	NO
 custom_pay_rules	type	varchar(16)	KEEP	checked by hand: business data	NO
@@ -877,6 +911,18 @@ gmail_state	watchExpiration	bigint(20)	TRUNCATE_TABLE	Gmail OAuth/watch state	NO
 gmail_state	gmailBackfillCooldownUntil	bigint(20)	TRUNCATE_TABLE	Gmail OAuth/watch state	NO
 gmail_state	backfillPageToken	varchar(500)	TRUNCATE_TABLE	Gmail OAuth/watch state	YES
 gmail_state	updatedAt	timestamp	TRUNCATE_TABLE	Gmail OAuth/watch state	NO
+gmail_thread_cache	cachedAt	timestamp	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	fromEmail	varchar(512)	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	fromName	varchar(512)	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	isUnread	int	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	labelIds	text	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	messageCount	int	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	needsRefresh	int	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	receivedAt	bigint	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	snippet	text	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	subject	varchar(1024)	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	threadId	varchar(255)	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
+gmail_thread_cache	updatedAt	timestamp	TRUNCATE_TABLE	email senders, subjects and snippets (production-only table)	NO
 gmail_thread_meta	id	int(11)	KEEP		NO
 gmail_thread_meta	threadId	varchar(255)	EXTERNAL_ID		NO
 gmail_thread_meta	isIssue	int(11)	KEEP		NO
@@ -969,6 +1015,7 @@ issue_comments	author_name	varchar(255)	PERSON_NAME		NO
 issue_comments	body	text	FREE_TEXT		NO
 issue_comments	type	varchar(32)	KEEP	checked by hand: business data	NO
 issue_comments	created_at	bigint(20)	KEEP		NO
+issue_comments	linked_issue_key	varchar(255)	KEEP	checked by hand: business data	YES
 issue_engine	id	int(11)	KEEP		NO
 issue_engine	title	varchar(255)	FREE_TEXT		NO
 issue_engine	issueType	enum('late_team','refund_request','angry_customer','no_show','access_problem','payment_problem','reschedule_needed','broken_item','manager_review','internal_task','other')	KEEP	checked by hand: business data	NO
@@ -1007,6 +1054,7 @@ issue_ownership	resolvedAt	bigint(20)	KEEP		YES
 issue_ownership	resolvedBy	varchar(128)	PERSON_NAME		YES
 issue_ownership	createdAt	timestamp	KEEP		NO
 issue_ownership	updatedAt	timestamp	KEEP		NO
+issue_ownership	resolutionNote	text	FREE_TEXT		YES
 job_alerts	id	int(11)	KEEP		NO
 job_alerts	cleanerJobId	int(11)	KEEP		NO
 job_alerts	alertType	varchar(50)	KEEP	checked by hand: business data	NO
@@ -1656,6 +1704,7 @@ payment_authorizations	captureBefore	bigint(20)	KEEP		YES
 payment_authorizations	capturedAt	bigint(20)	KEEP		YES
 payment_authorizations	cancelledAt	bigint(20)	KEEP		YES
 payment_authorizations	createdAt	timestamp	KEEP		NO
+payment_authorizations	updatedAt	timestamp	KEEP		NO
 public_review_responses	key	char(64)	KEEP	checked by hand: business data	NO
 public_review_responses	revision	int(10) unsigned	KEEP		NO
 public_review_responses	entry	longtext	FREE_TEXT		NO
@@ -1847,11 +1896,39 @@ sms_campaigns	sentByAgentId	int(11)	KEEP		YES
 sms_campaigns	sentByName	varchar(255)	PERSON_NAME		YES
 sms_campaigns	createdAt	timestamp	KEEP		NO
 sms_campaigns	updatedAt	timestamp	KEEP		NO
+sms_card_diag	affectedRows	int	TRUNCATE_TABLE	diagnostic log (production-only table)	YES
+sms_card_diag	createdAt	datetime(3)	TRUNCATE_TABLE	diagnostic log (production-only table)	YES
+sms_card_diag	dedupKey	varchar(320)	TRUNCATE_TABLE	diagnostic log (production-only table)	YES
+sms_card_diag	diagPayload	text	TRUNCATE_TABLE	diagnostic log (production-only table)	YES
+sms_card_diag	draftId	bigint	TRUNCATE_TABLE	diagnostic log (production-only table)	YES
+sms_card_diag	id	bigint unsigned	TRUNCATE_TABLE	diagnostic log (production-only table)	NO
+sms_card_diag	insertId	bigint	TRUNCATE_TABLE	diagnostic log (production-only table)	YES
+sms_card_diag	sessionId	bigint	TRUNCATE_TABLE	diagnostic log (production-only table)	YES
 sms_opt_outs	id	int(11)	KEEP		NO
 sms_opt_outs	phone	varchar(20)	PHONE		NO
 sms_opt_outs	optedOutAt	timestamp	KEEP		NO
 sms_opt_outs	source	varchar(50)	KEEP	checked by hand: business data	NO
 sms_opt_outs	triggerMessage	varchar(255)	FREE_TEXT		YES
+sms_shadow_evaluations	confidence	decimal(5,4)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	createdAt	datetime(3)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	decision	varchar(16)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	draftHash	char(64)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	draftText	text	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	id	bigint	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	outcomeActor	varchar(255)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	YES
+sms_shadow_evaluations	outcomeAt	datetime(3)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	YES
+sms_shadow_evaluations	outcome	varchar(24)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	YES
+sms_shadow_evaluations	policyVersion	varchar(64)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	preflight	json	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	rationale	varchar(512)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	reasonCode	varchar(96)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	score	int	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	sentDraftHash	char(64)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	YES
+sms_shadow_evaluations	sentText	text	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	YES
+sms_shadow_evaluations	sessionId	bigint	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	source	varchar(32)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	updatedAt	datetime(3)	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	NO
+sms_shadow_evaluations	verifierResult	json	TRUNCATE_TABLE	AI draft evaluations with message text (production-only table)	YES
 step_locks	id	int(11)	TRUNCATE_TABLE	transient locks	NO
 step_locks	cleanerJobId	int(11)	TRUNCATE_TABLE	transient locks	NO
 step_locks	step	varchar(100)	TRUNCATE_TABLE	transient locks	NO
@@ -1892,9 +1969,6 @@ sync_runs	targetDate	varchar(20)	TRUNCATE_TABLE	sync logs with raw errors	YES
 sync_runs	durationMs	int(11)	TRUNCATE_TABLE	sync logs with raw errors	YES
 sync_runs	startedAt	timestamp	TRUNCATE_TABLE	sync logs with raw errors	NO
 sync_runs	completedAt	timestamp	TRUNCATE_TABLE	sync logs with raw errors	YES
-system_config	id	int(11)	KEEP		NO
-system_config	pausedServices	longtext	JSON_KEEP		NO
-system_config	updatedAt	timestamp	KEEP		NO
 team_availability_checkins	id	int(11)	KEEP		NO
 team_availability_checkins	cleanerProfileId	int(11)	KEEP		NO
 team_availability_checkins	submittedForDate	varchar(20)	KEEP	checked by hand: business data	NO
@@ -1991,3 +2065,15 @@ voice_calls	structuredData	text	FREE_TEXT	data extracted from calls	YES
 voice_calls	endedReason	varchar(100)	FREE_TEXT		YES
 voice_calls	successEvaluation	varchar(10)	KEEP	checked by hand: business data	YES
 voice_calls	createdAt	timestamp	KEEP		NO
+webhook_events	created_at	timestamp	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	YES
+webhook_events	error_message	text	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	YES
+webhook_events	event_id	varchar(255)	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	YES
+webhook_events	event_type	varchar(100)	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	NO
+webhook_events	from_phone	varchar(30)	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	YES
+webhook_events	id	int	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	NO
+webhook_events	processed_at	bigint	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	YES
+webhook_events	processed	tinyint(1)	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	NO
+webhook_events	raw_payload	mediumtext	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	NO
+webhook_events	session_id	int	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	YES
+webhook_events	source	varchar(50)	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	NO
+webhook_events	to_phone	varchar(30)	TRUNCATE_TABLE	raw incoming webhook payloads with phones (production-only table)	YES

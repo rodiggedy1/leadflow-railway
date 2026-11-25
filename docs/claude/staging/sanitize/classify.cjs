@@ -36,6 +36,9 @@ const RULES = {
 
 // ---- Table-level decisions ---------------------------------------------------------------
 const TRUNCATE = {
+  webhook_events: "raw incoming webhook payloads with phones (production-only table)", cs_threads: "old copy of customer conversations (production-only table)",
+  sms_shadow_evaluations: "AI draft evaluations with message text (production-only table)", sms_card_diag: "diagnostic log (production-only table)",
+  gmail_thread_cache: "email senders, subjects and snippets (production-only table)",
   // credentials, sessions, devices
   applicant_portal_handoff_tokens: "login tokens", card_auth_tokens: "card-on-file links", cash_app_payment_tokens: "payment links",
   cleaner_magic_link_tokens: "cleaner login links", customer_portal_handoff_tokens: "customer login links",
@@ -73,6 +76,10 @@ const NEUTRALIZE_COL = /^(status|state|sendStatus|deliveryStatus|callStatus|appr
 
 // ---- Explicit column decisions (table.column -> rule [, note]) ----------------------------
 const OVERRIDES = {
+  "confirmation_calls.manual_override_by": ["PERSON_NAME", "staff name who overrode a call outcome"],
+  "booking_apple_pay_payments.cardLast4": ["CARD_LAST4", "card last 4"],
+  "booking_apple_pay_payments.stripePaymentIntentId": ["PAYMENT_REF", "payment reference"],
+  "booking_apple_pay_payments.failureMessage": ["FREE_TEXT", "payment error text"],
   "app_versioned_migration_ledger.last_error": ["FREE_TEXT", "database-update error text (can quote data values)"],
   "conversation_sessions.messageHistory": ["CONVERSATION", "full SMS history -> synthetic scenario conversation"],
   "conversation_sessions.lastMessageText": ["CONVERSATION", "kept consistent with the synthetic conversation"],
@@ -158,7 +165,7 @@ call_log.transcriptLanguage conversation_sessions.csPriorityTag conversation_ses
 payable_invoice_deliveries.payloadHash payable_invoice_manual_payments.payloadHash`.split(/\s+/).filter(Boolean));
 // Every other first-pass REVIEW column was checked by hand and is business data
 // (statuses, dates, prices stored as text, service names, enums, settings, template text).
-const REVIEWED_KEEP = new Set(`app_versioned_migration_ledger.migration_id app_versioned_migration_ledger.sha256 app_versioned_migration_ledger.state activity_log.eventType agents.pagePermissions agents.awayStatus ai_action_policies.merchantId ai_action_policies.actionKey
+const REVIEWED_KEEP = new Set(`__drizzle_migrations.hash booking_apple_pay_payments.cardBrand booking_apple_pay_payments.currency booking_apple_pay_payments.failureCode booking_apple_pay_payments.idempotencyKey booking_apple_pay_payments.status bookings.paymentMethod cleaner_profiles.profileSource confirmation_calls.manual_outcome issue_comments.linked_issue_key app_versioned_migration_ledger.migration_id app_versioned_migration_ledger.sha256 app_versioned_migration_ledger.state activity_log.eventType agents.pagePermissions agents.awayStatus ai_action_policies.merchantId ai_action_policies.actionKey
 ai_action_policies.category ai_action_policies.mode ai_call_templates.scenario ai_call_templates.audience always_on_enrollments.frequency
 always_on_enrollments.jobDate always_on_groups.groupType always_on_groups.name app_settings.key app_settings.fieldType booking_assignments.status
 booking_cash_app_payments.idempotencyKey booking_cash_app_payments.currency booking_cash_app_payments.status booking_cash_app_payments.cardBrand

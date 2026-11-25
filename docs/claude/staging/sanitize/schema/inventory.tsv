@@ -1,3 +1,6 @@
+__drizzle_migrations	created_at	bigint	bigint	YES		
+__drizzle_migrations	hash	text	text	NO		
+__drizzle_migrations	id	bigint unsigned	bigint	NO	PRI	auto_increment
 activity_log	id	int(11)	int	NO	PRI	auto_increment
 activity_log	eventType	enum('lead_reply','ai_sms_sent','silence_nudge','scheduled_followup','always_on_batch','nightly_sync','review_send','booking','new_lead')	enum	NO		
 activity_log	title	varchar(255)	varchar	NO		
@@ -96,6 +99,22 @@ applicant_portal_handoff_tokens	usedAt	datetime(3)	datetime	YES
 applicant_portal_handoff_tokens	reusable	tinyint(4)	tinyint	NO		
 applicant_portal_handoff_tokens	reusableToken	varchar(64)	varchar	YES		
 applicant_portal_handoff_tokens	createdAt	datetime(3)	datetime	NO		
+booking_apple_pay_payments	amountCents	int	int	NO		
+booking_apple_pay_payments	attempt	int	int	NO		
+booking_apple_pay_payments	bookingId	int	int	NO	MUL	
+booking_apple_pay_payments	bookingPaymentProfileId	int	int	NO	MUL	
+booking_apple_pay_payments	cardBrand	varchar(40)	varchar	YES		
+booking_apple_pay_payments	cardLast4	varchar(4)	varchar	YES		
+booking_apple_pay_payments	createdAt	datetime(3)	datetime	NO		
+booking_apple_pay_payments	currency	varchar(3)	varchar	NO		
+booking_apple_pay_payments	failureCode	varchar(128)	varchar	YES		
+booking_apple_pay_payments	failureMessage	text	text	YES		
+booking_apple_pay_payments	idempotencyKey	varchar(160)	varchar	NO	UNI	
+booking_apple_pay_payments	id	bigint	bigint	NO	PRI	auto_increment
+booking_apple_pay_payments	paidAt	bigint	bigint	YES		
+booking_apple_pay_payments	status	varchar(32)	varchar	NO		
+booking_apple_pay_payments	stripePaymentIntentId	varchar(255)	varchar	NO	UNI	
+booking_apple_pay_payments	updatedAt	datetime(3)	datetime	NO		
 booking_assignments	id	int(11)	int	NO	PRI	auto_increment
 booking_assignments	bookingId	int(11)	int	NO	MUL	
 booking_assignments	teamId	int(11)	int	YES	MUL	
@@ -238,6 +257,7 @@ bookings	bookedByAgentId	int(11)	int	YES
 bookings	bookedByAgentName	varchar(255)	varchar	YES		
 bookings	homeType	varchar(32)	varchar	YES		
 bookings	manualAmountOverrides	longtext	longtext	YES		
+bookings	paymentMethod	varchar(20)	varchar	NO		
 call_log	id	int(11)	int	NO	PRI	auto_increment
 call_log	cleanerJobId	int(11)	int	YES	MUL	
 call_log	teamId	int(11)	int	YES		
@@ -376,15 +396,10 @@ chain_step_executions	chainExecutionId	varchar(64)	varchar	NO	MUL
 chain_step_executions	stepId	varchar(128)	varchar	NO		
 chain_step_executions	capabilityId	varchar(128)	varchar	NO		
 chain_step_executions	status	enum('planned','running','succeeded','failed','skipped','cancelled')	enum	NO		
-chain_step_executions	resolvedArgs	longtext	longtext	YES		
 chain_step_executions	result	longtext	longtext	YES		
-chain_step_executions	verificationResult	longtext	longtext	YES		
-chain_step_executions	idempotencyKey	varchar(128)	varchar	YES	UNI	
-chain_step_executions	externalResultId	varchar(255)	varchar	YES		
-chain_step_executions	errorMessage	text	text	YES		
-chain_step_executions	createdAt	datetime(3)	datetime	NO		
 chain_step_executions	startedAt	datetime(3)	datetime	YES		
 chain_step_executions	completedAt	datetime(3)	datetime	YES		
+chain_step_executions	error	text	text	YES		
 channel_pins	id	int(11)	int	NO	PRI	auto_increment
 channel_pins	channel	varchar(64)	varchar	NO	MUL	
 channel_pins	body	text	text	NO		
@@ -532,6 +547,7 @@ cleaner_profiles	language	varchar(5)	varchar	NO
 cleaner_profiles	launch27TeamId	int(11)	int	YES	UNI	
 cleaner_profiles	createdAt	timestamp	timestamp	NO		
 cleaner_profiles	updatedAt	timestamp	timestamp	NO		on update current_timestamp()
+cleaner_profiles	profileSource	varchar(20)	varchar	NO		
 cleaner_rating_sms_log	id	int(11)	int	NO	PRI	auto_increment
 cleaner_rating_sms_log	cleanerPhone	varchar(20)	varchar	NO	MUL	
 cleaner_rating_sms_log	cleanerJobId	int(11)	int	NO	MUL	
@@ -613,6 +629,10 @@ confirmation_calls	sms_replies	longtext	longtext	YES
 confirmation_calls	smsConfirmedAt	bigint(20)	bigint	YES		
 confirmation_calls	createdAt	timestamp	timestamp	NO		
 confirmation_calls	updatedAt	timestamp	timestamp	NO		on update current_timestamp()
+confirmation_calls	manual_outcome_label	varchar(128)	varchar	YES		
+confirmation_calls	manual_outcome	varchar(32)	varchar	YES		
+confirmation_calls	manual_override_at	bigint	bigint	YES		
+confirmation_calls	manual_override_by	varchar(64)	varchar	YES		
 conversation_sessions	id	int(11)	int	NO	PRI	auto_increment
 conversation_sessions	leadPhone	varchar(30)	varchar	NO		
 conversation_sessions	leadName	varchar(255)	varchar	YES		
@@ -731,6 +751,20 @@ cs_missions	customerPhone	varchar(32)	varchar	YES
 cs_missions	customerName	varchar(160)	varchar	YES		
 cs_missions	activeDedupKey	varchar(128)	varchar	YES	UNI	
 cs_missions	failureReason	varchar(255)	varchar	YES		
+cs_threads	agentNote	text	text	YES		
+cs_threads	aiDraft	text	text	YES		
+cs_threads	createdAt	timestamp	timestamp	NO		
+cs_threads	customerName	varchar(128)	varchar	YES		
+cs_threads	flagged	tinyint	tinyint	NO		
+cs_threads	id	int	int	NO	PRI	auto_increment
+cs_threads	lastMessageAt	timestamp	timestamp	NO	MUL	
+cs_threads	launch27Snapshot	longtext	longtext	YES		
+cs_threads	messageHistory	longtext	longtext	NO		
+cs_threads	phone	varchar(30)	varchar	NO	MUL	
+cs_threads	sessionId	int	int	YES		
+cs_threads	status	varchar(32)	varchar	NO	MUL	
+cs_threads	unreadCount	int	int	NO		
+cs_threads	updatedAt	timestamp	timestamp	NO		DEFAULT_GENERATED on update CURRENT_TIMESTAMP
 custom_pay_rules	id	int(11)	int	NO	PRI	auto_increment
 custom_pay_rules	label	varchar(128)	varchar	NO		
 custom_pay_rules	type	varchar(16)	varchar	NO		
@@ -876,6 +910,18 @@ gmail_state	watchExpiration	bigint(20)	bigint	NO
 gmail_state	gmailBackfillCooldownUntil	bigint(20)	bigint	NO		
 gmail_state	backfillPageToken	varchar(500)	varchar	YES		
 gmail_state	updatedAt	timestamp	timestamp	NO		on update current_timestamp()
+gmail_thread_cache	cachedAt	timestamp	timestamp	NO		
+gmail_thread_cache	fromEmail	varchar(512)	varchar	NO		
+gmail_thread_cache	fromName	varchar(512)	varchar	NO		
+gmail_thread_cache	isUnread	int	int	NO		
+gmail_thread_cache	labelIds	text	text	NO		
+gmail_thread_cache	messageCount	int	int	NO		
+gmail_thread_cache	needsRefresh	int	int	NO		
+gmail_thread_cache	receivedAt	bigint	bigint	NO		
+gmail_thread_cache	snippet	text	text	NO		
+gmail_thread_cache	subject	varchar(1024)	varchar	NO		
+gmail_thread_cache	threadId	varchar(255)	varchar	NO	PRI	
+gmail_thread_cache	updatedAt	timestamp	timestamp	NO		DEFAULT_GENERATED on update CURRENT_TIMESTAMP
 gmail_thread_meta	id	int(11)	int	NO	PRI	auto_increment
 gmail_thread_meta	threadId	varchar(255)	varchar	NO	UNI	
 gmail_thread_meta	isIssue	int(11)	int	NO		
@@ -968,6 +1014,7 @@ issue_comments	author_name	varchar(255)	varchar	NO
 issue_comments	body	text	text	NO		
 issue_comments	type	varchar(32)	varchar	NO		
 issue_comments	created_at	bigint(20)	bigint	NO		
+issue_comments	linked_issue_key	varchar(255)	varchar	YES		
 issue_engine	id	int(11)	int	NO	PRI	auto_increment
 issue_engine	title	varchar(255)	varchar	NO		
 issue_engine	issueType	enum('late_team','refund_request','angry_customer','no_show','access_problem','payment_problem','reschedule_needed','broken_item','manager_review','internal_task','other')	enum	NO		
@@ -1006,6 +1053,7 @@ issue_ownership	resolvedAt	bigint(20)	bigint	YES	MUL
 issue_ownership	resolvedBy	varchar(128)	varchar	YES		
 issue_ownership	createdAt	timestamp	timestamp	NO		
 issue_ownership	updatedAt	timestamp	timestamp	NO		on update current_timestamp()
+issue_ownership	resolutionNote	text	text	YES		
 job_alerts	id	int(11)	int	NO	PRI	auto_increment
 job_alerts	cleanerJobId	int(11)	int	NO	MUL	
 job_alerts	alertType	varchar(50)	varchar	NO		
@@ -1655,6 +1703,7 @@ payment_authorizations	captureBefore	bigint(20)	bigint	YES
 payment_authorizations	capturedAt	bigint(20)	bigint	YES		
 payment_authorizations	cancelledAt	bigint(20)	bigint	YES		
 payment_authorizations	createdAt	timestamp	timestamp	NO		
+payment_authorizations	updatedAt	timestamp	timestamp	NO		DEFAULT_GENERATED on update CURRENT_TIMESTAMP
 public_review_responses	key	char(64)	char	NO	PRI	
 public_review_responses	revision	int(10) unsigned	int	NO		
 public_review_responses	entry	longtext	longtext	NO		
@@ -1846,11 +1895,39 @@ sms_campaigns	sentByAgentId	int(11)	int	YES
 sms_campaigns	sentByName	varchar(255)	varchar	YES		
 sms_campaigns	createdAt	timestamp	timestamp	NO	MUL	
 sms_campaigns	updatedAt	timestamp	timestamp	NO		on update current_timestamp()
+sms_card_diag	affectedRows	int	int	YES		
+sms_card_diag	createdAt	datetime(3)	datetime	YES		
+sms_card_diag	dedupKey	varchar(320)	varchar	YES		
+sms_card_diag	diagPayload	text	text	YES		
+sms_card_diag	draftId	bigint	bigint	YES		
+sms_card_diag	id	bigint unsigned	bigint	NO	PRI	auto_increment
+sms_card_diag	insertId	bigint	bigint	YES		
+sms_card_diag	sessionId	bigint	bigint	YES		
 sms_opt_outs	id	int(11)	int	NO	PRI	auto_increment
 sms_opt_outs	phone	varchar(20)	varchar	NO	UNI	
 sms_opt_outs	optedOutAt	timestamp	timestamp	NO		
 sms_opt_outs	source	varchar(50)	varchar	NO		
 sms_opt_outs	triggerMessage	varchar(255)	varchar	YES		
+sms_shadow_evaluations	confidence	decimal(5,4)	decimal	NO		
+sms_shadow_evaluations	createdAt	datetime(3)	datetime	NO	MUL	
+sms_shadow_evaluations	decision	varchar(16)	varchar	NO	MUL	
+sms_shadow_evaluations	draftHash	char(64)	char	NO		
+sms_shadow_evaluations	draftText	text	text	NO		
+sms_shadow_evaluations	id	bigint	bigint	NO	PRI	auto_increment
+sms_shadow_evaluations	outcomeActor	varchar(255)	varchar	YES		
+sms_shadow_evaluations	outcomeAt	datetime(3)	datetime	YES		
+sms_shadow_evaluations	outcome	varchar(24)	varchar	YES		
+sms_shadow_evaluations	policyVersion	varchar(64)	varchar	NO		
+sms_shadow_evaluations	preflight	json	json	NO		
+sms_shadow_evaluations	rationale	varchar(512)	varchar	NO		
+sms_shadow_evaluations	reasonCode	varchar(96)	varchar	NO		
+sms_shadow_evaluations	score	int	int	NO		
+sms_shadow_evaluations	sentDraftHash	char(64)	char	YES		
+sms_shadow_evaluations	sentText	text	text	YES		
+sms_shadow_evaluations	sessionId	bigint	bigint	NO	MUL	
+sms_shadow_evaluations	source	varchar(32)	varchar	NO		
+sms_shadow_evaluations	updatedAt	datetime(3)	datetime	NO		
+sms_shadow_evaluations	verifierResult	json	json	YES		
 step_locks	id	int(11)	int	NO	PRI	auto_increment
 step_locks	cleanerJobId	int(11)	int	NO	MUL	
 step_locks	step	varchar(100)	varchar	NO		
@@ -1891,9 +1968,6 @@ sync_runs	targetDate	varchar(20)	varchar	YES
 sync_runs	durationMs	int(11)	int	YES		
 sync_runs	startedAt	timestamp	timestamp	NO		
 sync_runs	completedAt	timestamp	timestamp	YES		
-system_config	id	int(11)	int	NO	PRI	auto_increment
-system_config	pausedServices	longtext	longtext	NO		
-system_config	updatedAt	timestamp	timestamp	NO		on update current_timestamp()
 team_availability_checkins	id	int(11)	int	NO	PRI	auto_increment
 team_availability_checkins	cleanerProfileId	int(11)	int	NO	MUL	
 team_availability_checkins	submittedForDate	varchar(20)	varchar	NO		
@@ -1990,3 +2064,15 @@ voice_calls	structuredData	text	text	YES
 voice_calls	endedReason	varchar(100)	varchar	YES		
 voice_calls	successEvaluation	varchar(10)	varchar	YES		
 voice_calls	createdAt	timestamp	timestamp	NO		
+webhook_events	created_at	timestamp	timestamp	YES	MUL	
+webhook_events	error_message	text	text	YES		
+webhook_events	event_id	varchar(255)	varchar	YES	MUL	
+webhook_events	event_type	varchar(100)	varchar	NO		
+webhook_events	from_phone	varchar(30)	varchar	YES	MUL	
+webhook_events	id	int	int	NO	PRI	auto_increment
+webhook_events	processed_at	bigint	bigint	YES		
+webhook_events	processed	tinyint(1)	tinyint	NO	MUL	
+webhook_events	raw_payload	mediumtext	mediumtext	NO		
+webhook_events	session_id	int	int	YES		
+webhook_events	source	varchar(50)	varchar	NO		
+webhook_events	to_phone	varchar(30)	varchar	YES		
