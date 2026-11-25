@@ -44,6 +44,16 @@ function fixture(text = fullText, history?: any[], changes: Partial<ClaudeCustom
     originalConversation, receivingPhoneNumberId: binding.receivingPhoneNumberId, receivingPhoneNumber: binding.receivingPhoneNumber, bookingContext: null },
   protectedIds: [binding.providerMessageId, binding.receivingPhoneNumberId] };
 }
+/** Token trim: the expected model payload. Internal IDs, hashes and provider metadata are left out;
+ * each turn keeps who/what/when plus its turnIndex. The knowledge base is only in the fixed instructions. */
+function modelPayload(input: ClaudeCustomerReplyInput, smsBookingQuote: Record<string, unknown>) {
+  const { receivingPhoneNumberId: _lineId, ...context } = input.context as Record<string, any>;
+  return { incomingMessage: input.incomingMessage, context: { ...context,
+    binding: { fromPhone: context.binding.fromPhone, customerName: context.binding.customerName },
+    contact: { displayName: context.contact.displayName, phone: context.contact.phone },
+    originalConversation: (context.originalConversation as any[]).map((turn, turnIndex) => ({ turnIndex, role: turn.role, content: turn.content })),
+    smsBookingQuote } };
+}
 function update(input: ClaudeCustomerReplyInput, patch: SmsBookingQuoteFields = fields, options: Partial<SmsBookingQuoteUpdate> = {}): SmsBookingQuoteUpdate {
   const turnIndex = (input.context.originalConversation as any[]).length - 1;
   return { action: "link", fields: structuredClone(patch), intentEvidenceQuote: input.incomingMessage,
@@ -89,9 +99,8 @@ describe("SMS-only additive quote generation", () => {
     expect(prompts.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
     expect(prompts.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(Object.keys(prompts).sort()).toEqual(["systemPrompt", "userPrompt"]);
-    expect(JSON.parse(prompts.userPrompt)).toEqual({ incomingMessage: input.incomingMessage, context: { ...input.context,
-      originalConversation: (input.context.originalConversation as any[]).map((turn, turnIndex) => ({ ...turn, turnIndex })),
-      smsBookingQuote: { state: null, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }, knowledgeBase: MAIDS_IN_BLACK_KNOWLEDGE_BASE } });
+    expect(JSON.parse(prompts.userPrompt)).toEqual(modelPayload(input, { state: null, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }));
+    expect(prompts.systemPrompt.split(MAIDS_IN_BLACK_KNOWLEDGE_BASE)).toHaveLength(2); // knowledge exactly once, in the fixed instructions
     expect(JSON.stringify(input)).toBe(before);
   });
 
@@ -134,7 +143,8 @@ describe("SMS-only additive quote generation", () => {
       const payload = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
       expect(payload.incomingMessage).toBe(incoming);
       expect(payload.context.smsBookingQuote.state).toEqual(state);
-      expect(payload.context.knowledgeBase).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+      expect(payload.context).not.toHaveProperty("knowledgeBase");
+      expect(h.runner.mock.calls[0][0].systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
       expect(h.readKnowledge).toHaveBeenCalledWith(incoming);
       expect(h.runner).toHaveBeenCalledTimes(1); expect(h.readState).toHaveBeenCalledTimes(1);
       expect(JSON.stringify({ input, state })).toBe(before);
@@ -218,12 +228,41 @@ describe("SMS-only additive quote generation", () => {
     const before = JSON.stringify(prior);
     await h.generate(large);
     const payload = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
-    expect(payload.context.originalConversation).toEqual((large.context.originalConversation as any[]).map((turn, turnIndex) => ({ ...turn, turnIndex })));
+    expect(payload.context.originalConversation).toEqual((large.context.originalConversation as any[]).map((turn, turnIndex) => ({ turnIndex, role: turn.role, content: turn.content })));
     expect(payload.context.originalConversation.map((turn: any) => turn.turnIndex)).toEqual(Array.from({ length: 651 }, (_, index) => index));
     expect((large.context.originalConversation as any[]).every(turn => !Object.prototype.hasOwnProperty.call(turn, "turnIndex"))).toBe(true);
     expect(payload.context.smsBookingQuote.state).toEqual(prior);
-    expect(payload.context.knowledgeBase).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+    expect(payload.context).not.toHaveProperty("knowledgeBase");
+    expect(h.runner.mock.calls[0][0].systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(JSON.stringify(prior)).toBe(before);
+  });
+
+  it("token trim: sends who/what/when per turn and the customer's identity, never internal IDs, hashes, links or provider metadata", async () => {
+    const history = [
+      { role: "user", content: "Hi, I need a cleaning.", ts: 1763400000000, opMsgId: "old-msg", receivingPhoneNumberId: "PN-actual",
+        media: ["https://files.example.test/a.jpg", "https://files.example.test/b.jpg"] },
+      { role: "assistant", content: "Happy to help! How many bedrooms?", ts: 1763400060000, senderName: "Alex", opMsgId: "out-1",
+        smsProvenance: { mode: "automatic", providerMessageId: "out-1" }, metadata: { saved: true } },
+      { role: "user", content: "Thank you", ts: 1763400120000, opMsgId: "msg-current", direction: "incoming" },
+    ];
+    const input = fixture("Thank you", history);
+    const before = JSON.stringify(input);
+    const h = harness({ replyText: "You’re welcome, Maya!", task: null, bookingQuote: null });
+    expect(await h.generate(input)).toEqual({ replyText: "You’re welcome, Maya!", task: null });
+    const request = h.runner.mock.calls[0][0], payload = JSON.parse(request.userPrompt);
+    expect(payload.context.originalConversation).toEqual([
+      { turnIndex: 0, role: "user", content: "Hi, I need a cleaning.", ts: 1763400000000, attachments: 2 },
+      { turnIndex: 1, role: "assistant", content: "Happy to help! How many bedrooms?", ts: 1763400060000, senderName: "Alex" },
+      { turnIndex: 2, role: "user", content: "Thank you", ts: 1763400120000 },
+    ]);
+    expect(payload.context.binding).toEqual({ fromPhone: "+12025550123", customerName: "Maya Lane" });
+    expect(payload.context.contact).toEqual({ displayName: "Maya Lane", phone: "+12025550123" });
+    expect(payload.context.receivingPhoneNumber).toBe("+12025550999");
+    for (const hidden of ["msg-current", "old-msg", "PN-actual", "files.example.test", "smsProvenance", "historyHash", "knowledgeBase", '"sessionId"'])
+      expect(request.userPrompt).not.toContain(hidden);
+    // The saved conversation and binding used for validation are untouched.
+    expect(JSON.stringify(input)).toBe(before);
+    expect(h.readState).toHaveBeenCalledWith(input.context.binding);
   });
 
   it("supplies authoritative indices for the reproduced 114-turn qualification failure without changing durable evidence", async () => {
@@ -438,9 +477,7 @@ describe("SMS-only additive quote generation", () => {
     expect(secondRequest.signal).toBe(controller.signal);
     expect(firstRequest.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(firstRequest.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
-    expect(JSON.parse(firstRequest.userPrompt)).toEqual({ incomingMessage: input.incomingMessage, context: { ...input.context,
-      originalConversation: (input.context.originalConversation as any[]).map((turn, turnIndex) => ({ ...turn, turnIndex })),
-      smsBookingQuote: { state: previous, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }, knowledgeBase: MAIDS_IN_BLACK_KNOWLEDGE_BASE } });
+    expect(JSON.parse(firstRequest.userPrompt)).toEqual(modelPayload(input, { state: previous, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }));
     expect(h.readKnowledge).toHaveBeenCalledTimes(1);
     expect(h.readKnowledge).toHaveBeenCalledWith(input.incomingMessage);
     expect(h.readState).toHaveBeenCalledTimes(1);
@@ -620,9 +657,7 @@ describe("SMS-only additive quote generation", () => {
     expect(h.readState).toHaveBeenCalledTimes(failedRead === "state" ? 2 : 1);
     expect(h.readKnowledge.mock.calls.every(([text]) => text === input.incomingMessage)).toBe(true);
     expect(h.readState.mock.calls.every(([binding]) => binding === input.context.binding)).toBe(true);
-    expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt)).toEqual({ incomingMessage: input.incomingMessage, context: { ...input.context,
-      originalConversation: (input.context.originalConversation as any[]).map((turn, turnIndex) => ({ ...turn, turnIndex })),
-      smsBookingQuote: { state: previous, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }, knowledgeBase: MAIDS_IN_BLACK_KNOWLEDGE_BASE } });
+    expect(JSON.parse(h.runner.mock.calls[0][0].userPrompt)).toEqual(modelPayload(input, { state: previous, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }));
     expect(JSON.stringify({ input, previous })).toBe(before);
   });
 
@@ -813,7 +848,7 @@ describe("SMS-only additive quote generation", () => {
     let startedA!: () => void;
     const startA = new Promise<void>(resolve => { startedA = resolve; });
     const runner = vi.fn(async (options: InitialLeadDraftOptions) => {
-      const payload = JSON.parse(options.userPrompt), isA = payload.context.binding.sessionId === 42;
+      const payload = JSON.parse(options.userPrompt), isA = payload.context.binding.customerName === "Maya Lane";
       if (isA) { startedA(); await gateA; }
       const input = isA ? a : b;
       return { finalSmsText: JSON.stringify({ replyText: isA ? "How many bathrooms, Maya?" : "How many bathrooms, Lucia?", task: null,

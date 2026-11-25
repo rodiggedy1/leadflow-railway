@@ -75,10 +75,15 @@ export function createClaudeCustomerEmailApplication(options: CustomerEmailAppli
           protectedIds: [source.threadId, source.inboundMessageId, source.rfcMessageId],
           context: {
             source: "email", contact: { displayName: source.senderName, email: source.fromEmail },
-            binding: source,
+            // Token trim (model payload only): the raw thread snapshot (every message again,
+            // with its HTML copy and headers), its hash, internal IDs and the duplicate
+            // incoming text are left out. Each message's text stays in originalConversation.
+            binding: { mailboxEmail: source.mailboxEmail, fromEmail: source.fromEmail, replyToEmail: source.replyToEmail,
+              recipientEmail: source.recipientEmail, senderName: source.senderName, subject: source.subject,
+              createdAt: source.createdAt, receivedAt: source.receivedAt },
             originalConversation: source.snapshot.messages.map(message => ({
               role: message.fromEmail.toLowerCase() === source.mailboxEmail.toLowerCase() ? "assistant" : "user",
-              content: message.text || message.html, providerMessageId: message.id, timestamp: message.createdAt,
+              content: message.text || message.html, timestamp: message.createdAt,
               fromEmail: message.fromEmail, subject: message.subject,
             })), bookingContext: null,
           },

@@ -270,7 +270,8 @@ describe("ordinary SMS uses the same additive writing rules without changing sha
     expect(sent.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);
     expect(sent.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
     expect(sent.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
-    expect(JSON.parse(sent.userPrompt).context.knowledgeBase).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
+    expect(JSON.parse(sent.userPrompt).context).not.toHaveProperty("knowledgeBase");
+    expect(sent.systemPrompt.split(MAIDS_IN_BLACK_KNOWLEDGE_BASE)).toHaveLength(2); // once, in the fixed instructions
     expect(h.readKnowledge).toHaveBeenCalledWith(input.incomingMessage);
     expect(h.runner).toHaveBeenCalledTimes(1); expect(baseRunner).toHaveBeenCalledTimes(1);
   });

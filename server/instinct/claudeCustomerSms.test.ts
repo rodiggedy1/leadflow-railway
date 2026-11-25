@@ -25,6 +25,10 @@ function fixture(onFailure = vi.fn(async (_detail: any) => undefined)) {
   return { onFailure, order, store, config, readSession, readReceivingLine, generate, send, run: createClaudeCustomerSmsService({ config, readSession, readReceivingLine, generate, store, send, onFailure }) };
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+/** Token trim: the model sees who/what/when per turn plus turnIndex; saved metadata stays out. */
+const modelTurn = (turn: any, turnIndex: number) => ({ turnIndex, role: turn.role, content: turn.content,
+  ...(turn.ts != null ? { ts: turn.ts } : {}), ...(typeof turn.senderName === "string" && turn.senderName.trim() ? { senderName: turn.senderName } : {}),
+  ...(Array.isArray(turn.media) && turn.media.length ? { attachments: turn.media.length } : {}) });
 describe("customer replies and real human-task intent", () => {
   it("responds to a cleaner in the Teams queue without requiring an override or changing the saved role", async () => {
     const f = fixture(), session = { ...snapshot(), csQueue: "Teams", leadSource: "hiring-cleaner" };
@@ -420,12 +424,12 @@ describe("one extra content attempt composed with the existing SMS coordinator",
     expect(second.signal).toBe(first.signal); expect(second.signal?.aborted).toBe(false);
     const payload = JSON.parse(second.userPrompt);
     expect(payload.incomingMessage).toBe(input.inboundText);
-    expect(payload.context.contact).toEqual(session.contact);
-    expect(payload.context.binding).toMatchObject({ sessionId: input.sessionId, fromPhone: input.fromPhone,
-      providerMessageId: input.providerMessageId, receivingPhoneNumberId: input.receivingPhoneNumberId,
-      historyHash: customerHistoryHash(session.messageHistory) });
-    expect(payload.context.originalConversation).toEqual(JSON.parse(session.messageHistory as string)
-      .map((turn: any, turnIndex: number) => ({ ...turn, turnIndex })));
+    expect(payload.context.contact).toEqual({ displayName: session.contact.displayName, phone: session.contact.phone });
+    expect(Object.keys(payload.context.binding).sort()).toEqual(["customerName", "fromPhone"]);
+    expect(payload.context.binding.fromPhone).toBe(input.fromPhone);
+    expect(second.userPrompt).not.toContain(customerHistoryHash(session.messageHistory));
+    expect(second.userPrompt).not.toContain(input.providerMessageId);
+    expect(payload.context.originalConversation).toEqual(JSON.parse(session.messageHistory as string).map(modelTurn));
     expect(JSON.stringify(session)).toBe(before);
     expect(f.readKnowledge).toHaveBeenCalledTimes(1); expect(f.readState).toHaveBeenCalledTimes(1);
     expect(f.store.claim).toHaveBeenCalledTimes(1); expect(f.store.prepare).toHaveBeenCalledTimes(1);

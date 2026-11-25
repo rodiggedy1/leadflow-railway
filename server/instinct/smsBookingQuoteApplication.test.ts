@@ -8,7 +8,7 @@ import { createCustomerBookingLink } from "../customerBookingLinkService";
 import { previewCallBookingQuote, type CallBookingQuotePricing } from "./callBookingQuote";
 import { renderSmsBookingQuoteSummary } from "./bookingQuotePresentation";
 import { createClaudeCustomerSmsService, type CustomerSmsInput } from "./claudeCustomerSms";
-import { createClaudeCustomerSmsGeneratorWithReply } from "./claudeCustomerSmsGeneration";
+import { CLAUDE_KNOWLEDGE_BASE_HEADING, createClaudeCustomerSmsGeneratorWithReply } from "./claudeCustomerSmsGeneration";
 import { createClaudeCustomerTasksStore, type CustomerSmsBinding } from "./claudeCustomerTasksStore";
 import { createSmsBookingQuotePlanPreparer } from "./smsBookingQuoteApplication";
 import { createSmsBookingQuoteReplyGenerator } from "./smsBookingQuoteGeneration";
@@ -34,6 +34,10 @@ const NOW = Date.parse("2026-11-17T18:00:00.000Z");
 const PHONE = "+13015550123", LINE = "PN-synthetic-cs", LINE_TWO = "PN-synthetic-other";
 const BUSINESS = "+12028885362", BUSINESS_TWO = "+19347898077";
 const NAME = "María García", ADDRESS = "123 Synthetic Street, Washington, DC 20001";
+/** Token trim: the model sees who/what/when per turn plus turnIndex; saved metadata stays out. */
+const modelTurn = (turn: any, turnIndex: number) => ({ turnIndex, role: turn.role, content: turn.content,
+  ...(turn.ts != null ? { ts: turn.ts } : {}), ...(typeof turn.senderName === "string" && turn.senderName.trim() ? { senderName: turn.senderName } : {}),
+  ...(Array.isArray(turn.media) && turn.media.length ? { attachments: turn.media.length } : {}) });
 const KNOWLEDGE = "Complete approved synthetic company text for offline transport verification. Customer preferences are not verified availability.";
 const OWNER = { id: "17", name: "Sam" }, OTHER = { id: "18", name: "Sam" };
 const pricing: CallBookingQuotePricing = {
@@ -472,7 +476,8 @@ describe("SMS new-booking quote application: real generator → qualification �
     const prompt = JSON.parse(h.runner.mock.calls[1][0].userPrompt);
     expect(prompt.context.smsBookingQuote.state).toMatchObject({ quoteId, fields: { customerName: NAME, address: ADDRESS, requestedLocalTime: "10:30" } });
     expect(prompt.context.originalConversation).toHaveLength(3); expect(prompt.context.originalConversation[1].role).toBe("assistant");
-    expect(prompt.context.knowledgeBase).toBe(KNOWLEDGE);
+    expect(prompt.context).not.toHaveProperty("knowledgeBase");
+    expect(h.runner.mock.calls[1][0].systemPrompt.endsWith(`${CLAUDE_KNOWLEDGE_BASE_HEADING}${KNOWLEDGE}`)).toBe(true);
     expect(h.runner.mock.calls[1][0].systemPrompt).toContain("COMPLETE CURRENT CS WRITING PROMPT");
     expect(h.runner.mock.calls[1][0].systemPrompt).toContain("never repeat known usable fields");
     const third = await h.turn("No extras. Please show my quote.", { extras: [], extrasConfirmed: true }, "quote", { quoteTextTemplate: QUOTE_TEMPLATE });
@@ -1364,9 +1369,10 @@ describe("ordinary customer service and original human-task authority remain int
     expect(h.send.mock.calls).toEqual([[{ to: input.fromPhone, fromNumberId: input.receivingPhoneNumberId, content: replyText }]]);
     expect(h.runner).toHaveBeenCalledTimes(1); expect(h.readKnowledge.mock.calls).toEqual([[input.inboundText]]);
     const prompt = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
-    expect(prompt.context.binding).toMatchObject({ providerMessageId: input.providerMessageId, fromPhone: PHONE,
-      receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS, inboundText: input.inboundText });
-    expect(prompt.context.originalConversation).toEqual(beforeHistory.map((turn, turnIndex) => ({ ...turn, turnIndex })));
+    expect(Object.keys(prompt.context.binding).sort()).toEqual(["customerName", "fromPhone"]);
+    expect(prompt.context.binding.fromPhone).toBe(PHONE); expect(prompt.context.receivingPhoneNumber).toBe(BUSINESS);
+    expect(prompt.incomingMessage).toBe(input.inboundText);
+    expect(prompt.context.originalConversation).toEqual(beforeHistory.map(modelTurn));
     expect(h.state().drafts).toHaveLength(1);
     expect(h.state().drafts[0]).toMatchObject({ inboundOpenPhoneId: input.providerMessageId, generatedDraft: replyText, approvedText: replyText,
       status: "SENT", outboundOpenPhoneId: "synthetic-outbound-1", errorCode: null, errorStage: null,
@@ -1423,12 +1429,13 @@ describe("ordinary customer service and original human-task authority remain int
     expect(h.runner).toHaveBeenCalledTimes(1);
     const prompt = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
     expect(prompt.incomingMessage).toBe("Yes that's fine");
-    expect(prompt.context.originalConversation).toEqual(originalConversation.map((turn, turnIndex) => ({ ...turn, turnIndex })));
-    expect(prompt.context.binding).toMatchObject({ sessionId: input.sessionId, providerMessageId: input.providerMessageId,
-      inboundText: input.inboundText, fromPhone: PHONE, receivingPhoneNumberId: LINE, receivingPhoneNumber: BUSINESS,
-      historyHash: createHash("sha256").update(beforeHistory).digest("hex") });
+    expect(prompt.context.originalConversation).toEqual(originalConversation.map(modelTurn));
+    expect(Object.keys(prompt.context.binding).sort()).toEqual(["customerName", "fromPhone"]);
+    expect(prompt.context.binding.fromPhone).toBe(PHONE); expect(prompt.context.receivingPhoneNumber).toBe(BUSINESS);
+    expect(h.runner.mock.calls[0][0].userPrompt).not.toContain(createHash("sha256").update(beforeHistory).digest("hex"));
     expect(prompt.context.smsBookingQuote.state).toEqual(before.quote);
-    expect(prompt.context.knowledgeBase).toBe(KNOWLEDGE);
+    expect(prompt.context).not.toHaveProperty("knowledgeBase");
+    expect(h.runner.mock.calls[0][0].systemPrompt.endsWith(`${CLAUDE_KNOWLEDGE_BASE_HEADING}${KNOWLEDGE}`)).toBe(true);
     expect(h.readKnowledge.mock.calls).toEqual([[input.inboundText]]);
     expect(h.send.mock.calls).toEqual([[{ to: PHONE, fromNumberId: LINE, content: replyText }]]);
     expect(h.state().drafts).toHaveLength(1);

@@ -23,9 +23,13 @@ const recoveryHashes: Record<string, string> = {
   "server/instinct/claudeInitialLead.ts": "2e33c4f9d5aeb307517fe5ed5ed5ff0fa439e2f2115d27444a8a0b96da4cc391",
   "server/instinct/smsBookingQuoteGeneration.ts": "303e0a7f38d7c5e3e33eedc0874be028b88e50c18fb7a5e67530a132fb5e85e0",
 };
+// Token trim (2026-11-25): reviewed knowledge-placement change on top of the pinned candidate above.
+const tokenTrimHashes: Record<string, string> = {
+  "server/instinct/claudeCustomerSmsGeneration.ts": "1c9dd8b5e8f2ebe0cffa7994f9527254ee69b3029e36c53cccc7cb076aed320f",
+};
 function phraseRemovalSource(path: string): string {
-  const source = readFileSync(path, "utf8");
-  return createHash("sha256").update(source).digest("hex") === recoveryHashes[path]
+  const source = readFileSync(path, "utf8"), hash = createHash("sha256").update(source).digest("hex");
+  return hash === recoveryHashes[path] || hash === tokenTrimHashes[path]
     ? execFileSync("git", ["show", `d277178315602808dbc1ac141bc344761f6f4468:${path}`], { encoding: "utf8" }) : source;
 }
 function expectedAfter(path: string, source: string): string {
