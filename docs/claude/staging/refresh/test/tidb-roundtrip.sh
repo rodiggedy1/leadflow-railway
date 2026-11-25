@@ -2,9 +2,9 @@
 # TEST ONLY — local TiDB 8.5 (unistore, in-memory) built from source; no network, no real data.
 # Proves on real TiDB: b3 export with snapshot consistency -> load into a fresh database -> prepare -> verify (before)
 # -> sanitize -> verify (after: must be empty) -> cleanup.
-# Usage: bash tidb-roundtrip.sh <tidb-server binary> <dumpling binary> <mysql 8 bin dir> <planted MariaDB dump .sql>
+# Usage: bash tidb-roundtrip.sh <tidb-server> <dumpling> <mysql 8 bin dir> <production-shaped structure .sql (no data)> <node_modules>
 set -u
-TIDB="$1"; DUMPLING="$2"; MYBIN="$3"; SNAP="$4"
+TIDB="$1"; DUMPLING="$2"; MYBIN="$3"; SNAP="$4"; MODULES="$5"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SAN="$HERE/../../sanitize"
 W="$(mktemp -d)"
@@ -20,6 +20,8 @@ echo "TiDB: $(M -e 'SELECT VERSION()')"
 sed -E -e '/^\/\*M!999999/d' -e 's/ CHECK \(json_valid\(`[^`]+`\)\)//g' "$SNAP" > "$W/plant.sql"
 M -e "CREATE DATABASE prod_like"
 M prod_like < "$W/plant.sql" 2> "$W/load.err" || { echo "LOAD FAILED"; head -5 "$W/load.err"; exit 1; }
+NODE_PATH="$MODULES" node "$HERE/../../sanitize/test/plant.cjs" "mysql://root:@127.0.0.1:$PORT/prod_like" 2>&1 | tail -3 | sed 's/^/  plant: /'
+M prod_like -e "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (REPEAT('c',64), 1700000000000); INSERT INTO app_versioned_migration_ledger VALUES ('0082_example', REPEAT('a',64), 'applied', NOW(3), NOW(3), 1, NOW(3), 'Duplicate entry ''+12025550101'' for key uq_phone')"
 echo "planted tables on TiDB: $(M -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='prod_like'")"
 
 # 2. B3 export (the real script), snapshot consistency, as the owner would run it
@@ -53,5 +55,6 @@ echo "RESULT $([ $SX = 0 ] && [ -z "$A" ] && [ "$B" -gt 0 ] && echo PASS || echo
 [ -n "$A" ] && echo "$A" | head -10
 M cleaning < "$HERE/../../sanitize/test/relationships.sql" > "$W/rel2"
 cmp -s "$W/rel1" "$W/rel2"; echo "RESULT $([ $? = 0 ] && echo PASS || echo FAIL) | links, row counts, money totals identical on TiDB"
+cmp -s "$W/rel1" "$W/rel2" || paste "$W/rel1" "$W/rel2" | awk -F'\t' '$2 != $4 {print "  differs:", $1, $2, "->", $4}'
 M cleaning < "$SAN/cleanup.sql"
 echo "RESULT $([ "$(M -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='cleaning' AND table_name LIKE '\\_\\_%' AND table_name <> '__drizzle_migrations'")" = 0 ] && echo PASS || echo FAIL) | cleanup removed helper tables on TiDB"

@@ -1,5 +1,6 @@
 -- TEST ONLY: how many records still link up across tables (by phone, email, person or team), plus row counts.
--- Run before and after sanitizing; the numbers must be identical.
+-- Run before and after sanitizing; the numbers must be identical. Sorted, because TiDB returns UNION rows in any order.
+SELECT * FROM (
 SELECT 'lead phone -> job phone' AS link, COUNT(*) AS n FROM conversation_sessions a JOIN leadflow_jobs b ON RIGHT(REGEXP_REPLACE(a.leadPhone,'[^0-9]',''),10) = RIGHT(REGEXP_REPLACE(b.customerPhone,'[^0-9]',''),10)
 UNION ALL SELECT 'stripe customer phone -> payment authorization phone', COUNT(*) FROM stripe_customers a JOIN payment_authorizations b ON RIGHT(REGEXP_REPLACE(a.phone,'[^0-9]',''),10) = RIGHT(REGEXP_REPLACE(b.customerPhone,'[^0-9]',''),10)
 UNION ALL SELECT 'cleaner job customer phone -> lead phone', COUNT(*) FROM cleaner_jobs a JOIN conversation_sessions b ON RIGHT(REGEXP_REPLACE(a.customerPhone,'[^0-9]',''),10) = RIGHT(REGEXP_REPLACE(b.leadPhone,'[^0-9]',''),10)
@@ -12,4 +13,5 @@ UNION ALL SELECT 'rows: leadflow_jobs', COUNT(*) FROM leadflow_jobs
 UNION ALL SELECT 'rows: bookings', COUNT(*) FROM bookings
 UNION ALL SELECT 'rows: payable_invoices', COUNT(*) FROM payable_invoices
 UNION ALL SELECT 'sum: leadflow_jobs.jobTotalCents', COALESCE(SUM(jobTotalCents), 0) FROM leadflow_jobs
-UNION ALL SELECT 'sum: payable_invoice_lines.amountCents', COALESCE(SUM(amountCents), 0) FROM payable_invoice_lines;
+UNION ALL SELECT 'sum: payable_invoice_lines.amountCents', COALESCE(SUM(amountCents), 0) FROM payable_invoice_lines
+) r ORDER BY link;

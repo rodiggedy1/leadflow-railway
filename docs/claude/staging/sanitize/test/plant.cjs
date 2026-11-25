@@ -100,9 +100,11 @@ const PARENTS_FIRST = ["payable_invoices", "payable_invoice_lines", "payable_inv
 
 (async () => {
   const db = await mysql.createConnection(url);
+  await db.query("SET FOREIGN_KEY_CHECKS = 0"); // test data only: lets child rows be planted in any order (TiDB enforces FKs)
   const [cols] = await db.query(`SELECT table_name, column_name, data_type, column_type, character_maximum_length len, extra, is_nullable
     FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name NOT LIKE '\\_\\_%' ORDER BY table_name, ordinal_position`);
-  const [checks] = await db.query(`SELECT table_name t, check_clause cc FROM information_schema.check_constraints WHERE constraint_schema = DATABASE() AND check_clause LIKE 'json_valid(%'`);
+  // MariaDB lists JSON CHECK rules here; TiDB has no such column (and the TiDB test strips those rules), so skip there
+  const [checks] = await db.query(`SELECT table_name t, check_clause cc FROM information_schema.check_constraints WHERE constraint_schema = DATABASE() AND check_clause LIKE 'json_valid(%'`).catch(() => [[]]);
   for (const r of checks) { const m = String(r.cc ?? r.CHECK_CLAUSE).match(/json_valid\(`([^`]+)`\)/); if (m) JSON_CHECKED.add(`${r.t ?? r.TABLE_NAME}.${m[1]}`); }
   const byTable = new Map(PARENTS_FIRST.map(t => [t, []]));
   for (const c of cols) {
