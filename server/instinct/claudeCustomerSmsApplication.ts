@@ -29,6 +29,9 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
   const { createSmsBookingQuoteStore } = await import("./smsBookingQuoteStore");
   const { createSmsBookingQuotePlanPreparer } = await import("./smsBookingQuoteApplication");
   const reader = createAlternativeSessionReader({ getDatabase: async () => db });
+  const { createSmsCustomerRecordsReader } = await import("./smsCustomerRecords");
+  const { readVoiceCustomerBookingContext } = await import("./voiceCustomerBookingLookup");
+  const readCustomerRecords = createSmsCustomerRecordsReader(db, readVoiceCustomerBookingContext);
   const { sendSms } = await import("../openphone");
   const quoteStore = createSmsBookingQuoteStore(db);
   let linkPrepared = false;
@@ -48,6 +51,7 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
     generate: (binding, session, signal) => createClaudeCustomerSmsGeneratorWithReply(createSmsBookingQuoteReplyGenerator({
       signal,
       smsBookingQuote: { readState: quoteStore.read },
+      readCustomerRecords: readCustomerRecords,
       runner: options => runInitialLeadDraft({ ...options, signal }),
     }))(binding, session),
     store: { ...taskStore, prepare: async (claim, plan, failure) => {

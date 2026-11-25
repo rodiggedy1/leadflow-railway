@@ -18,7 +18,7 @@ import {
   type ClaudeCustomerSmsGenerationBinding,
 } from "./claudeCustomerSmsGeneration";
 import { advanceSmsBookingQuote, SMS_BOOKING_QUOTE_INSTRUCTIONS, type SmsBookingQuoteFields, type SmsBookingQuoteState, type SmsBookingQuoteUpdate } from "./smsBookingQuote";
-import { createSmsBookingQuoteReplyGenerator, SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS } from "./smsBookingQuoteGeneration";
+import { createSmsBookingQuoteReplyGenerator, SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS, SMS_HISTORY_AND_RECORDS_INSTRUCTIONS } from "./smsBookingQuoteGeneration";
 
 const NOW = Date.parse("2026-11-17T17:00:00.000Z");
 const FUTURE_DATE = new Date(NOW + 86400000).toISOString().split("T")[0];
@@ -45,13 +45,16 @@ function fixture(text = fullText, history?: any[], changes: Partial<ClaudeCustom
   protectedIds: [binding.providerMessageId, binding.receivingPhoneNumberId] };
 }
 /** Token trim: the expected model payload. Internal IDs, hashes and provider metadata are left out;
- * each turn keeps who/what/when plus its turnIndex. The knowledge base is only in the fixed instructions. */
+ * each turn keeps who/what/when plus its turnIndex. The knowledge base is only in the fixed instructions.
+ * History window: only the last 30 turns (fixtures end with the current inbound), with ORIGINAL indices. */
 function modelPayload(input: ClaudeCustomerReplyInput, smsBookingQuote: Record<string, unknown>) {
   const { receivingPhoneNumberId: _lineId, ...context } = input.context as Record<string, any>;
+  const turns = context.originalConversation as any[], start = Math.max(0, turns.length - 30);
   return { incomingMessage: input.incomingMessage, context: { ...context,
     binding: { fromPhone: context.binding.fromPhone, customerName: context.binding.customerName },
     contact: { displayName: context.contact.displayName, phone: context.contact.phone },
-    originalConversation: (context.originalConversation as any[]).map((turn, turnIndex) => ({ turnIndex, role: turn.role, content: turn.content })),
+    ...(start > 0 ? { earlierMessagesOmitted: start } : {}),
+    originalConversation: turns.slice(start).map((turn, offset) => ({ turnIndex: start + offset, role: turn.role, content: turn.content })),
     smsBookingQuote } };
 }
 function update(input: ClaudeCustomerReplyInput, patch: SmsBookingQuoteFields = fields, options: Partial<SmsBookingQuoteUpdate> = {}): SmsBookingQuoteUpdate {
@@ -92,7 +95,7 @@ describe("SMS-only additive quote generation", () => {
     const baseRunner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText: "Hello Maya!", task: null }) }));
     await createClaudeCustomerReplyGenerator({ readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE, runner: baseRunner })(input);
     const prompts = h.runner.mock.calls[0][0];
-    expect(prompts.systemPrompt).toBe(`=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${baseRunner.mock.calls[0][0].systemPrompt}`);
+    expect(prompts.systemPrompt).toBe(`=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${SMS_HISTORY_AND_RECORDS_INSTRUCTIONS}\n\n${baseRunner.mock.calls[0][0].systemPrompt}`);
     expect(prompts.systemPrompt).toContain(SMS_BOOKING_QUOTE_INSTRUCTIONS);
     expect(prompts.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
     expect(prompts.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);
@@ -217,7 +220,7 @@ describe("SMS-only additive quote generation", () => {
     expect(JSON.stringify(input)).toBe(before);
   });
 
-  it("reads exact-bound complete durable state and complete large incoming/outgoing history without clipping or mutation", async () => {
+  it("reads exact-bound complete durable state and sends the last 30 of a large history with original indices, without mutation", async () => {
     const input = fixture();
     const prior = advanceSmsBookingQuote(null, update(input), { binding: input.context.binding as ClaudeCustomerSmsGenerationBinding, originalConversation: input.context.originalConversation as any[], nowMs: NOW }).state;
     prior.link = { fingerprint: "synthetic-fingerprint", token: "mib-saved-token", urlPath: "/book/mib-saved-token", firstCleaningTotalCents: 10000 };
@@ -228,8 +231,10 @@ describe("SMS-only additive quote generation", () => {
     const before = JSON.stringify(prior);
     await h.generate(large);
     const payload = JSON.parse(h.runner.mock.calls[0][0].userPrompt);
-    expect(payload.context.originalConversation).toEqual((large.context.originalConversation as any[]).map((turn, turnIndex) => ({ turnIndex, role: turn.role, content: turn.content })));
-    expect(payload.context.originalConversation.map((turn: any) => turn.turnIndex)).toEqual(Array.from({ length: 651 }, (_, index) => index));
+    expect(payload.context.originalConversation).toEqual((large.context.originalConversation as any[]).slice(621).map((turn, offset) => ({ turnIndex: 621 + offset, role: turn.role, content: turn.content })));
+    expect(payload.context.originalConversation.map((turn: any) => turn.turnIndex)).toEqual(Array.from({ length: 30 }, (_, index) => 621 + index));
+    expect(payload.context.earlierMessagesOmitted).toBe(621);
+    expect((large.context.originalConversation as any[])).toHaveLength(651); // stored history untouched
     expect((large.context.originalConversation as any[]).every(turn => !Object.prototype.hasOwnProperty.call(turn, "turnIndex"))).toBe(true);
     expect(payload.context.smsBookingQuote.state).toEqual(prior);
     expect(payload.context).not.toHaveProperty("knowledgeBase");
@@ -263,6 +268,59 @@ describe("SMS-only additive quote generation", () => {
     // The saved conversation and binding used for validation are untouched.
     expect(JSON.stringify(input)).toBe(before);
     expect(h.readState).toHaveBeenCalledWith(input.context.binding);
+  });
+
+  it("history window: sends saved bookings and unfinished tasks once per message, read once across recovery", async () => {
+    const records = { openStaffTasks: [{ title: "Move cleaning to Friday", status: "claimed" as const, items: [{ title: "Reschedule", done: false }] }],
+      bookingContext: { customerFound: true, upcomingBooking: { status: "confirmed", date: "2026-11-20" }, mostRecentPastBooking: null },
+      unavailableRecords: [] as Array<"openStaffTasks" | "bookings"> };
+    const readCustomerRecords = vi.fn(async () => records);
+    const input = fixture("Thank you", [{ role: "user", content: "Thank you", opMsgId: "msg-current" }]);
+    const runner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText: "You’re welcome!", task: null, bookingQuote: null }) }));
+    runner.mockResolvedValueOnce({ finalSmsText: "Not JSON" });
+    const generate = createSmsBookingQuoteReplyGenerator({ readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE, runner,
+      smsBookingQuote: { readState: async () => null }, readCustomerRecords });
+    expect(await generate(input)).toEqual({ replyText: "You’re welcome!", task: null });
+    expect(runner).toHaveBeenCalledTimes(2); expect(readCustomerRecords).toHaveBeenCalledTimes(1);
+    expect(readCustomerRecords).toHaveBeenCalledWith(input.context.binding);
+    const payload = JSON.parse(runner.mock.calls[1][0].userPrompt);
+    expect(payload.context).toMatchObject({ bookingContext: records.bookingContext, openStaffTasks: records.openStaffTasks, unavailableRecords: [] });
+    expect(payload.context).not.toHaveProperty("earlierMessagesOmitted");
+    expect(runner.mock.calls[0][0].systemPrompt).toContain(SMS_HISTORY_AND_RECORDS_INSTRUCTIONS);
+    for (const rule of ["upcomingBooking is the next CONFIRMED", "cancelled = it did not happen", "rescheduled = that date was moved",
+      "completed = it happened", "you have NO booking information", "never say or imply they are completed", "never guess or claim what they said"])
+      expect(SMS_HISTORY_AND_RECORDS_INSTRUCTIONS).toContain(rule);
+  });
+
+  it("history window: a failed bookings/tasks lookup does not block the reply and is reported as unavailable", async () => {
+    const input = fixture("Thank you", [{ role: "user", content: "Thank you", opMsgId: "msg-current" }]);
+    const runner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText: "You’re welcome!", task: null, bookingQuote: null }) }));
+    const generate = createSmsBookingQuoteReplyGenerator({ readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE, runner,
+      smsBookingQuote: { readState: async () => null }, readCustomerRecords: async () => { throw new Error("lookup failed"); } });
+    expect(await generate(input)).toEqual({ replyText: "You’re welcome!", task: null });
+    expect(JSON.parse(runner.mock.calls[0][0].userPrompt).context).toMatchObject({ bookingContext: null, openStaffTasks: null,
+      unavailableRecords: ["openStaffTasks", "bookings"] });
+  });
+
+  it("history window: evidence from a message older than the window is still validated against the full stored history", async () => {
+    const text = "it's a standard cleaning";
+    const history = Array.from({ length: 60 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `Synthetic history ${index}` }));
+    history[4] = { role: "user", content: "The address is 123 Synthetic Street" };
+    history[59] = { role: "user", content: text };
+    const input = fixture(text, history.map((turn, index) => index === 59 ? { ...turn, opMsgId: "msg-current" } : turn));
+    const before = JSON.stringify(input);
+    const plan = (quote: string) => ({ replyText: "How many bedrooms?", task: null, quotePresentationLanguage: "en",
+      bookingQuote: { action: "collect", intentEvidenceQuote: text, fields: { address: "123 Synthetic Street", serviceId: "standard" },
+        evidence: { address: { turnIndex: 4, quote }, serviceId: { turnIndex: 59, quote: text } } } });
+    const h = harness(plan("123 Synthetic Street"));
+    const result = await h.generate(input);
+    const sent = JSON.parse(h.runner.mock.calls[0][0].userPrompt).context;
+    expect(sent.earlierMessagesOmitted).toBe(30);
+    expect(sent.originalConversation.map((turn: any) => turn.turnIndex)).toEqual(Array.from({ length: 30 }, (_, index) => 30 + index));
+    expect(result.smsBookingQuote?.update.evidence.address).toEqual({ turnIndex: 4, quote: "123 Synthetic Street" });
+    expect(result.smsBookingQuote?.originalConversation).toBe(input.context.originalConversation);
+    await expect(harness(plan("456 Invented Avenue")).generate(input)).rejects.toThrow();
+    expect(JSON.stringify(input)).toBe(before);
   });
 
   it("supplies authoritative indices for the reproduced 114-turn qualification failure without changing durable evidence", async () => {
@@ -875,7 +933,10 @@ describe("SMS-only additive quote generation", () => {
     const source = readFileSync(new URL("./smsBookingQuoteGeneration.ts", import.meta.url), "utf8");
     expect(source).toContain("options.runner ?? runInitialLeadDraft");
     expect(source).toContain("advanceSmsBookingQuote(previous, update");
-    expect(source).not.toMatch(/invokeLLM|runGeneralSmsDraft|sendSms|fetch\(|getDb|\.slice\(|maxTokens|max_tokens|setInterval|setTimeout/);
+    expect(source).not.toMatch(/invokeLLM|runGeneralSmsDraft|sendSms|fetch\(|getDb|maxTokens|max_tokens|setInterval|setTimeout/);
+    // The only approved cap: the owner-approved 30-message history window (model payload only).
+    expect(source.match(/\.slice\(/g)).toEqual([".slice("]);
+    expect(source).toContain("originalConversation.slice(windowStart)");
     for (const instruction of ["CURRENT incomingMessage", "zero-based", "restart:true ONLY", "phone is ALWAYS", "never a phone-confirmation question", "COMPLETE customer-facing quote", "quotePresentationLanguage", "its layout is never rendered"]) {
       expect(SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS).toContain(instruction);
     }

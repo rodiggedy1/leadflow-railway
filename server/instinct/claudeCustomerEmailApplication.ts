@@ -8,7 +8,14 @@ import type { getDb } from "../db";
 import type { GmailThread } from "../gmailService";
 import type { ClaudeCustomerSmsGenerationOptions } from "./claudeCustomerSmsGeneration";
 
+import { historyWindowStart, withoutQuotedEmailHistory } from "./claudeHistoryWindow";
+
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+/** First email sent to Claude: the last emails of the thread, always including the one being answered. */
+function emailWindowStart(source: CustomerEmailBinding): number {
+  const messages = source.snapshot.messages;
+  return historyWindowStart(messages.length, messages.findIndex(message => message.id === source.inboundMessageId));
+}
 export interface CapturedCustomerEmail { inboundMessageId: string; receivedAt: number; rawThread: unknown }
 export interface CustomerEmailApplicationOptions {
   config?: () => CustomerEmailConfig;
@@ -81,10 +88,13 @@ export function createClaudeCustomerEmailApplication(options: CustomerEmailAppli
             binding: { mailboxEmail: source.mailboxEmail, fromEmail: source.fromEmail, replyToEmail: source.replyToEmail,
               recipientEmail: source.recipientEmail, senderName: source.senderName, subject: source.subject,
               createdAt: source.createdAt, receivedAt: source.receivedAt },
-            originalConversation: source.snapshot.messages.map(message => ({
+            // History window (model payload only): the last emails, always including the one being answered.
+            // Older emails drop the copy of the thread quoted inside them; the answered email is sent whole.
+            ...(emailWindowStart(source) > 0 ? { earlierEmailsOmitted: emailWindowStart(source) } : {}),
+            originalConversation: source.snapshot.messages.slice(emailWindowStart(source)).map(message => ({
               role: message.fromEmail.toLowerCase() === source.mailboxEmail.toLowerCase() ? "assistant" : "user",
-              content: message.text || message.html, timestamp: message.createdAt,
-              fromEmail: message.fromEmail, subject: message.subject,
+              content: message.id === source.inboundMessageId || !message.text ? message.text || message.html : withoutQuotedEmailHistory(message.text),
+              timestamp: message.createdAt, fromEmail: message.fromEmail, subject: message.subject,
             })), bookingContext: null,
           },
         });

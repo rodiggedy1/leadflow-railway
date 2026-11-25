@@ -143,6 +143,31 @@ describe("actual email counterpart application, no network", () => {
     const input = JSON.parse((x.runner.mock.calls[0][0] as any).userPrompt);
     expect(input.context.originalConversation[0].content).toBe(html);
   });
+  it("history window: sends the last 30 emails, older ones without their quoted thread, the answered email whole", async () => {
+    const x = setup();
+    const inboundText = "Please add a key note.\n\nOn Mon, Nov 17, 2026 Office <office@example.com> wrote:\n> Anything else?";
+    x.raw.messages[0].payload.body.data = Buffer.from(inboundText).toString("base64url");
+    for (let index = 1; index <= 34; index++) { // oldest (34) ends up first
+      const earlier = structuredClone(x.raw.messages[x.raw.messages.length - 1]);
+      earlier.id = `earlier-${index}`; earlier.internalDate = String(1000 - index * 10);
+      earlier.payload.body.data = Buffer.from(`Email ${index} own words\n\nOn Sun, Office <office@example.com> wrote:\n> quoted thread ${index}`).toString("base64url");
+      x.raw.messages.unshift(earlier);
+    }
+    const before = JSON.stringify(x.raw);
+    expect(await x.app.captured(x.event)).toBe(true);
+    const request = x.runner.mock.calls[0][0] as any, input = JSON.parse(request.userPrompt);
+    expect(input.context.earlierEmailsOmitted).toBe(5);
+    expect(input.context.originalConversation).toHaveLength(30);
+    expect(input.context.originalConversation[0].content).toBe("Email 29 own words");
+    expect(input.context.originalConversation[28].content).toBe("Email 1 own words");
+    expect(input.context.originalConversation[29].content).toBe(inboundText);
+    expect(input.incomingMessage).toBe(inboundText);
+    expect(request.userPrompt).not.toContain("quoted thread");
+    expect(request.userPrompt).not.toContain("Email 30 own words");
+    expect(JSON.stringify(x.raw)).toBe(before);
+    expect(x.send).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves the complete source text and all historical messages without caps", async () => {
     const x = setup(); const long = "full history ".repeat(5000);
     const earlier = structuredClone(x.raw.messages[0]); earlier.id = "earlier-gmail-id"; earlier.internalDate = "950"; earlier.payload.body.data = Buffer.from(long).toString("base64url");
