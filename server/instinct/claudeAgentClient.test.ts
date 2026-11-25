@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import {
   ANTHROPIC_BETA, ANTHROPIC_VERSION, EXISTING_AGENT_ID,
-  EXISTING_AGENT_VERSION, EXISTING_ENVIRONMENT_ID, ManagedAgentDemoError,
+  EXISTING_AGENT_VERSION, EXISTING_ENVIRONMENT_ID, ManagedAgentDemoError, SESSION_MODEL_ID,
   runGeneralSmsDraft, type Backend, type ObservedEvent, type GeneralSmsDraftOptions,
   runInitialLeadDraft, type InitialLeadDraftOptions, type TraceEntry,
 } from "./claudeAgentClient";
@@ -35,7 +35,7 @@ function environment(): Obj {
     metadata: { private_fixture: "must never appear in traces" } };
 }
 function sessionFor(base: Obj): Obj {
-  return { type: "session", id: SESSION_ID, agent: { ...clone(base),
+  return { type: "session", id: SESSION_ID, agent: { ...clone(base), ...(base.model === undefined ? {} : { model: { ...clone(base.model), id: SESSION_MODEL_ID } }),
     tools: [{ type: "custom", ...clone(toolDefinition) }], mcp_servers: [], skills: [] },
     environment_id: EXISTING_ENVIRONMENT_ID, status: "idle", archived_at: null,
     resources: [], vault_ids: [], budget: null, deployment_id: null };
@@ -193,7 +193,7 @@ describe("MOCKED TRANSPORT ONLY: exact first-lead instructions without tools", (
       agentMessages: [{ providerEventId: "sevt_sms1", text: rawSms }], finalSmsText: rawSms, toolCalls: [] });
     expect(h.calls.find(call => call.path === "/v1/sessions")!.body).toEqual({
       agent: { type: "agent_with_overrides", id: EXISTING_AGENT_ID, version: EXISTING_AGENT_VERSION,
-        system: INITIAL_SYSTEM, tools: [], mcp_servers: [], skills: [] },
+        model: { ...baseAgent().model, id: SESSION_MODEL_ID }, system: INITIAL_SYSTEM, tools: [], mcp_servers: [], skills: [] },
       environment_id: EXISTING_ENVIRONMENT_ID,
     });
     expect(h.calls.at(-1)?.body).toEqual({ events: [{ type: "user.message",
@@ -215,6 +215,21 @@ describe("MOCKED TRANSPORT ONLY: exact first-lead instructions without tools", (
       onMessage: h => { h.push(message()); h.push(idle()); } });
     await h.runInitial();
     expect(h.calls.find(call => call.path === "/v1/sessions")!.body!.agent.system).toBe(systemPrompt);
+  });
+
+  it("runs every session on Sonnet 5.5 with the saved agent's other model settings, without changing the saved agent", async () => {
+    expect(SESSION_MODEL_ID).toBe("claude-sonnet-5-5");
+    const h = initialHarness({ onMessage: h => { h.push(message()); h.push(idle()); } });
+    await h.runInitial();
+    const sent = h.calls.find(call => call.path === "/v1/sessions")!.body!.agent.model;
+    expect(sent).toEqual({ id: "claude-sonnet-5-5", effort: baseAgent().model.effort });
+    expect(h.calls.filter(call => call.method !== "GET" && call.path.startsWith("/v1/agents"))).toHaveLength(0);
+  });
+
+  it("accepts extra default fields in the resolved model but still requires the sent ones", async () => {
+    const h = initialHarness({ mutateSession: s => { s.agent.model.speed = "standard"; },
+      onMessage: h => { h.push(message()); h.push(idle()); } });
+    expect((await h.runInitial()).finalSmsText).toBeTruthy();
   });
 
   it("does not parse or wrap the returned agent text", async () => {
@@ -308,7 +323,7 @@ describe("MOCKED TRANSPORT ONLY: exact first-lead instructions without tools", (
     await h.run();
     const override = h.calls.find(call => call.path === "/v1/sessions")!.body!.agent;
     expect(override).not.toHaveProperty("system");
-    expect(override).not.toHaveProperty("model");
+    expect(override.model).toEqual({ ...baseAgent().model, id: SESSION_MODEL_ID });
     expect(override.tools).toEqual([{ type: "custom", ...toolDefinition }]);
   });
 });
@@ -347,7 +362,7 @@ describe("MOCKED TRANSPORT ONLY: extracted existing-agent general SMS draft", ()
     expect(h.toolCalls).toHaveBeenCalledWith(toolDefinition.name, { bookingId: "synthetic-booking" }, "sevt_tool1");
     const create = h.calls.find(call => call.path === "/v1/sessions")!;
     expect(create.body).toEqual({ agent: { type: "agent_with_overrides", id: EXISTING_AGENT_ID,
-      version: 1, tools: [{ type: "custom", ...toolDefinition }], mcp_servers: [], skills: [] }, environment_id: EXISTING_ENVIRONMENT_ID });
+      version: 1, model: { ...baseAgent().model, id: SESSION_MODEL_ID }, tools: [{ type: "custom", ...toolDefinition }], mcp_servers: [], skills: [] }, environment_id: EXISTING_ENVIRONMENT_ID });
     expect(h.calls.map(call => `${call.method} ${call.path}`)).toEqual([
       `GET /v1/agents/${EXISTING_AGENT_ID}`, `GET /v1/environments/${EXISTING_ENVIRONMENT_ID}`,
       "POST /v1/sessions", `GET /v1/sessions/${SESSION_ID}/events/stream`,
@@ -552,12 +567,17 @@ describe("scoped source extraction preservation", () => {
     expect(source.match(/async function runManagedAgentSession\(/g)).toHaveLength(1);
     // Permit only these named additions; original hashes still protect everything else.
     const prefix = source.slice(source.indexOf("export const EXISTING_AGENT_ID"), coreStart)
+      .replace('/** Model every session runs on, set per session. The saved agent is not changed; its other model settings\n * (effort etc.) are copied unchanged. Roll back by setting this to "claude-opus-5-5". */\nexport const SESSION_MODEL_ID = "claude-sonnet-5-5";\n', "")
       .replace("/** Private session overrides used only by the dedicated first-lead entrypoint. */\ninterface SessionRunOptions extends RunOptions {\n  systemOverride?: string;\n  allowEmptyTools?: true;\n}\n", "")
       .replace("function customTools(backend: Backend, allowEmptyTools = false)", "function customTools(backend: Backend)")
       .replace("(backend.tools.length === 0 && !allowEmptyTools)", "backend.tools.length === 0")
       .replace("if (signal.aborted) {\n    // The operation/hook was evaluated before this helper. Observe late failure\n    // even when cancellation wins before Promise.race can attach its handlers.\n    void promise.catch(() => undefined);\n    throw new ManagedAgentDemoError(\"CANCELLED\", sessionId);\n  }",
         "if (signal.aborted) throw new ManagedAgentDemoError(\"CANCELLED\", sessionId);");
     const core = source.slice(coreStart, wrapperStart)
+      .replace("    const sessionModel: ObjectValue = { ...(base.model as ObjectValue), id: SESSION_MODEL_ID };\n", "")
+      .replace("version: EXISTING_AGENT_VERSION, model: sessionModel, tools,", "version: EXISTING_AGENT_VERSION, tools,")
+      .replace("!object(resolved.model) || Object.keys(sessionModel).some(key => canonical((resolved.model as ObjectValue)[key]) !== canonical(sessionModel[key])) ||",
+        "canonical(resolved.model) !== canonical(base.model) ||")
       .replace("options: SessionRunOptions", "options: RunOptions")
       .replace("customTools(options.backend, options.allowEmptyTools === true)", "customTools(options.backend)")
       .replace("version: EXISTING_AGENT_VERSION, tools, mcp_servers: [], skills: [],\n        ...(options.systemOverride === undefined ? {} : { system: options.systemOverride }) },",

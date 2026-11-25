@@ -7,6 +7,9 @@
  */
 export const EXISTING_AGENT_ID = "agent_01Naiw8VvfB75yd2VWUtVP6v";
 export const EXISTING_AGENT_VERSION = 1;
+/** Model every session runs on, set per session. The saved agent is not changed; its other model settings
+ * (effort etc.) are copied unchanged. Roll back by setting this to "claude-opus-5-5". */
+export const SESSION_MODEL_ID = "claude-sonnet-5-5";
 export const EXISTING_ENVIRONMENT_ID = "env_01U7m4FNwLv7iecyqyKfFFsW";
 export const ANTHROPIC_VERSION = "2026-10-21";
 export const ANTHROPIC_BETA = "managed-agents-2026-04-01";
@@ -321,9 +324,10 @@ async function runManagedAgentSession(options: SessionRunOptions): Promise<RunRe
       throw new ManagedAgentDemoError("ENVIRONMENT_MISMATCH", undefined, undefined, "not_started");
     }
     await trace({ stage: "configuration_verified" });
+    const sessionModel: ObjectValue = { ...(base.model as ObjectValue), id: SESSION_MODEL_ID };
     const session = await jsonRequest("POST", "/v1/sessions", {
       agent: { type: "agent_with_overrides", id: EXISTING_AGENT_ID,
-        version: EXISTING_AGENT_VERSION, tools, mcp_servers: [], skills: [],
+        version: EXISTING_AGENT_VERSION, model: sessionModel, tools, mcp_servers: [], skills: [],
         ...(options.systemOverride === undefined ? {} : { system: options.systemOverride }) },
       environment_id: EXISTING_ENVIRONMENT_ID,
     });
@@ -337,7 +341,7 @@ async function runManagedAgentSession(options: SessionRunOptions): Promise<RunRe
         (session.deployment_id !== undefined && session.deployment_id !== null) ||
         !object(resolved) || resolved.type !== "agent" || resolved.id !== EXISTING_AGENT_ID ||
         resolved.version !== EXISTING_AGENT_VERSION || resolved.multiagent !== null ||
-        canonical(resolved.model) !== canonical(base.model) ||
+        !object(resolved.model) || Object.keys(sessionModel).some(key => canonical((resolved.model as ObjectValue)[key]) !== canonical(sessionModel[key])) ||
         resolved.system !== (options.systemOverride === undefined ? base.system : options.systemOverride) ||
         !sameTools(resolved.tools, tools) || !emptyArray(resolved.mcp_servers) || !emptyArray(resolved.skills)) {
       throw new ManagedAgentDemoError("SESSION_MISMATCH", sessionId);
