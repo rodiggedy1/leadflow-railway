@@ -10,7 +10,7 @@ const sha = (source: string) => createHash("sha256").update(source).digest("hex"
 const candidates: Record<string, string> = {
   // Token trim (2026-11-25): knowledge base kept only in the fixed instructions; email payload slimmed.
   "server/instinct/claudeCustomerSmsGeneration.ts": "1c9dd8b5e8f2ebe0cffa7994f9527254ee69b3029e36c53cccc7cb076aed320f",
-  "server/instinct/claudeCustomerEmailApplication.ts": "9e54c1817cdd06ccba53e4c99b17a0a66ecadae859c84b00861da407517c2963",
+  "server/instinct/claudeCustomerEmailApplication.ts": "4bcf1aa8fe5c79ec1963724cc2bc1b5c0a99bdcd2b7bdf015e3252de43e6cfd1", // + history window (2026-11-25)
   "server/instinct/smsBookingQuoteGeneration.ts": "303e0a7f38d7c5e3e33eedc0874be028b88e50c18fb7a5e67530a132fb5e85e0",
   "server/instinct/claudeInitialLead.ts": "2e33c4f9d5aeb307517fe5ed5ed5ff0fa439e2f2115d27444a8a0b96da4cc391",
   "server/instinct/claudeSmsAlternative.ts": "a9f2e906787cfda63d32a9d9612e7b0a7b8555d1ee2249ba8698dd3947979ee6",
@@ -50,8 +50,15 @@ describe("one-extra-generation recovery exact local scope", () => {
     expect(sha(source + "\n// UNAUTHORIZED_CHANGE\n")).not.toBe(hash);
     expect(source).not.toMatch(/\b(?:sendSms|setInterval|setTimeout)\s*\(|\bdb\.(?:insert|update|delete)\s*\(/);
   });
+  // Owner-approved reviewed changes to protected files: exact new bytes pinned; any further edit still fails.
+  const reviewedProtected: Record<string, string> = {
+    // History window (2026-11-25): reads saved bookings and unfinished tasks as optional SMS context.
+    "server/instinct/claudeCustomerSmsApplication.ts": "e5c7ff921c8f81b6db0aac09081a80d2a50f1aa14b8598709031edb0c60c80b6",
+  };
   it.each(protectedSources)("preserves delivery, authority, state, transport and prompts byte-for-byte: %s", path => {
-    expect(readFileSync(path, "utf8")).toBe(before(path));
+    const source = readFileSync(path, "utf8");
+    if (reviewedProtected[path]) { expect(sha(source)).toBe(reviewedProtected[path]); return; }
+    expect(source).toBe(before(path));
   });
   it.each([
     ["server/instinct/claudeCustomerSmsGeneration.ts", "CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS"],
