@@ -21,5 +21,10 @@ every customer phone as invalid. Fakes are now `+1 999 2xx xxxx`: still unreacha
 tests were re-run (leak check 0, links identical, lock and drift tests unchanged), and all 168 fake phones in the test
 database pass the app's rule.
 
-Not testable locally (checked on staging by the owner): the `[staging-sim] ACTIVE` line in Railway's Deploy Logs, and a
-`SIMULATED` line after sending a text from the staging site.
+## On the live staging site (owner, 2026-11-25): C COMPLETE
+1. **Start command changed.** Deploy Logs showed `[staging-sim] ACTIVE: self-test passed (6/6)`.
+2. **The 14 fake variables were added and deployed.** The self-test passed 6/6 again.
+3. **A test text was sent from the staging site** ("testing staging sms"). The logs showed `SIMULATED OpenPhone POST …`;
+   Google/Gmail requests were also simulated. Nothing was sent to anyone.
+
+`staging` branch at `83bdcd1`.

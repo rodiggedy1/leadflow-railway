@@ -73,6 +73,7 @@ const NEUTRALIZE_COL = /^(status|state|sendStatus|deliveryStatus|callStatus|appr
 
 // ---- Explicit column decisions (table.column -> rule [, note]) ----------------------------
 const OVERRIDES = {
+  "app_versioned_migration_ledger.last_error": ["FREE_TEXT", "database-update error text (can quote data values)"],
   "conversation_sessions.messageHistory": ["CONVERSATION", "full SMS history -> synthetic scenario conversation"],
   "conversation_sessions.lastMessageText": ["CONVERSATION", "kept consistent with the synthetic conversation"],
   "conversation_sessions.lastMessageRole": ["KEEP"],
@@ -157,7 +158,7 @@ call_log.transcriptLanguage conversation_sessions.csPriorityTag conversation_ses
 payable_invoice_deliveries.payloadHash payable_invoice_manual_payments.payloadHash`.split(/\s+/).filter(Boolean));
 // Every other first-pass REVIEW column was checked by hand and is business data
 // (statuses, dates, prices stored as text, service names, enums, settings, template text).
-const REVIEWED_KEEP = new Set(`activity_log.eventType agents.pagePermissions agents.awayStatus ai_action_policies.merchantId ai_action_policies.actionKey
+const REVIEWED_KEEP = new Set(`app_versioned_migration_ledger.migration_id app_versioned_migration_ledger.sha256 app_versioned_migration_ledger.state activity_log.eventType agents.pagePermissions agents.awayStatus ai_action_policies.merchantId ai_action_policies.actionKey
 ai_action_policies.category ai_action_policies.mode ai_call_templates.scenario ai_call_templates.audience always_on_enrollments.frequency
 always_on_enrollments.jobDate always_on_groups.groupType always_on_groups.name app_settings.key app_settings.fieldType booking_assignments.status
 booking_cash_app_payments.idempotencyKey booking_cash_app_payments.currency booking_cash_app_payments.status booking_cash_app_payments.cardBrand

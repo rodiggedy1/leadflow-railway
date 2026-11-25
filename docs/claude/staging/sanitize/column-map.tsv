@@ -74,6 +74,21 @@ always_on_groups	repliedCount	int(11)	KEEP		NO
 always_on_groups	bookedCount	int(11)	KEEP		NO
 always_on_groups	createdAt	timestamp	KEEP		NO
 always_on_groups	updatedAt	timestamp	KEEP		NO
+app_settings	id	int(11)	KEEP		NO
+app_settings	key	varchar(100)	KEEP	checked by hand: business data	NO
+app_settings	value	text	KEEP	business settings; A2 blanks any key named like token/secret/key/password/webhook	NO
+app_settings	label	varchar(200)	KEEP	business template/label/code: no customer data	NO
+app_settings	description	text	KEEP	business template/label/code: no customer data	YES
+app_settings	fieldType	varchar(20)	KEEP	checked by hand: business data	NO
+app_settings	updatedAt	timestamp	KEEP		NO
+app_versioned_migration_ledger	migration_id	varchar(255)	KEEP	checked by hand: business data	NO
+app_versioned_migration_ledger	sha256	char(64)	KEEP	checked by hand: business data	NO
+app_versioned_migration_ledger	state	varchar(16)	KEEP	checked by hand: business data	NO
+app_versioned_migration_ledger	started_at	datetime(3)	KEEP		NO
+app_versioned_migration_ledger	applied_at	datetime(3)	KEEP		YES
+app_versioned_migration_ledger	attempt_count	int(11)	KEEP		NO
+app_versioned_migration_ledger	last_attempt_at	datetime(3)	KEEP		NO
+app_versioned_migration_ledger	last_error	text	FREE_TEXT	database-update error text (can quote data values)	YES
 applicant_portal_handoff_tokens	id	int(11)	TRUNCATE_TABLE	login tokens	NO
 applicant_portal_handoff_tokens	candidateId	int(11)	TRUNCATE_TABLE	login tokens	NO
 applicant_portal_handoff_tokens	tokenHash	varchar(64)	TRUNCATE_TABLE	login tokens	NO
@@ -82,50 +97,6 @@ applicant_portal_handoff_tokens	usedAt	datetime(3)	TRUNCATE_TABLE	login tokens	Y
 applicant_portal_handoff_tokens	reusable	tinyint(4)	TRUNCATE_TABLE	login tokens	NO
 applicant_portal_handoff_tokens	reusableToken	varchar(64)	TRUNCATE_TABLE	login tokens	YES
 applicant_portal_handoff_tokens	createdAt	datetime(3)	TRUNCATE_TABLE	login tokens	NO
-app_settings	id	int(11)	KEEP		NO
-app_settings	key	varchar(100)	KEEP	checked by hand: business data	NO
-app_settings	value	text	KEEP	business settings; A2 blanks any key named like token/secret/key/password/webhook	NO
-app_settings	label	varchar(200)	KEEP	business template/label/code: no customer data	NO
-app_settings	description	text	KEEP	business template/label/code: no customer data	YES
-app_settings	fieldType	varchar(20)	KEEP	checked by hand: business data	NO
-app_settings	updatedAt	timestamp	KEEP		NO
-bookings	id	int(11)	KEEP		NO
-bookings	publicBookingNumber	varchar(40)	KEEP	checked by hand: business data	NO
-bookings	idempotencyKey	varchar(36)	KEEP	checked by hand: business data	NO
-bookings	commandHash	varchar(64)	KEEP	checked by hand: business data	NO
-bookings	source	varchar(20)	KEEP	checked by hand: business data	NO
-bookings	status	varchar(32)	KEEP	checked by hand: business data	NO
-bookings	availabilityStatus	varchar(32)	KEEP	checked by hand: business data	NO
-bookings	assignmentStatus	varchar(32)	KEEP	checked by hand: business data	NO
-bookings	paymentStatus	varchar(32)	KEEP	checked by hand: business data	NO
-bookings	customerName	varchar(255)	PERSON_NAME		NO
-bookings	customerPhone	varchar(20)	PHONE		NO
-bookings	customerEmail	varchar(320)	EMAIL		NO
-bookings	serviceId	varchar(32)	KEEP	checked by hand: business data	NO
-bookings	serviceName	varchar(120)	KEEP	checked by hand: business data	NO
-bookings	bedrooms	int(11)	KEEP		NO
-bookings	bathrooms	int(11)	KEEP		NO
-bookings	extras	longtext	JSON_KEEP		NO
-bookings	specialRequestNotes	longtext	JSON_EMPTY	structured data that may embed personal details	NO
-bookings	address	varchar(500)	ADDRESS		NO
-bookings	requestedLocalDate	varchar(10)	KEEP	checked by hand: business data	NO
-bookings	requestedLocalTime	varchar(5)	KEEP	checked by hand: business data	NO
-bookings	requestedTimeZone	varchar(64)	KEEP	checked by hand: business data	NO
-bookings	requestedStartAt	bigint(20)	KEEP		NO
-bookings	recurrence	varchar(32)	KEEP	checked by hand: business data	NO
-bookings	recurringIntentStatus	varchar(32)	KEEP	checked by hand: business data	YES
-bookings	pricingVersion	varchar(64)	KEEP	checked by hand: business data	NO
-bookings	firstCleaningTotalCents	int(11)	KEEP		NO
-bookings	futureVisitTotalCents	int(11)	KEEP		YES
-bookings	priceSnapshot	longtext	JSON_KEEP		NO
-bookings	expiresAt	bigint(20)	KEEP		YES
-bookings	createdAt	datetime(3)	KEEP		NO
-bookings	updatedAt	datetime(3)	KEEP		NO
-bookings	companyNotes	text	FREE_TEXT		YES
-bookings	bookedByAgentId	int(11)	KEEP		YES
-bookings	bookedByAgentName	varchar(255)	PERSON_NAME		YES
-bookings	homeType	varchar(32)	KEEP	checked by hand: business data	YES
-bookings	manualAmountOverrides	longtext	KEEP	checked by hand: business data	YES
 booking_assignments	id	int(11)	KEEP		NO
 booking_assignments	bookingId	int(11)	KEEP		NO
 booking_assignments	teamId	int(11)	KEEP		YES
@@ -231,17 +202,43 @@ booking_series	firstCleaningTotalCents	int(11)	KEEP		NO
 booking_series	futureVisitTotalCents	int(11)	KEEP		NO
 booking_series	createdAt	datetime(3)	KEEP		NO
 booking_series	updatedAt	datetime(3)	KEEP		NO
-callback_tasks	id	int(11)	KEEP		NO
-callback_tasks	voiceCallId	int(11)	KEEP		YES
-callback_tasks	sessionId	int(11)	KEEP		YES
-callback_tasks	callerPhone	varchar(30)	PHONE		NO
-callback_tasks	callerName	varchar(128)	PERSON_NAME		YES
-callback_tasks	preferredCallbackTime	varchar(255)	KEEP		YES
-callback_tasks	notes	text	FREE_TEXT		YES
-callback_tasks	completed	int(11)	KEEP		NO
-callback_tasks	completedByAgentName	varchar(128)	PERSON_NAME		YES
-callback_tasks	completedAt	timestamp	KEEP		YES
-callback_tasks	createdAt	timestamp	KEEP		NO
+bookings	id	int(11)	KEEP		NO
+bookings	publicBookingNumber	varchar(40)	KEEP	checked by hand: business data	NO
+bookings	idempotencyKey	varchar(36)	KEEP	checked by hand: business data	NO
+bookings	commandHash	varchar(64)	KEEP	checked by hand: business data	NO
+bookings	source	varchar(20)	KEEP	checked by hand: business data	NO
+bookings	status	varchar(32)	KEEP	checked by hand: business data	NO
+bookings	availabilityStatus	varchar(32)	KEEP	checked by hand: business data	NO
+bookings	assignmentStatus	varchar(32)	KEEP	checked by hand: business data	NO
+bookings	paymentStatus	varchar(32)	KEEP	checked by hand: business data	NO
+bookings	customerName	varchar(255)	PERSON_NAME		NO
+bookings	customerPhone	varchar(20)	PHONE		NO
+bookings	customerEmail	varchar(320)	EMAIL		NO
+bookings	serviceId	varchar(32)	KEEP	checked by hand: business data	NO
+bookings	serviceName	varchar(120)	KEEP	checked by hand: business data	NO
+bookings	bedrooms	int(11)	KEEP		NO
+bookings	bathrooms	int(11)	KEEP		NO
+bookings	extras	longtext	JSON_KEEP		NO
+bookings	specialRequestNotes	longtext	JSON_EMPTY	structured data that may embed personal details	NO
+bookings	address	varchar(500)	ADDRESS		NO
+bookings	requestedLocalDate	varchar(10)	KEEP	checked by hand: business data	NO
+bookings	requestedLocalTime	varchar(5)	KEEP	checked by hand: business data	NO
+bookings	requestedTimeZone	varchar(64)	KEEP	checked by hand: business data	NO
+bookings	requestedStartAt	bigint(20)	KEEP		NO
+bookings	recurrence	varchar(32)	KEEP	checked by hand: business data	NO
+bookings	recurringIntentStatus	varchar(32)	KEEP	checked by hand: business data	YES
+bookings	pricingVersion	varchar(64)	KEEP	checked by hand: business data	NO
+bookings	firstCleaningTotalCents	int(11)	KEEP		NO
+bookings	futureVisitTotalCents	int(11)	KEEP		YES
+bookings	priceSnapshot	longtext	JSON_KEEP		NO
+bookings	expiresAt	bigint(20)	KEEP		YES
+bookings	createdAt	datetime(3)	KEEP		NO
+bookings	updatedAt	datetime(3)	KEEP		NO
+bookings	companyNotes	text	FREE_TEXT		YES
+bookings	bookedByAgentId	int(11)	KEEP		YES
+bookings	bookedByAgentName	varchar(255)	PERSON_NAME		YES
+bookings	homeType	varchar(32)	KEEP	checked by hand: business data	YES
+bookings	manualAmountOverrides	longtext	KEEP	checked by hand: business data	YES
 call_log	id	int(11)	KEEP		NO
 call_log	cleanerJobId	int(11)	KEEP		YES
 call_log	teamId	int(11)	KEEP		YES
@@ -276,6 +273,17 @@ call_templates	isActive	int(11)	KEEP		NO
 call_templates	sortOrder	int(11)	KEEP		NO
 call_templates	createdAt	timestamp	KEEP		NO
 call_templates	updatedAt	timestamp	KEEP		NO
+callback_tasks	id	int(11)	KEEP		NO
+callback_tasks	voiceCallId	int(11)	KEEP		YES
+callback_tasks	sessionId	int(11)	KEEP		YES
+callback_tasks	callerPhone	varchar(30)	PHONE		NO
+callback_tasks	callerName	varchar(128)	PERSON_NAME		YES
+callback_tasks	preferredCallbackTime	varchar(255)	KEEP		YES
+callback_tasks	notes	text	FREE_TEXT		YES
+callback_tasks	completed	int(11)	KEEP		NO
+callback_tasks	completedByAgentName	varchar(128)	PERSON_NAME		YES
+callback_tasks	completedAt	timestamp	KEEP		YES
+callback_tasks	createdAt	timestamp	KEEP		NO
 campaign_approval_batches	id	int(11)	KEEP		NO
 campaign_approval_batches	groupId	int(11)	KEEP		NO
 campaign_approval_batches	groupType	varchar(30)	KEEP	checked by hand: business data	NO
@@ -392,6 +400,13 @@ chat_super_alerts	senderName	varchar(255)	PERSON_NAME		NO
 chat_super_alerts	messageBody	text	FREE_TEXT		NO
 chat_super_alerts	repliedAt	bigint(20)	KEEP		YES
 chat_super_alerts	createdAt	timestamp	KEEP		NO
+cleaner_job_custom_rules	id	int(11)	KEEP		NO
+cleaner_job_custom_rules	cleanerJobId	int(11)	KEEP		NO
+cleaner_job_custom_rules	customPayRuleId	int(11)	KEEP		NO
+cleaner_job_custom_rules	appliedAmount	decimal(8,2)	KEEP		NO
+cleaner_job_custom_rules	appliedLabel	varchar(128)	KEEP	business template/label/code: no customer data	NO
+cleaner_job_custom_rules	appliedType	varchar(16)	KEEP	checked by hand: business data	NO
+cleaner_job_custom_rules	appliedAt	timestamp	KEEP		NO
 cleaner_jobs	id	int(11)	KEEP		NO
 cleaner_jobs	completedJobId	int(11)	KEEP		NO
 cleaner_jobs	bookingId	int(11)	KEEP		YES
@@ -461,13 +476,6 @@ cleaner_jobs	chargesOnHoldCents	int(11)	KEEP		NO
 cleaner_jobs	chargesOutstandingCents	int(11)	KEEP		NO
 cleaner_jobs	createdAt	timestamp	KEEP		NO
 cleaner_jobs	updatedAt	timestamp	KEEP		NO
-cleaner_job_custom_rules	id	int(11)	KEEP		NO
-cleaner_job_custom_rules	cleanerJobId	int(11)	KEEP		NO
-cleaner_job_custom_rules	customPayRuleId	int(11)	KEEP		NO
-cleaner_job_custom_rules	appliedAmount	decimal(8,2)	KEEP		NO
-cleaner_job_custom_rules	appliedLabel	varchar(128)	KEEP	business template/label/code: no customer data	NO
-cleaner_job_custom_rules	appliedType	varchar(16)	KEEP	checked by hand: business data	NO
-cleaner_job_custom_rules	appliedAt	timestamp	KEEP		NO
 cleaner_magic_link_tokens	id	int(11)	TRUNCATE_TABLE	cleaner login links	NO
 cleaner_magic_link_tokens	cleanerProfileId	int(11)	TRUNCATE_TABLE	cleaner login links	NO
 cleaner_magic_link_tokens	token	varchar(128)	TRUNCATE_TABLE	cleaner login links	NO
@@ -542,6 +550,15 @@ command_center_cache	cacheKey	varchar(50)	TRUNCATE_TABLE	cache (regenerates)	NO
 command_center_cache	rangeKey	varchar(10)	TRUNCATE_TABLE	cache (regenerates)	NO
 command_center_cache	payload	text	TRUNCATE_TABLE	cache (regenerates)	NO
 command_center_cache	generatedAt	timestamp	TRUNCATE_TABLE	cache (regenerates)	NO
+completed_job_batches	id	int(11)	KEEP		NO
+completed_job_batches	filename	varchar(255)	KEEP	checked by hand: business data	NO
+completed_job_batches	jobDate	varchar(20)	KEEP	checked by hand: business data	YES
+completed_job_batches	totalCount	int(11)	KEEP		NO
+completed_job_batches	sentCount	int(11)	KEEP		NO
+completed_job_batches	positiveCount	int(11)	KEEP		NO
+completed_job_batches	negativeCount	int(11)	KEEP		NO
+completed_job_batches	reviewConfirmedCount	int(11)	KEEP		NO
+completed_job_batches	uploadedAt	timestamp	KEEP		NO
 completed_jobs	id	int(11)	KEEP		NO
 completed_jobs	batchId	int(11)	KEEP		NO
 completed_jobs	phone	varchar(20)	PHONE		NO
@@ -565,15 +582,6 @@ completed_jobs	reactivationEligibleAt	timestamp	KEEP		YES
 completed_jobs	reviewSkipped	int(11)	KEEP		NO
 completed_jobs	phoneInvalid	int(11)	KEEP		NO
 completed_jobs	createdAt	timestamp	KEEP		NO
-completed_job_batches	id	int(11)	KEEP		NO
-completed_job_batches	filename	varchar(255)	KEEP	checked by hand: business data	NO
-completed_job_batches	jobDate	varchar(20)	KEEP	checked by hand: business data	YES
-completed_job_batches	totalCount	int(11)	KEEP		NO
-completed_job_batches	sentCount	int(11)	KEEP		NO
-completed_job_batches	positiveCount	int(11)	KEEP		NO
-completed_job_batches	negativeCount	int(11)	KEEP		NO
-completed_job_batches	reviewConfirmedCount	int(11)	KEEP		NO
-completed_job_batches	uploadedAt	timestamp	KEEP		NO
 confirmation_calls	id	int(11)	KEEP		NO
 confirmation_calls	cleanerJobId	int(11)	KEEP		YES
 confirmation_calls	leadflowJobId	int(11)	KEEP		YES
@@ -724,6 +732,14 @@ cs_missions	customerPhone	varchar(32)	PHONE		YES
 cs_missions	customerName	varchar(160)	PERSON_NAME		YES
 cs_missions	activeDedupKey	varchar(128)	EXTERNAL_ID		YES
 cs_missions	failureReason	varchar(255)	FREE_TEXT		YES
+custom_pay_rules	id	int(11)	KEEP		NO
+custom_pay_rules	label	varchar(128)	KEEP	business template/label/code: no customer data	NO
+custom_pay_rules	type	varchar(16)	KEEP	checked by hand: business data	NO
+custom_pay_rules	amount	decimal(8,2)	KEEP		NO
+custom_pay_rules	description	varchar(256)	KEEP	business template/label/code: no customer data	YES
+custom_pay_rules	isActive	tinyint(4)	KEEP		NO
+custom_pay_rules	createdAt	timestamp	KEEP		NO
+custom_pay_rules	updatedAt	timestamp	KEEP		NO
 customer_portal_accounts	id	int(11)	KEEP		NO
 customer_portal_accounts	customerName	varchar(255)	PERSON_NAME		NO
 customer_portal_accounts	customerPhone	varchar(20)	PHONE		NO
@@ -776,14 +792,6 @@ customer_portal_service_requests	paymentLast4	varchar(4)	CARD_LAST4		YES
 customer_portal_service_requests	stripePaymentMethodId	varchar(255)	PAYMENT_REF		YES
 customer_portal_service_requests	stripePaymentIntentId	varchar(255)	PAYMENT_REF		YES
 customer_portal_service_requests	paymentChargedAt	bigint(20)	KEEP		YES
-custom_pay_rules	id	int(11)	KEEP		NO
-custom_pay_rules	label	varchar(128)	KEEP	business template/label/code: no customer data	NO
-custom_pay_rules	type	varchar(16)	KEEP	checked by hand: business data	NO
-custom_pay_rules	amount	decimal(8,2)	KEEP		NO
-custom_pay_rules	description	varchar(256)	KEEP	business template/label/code: no customer data	YES
-custom_pay_rules	isActive	tinyint(4)	KEEP		NO
-custom_pay_rules	createdAt	timestamp	KEEP		NO
-custom_pay_rules	updatedAt	timestamp	KEEP		NO
 drive_time_cache	id	int(11)	TRUNCATE_TABLE	cache (regenerates)	NO
 drive_time_cache	routeKey	varchar(100)	TRUNCATE_TABLE	cache (regenerates)	NO
 drive_time_cache	durationSeconds	int(11)	TRUNCATE_TABLE	cache (regenerates)	NO
@@ -926,18 +934,6 @@ interview_chunks	sessionId	varchar(128)	TRUNCATE_TABLE	applicant interview recor
 interview_chunks	chunkIndex	int(11)	TRUNCATE_TABLE	applicant interview recordings	NO
 interview_chunks	s3Key	varchar(512)	TRUNCATE_TABLE	applicant interview recordings	NO
 interview_chunks	createdAt	timestamp	TRUNCATE_TABLE	applicant interview recordings	NO
-invoices	id	int(11)	KEEP		NO
-invoices	invoiceNumber	int(11)	KEEP		NO
-invoices	templateId	int(11)	KEEP		NO
-invoices	customerName	varchar(255)	PERSON_NAME		NO
-invoices	serviceDate	varchar(50)	KEEP	checked by hand: business data	NO
-invoices	billingDate	varchar(50)	KEEP	checked by hand: business data	NO
-invoices	stripeLink	varchar(1000)	PAYMENT_REF		NO
-invoices	lineItems	longtext	JSON_KEEP		NO
-invoices	totalCents	int(11)	KEEP		NO
-invoices	pdfUrl	varchar(1000)	MEDIA_URL		YES
-invoices	paidAt	timestamp	KEEP		YES
-invoices	createdAt	timestamp	KEEP		NO
 invoiceTemplates	id	int(11)	KEEP		NO
 invoiceTemplates	customerName	varchar(255)	PERSON_NAME		NO
 invoiceTemplates	billTo	text	FREE_TEXT	billing name and address	NO
@@ -955,6 +951,18 @@ invoice_stripe_links	hostedInvoiceUrl	varchar(1000)	MEDIA_URL		YES
 invoice_stripe_links	paidAt	datetime(3)	KEEP		YES
 invoice_stripe_links	createdAt	timestamp	KEEP		NO
 invoice_stripe_links	updatedAt	timestamp	KEEP		NO
+invoices	id	int(11)	KEEP		NO
+invoices	invoiceNumber	int(11)	KEEP		NO
+invoices	templateId	int(11)	KEEP		NO
+invoices	customerName	varchar(255)	PERSON_NAME		NO
+invoices	serviceDate	varchar(50)	KEEP	checked by hand: business data	NO
+invoices	billingDate	varchar(50)	KEEP	checked by hand: business data	NO
+invoices	stripeLink	varchar(1000)	PAYMENT_REF		NO
+invoices	lineItems	longtext	JSON_KEEP		NO
+invoices	totalCents	int(11)	KEEP		NO
+invoices	pdfUrl	varchar(1000)	MEDIA_URL		YES
+invoices	paidAt	timestamp	KEEP		YES
+invoices	createdAt	timestamp	KEEP		NO
 issue_comments	id	int(11)	KEEP		NO
 issue_comments	issue_key	varchar(255)	KEEP	checked by hand: business data	NO
 issue_comments	author_name	varchar(255)	PERSON_NAME		NO
@@ -1048,6 +1056,34 @@ job_status_history	cleanerJobId	int(11)	KEEP		NO
 job_status_history	status	varchar(64)	KEEP	checked by hand: business data	NO
 job_status_history	source	varchar(32)	KEEP	checked by hand: business data	NO
 job_status_history	changedAt	timestamp	KEEP		NO
+lead_assignments	id	int(11)	KEEP		NO
+lead_assignments	sessionId	int(11)	KEEP		NO
+lead_assignments	agentId	int(11)	KEEP		NO
+lead_assignments	agentName	varchar(128)	PERSON_NAME		NO
+lead_assignments	assignedByName	varchar(128)	PERSON_NAME		NO
+lead_assignments	leadName	varchar(255)	PERSON_NAME		YES
+lead_assignments	leadPhone	varchar(30)	PHONE		YES
+lead_assignments	notes	text	FREE_TEXT		YES
+lead_assignments	opsChatMessageId	int(11)	KEEP		YES
+lead_assignments	acknowledgedAt	bigint(20)	KEEP		YES
+lead_assignments	createdAt	timestamp	KEEP		NO
+lead_call_logs	id	int(11)	KEEP		NO
+lead_call_logs	sessionId	int(11)	KEEP		NO
+lead_call_logs	agentId	int(11)	KEEP		NO
+lead_call_logs	agentName	varchar(255)	PERSON_NAME		NO
+lead_call_logs	outcome	enum('ANSWERED','NO_ANSWER','VOICEMAIL','BUSY','BOOKED','CALLBACK')	KEEP	checked by hand: business data	NO
+lead_call_logs	notes	text	FREE_TEXT		YES
+lead_call_logs	calledAt	timestamp	KEEP		NO
+lead_notification_deliveries	id	int(11)	KEEP		NO
+lead_notification_deliveries	funnelRecordId	int(11)	KEEP		NO
+lead_notification_deliveries	channel	varchar(32)	KEEP	checked by hand: business data	NO
+lead_notification_deliveries	status	varchar(32)	NEUTRALIZE	pending/queue state	NO
+lead_notification_deliveries	claimToken	varchar(64)	NEUTRALIZE	pending/queue state	YES
+lead_notification_deliveries	claimedAt	datetime(3)	NEUTRALIZE	pending/queue state	YES
+lead_notification_deliveries	providerMessageId	varchar(255)	EXTERNAL_ID		YES
+lead_notification_deliveries	errorMessage	text	FREE_TEXT		YES
+lead_notification_deliveries	createdAt	datetime(3)	KEEP		NO
+lead_notification_deliveries	updatedAt	datetime(3)	KEEP		NO
 leadflow_booking_messages	id	int(11)	KEEP		NO
 leadflow_booking_messages	leadflowJobId	int(11)	KEEP		NO
 leadflow_booking_messages	senderRole	varchar(16)	KEEP	checked by hand: business data	NO
@@ -1059,6 +1095,13 @@ leadflow_booking_messages	notificationMessageId	varchar(255)	EXTERNAL_ID		YES
 leadflow_booking_messages	notificationError	text	FREE_TEXT		YES
 leadflow_booking_messages	notificationSentAt	datetime(3)	KEEP		YES
 leadflow_booking_messages	createdAt	datetime(3)	KEEP		NO
+leadflow_job_payroll_adjustments	id	int(11)	KEEP		NO
+leadflow_job_payroll_adjustments	leadflowJobId	int(11)	KEEP		NO
+leadflow_job_payroll_adjustments	amountCents	int(11)	KEEP		NO
+leadflow_job_payroll_adjustments	reason	varchar(500)	FREE_TEXT		NO
+leadflow_job_payroll_adjustments	createdByAgentId	int(11)	KEEP		NO
+leadflow_job_payroll_adjustments	createdByAgentName	varchar(128)	PERSON_NAME		NO
+leadflow_job_payroll_adjustments	createdAt	datetime(3)	KEEP		NO
 leadflow_jobs	id	int(11)	KEEP		NO
 leadflow_jobs	origin	varchar(32)	KEEP	checked by hand: business data	NO
 leadflow_jobs	launch27BookingId	int(11)	KEEP		YES
@@ -1097,63 +1140,8 @@ leadflow_jobs	reviewThumbtackOpenedAt	datetime(3)	KEEP		YES
 leadflow_jobs	reviewCompletionSmsClaimedAt	datetime(3)	KEEP		YES
 leadflow_jobs	reviewCompletionSmsSentAt	datetime(3)	KEEP		YES
 leadflow_jobs	bookingId	int(11)	KEEP		YES
-leadflow_job_payroll_adjustments	id	int(11)	KEEP		NO
-leadflow_job_payroll_adjustments	leadflowJobId	int(11)	KEEP		NO
-leadflow_job_payroll_adjustments	amountCents	int(11)	KEEP		NO
-leadflow_job_payroll_adjustments	reason	varchar(500)	FREE_TEXT		NO
-leadflow_job_payroll_adjustments	createdByAgentId	int(11)	KEEP		NO
-leadflow_job_payroll_adjustments	createdByAgentName	varchar(128)	PERSON_NAME		NO
-leadflow_job_payroll_adjustments	createdAt	datetime(3)	KEEP		NO
 leadflow_launch27_visit_notes	launch27BookingId	int(11)	KEEP		NO
 leadflow_launch27_visit_notes	staffNotes	text	FREE_TEXT		YES
-lead_assignments	id	int(11)	KEEP		NO
-lead_assignments	sessionId	int(11)	KEEP		NO
-lead_assignments	agentId	int(11)	KEEP		NO
-lead_assignments	agentName	varchar(128)	PERSON_NAME		NO
-lead_assignments	assignedByName	varchar(128)	PERSON_NAME		NO
-lead_assignments	leadName	varchar(255)	PERSON_NAME		YES
-lead_assignments	leadPhone	varchar(30)	PHONE		YES
-lead_assignments	notes	text	FREE_TEXT		YES
-lead_assignments	opsChatMessageId	int(11)	KEEP		YES
-lead_assignments	acknowledgedAt	bigint(20)	KEEP		YES
-lead_assignments	createdAt	timestamp	KEEP		NO
-lead_call_logs	id	int(11)	KEEP		NO
-lead_call_logs	sessionId	int(11)	KEEP		NO
-lead_call_logs	agentId	int(11)	KEEP		NO
-lead_call_logs	agentName	varchar(255)	PERSON_NAME		NO
-lead_call_logs	outcome	enum('ANSWERED','NO_ANSWER','VOICEMAIL','BUSY','BOOKED','CALLBACK')	KEEP	checked by hand: business data	NO
-lead_call_logs	notes	text	FREE_TEXT		YES
-lead_call_logs	calledAt	timestamp	KEEP		NO
-lead_notification_deliveries	id	int(11)	KEEP		NO
-lead_notification_deliveries	funnelRecordId	int(11)	KEEP		NO
-lead_notification_deliveries	channel	varchar(32)	KEEP	checked by hand: business data	NO
-lead_notification_deliveries	status	varchar(32)	NEUTRALIZE	pending/queue state	NO
-lead_notification_deliveries	claimToken	varchar(64)	NEUTRALIZE	pending/queue state	YES
-lead_notification_deliveries	claimedAt	datetime(3)	NEUTRALIZE	pending/queue state	YES
-lead_notification_deliveries	providerMessageId	varchar(255)	EXTERNAL_ID		YES
-lead_notification_deliveries	errorMessage	text	FREE_TEXT		YES
-lead_notification_deliveries	createdAt	datetime(3)	KEEP		NO
-lead_notification_deliveries	updatedAt	datetime(3)	KEEP		NO
-madison_actions	id	varchar(64)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	conversationAgentId	int(11)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	actionType	varchar(64)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	riskLevel	varchar(64)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	requestedTargets	longtext	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	executedTargets	longtext	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	requestedCount	int(11)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	acknowledgedCount	int(11)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	alreadyAcknowledgedCount	int(11)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	invalidCount	int(11)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	status	enum('planned','executing','completed','failed','verification_failed','reversed')	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	failureCode	varchar(64)	TRUNCATE_TABLE	AI executed actions	YES
-madison_actions	failureMessage	text	TRUNCATE_TABLE	AI executed actions	YES
-madison_actions	executedBy	int(11)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	createdAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	NO
-madison_actions	executionStartedAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
-madison_actions	executedAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
-madison_actions	verifiedAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
-madison_actions	reversedAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
-madison_actions	undoExpiresAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
 madison_action_approvals	id	bigint(20)	TRUNCATE_TABLE	AI approvals	NO
 madison_action_approvals	proposalId	bigint(20)	TRUNCATE_TABLE	AI approvals	NO
 madison_action_approvals	decision	enum('APPROVE','DISMISS','WRONG_ACTION')	TRUNCATE_TABLE	AI approvals	NO
@@ -1189,6 +1177,26 @@ madison_action_proposals	status	enum('PROPOSED','NEEDS_REVIEW','APPROVING','APPR
 madison_action_proposals	supersededByProposalId	bigint(20)	TRUNCATE_TABLE	AI proposals	YES
 madison_action_proposals	createdAt	datetime(3)	TRUNCATE_TABLE	AI proposals	NO
 madison_action_proposals	updatedAt	datetime(3)	TRUNCATE_TABLE	AI proposals	NO
+madison_actions	id	varchar(64)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	conversationAgentId	int(11)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	actionType	varchar(64)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	riskLevel	varchar(64)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	requestedTargets	longtext	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	executedTargets	longtext	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	requestedCount	int(11)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	acknowledgedCount	int(11)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	alreadyAcknowledgedCount	int(11)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	invalidCount	int(11)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	status	enum('planned','executing','completed','failed','verification_failed','reversed')	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	failureCode	varchar(64)	TRUNCATE_TABLE	AI executed actions	YES
+madison_actions	failureMessage	text	TRUNCATE_TABLE	AI executed actions	YES
+madison_actions	executedBy	int(11)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	createdAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	NO
+madison_actions	executionStartedAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
+madison_actions	executedAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
+madison_actions	verifiedAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
+madison_actions	reversedAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
+madison_actions	undoExpiresAt	datetime(3)	TRUNCATE_TABLE	AI executed actions	YES
 madison_conversation_context	id	int(11)	TRUNCATE_TABLE	AI context	NO
 madison_conversation_context	agentId	int(11)	TRUNCATE_TABLE	AI context	NO
 madison_conversation_context	activeDomain	varchar(64)	TRUNCATE_TABLE	AI context	YES
@@ -1218,6 +1226,19 @@ madison_conversation_fact_events	createdAt	datetime(3)	TRUNCATE_TABLE	facts extr
 madison_conversation_fact_events	validationStatus	enum('unverified','validated','rejected')	TRUNCATE_TABLE	facts extracted from customer messages	NO
 madison_conversation_fact_events	evidenceExcerpt	text	TRUNCATE_TABLE	facts extracted from customer messages	YES
 madison_conversation_fact_events	normalizationContext	longtext	TRUNCATE_TABLE	facts extracted from customer messages	YES
+madison_customer_mission_facts	id	bigint(20)	TRUNCATE_TABLE	facts extracted from customer messages	NO
+madison_customer_mission_facts	missionId	bigint(20)	TRUNCATE_TABLE	facts extracted from customer messages	NO
+madison_customer_mission_facts	factKey	varchar(96)	TRUNCATE_TABLE	facts extracted from customer messages	NO
+madison_customer_mission_facts	value	longtext	TRUNCATE_TABLE	facts extracted from customer messages	NO
+madison_customer_mission_facts	source	enum('customer_sms','leadflow_context')	TRUNCATE_TABLE	facts extracted from customer messages	NO
+madison_customer_mission_facts	sourceRecordId	varchar(128)	TRUNCATE_TABLE	facts extracted from customer messages	YES
+madison_customer_mission_facts	sourceMessageId	varchar(128)	TRUNCATE_TABLE	facts extracted from customer messages	YES
+madison_customer_mission_facts	confidence	enum('verified','customer_stated')	TRUNCATE_TABLE	facts extracted from customer messages	NO
+madison_customer_mission_facts	observedAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	NO
+madison_customer_mission_facts	verifiedAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	YES
+madison_customer_mission_facts	expiresAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	YES
+madison_customer_mission_facts	createdAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	NO
+madison_customer_mission_facts	updatedAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	NO
 madison_customer_missions	id	bigint(20)	TRUNCATE_TABLE	AI missions	NO
 madison_customer_missions	missionKey	varchar(160)	TRUNCATE_TABLE	AI missions	NO
 madison_customer_missions	sessionId	bigint(20)	TRUNCATE_TABLE	AI missions	NO
@@ -1233,19 +1254,6 @@ madison_customer_missions	resolvedContext	longtext	TRUNCATE_TABLE	AI missions	NO
 madison_customer_missions	missingContext	longtext	TRUNCATE_TABLE	AI missions	NO
 madison_customer_missions	createdAt	datetime(3)	TRUNCATE_TABLE	AI missions	NO
 madison_customer_missions	updatedAt	datetime(3)	TRUNCATE_TABLE	AI missions	NO
-madison_customer_mission_facts	id	bigint(20)	TRUNCATE_TABLE	facts extracted from customer messages	NO
-madison_customer_mission_facts	missionId	bigint(20)	TRUNCATE_TABLE	facts extracted from customer messages	NO
-madison_customer_mission_facts	factKey	varchar(96)	TRUNCATE_TABLE	facts extracted from customer messages	NO
-madison_customer_mission_facts	value	longtext	TRUNCATE_TABLE	facts extracted from customer messages	NO
-madison_customer_mission_facts	source	enum('customer_sms','leadflow_context')	TRUNCATE_TABLE	facts extracted from customer messages	NO
-madison_customer_mission_facts	sourceRecordId	varchar(128)	TRUNCATE_TABLE	facts extracted from customer messages	YES
-madison_customer_mission_facts	sourceMessageId	varchar(128)	TRUNCATE_TABLE	facts extracted from customer messages	YES
-madison_customer_mission_facts	confidence	enum('verified','customer_stated')	TRUNCATE_TABLE	facts extracted from customer messages	NO
-madison_customer_mission_facts	observedAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	NO
-madison_customer_mission_facts	verifiedAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	YES
-madison_customer_mission_facts	expiresAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	YES
-madison_customer_mission_facts	createdAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	NO
-madison_customer_mission_facts	updatedAt	datetime(3)	TRUNCATE_TABLE	facts extracted from customer messages	NO
 madison_decisions	id	bigint(20)	TRUNCATE_TABLE	AI reasoning	NO
 madison_decisions	sourceMessageId	varchar(128)	TRUNCATE_TABLE	AI reasoning	NO
 madison_decisions	sessionId	bigint(20)	TRUNCATE_TABLE	AI reasoning	NO
@@ -1382,6 +1390,12 @@ madison_sms_action_approvals	issueId	int(11)	TRUNCATE_TABLE	AI approvals	YES
 madison_sms_action_approvals	createdAt	datetime(3)	TRUNCATE_TABLE	AI approvals	NO
 madison_sms_action_approvals	updatedAt	datetime(3)	TRUNCATE_TABLE	AI approvals	NO
 madison_sms_action_approvals	decisionEvaluation	longtext	TRUNCATE_TABLE	AI approvals	YES
+madison_sms_draft_edits	id	bigint(20)	TRUNCATE_TABLE	edits of real drafts	NO
+madison_sms_draft_edits	draftId	bigint(20)	TRUNCATE_TABLE	edits of real drafts	NO
+madison_sms_draft_edits	originalText	text	TRUNCATE_TABLE	edits of real drafts	NO
+madison_sms_draft_edits	editedText	text	TRUNCATE_TABLE	edits of real drafts	NO
+madison_sms_draft_edits	editedBy	varchar(128)	TRUNCATE_TABLE	edits of real drafts	NO
+madison_sms_draft_edits	editedAt	datetime(3)	TRUNCATE_TABLE	edits of real drafts	NO
 madison_sms_drafts	id	bigint(20)	KEEP		NO
 madison_sms_drafts	inboundOpenPhoneId	varchar(128)	EXTERNAL_ID		NO
 madison_sms_drafts	sessionId	bigint(20)	KEEP		NO
@@ -1419,12 +1433,6 @@ madison_sms_drafts	errorCode	varchar(64)	KEEP	business template/label/code: no c
 madison_sms_drafts	errorMessage	text	FREE_TEXT		YES
 madison_sms_drafts	createdAt	datetime(3)	KEEP		NO
 madison_sms_drafts	updatedAt	datetime(3)	KEEP		NO
-madison_sms_draft_edits	id	bigint(20)	TRUNCATE_TABLE	edits of real drafts	NO
-madison_sms_draft_edits	draftId	bigint(20)	TRUNCATE_TABLE	edits of real drafts	NO
-madison_sms_draft_edits	originalText	text	TRUNCATE_TABLE	edits of real drafts	NO
-madison_sms_draft_edits	editedText	text	TRUNCATE_TABLE	edits of real drafts	NO
-madison_sms_draft_edits	editedBy	varchar(128)	TRUNCATE_TABLE	edits of real drafts	NO
-madison_sms_draft_edits	editedAt	datetime(3)	TRUNCATE_TABLE	edits of real drafts	NO
 message_integrity_checks	id	int(11)	TRUNCATE_TABLE	integrity logs with phone data	NO
 message_integrity_checks	sessionId	int(11)	TRUNCATE_TABLE	integrity logs with phone data	NO
 message_integrity_checks	leadName	varchar(255)	TRUNCATE_TABLE	integrity logs with phone data	YES
@@ -1559,25 +1567,6 @@ page_views	utmMedium	varchar(100)	TRUNCATE_TABLE	visitor analytics (IPs, agents)
 page_views	utmCampaign	varchar(255)	TRUNCATE_TABLE	visitor analytics (IPs, agents)	YES
 page_views	timeOnPage	int(11)	TRUNCATE_TABLE	visitor analytics (IPs, agents)	YES
 page_views	createdAt	timestamp	TRUNCATE_TABLE	visitor analytics (IPs, agents)	NO
-payable_invoices	id	int(10) unsigned	KEEP		NO
-payable_invoices	number	varchar(40)	KEEP	checked by hand: business data	NO
-payable_invoices	accountId	int(11)	KEEP		NO
-payable_invoices	clientName	varchar(255)	PERSON_NAME		NO
-payable_invoices	clientPhone	varchar(20)	PHONE		NO
-payable_invoices	clientEmail	varchar(320)	EMAIL		NO
-payable_invoices	periodFrom	varchar(10)	KEEP	checked by hand: business data	NO
-payable_invoices	periodTo	varchar(10)	KEEP	checked by hand: business data	NO
-payable_invoices	dueDate	varchar(10)	KEEP	checked by hand: business data	NO
-payable_invoices	currency	char(3)	KEEP	checked by hand: business data	NO
-payable_invoices	status	enum('open','partially_paid','paid','void','payment_review')	KEEP	checked by hand: business data	NO
-payable_invoices	requestId	char(36)	KEEP	checked by hand: business data	NO
-payable_invoices	payloadHash	char(64)	KEEP	business template/label/code: no customer data	NO
-payable_invoices	reviewHash	char(64)	KEEP	checked by hand: business data	NO
-payable_invoices	tokenHash	char(64)	SECRET	payment link token	NO
-payable_invoices	tokenExpiresAt	bigint(20) unsigned	KEEP		NO
-payable_invoices	activeAttemptId	char(36)	KEEP	checked by hand: business data	YES
-payable_invoices	createdAtMs	bigint(20) unsigned	KEEP		NO
-payable_invoices	paidAtMs	bigint(20) unsigned	KEEP		YES
 payable_invoice_allocations	invoiceId	int(10) unsigned	KEEP		NO
 payable_invoice_allocations	attemptId	char(36)	KEEP	checked by hand: business data	NO
 payable_invoice_allocations	lineId	int(10) unsigned	KEEP		NO
@@ -1625,6 +1614,25 @@ payable_invoice_manual_payments	payloadHash	char(64)	KEEP	business template/labe
 payable_invoice_manual_payments	reviewHash	char(64)	KEEP	checked by hand: business data	NO
 payable_invoice_manual_payments	recordedByAgentId	int(11)	KEEP		NO
 payable_invoice_manual_payments	recordedAtMs	bigint(20) unsigned	KEEP		NO
+payable_invoices	id	int(10) unsigned	KEEP		NO
+payable_invoices	number	varchar(40)	KEEP	checked by hand: business data	NO
+payable_invoices	accountId	int(11)	KEEP		NO
+payable_invoices	clientName	varchar(255)	PERSON_NAME		NO
+payable_invoices	clientPhone	varchar(20)	PHONE		NO
+payable_invoices	clientEmail	varchar(320)	EMAIL		NO
+payable_invoices	periodFrom	varchar(10)	KEEP	checked by hand: business data	NO
+payable_invoices	periodTo	varchar(10)	KEEP	checked by hand: business data	NO
+payable_invoices	dueDate	varchar(10)	KEEP	checked by hand: business data	NO
+payable_invoices	currency	char(3)	KEEP	checked by hand: business data	NO
+payable_invoices	status	enum('open','partially_paid','paid','void','payment_review')	KEEP	checked by hand: business data	NO
+payable_invoices	requestId	char(36)	KEEP	checked by hand: business data	NO
+payable_invoices	payloadHash	char(64)	KEEP	business template/label/code: no customer data	NO
+payable_invoices	reviewHash	char(64)	KEEP	checked by hand: business data	NO
+payable_invoices	tokenHash	char(64)	SECRET	payment link token	NO
+payable_invoices	tokenExpiresAt	bigint(20) unsigned	KEEP		NO
+payable_invoices	activeAttemptId	char(36)	KEEP	checked by hand: business data	YES
+payable_invoices	createdAtMs	bigint(20) unsigned	KEEP		NO
+payable_invoices	paidAtMs	bigint(20) unsigned	KEEP		YES
 payment_authorizations	id	int(11)	KEEP		NO
 payment_authorizations	cleanerJobId	int(11)	KEEP		YES
 payment_authorizations	bookingPaymentProfileId	int(11)	KEEP		YES
@@ -1775,35 +1783,6 @@ scheduling_teams	regionTags	varchar(50)	KEEP	business template/label/code: no cu
 scheduling_teams	isArchived	int(11)	KEEP		NO
 scheduling_teams	createdAt	timestamp	KEEP		NO
 scheduling_teams	updatedAt	timestamp	KEEP		NO
-sms_campaigns	id	int(11)	KEEP		NO
-sms_campaigns	name	varchar(255)	KEEP	checked by hand: business data	NO
-sms_campaigns	status	enum('DRAFT','FROZEN','APPROVED','SENDING','PAUSED','COMPLETED','CANCELLED')	NEUTRALIZE	pending/queue state	NO
-sms_campaigns	audienceDefinition	longtext	KEEP	checked by hand: business data	NO
-sms_campaigns	messageTemplate	text	KEEP	business template/label/code: no customer data	NO
-sms_campaigns	plannerResult	longtext	JSON_EMPTY		YES
-sms_campaigns	frozenAt	bigint(20)	KEEP		YES
-sms_campaigns	frozenRecipientCount	int(11)	KEEP		YES
-sms_campaigns	definitionHash	varchar(64)	KEEP	checked by hand: business data	YES
-sms_campaigns	approvedAt	bigint(20)	KEEP		YES
-sms_campaigns	approvedByAgentId	int(11)	KEEP		YES
-sms_campaigns	approvedByName	varchar(255)	PERSON_NAME		YES
-sms_campaigns	sentCount	int(11)	KEEP		NO
-sms_campaigns	failedCount	int(11)	KEEP		NO
-sms_campaigns	repliedCount	int(11)	KEEP		NO
-sms_campaigns	bookedCount	int(11)	KEEP		NO
-sms_campaigns	sendStartedAt	bigint(20)	KEEP		YES
-sms_campaigns	sendCompletedAt	bigint(20)	KEEP		YES
-sms_campaigns	estimatedRevenue	int(11)	KEEP		YES
-sms_campaigns	estimatedBookings	int(11)	KEEP		YES
-sms_campaigns	estimatedReplies	int(11)	KEEP		YES
-sms_campaigns	isDryRun	tinyint(4)	KEEP		NO
-sms_campaigns	testPhones	text	BLANK	list of staff test numbers	YES
-sms_campaigns	createdByAgentId	int(11)	KEEP		YES
-sms_campaigns	createdByName	varchar(255)	PERSON_NAME		NO
-sms_campaigns	sentByAgentId	int(11)	KEEP		YES
-sms_campaigns	sentByName	varchar(255)	PERSON_NAME		YES
-sms_campaigns	createdAt	timestamp	KEEP		NO
-sms_campaigns	updatedAt	timestamp	KEEP		NO
 sms_campaign_recipients	id	int(11)	KEEP		NO
 sms_campaign_recipients	campaignId	int(11)	KEEP		NO
 sms_campaign_recipients	phone	varchar(30)	PHONE		NO
@@ -1839,6 +1818,35 @@ sms_campaign_send_log	openPhoneMessageId	varchar(128)	EXTERNAL_ID		YES
 sms_campaign_send_log	errorMessage	varchar(500)	FREE_TEXT		YES
 sms_campaign_send_log	triggeredBy	varchar(255)	PERSON_NAME		YES
 sms_campaign_send_log	attemptedAt	timestamp	KEEP		NO
+sms_campaigns	id	int(11)	KEEP		NO
+sms_campaigns	name	varchar(255)	KEEP	checked by hand: business data	NO
+sms_campaigns	status	enum('DRAFT','FROZEN','APPROVED','SENDING','PAUSED','COMPLETED','CANCELLED')	NEUTRALIZE	pending/queue state	NO
+sms_campaigns	audienceDefinition	longtext	KEEP	checked by hand: business data	NO
+sms_campaigns	messageTemplate	text	KEEP	business template/label/code: no customer data	NO
+sms_campaigns	plannerResult	longtext	JSON_EMPTY		YES
+sms_campaigns	frozenAt	bigint(20)	KEEP		YES
+sms_campaigns	frozenRecipientCount	int(11)	KEEP		YES
+sms_campaigns	definitionHash	varchar(64)	KEEP	checked by hand: business data	YES
+sms_campaigns	approvedAt	bigint(20)	KEEP		YES
+sms_campaigns	approvedByAgentId	int(11)	KEEP		YES
+sms_campaigns	approvedByName	varchar(255)	PERSON_NAME		YES
+sms_campaigns	sentCount	int(11)	KEEP		NO
+sms_campaigns	failedCount	int(11)	KEEP		NO
+sms_campaigns	repliedCount	int(11)	KEEP		NO
+sms_campaigns	bookedCount	int(11)	KEEP		NO
+sms_campaigns	sendStartedAt	bigint(20)	KEEP		YES
+sms_campaigns	sendCompletedAt	bigint(20)	KEEP		YES
+sms_campaigns	estimatedRevenue	int(11)	KEEP		YES
+sms_campaigns	estimatedBookings	int(11)	KEEP		YES
+sms_campaigns	estimatedReplies	int(11)	KEEP		YES
+sms_campaigns	isDryRun	tinyint(4)	KEEP		NO
+sms_campaigns	testPhones	text	BLANK	list of staff test numbers	YES
+sms_campaigns	createdByAgentId	int(11)	KEEP		YES
+sms_campaigns	createdByName	varchar(255)	PERSON_NAME		NO
+sms_campaigns	sentByAgentId	int(11)	KEEP		YES
+sms_campaigns	sentByName	varchar(255)	PERSON_NAME		YES
+sms_campaigns	createdAt	timestamp	KEEP		NO
+sms_campaigns	updatedAt	timestamp	KEEP		NO
 sms_opt_outs	id	int(11)	KEEP		NO
 sms_opt_outs	phone	varchar(20)	PHONE		NO
 sms_opt_outs	optedOutAt	timestamp	KEEP		NO
