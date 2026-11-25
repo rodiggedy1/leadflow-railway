@@ -29,8 +29,12 @@ changed.
 **Safety:**
 - It only contacts `api.anthropic.com`.
 - Nothing is sent to customers and no tasks are created.
-- New spend (Sonnet plus judge) stops before $14 (target $15), and every new session has a $1 hard cap.
-- If it is interrupted, re-running it continues where it stopped.
+- Every new session has a $1 hard cap. The overall $14 spending stop was removed on 2026-11-25, with the owner's
+  explicit authorization to complete all 40 messages.
+- If it is interrupted, re-running it continues where it stopped. Finished messages are kept, and the original
+  message set is kept too: a resume only considers messages up to the newest one already evaluated, then saves the
+  exact list in `results.json`.
+- Every failure shows a plain-language explanation next to its technical reason.
 
 **Run (from the LeadFlow folder on the Mac, after `pnpm install`):**
 ```bash

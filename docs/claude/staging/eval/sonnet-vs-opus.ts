@@ -11,8 +11,8 @@
  *    session with a session-level model override to Sonnet (same effort/settings as the original session).
  *  - Both outputs go through the production validation code; Sonnet gets production's single retry on failure.
  * Read-only for everything that exists: the saved agent and past sessions are only read. Nothing is sent to
- * customers and no task is created. Only api.anthropic.com is contacted. New spend (Sonnet + judge) stops
- * before $14 (target $15); each new session also has a $1 hard cap.
+ * customers and no task is created. Only api.anthropic.com is contacted. Each new session has a $1 hard cap.
+ * (The overall $14 stop was removed with the owner's explicit authorization to complete all 40 messages.)
  * Output (stays on this Mac; contains real customer conversations): ~/leadflow-eval/report.html, results.json
  */
 import { createHash, randomInt } from "node:crypto";
@@ -26,7 +26,7 @@ import { z } from "zod";
 const ORIGIN = process.env.EVAL_ANTHROPIC_ORIGIN ?? "https://api.anthropic.com"; // tests point this at a local fake server
 const OUT_DIR = process.env.EVAL_OUT_DIR ?? path.join(os.homedir(), "leadflow-eval");
 const LIMIT = (() => { const i = process.argv.indexOf("--limit"); const n = i > 0 ? Number(process.argv[i + 1]) : 40; return Number.isInteger(n) && n > 0 && n <= 40 ? n : 40; })();
-const BUDGET_TARGET = 15, BUDGET_STOP = 14, SESSION_CAP_CENTS = "100", MAX_SESSIONS_SCANNED = 5000;
+const SESSION_CAP_CENTS = "100", MAX_SESSIONS_SCANNED = 5000; // no overall spend stop (owner authorized all 40); $1 cap per session stays
 const SMS_PREFIX = "=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===";
 const SONNET = "claude-sonnet-5-5", JUDGE_MODEL = "claude-opus-5-5";
 const PRICES: Record<string, { in: number; out: number; cacheRead: number; cacheWrite: number }> = { // $ per million tokens (published)
@@ -69,7 +69,8 @@ interface CaseResult {
   arms: { opus: ArmResult; sonnet: ArmResult }; aIs: "opus" | "sonnet";
   judge?: { a: JudgeSide; b: JudgeSide; meaningful_difference: boolean; difference_summary: string; cost: number; error?: string };
 }
-interface Store { startedAt: string; agent: { id: string; version: number }; cases: CaseResult[]; judgeCost: number; stoppedForBudget: boolean; skipped: string[] }
+interface Store { startedAt: string; agent: { id: string; version: number }; cases: CaseResult[]; judgeCost: number; stoppedForBudget: boolean; skipped: string[];
+  /** The exact messages of this test (ids, newest first), fixed so a resume never drifts to newer messages. */ dataset?: string[] }
 
 const emptyUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, requests: 0 });
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -309,14 +310,29 @@ function summary(store: Store, arm: "opus" | "sonnet") {
 // ---------- report ----------
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]!));
 const money = (x: number) => `$${x.toFixed(x < 1 ? 4 : 2)}`;
+function explain(error?: string): string {
+  const e = String(error ?? "");
+  if (/refusal/i.test(e)) return "The model declined to answer (safety refusal), so no reply was produced.";
+  if (/budget_reached/i.test(e)) return "The session reached its $1 safety cap before finishing.";
+  if (/INCOMPLETE_TURN/.test(e)) return "The model stopped without a normal finished answer.";
+  if (/NO_OUTPUT|NO_IDLE_EVENT|STREAM_ENDED/.test(e)) return "No answer text came back from the session.";
+  if (/TIMEOUT/.test(e)) return "No answer within 4 minutes.";
+  if (/MODEL_MISMATCH/.test(e)) return "The session did not run on the expected model; the attempt was discarded.";
+  if (/^HTTP_/.test(e)) return "Anthropic's API returned an error for this request.";
+  if (/JSON|Unexpected token|is not valid JSON/i.test(e)) return "The answer was not the strict JSON format the app requires, so production would reject it.";
+  if (/EVIDENCE|QUOTE/i.test(e)) return "A quoted piece of evidence did not match the customer's actual words exactly, so production would reject it.";
+  if (/PRICE|URL|TEMPLATE/i.test(e)) return "The reply wrote its own price, link or template text, which the production checks forbid.";
+  if (/^VALIDATION/.test(e)) return "The answer failed one of production's checks on the reply (shown in the technical reason).";
+  return "See the technical reason.";
+}
 const label = (arm: "opus" | "sonnet") => arm === "opus" ? "Opus 5.5 (original production run)" : "Sonnet 5.5 (new run, same input)";
 function armHtml(c: CaseResult, arm: "opus" | "sonnet"): string {
   const a = c.arms[arm], s = sideFor(c, arm), crit = criticals(c, arm);
   const out = a.ok && a.output ? `<div class="sms">${esc(a.output.replyText)}</div>
     <div class="small"><b>Staff task:</b> ${a.output.task ? `<pre>${esc(JSON.stringify(a.output.task, null, 1))}</pre>` : "none"}</div>
     <div class="small"><b>Booking-quote update:</b> ${a.output.bookingQuote ? `<pre>${esc(JSON.stringify(a.output.bookingQuote, null, 1))}</pre>` : "none"}</div>`
-    : `<div class="fail">NO USABLE REPLY: ${esc(a.error)}</div>`;
-  const raw = a.calls.map((k, i) => `<details><summary>attempt ${i + 1}: ${k.valid ? "valid" : esc(k.error ?? "invalid")} · ${(k.ms / 1000).toFixed(1)}s · ${money(k.cost)} · ${k.usage.input.toLocaleString()} in / ${k.usage.output.toLocaleString()} out</summary><pre>${esc(k.rawOutput ?? "")}</pre></details>`).join("");
+    : `<div class="fail">NO USABLE REPLY: ${esc(explain(a.error))}<br><span class="small">Technical reason: ${esc(a.error)}</span></div>`;
+  const raw = a.calls.map((k, i) => `<details><summary>attempt ${i + 1}: ${k.valid ? "valid" : `failed: ${esc(explain(k.error))} (${esc(k.error ?? "invalid")})`} · ${(k.ms / 1000).toFixed(1)}s · ${money(k.cost)} · ${k.usage.input.toLocaleString()} in / ${k.usage.output.toLocaleString()} out</summary><pre>${esc(k.rawOutput ?? "")}</pre></details>`).join("");
   return `<td><h4>${label(arm)} <span class="small">(was Model ${c.aIs === arm ? "A" : "B"})</span> · score ${weighted(c, arm).toFixed(1)}</h4>${out}
     ${crit.length ? `<div class="crit">${crit.map(e => `⚠ ${esc(e.category)}: ${esc(e.explanation)}`).join("<br>")}</div>` : ""}
     ${s ? `<div class="small">intent ${s.intent} · action ${s.action} · factual ${s.factual} · compliance ${s.compliance} · structured ${structured(a)} · quality ${s.quality} · task decision ${s.task_decision_correct ? "correct" : "wrong"}<br><i>${esc(s.notes)}</i></div>` : ""}
@@ -338,7 +354,7 @@ function report(store: Store): string {
   for (const c of store.cases) { const d = weighted(c, "sonnet") - weighted(c, "opus"); if (d >= 0.5) w++; else if (d <= -0.5) l++; else t++; }
   const savings = o.total ? (1 - s.total / o.total) * 100 : 0;
   const crit = store.cases.flatMap((c, i) => (["opus", "sonnet"] as const).flatMap(arm => criticals(c, arm).map(e =>
-    `<tr><td><a href="#case-${i + 1}">Case ${i + 1}</a></td><td>${arm === "opus" ? "Opus" : "Sonnet"}</td><td>${esc(e.category)}</td><td>${esc(e.explanation)}</td></tr>`)));
+    `<tr><td><a href="#case-${i + 1}">Case ${i + 1}</a></td><td>${arm === "opus" ? "Opus" : "Sonnet"}</td><td>${esc(e.category)}</td><td>${esc(e.category === "no_usable_reply" ? `${explain(e.explanation)} (${e.explanation})` : e.explanation)}</td></tr>`)));
   const dis = store.cases.map((c, i) => ({ i, why: disagreement(c) })).filter(x => x.why.length);
   const row = (k: string, a: string, b: string) => `<tr><td>${k}</td><td>${a}</td><td>${b}</td></tr>`;
   const pct = (x: number) => n ? `${Math.round(x / n * 100)}%` : "-";
@@ -353,7 +369,7 @@ function report(store: Store): string {
   @media (prefers-color-scheme: dark){body{background:#111;color:#eee}.sms{background:#1b2a3a}.inbound{background:#3a3020}td,th{border-color:#444}.small,.biz{color:#aaa}}
   </style></head><body>
   <h1>Sonnet 5.5 vs Opus 5.5: automatic customer SMS replies</h1>
-  <p class="small">The last ${n} automatic SMS replies production ran on Opus. Sonnet received the byte-identical instructions and message payload through the same saved agent (session-level model override). Both outputs went through the production validation code; a failed output got production's single retry. The judge (Opus 5.5) scored randomized "Reply A / Reply B" without model names; identities were revealed only after scoring. The Opus column is the original production output, shown for comparison and not treated as correct. Opus settings ${settings("opus")}; Sonnet settings ${settings("sonnet")}. Started ${esc(store.startedAt)}.${store.stoppedForBudget ? " <b>Stopped early to stay within the $15 budget.</b>" : ""}</p>
+  <p class="small">The last ${n} automatic SMS replies production ran on Opus. Sonnet received the byte-identical instructions and message payload through the same saved agent (session-level model override). Both outputs went through the production validation code; a failed output got production's single retry. The judge (Opus 5.5) scored randomized "Reply A / Reply B" without model names; identities were revealed only after scoring. The Opus column is the original production output, shown for comparison and not treated as correct. Opus settings ${settings("opus")}; Sonnet settings ${settings("sonnet")}. Started ${esc(store.startedAt)}.</p>
   <h2>Summary</h2><table><tr><th></th><th>Opus 5.5</th><th>Sonnet 5.5</th></tr>
   ${row("Overall quality score (0-10, weighted)", o.quality.toFixed(2), s.quality.toFixed(2))}
   ${row("Cases with a critical error", String(o.criticalCases), String(s.criticalCases))}
@@ -368,7 +384,7 @@ function report(store: Store): string {
   ${row("Measured cache tokens: read / written", `${o.usage.cacheRead.toLocaleString()} / ${o.usage.cacheWrite.toLocaleString()}`, `${s.usage.cacheRead.toLocaleString()} / ${s.usage.cacheWrite.toLocaleString()}`)}
   </table>
   <p><b>Savings from switching to Sonnet: ${savings.toFixed(0)}%</b> (${money(o.total)} vs ${money(s.total)} for the same ${n} messages). <b>Sonnet wins ${w} · loses ${l} · ties ${t}</b> (a win = weighted score at least 0.5 higher).</p>
-  <p class="small">Token counts and response times are <b>measured</b> (recorded by Anthropic in each session). Costs are <b>calculated</b>: measured tokens × published prices (Opus $4/$20, Sonnet $2/$10 per million input/output; cache reads $0.20/$0.10; cache writes at the 5-minute rate) plus session time at $0.08/hour. Anthropic's invoice is the only billed figure. New spend for this test: Sonnet ${money(s.total)} + judge ${money(store.judgeCost)} = ${money(newSpend)} of ${money(BUDGET_TARGET)} (the Opus figures are from the original production runs and cost nothing new).</p>
+  <p class="small">Token counts and response times are <b>measured</b> (recorded by Anthropic in each session). Costs are <b>calculated</b>: measured tokens × published prices (Opus $4/$20, Sonnet $2/$10 per million input/output; cache reads $0.20/$0.10; cache writes at the 5-minute rate) plus session time at $0.08/hour. Anthropic's invoice is the only billed figure. New spend for this test: Sonnet ${money(s.total)} + judge ${money(store.judgeCost)} = ${money(newSpend)} (the Opus figures are from the original production runs and cost nothing new).</p>
   <h2>Critical errors (${crit.length})</h2>${crit.length ? `<table><tr><th>Case</th><th>Model</th><th>Type</th><th>Explanation</th></tr>${crit.join("")}</table>` : "<p>None.</p>"}
   <h2>Meaningful disagreements (${dis.length})</h2>${dis.length ? `<ul>${dis.map(x => `<li><a href="#case-${x.i + 1}">Case ${x.i + 1}</a>: ${esc(x.why.join("; "))}</li>`).join("")}</ul>` : "<p>None.</p>"}
   ${store.skipped.length ? `<p class="small">Skipped: ${esc(store.skipped.join("; "))}</p>` : ""}
@@ -400,30 +416,42 @@ async function main() {
   console.log("Finding the most recent automatic SMS-reply sessions (read-only)...");
   type Group = { key: string; sessions: any[] };
   const groups = new Map<string, Group>(); let scanned = 0, extra = 0;
+  const gid = (key: string) => key.slice(0, 16);
+  // Resume without drift: use the saved list, or else only messages up to the newest one already evaluated.
+  const wanted = store.dataset ? new Set(store.dataset) : null;
+  const cutoff = !wanted && store.cases.length ? Math.max(...store.cases.map(c => Date.parse(c.createdAt))) : Infinity;
+  const earliest = (g: Group) => Math.min(...g.sessions.map((x: any) => Date.parse(x.created_at)));
+  const enough = () => wanted ? [...wanted].every(id => [...groups.keys()].some(k => gid(k) === id))
+    : [...groups.values()].filter(g => earliest(g) <= cutoff).length >= LIMIT;
   for await (const s of paged("/v1/sessions?order=desc")) {
     if (++scanned > MAX_SESSIONS_SCANNED) break;
     const full = s?.agent?.system !== undefined ? s : await api("GET", `/v1/sessions/${s.id}`);
     if (full?.agent?.id !== AGENT.id || typeof full.agent.system !== "string" || !full.agent.system.startsWith(SMS_PREFIX)) continue;
     if (!["idle", "terminated"].includes(String(full.status))) continue;
     if (modelId(full.agent.model) !== "claude-opus-5-5") continue; // production runs only (not this test's Sonnet sessions)
-    if (groups.size >= LIMIT && extra++ > 40) break;
+    if (Date.parse(full.created_at) > cutoff + 15 * 60_000) continue; // newer than the original test's messages
+    if (enough() && extra++ > 40) break;
     const events = await sessionEvents(full.id); const f = facts(events);
     if (f.userText === null) continue;
     const key = sha(`${full.agent.system}\u0000${f.userText}`);
-    if (!groups.has(key) && groups.size >= LIMIT) continue; // after the newest LIMIT messages, only collect their older retry attempts
+    if (wanted ? !wanted.has(gid(key)) : !groups.has(key) && enough()) continue; // only the test's messages (and their retry attempts)
     const g = groups.get(key) ?? { key, sessions: [] }; g.sessions.push({ ...full, facts: f }); groups.set(key, g);
   }
-  const chosen = Array.from(groups.values()).slice(0, LIMIT);
+  const chosen = wanted
+    ? store.dataset!.map(id => [...groups.values()].find(g => gid(g.key) === id)).filter((g): g is Group => !!g)
+    : [...groups.values()].filter(g => earliest(g) <= cutoff)
+        .sort((a, b) => Math.max(...b.sessions.map((x: any) => Date.parse(x.created_at))) - Math.max(...a.sessions.map((x: any) => Date.parse(x.created_at))))
+        .slice(0, LIMIT);
+  if (!wanted && LIMIT === 40) { store.dataset = chosen.map(g => gid(g.key)); save(); }
+  const missingDone = store.cases.filter(c => !chosen.some(g => gid(g.key) === c.id)).length;
+  if (missingDone) console.log(`Note: ${missingDone} already-evaluated message(s) were not found again; they stay in the report.`);
   console.log(`Scanned ${scanned} sessions; found ${chosen.length} customer messages answered automatically.`);
 
   // 2. Run Sonnet on each, judge blind, save after every message.
   const kb = await (await import("../../../../server/madisonKnowledgeRetrieval")).retrieveKnowledge("");
   const judgeSys = judgeSystem(prod, String(kb));
   for (const g of chosen) {
-    if (store.cases.some(c => c.id === g.key.slice(0, 16))) continue; // already done (e.g. in the smoke test)
-    const done = store.cases.filter(c => c.arms.sonnet.calls.length).length;
-    const projected = done ? (newSpend() / done) * 1.5 : 0.5;
-    if (newSpend() + projected > BUDGET_STOP) { store.stoppedForBudget = true; console.log(`Stopping before the budget limit (new spend so far ${money(newSpend())}).`); break; }
+    if (store.cases.some(c => c.id === gid(g.key))) continue; // already evaluated: kept as is
     const sessions = g.sessions.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
     const system: string = sessions[0].agent.system, user: string = sessions[0].facts.userText;
     let payload: any; try { payload = JSON.parse(user); } catch { store.skipped.push(`${g.key.slice(0, 8)} (payload not JSON)`); continue; }
@@ -454,7 +482,7 @@ async function main() {
       ms: sonnetCalls.reduce((s, k) => s + k.ms, 0), calls: sonnetCalls, cost: sonnetCalls.reduce((s, k) => s + k.cost, 0) };
 
     const conv = (payload.context?.originalConversation ?? []).map((t: any) => ({ role: String(t.role), content: String(t.content), ts: typeof t.ts === "number" ? t.ts : null }));
-    const c: CaseResult = { id: g.key.slice(0, 16), createdAt: String(sessions[0].created_at), customerName: payload.context?.contact?.displayName ?? null,
+    const c: CaseResult = { id: gid(g.key), createdAt: String(sessions[0].created_at), customerName: payload.context?.contact?.displayName ?? null,
       inboundText: String(payload.incomingMessage ?? ""), conversation: conv, arms: { opus, sonnet }, aIs: randomInt(2) === 0 ? "opus" : "sonnet" };
     process.stdout.write(`Opus ${opus.ok ? "valid" : "INVALID"}, Sonnet ${sonnet.ok ? "valid" : "INVALID"}${sonnet.calls.length > 1 ? " (after retry)" : ""}; judging... `);
     if (opus.ok || sonnet.ok) {
@@ -469,7 +497,7 @@ async function main() {
   const fmt = (x: ReturnType<typeof summary>) => `quality ${x.quality.toFixed(2)} | critical ${x.criticalCases} | valid ${x.ok}/${x.n} | task correct ${x.taskCorrect} | first-try ${x.first} | retried ${x.retried} | avg ${(x.avgMs / 1000).toFixed(1)}s | cost ${money(x.total)} | per success ${money(x.perSuccess)}`;
   let w = 0, l = 0, t = 0; for (const c of store.cases) { const d = weighted(c, "sonnet") - weighted(c, "opus"); if (d >= 0.5) w++; else if (d <= -0.5) l++; else t++; }
   console.log("\n===== SUMMARY (safe to paste: no customer details) =====");
-  console.log(`Messages: ${store.cases.length}${store.stoppedForBudget ? " (stopped for budget)" : ""}`);
+  console.log(`Messages: ${store.cases.length} of ${store.dataset?.length ?? store.cases.length}`);
   console.log(`Opus 5.5:   ${fmt(o)}`);
   console.log(`Sonnet 5.5: ${fmt(s)}`);
   console.log(`Sonnet wins ${w} / loses ${l} / ties ${t} | meaningful disagreements ${store.cases.filter(c => disagreement(c).length).length}`);

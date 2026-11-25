@@ -62,6 +62,11 @@ http.createServer((req, res) => {
     const u = new URL(req.url, "http://x"), p = u.pathname;
     if (!req.headers["x-api-key"]) return json(res, 401, { error: "no key" });
     if (req.method === "GET" && p === "/__log") return json(res, 200, log);
+    if (req.method === "POST" && p === "/__add_newer") { // a production SMS that arrives after the test started
+      addSession({ system: SMS_SYSTEM, model: opus, created: Date.now(), userText: JSON.stringify(payload(99, "NEWER MESSAGE AFTER THE TEST STARTED")),
+        output: reply("x", false), usage: { input_tokens: 19000, output_tokens: 300, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+      return json(res, 200, { ok: true });
+    }
     if (req.method === "GET" && p === `/v1/agents/${AGENT_ID}`) return json(res, 200, { type: "agent", id: AGENT_ID, version: 1, archived_at: null, model: opus, system: "saved", multiagent: null });
     if (req.method !== "GET" && p.startsWith("/v1/agents")) { log.agentWrites++; return json(res, 400, {}); }
     if (req.method === "GET" && p === "/v1/sessions") {
