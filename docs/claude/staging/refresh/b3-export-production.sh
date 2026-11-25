@@ -15,13 +15,27 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 MAP="$HERE/../sanitize/column-map.tsv"
 OUT="$HOME/leadflow-refresh"
 
-MYSQL="$(command -v mysql || true)"
-for p in /opt/homebrew/opt/mysql-client/bin/mysql /usr/local/opt/mysql-client/bin/mysql; do
-  [ -z "$MYSQL" ] && [ -x "$p" ] && MYSQL="$p"
+# TiDB works with the MySQL 8 family of tools. Newer mysqldump releases (9.x / 26.x) also try to export "masking
+# policies", which TiDB does not have, and the export aborts. So this step uses the MySQL 8.4 LTS tools, installed
+# side by side with any newer client (brew install mysql-client@8.4).
+BIN=""
+for d in "${B3_MYSQL_BIN_DIR:-}" /opt/homebrew/opt/mysql-client@8.4/bin /usr/local/opt/mysql-client@8.4/bin \
+         /opt/homebrew/opt/mysql-client@8.0/bin /usr/local/opt/mysql-client@8.0/bin; do
+  [ -n "$d" ] && [ -x "$d/mysqldump" ] && [ -x "$d/mysql" ] && { BIN="$d"; break; }
 done
-[ -n "$MYSQL" ] || { echo "The MySQL client is not installed (brew install mysql-client)."; exit 1; }
-DUMP="$(dirname "$MYSQL")/mysqldump"
-[ -x "$DUMP" ] || { echo "mysqldump not found next to $MYSQL."; exit 1; }
+if [ -z "$BIN" ]; then
+  echo "This export needs the MySQL 8.4 tools (the versions TiDB supports). In Terminal run:"
+  echo "    brew install mysql-client@8.4"
+  echo "then run this script again. Nothing was exported."
+  exit 1
+fi
+MYSQL="$BIN/mysql"
+DUMP="$BIN/mysqldump"
+DUMP_VERSION="$("$DUMP" --version)"
+case "$DUMP_VERSION" in
+  *" Ver 8."*) ;;
+  *) echo "Expected a MySQL 8 mysqldump, found: $DUMP_VERSION. Nothing was exported."; exit 1 ;;
+esac
 [ -f "$MAP" ] || { echo "Cannot find $MAP. Run this from the LeadFlow folder after the git steps."; exit 1; }
 
 printf "Paste the PRODUCTION DATABASE_URL (nothing will show while you paste), then press Enter: "
@@ -64,7 +78,16 @@ LC_ALL=C comm -12 "$TMP/all.txt" "$TMP/skip.txt" > "$TMP/skip-present.txt"
 IGNORE=()
 while IFS= read -r t; do IGNORE+=("--ignore-table=$DB.$t"); done < "$TMP/skip-present.txt"
 
+# Pre-check (reads no data): the exact transaction steps mysqldump uses for its consistent snapshot.
+PRE="START TRANSACTION WITH CONSISTENT SNAPSHOT; SAVEPOINT sp; SELECT 1; ROLLBACK TO SAVEPOINT sp; RELEASE SAVEPOINT sp; ROLLBACK"
+if ! q "$PRE" > /dev/null; then
+  echo "STOP: the database refused the snapshot/savepoint pre-check above. Nothing was exported. Send Claude this message."
+  exit 1
+fi
+
 echo "===== About to export (read-only) ====="
+echo "Export tool:         $DUMP_VERSION"
+echo "Pre-check:           consistent snapshot + savepoint OK"
 echo "Database:            $DB"
 q "SELECT CONCAT('Tables:              ', COUNT(*), ' (approx. ', ROUND(SUM(data_length + index_length) / 1048576), ' MB)') FROM information_schema.tables WHERE table_schema = DATABASE()"
 echo "Structure exported:  all tables"
@@ -84,9 +107,10 @@ mkdir -p "$OUT" && chmod 700 "$OUT"
 rm -f "$OUT/production-structure.sql" "$OUT/production-data.sql"
 START=$(date +%s)
 echo "Exporting structure..."
-"$DUMP" "${OPTS[@]}" --no-data "$DB" > "$OUT/production-structure.sql" || { echo "Structure export FAILED (nothing was changed in production)."; exit 1; }
+fail() { rm -f "$OUT/production-structure.sql" "$OUT/production-data.sql"; echo "$1 export FAILED (nothing was changed in production; partial files deleted). Send Claude the message above."; exit 1; }
+"$DUMP" "${OPTS[@]}" --no-data "$DB" > "$OUT/production-structure.sql" || fail "Structure"
 echo "Exporting contents (this can take a few minutes)..."
-"$DUMP" "${OPTS[@]}" --no-create-info "${IGNORE[@]}" "$DB" > "$OUT/production-data.sql" || { echo "Contents export FAILED (nothing was changed in production)."; exit 1; }
+"$DUMP" "${OPTS[@]}" --no-create-info "${IGNORE[@]}" "$DB" > "$OUT/production-data.sql" || fail "Contents"
 END=$(date +%s)
 
 echo "===== Export finished in $((END - START)) seconds. Production was only read. ====="
