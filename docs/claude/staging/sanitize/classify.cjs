@@ -12,7 +12,7 @@ const [inventoryPath, jsonColsPath, outPath] = process.argv.slice(2);
 
 const RULES = {
   KEEP: "keep as is (ids, numbers, dates, statuses, business settings)",
-  PHONE: "deterministic fake phone +1999XXXXXXX (same real number -> same fake number)",
+  PHONE: "deterministic fake phone +19992XXXXXX (same real number -> same fake number)",
   EMAIL: "deterministic fake email u<hash>@example.invalid",
   CONTACT: "if it contains @ -> same fake email as EMAIL; if it looks like a phone -> same fake phone as PHONE; else fake id",
   PERSON_NAME: "deterministic fake person name",

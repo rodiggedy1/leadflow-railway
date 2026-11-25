@@ -28,7 +28,8 @@ const empty = c => (c.nullable ? "NULL" : "''");
 const notEmpty = c => `t.${id(c.column)} IS NOT NULL AND t.${id(c.column)} <> ''`;
 const hash = c => `SHA2(CONCAT(m.salt, t.${id(c.column)}), 256)`;
 const PHONE_NORM = x => `RIGHT(REGEXP_REPLACE(${x}, '[^0-9]', ''), 10)`;
-const PHONE_FAKE_DEFAULT = "'+19990000000'";
+// fake phones: +1 999 2xx xxxx. Area code 999 does not exist; the 2 keeps them valid for the app's US-number rule
+const PHONE_FAKE_DEFAULT = "'+19992000000'";
 // phone in free text: E.164 (+1XXXXXXXXXX) or formatted with separators; area code 999 (our fakes) excluded
 const AREA = "([2-8][0-9]{2}|9[0-8][0-9]|99[0-8])";
 const PHONE_RE = `(\\\\+1${AREA}[0-9]{7})|(\\\\(?${AREA}\\\\)?[ .-][0-9]{3}[ .-][0-9]{4})`;
@@ -97,7 +98,7 @@ for (const c of byRule("TEAM_NAME")) src("team", c, `LOWER(TRIM(t.${id(c.column)
 // app tables use mixed text-comparison rules (collations); compare against helper tables by exact bytes
 const B = e => `(${e}) COLLATE utf8mb4_bin`;
 const rn = n => `ROW_NUMBER() OVER (ORDER BY SHA2(CONCAT(m.salt, x.\`real\`), 256))`;
-s.push(`INSERT INTO __map_phone (\`real\`, fake) SELECT x.\`real\`, CONCAT('+1999', LPAD(${rn()}, 7, '0')) FROM __src_phone x ${GUARD}`);
+s.push(`INSERT INTO __map_phone (\`real\`, fake) SELECT x.\`real\`, CONCAT('+19992', LPAD(${rn()}, 6, '0')) FROM __src_phone x ${GUARD}`);
 s.push(`INSERT INTO __map_email (\`real\`, fake) SELECT x.\`real\`, CONCAT('u', LPAD(${rn()}, 6, '0'), '@example.invalid') FROM __src_email x ${GUARD}`);
 const F = FIRST.length, L = LAST.length, W = TEAM_WORDS.length;
 s.push(`INSERT INTO __map_name (\`real\`, fake) SELECT k.\`real\`, CONCAT(f.v, ' ', l.v, IF(k.k >= ${F * L}, CONCAT(' ', k.k DIV ${F * L}), '')) FROM (SELECT x.\`real\`, ${rn()} - 1 AS k FROM __src_name x ${GUARD}) k JOIN __name_first f ON f.i = k.k % ${F} JOIN __name_last l ON l.i = (k.k DIV ${F}) % ${L}`);
@@ -211,7 +212,7 @@ for (const c of byRule("NEUTRALIZE")) {
 const keptText = map.filter(c => !truncSet.has(c.table) && ["KEEP", "JSON_KEEP"].includes(c.rule) && c.isString && !/^enum/.test(c.type));
 for (const c of keptText) {
   const v = `CAST(t.${id(c.column)} AS CHAR)`;
-  s.push(`UPDATE ${id(c.table)} t ${GUARD} SET t.${id(c.column)} = REGEXP_REPLACE(REGEXP_REPLACE(${v}, '${EMAIL_RE}', 'info@example.invalid'), '${PHONE_RE}', '+19990000000') WHERE ${v} REGEXP '${PHONE_RE}' OR REGEXP_REPLACE(${v}, '${FAKE_EMAIL_RE}', '') REGEXP '${EMAIL_RE}'`);
+  s.push(`UPDATE ${id(c.table)} t ${GUARD} SET t.${id(c.column)} = REGEXP_REPLACE(REGEXP_REPLACE(${v}, '${EMAIL_RE}', 'info@example.invalid'), '${PHONE_RE}', '+19992000000') WHERE ${v} REGEXP '${PHONE_RE}' OR REGEXP_REPLACE(${v}, '${FAKE_EMAIL_RE}', '') REGEXP '${EMAIL_RE}'`);
 }
 // 8. settings that look like credentials
 s.push(`UPDATE app_settings t ${GUARD} SET t.\`value\` = '' WHERE LOWER(t.\`key\`) REGEXP 'token|secret|password|api_?key|webhook|credential|private|signing'`);
@@ -227,9 +228,9 @@ for (const c of map) {
   if (truncSet.has(c.table)) continue;
   const x = col(c), ne = `${x} IS NOT NULL AND ${x} <> ''`;
   switch (c.rule) {
-    case "PHONE": chk(c.rule, c, `${ne} AND ${x} NOT REGEXP '^\\\\+1999[0-9]{7}$'`); break;
+    case "PHONE": chk(c.rule, c, `${ne} AND ${x} NOT REGEXP '^\\\\+19992[0-9]{6}$'`); break;
     case "EMAIL": chk(c.rule, c, `${ne} AND ${x} NOT LIKE '%@example.invalid'`); break;
-    case "CONTACT": chk(c.rule, c, `${ne} AND ${x} NOT REGEXP '^\\\\+1999[0-9]{7}$' AND ${x} NOT LIKE '%@example.invalid' AND ${x} NOT LIKE 'SIM\\\\_%'`); break;
+    case "CONTACT": chk(c.rule, c, `${ne} AND ${x} NOT REGEXP '^\\\\+19992[0-9]{6}$' AND ${x} NOT LIKE '%@example.invalid' AND ${x} NOT LIKE 'SIM\\\\_%'`); break;
     case "PERSON_NAME":
       chk(c.rule, c, `${ne} AND ${x} NOT IN ('Alex Example', 'Alex', 'Example') AND ${isFirst(c.column) ? `${B(x)} NOT IN (SELECT v FROM __name_first)` : isLast(c.column) ? `${B(x)} NOT IN (SELECT v FROM __name_last)` : `${B(x)} NOT IN (SELECT fake FROM __map_name)`}`); break;
     case "TEAM_NAME": chk(c.rule, c, `${ne} AND ${B(x)} NOT IN (SELECT fake FROM __map_team) AND ${x} <> 'Team Aspen'`); break;

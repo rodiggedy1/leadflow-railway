@@ -9,7 +9,7 @@ It was set up and verified on 2026-11-24. This document records exactly how, so 
 | Risk | How staging avoids it | Verified |
 |---|---|---|
 | Real customer data | Its own database `leadflow_staging` on the TiDB cluster `instinct-db`, a **different cluster** from production's, containing only invented data | Owner compared cluster IDs; cluster held only TiDB's built-in databases before staging |
-| Real texts / calls / emails / payments / AI | **No** OpenPhone, Twilio, Vapi, Mailgun, Gmail, Stripe, Launch27, OpenAI or Anthropic keys | Local test: an SMS attempt returned `smsSent: false` ("OpenPhone credentials not configured") and the app made **zero** outbound connections |
+| Real texts / calls / emails / payments / AI | Part C: outbound firewall + simulator (`staging/sim/README.md`). **No real** OpenPhone, Twilio, Vapi, Mailgun, Gmail, Stripe, Launch27, OpenAI or Anthropic keys | Local test: an SMS attempt returned `smsSent: false` ("OpenPhone credentials not configured") and the app made **zero** outbound connections |
 | Scheduled jobs | `PREVIEW_MODE=true` and `CRON_DISABLED=true` | Railway deploy log: "PREVIEW_MODE=true — all cron jobs and Vapi bootstrap disabled" |
 | Live webhooks | No outside service points at staging's address | — |
 | Unauthorised admin access | One-click login switched off; the owner signs in with their own email + password | Browser test: login page shown, wrong password refused, owner login works, `/api/preview-login` says "unavailable" |
@@ -28,7 +28,7 @@ Staging is **never** made by duplicating Production or Preview (that would copy 
 | Config-as-code file | **none** (Railway deprecated config-as-code; settings below are entered in the service itself) |
 | Builder | Railpack (Nixpacks is deprecated) |
 | Build command | `pnpm run build` |
-| Start command | `node dist/index.js` |
+| Start command | `node dist/index.js`. With Part C: `node --require ./docs/claude/staging/sim/outbound-sim.cjs dist/index.js` (see `staging/sim/README.md`) |
 | Pre-deploy command | `node dist/runVersionedMigrations.js` |
 | Healthcheck path | `/api/trpc/system.health?input=%7B%22json%22%3A%7B%22timestamp%22%3A0%7D%7D` |
 | Restart policy | On failure, 3 retries |
@@ -38,7 +38,7 @@ Staging is **never** made by duplicating Production or Preview (that would copy 
 Why the healthcheck differs from `railway.json`'s `/api/health`: `/api/health` returns 503 between 6 AM and 10 PM ET
 when no scheduled jobs have run, which is always the case on staging. The tRPC health check (the one Production uses) returns 200.
 
-**Variables** (exactly these six — nothing else):
+**Variables** (exactly these six; Part C adds only the fake values listed in `staging/sim/README.md`, never real keys):
 
 | Name | Value |
 |---|---|

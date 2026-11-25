@@ -15,6 +15,9 @@ by `test/plant.cjs`.
 | Static | every statement in `prepare.sql` and `sanitize.sql` references the marker or a helper table | PASS: 30 of 30 and 1007 of 1007 |
 
 Fixed during testing:
+- (Found during Part C) Fake phones are `+1 999 2xx xxxx`, not `+1 999 0xx xxxx`. The app treats a US number whose 4th
+  digit is 0 or 1 as invalid (server/utils/phone.ts). Tests 1–3 were re-run afterwards: all pass, and 168 of 168 fake
+  phones are valid for the app.
 - Helper tables now use one explicit text-comparison rule (`utf8mb4_bin`) because the app's tables mix collations.
 - A "clear it" rule is skipped for a column that must hold a value (`nurture_enrollments.nextSendAt`). The enrollment is
   already set to `paused`, and the sender only picks `active` ones (server/nurtureCron.ts).
