@@ -161,9 +161,22 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   return result;
 }
 
-export async function generatePayableInvoicePdf(invoice: PayableInvoice, url: string): Promise<Uint8Array> {
+export type PayableInvoicePdfScope = { lineId: number };
+
+export async function generatePayableInvoicePdf(invoice: PayableInvoice, url: string, scope?: PayableInvoicePdfScope): Promise<Uint8Array> {
   const link = checkedUrl(url);
-  const amounts = totals(invoice);
+  const scopedLine = scope === undefined ? undefined : invoice.lines.find(line => line.id === scope.lineId);
+  if (scope !== undefined && (!Number.isSafeInteger(scope.lineId) || scope.lineId <= 0 || !scopedLine)) throw new InvoiceError("NOT_FOUND", 404, "Invoice line unavailable.");
+  if (scopedLine) {
+    if (invoice.currency !== "usd") throw new InvoiceError("INVALID_CURRENCY", 409, "Invoice currency needs review.");
+    invoiceDate.parse(invoice.from);
+    invoiceDate.parse(invoice.to);
+    invoiceDate.parse(invoice.dueDate);
+    invoiceDate.parse(scopedLine.date);
+    safeSum([scopedLine.amountCents, scopedLine.paidCents, ...(scopedLine.manualPaidCents === undefined ? [] : [scopedLine.manualPaidCents])]);
+    safeSum([scopedLine.amountCents - scopedLine.paidCents]);
+  }
+  const amounts = scopedLine === undefined ? totals(invoice) : undefined;
   const doc = await PDFDocument.create();
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -208,6 +221,38 @@ export async function generatePayableInvoicePdf(invoice: PayableInvoice, url: st
     draw(text, edge - regular.widthOfTextAtSize(text, 9), at);
   }
 
+  if (scopedLine) {
+    newPage();
+    paragraph("Service-date invoice detail", bold, 12);
+    paragraph(`Parent invoice: ${invoice.number}`, bold);
+    paragraph(`Bill to: ${invoice.clientName}`);
+    paragraph(`Service date: ${scopedLine.date}`);
+    paragraph(`Payment due: ${invoice.dueDate}`);
+    paragraph(`Address: ${scopedLine.address}`);
+    paragraph(`Description: ${scopedLine.description}`);
+    paragraph(`Original amount: ${cents(scopedLine.amountCents)}`);
+    paragraph(`Payments applied (selected service): ${cents(scopedLine.paidCents)}`);
+    paragraph(`Residual balance (selected service): ${cents(scopedLine.amountCents - scopedLine.paidCents)}`);
+    const selectedStatus = invoice.status === "void" ? "void — not payable" : invoice.status === "payment_review" ? "payment review — not payable" : scopedLine.paidCents === scopedLine.amountCents ? "paid" : scopedLine.paidCents > 0 ? "partially paid" : "open";
+    paragraph(`Selected service status: ${selectedStatus}`, bold);
+    paragraph("This is service-date detail from the parent invoice, not a new issued invoice.", regular, 8);
+    ensure(62);
+    y -= 8;
+    paragraph(invoice.status === "void" ? "View void service-date detail (not payable)" : invoice.status === "payment_review" ? "View service-date detail (payment adjustment needs review; not payable)" : scopedLine.paidCents === scopedLine.amountCents ? "View paid service-date detail" : "View service-date detail", bold, 10);
+    const annotation = doc.context.register(doc.context.obj({
+      Type: "Annot", Subtype: "Link", Rect: [MARGIN, y - 8, MARGIN + WIDTH, y + 18],
+      Border: [0, 0, 0], A: { Type: "Action", S: "URI", URI: PDFString.of(link) },
+    }));
+    page.node.set(PDFName.of("Annots"), doc.context.obj([annotation]));
+    paragraph("Click here to open your secure invoice", regular, 9);
+    doc.getPages().forEach((item, index) => {
+      item.drawText(`Maids In Black | Invoice | Page ${index + 1} of ${doc.getPageCount()}`, {
+        x: MARGIN, y: 48, size: 8, font: regular, color: GRAY,
+      });
+    });
+    return doc.save();
+  }
+
   newPage();
   paragraph(`Invoice: ${invoice.number}`, bold, 12);
   paragraph(`Bill to: ${invoice.clientName}`);
@@ -234,13 +279,13 @@ export async function generatePayableInvoicePdf(invoice: PayableInvoice, url: st
       offset += chunk.length;
     }
   }
-  const summaryHeight = amounts.selected === undefined ? 72 : 90;
+  const summaryHeight = amounts!.selected === undefined ? 72 : 90;
   ensure(summaryHeight);
   y -= 6;
-  paragraph(`All-service total: ${cents(amounts.total)}`, bold);
-  paragraph(`Payments applied (net): ${cents(amounts.paid)}`);
-  paragraph(`All-service balance: ${cents(amounts.balance)}`, bold, 11);
-  if (amounts.selected !== undefined) paragraph(`Selected service balance: ${cents(amounts.selected)} (not the all-service balance)`);
+  paragraph(`All-service total: ${cents(amounts!.total)}`, bold);
+  paragraph(`Payments applied (net): ${cents(amounts!.paid)}`);
+  paragraph(`All-service balance: ${cents(amounts!.balance)}`, bold, 11);
+  if (amounts!.selected !== undefined) paragraph(`Selected service balance: ${cents(amounts!.selected)} (not the all-service balance)`);
   if (invoice.receipts.length) {
     ensure(42);
     y -= 8;
@@ -257,7 +302,7 @@ export async function generatePayableInvoicePdf(invoice: PayableInvoice, url: st
   }
   ensure(62);
   y -= 8;
-  paragraph(invoice.status === "void" ? "View void invoice (not payable)" : invoice.status === "payment_review" ? "View invoice (payment adjustment needs review; not payable)" : amounts.balance === 0 ? "View paid invoice and receipts" : "View invoice and choose services to pay securely", bold, 10);
+  paragraph(invoice.status === "void" ? "View void invoice (not payable)" : invoice.status === "payment_review" ? "View invoice (payment adjustment needs review; not payable)" : amounts!.balance === 0 ? "View paid invoice and receipts" : "View invoice and choose services to pay securely", bold, 10);
   // A true URI annotation preserves the exact server-validated opaque URL without rendering
   // or truncating it. It is never written to public storage or diagnostic logs.
   const annotation = doc.context.register(doc.context.obj({

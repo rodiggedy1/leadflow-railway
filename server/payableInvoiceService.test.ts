@@ -142,14 +142,15 @@ class TEST_ONLY_InvoiceRepository implements InvoiceRepository {
   reserve = vi.fn(async (invoiceId: number, requestId: string, lineIds: number[]): Promise<InvoiceAttempt> => {
     if (invoiceId !== this.invoice.id) throw new InvoiceError("NOT_FOUND", 404, "Unknown invoice.");
     const sameRequest = [...this.attempts.values()].find(attempt => attempt.requestId === requestId);
-    const active = this.invoice.activeAttemptId ? this.attempts.get(this.invoice.activeAttemptId) : undefined;
-    const previous = sameRequest ?? active;
-    if (previous) {
-      if (JSON.stringify(previous.lineIds) !== JSON.stringify(lineIds)) {
-        throw new InvoiceError("PAYMENT_ATTEMPT_CONFLICT", 409, "An existing attempt has a different selection.");
+    if (sameRequest) {
+      if (JSON.stringify(sameRequest.lineIds) !== JSON.stringify(lineIds)) {
+        throw new InvoiceError("IDEMPOTENCY_CONFLICT", 409, "An existing attempt has a different selection.");
       }
-      return previous;
+      if (sameRequest.state === "expired") throw new InvoiceError("PAYMENT_REVIEW_REQUIRED", 409, "Retained expired attempt.");
+      if (sameRequest.state !== "paid" && this.invoice.activeAttemptId !== sameRequest.id) throw new InvoiceError("PAYMENT_REVIEW_REQUIRED", 409, "Payment ownership changed.");
+      return sameRequest;
     }
+    if (this.invoice.activeAttemptId) throw new InvoiceError("CHECKOUT_IN_PROGRESS", 409, "Another checkout owns this invoice.");
     const attempt: InvoiceAttempt = {
       id: `attempt-test-${this.attempts.size + 1}`, invoiceId, requestId,
       lineIds: [...lineIds], amountCents: selectedBalance(this.invoice, lineIds),
@@ -189,7 +190,7 @@ function harness() {
   const create = vi.fn(async (_params: Stripe.Checkout.SessionCreateParams, _options?: Stripe.RequestOptions) => ({
     id: "cs_test_example", url: "https://checkout.stripe.com/c/pay/test_example",
   }));
-  const retrieve = vi.fn(async (_id: string): Promise<Stripe.Checkout.Session> => paidSession());
+  const retrieve = vi.fn(async (_id: string): Promise<Stripe.Checkout.Session> => paidSession({ status: "open", payment_status: "unpaid", url: "https://checkout.stripe.com/c/pay/test_example", amount_total: repo.attempts.get("attempt-test-1")?.amountCents ?? 18_345 }));
   // Only these two operations exist; any other provider API use cannot silently pass.
   const stripeStub = { checkout: { sessions: { create, retrieve } } } as unknown as Stripe;
   const stripe = vi.fn(() => stripeStub);
@@ -215,6 +216,8 @@ function eventFixture(source: Stripe.Checkout.Session = paidSession(), type = "c
 async function reconciliationHarness() {
   const h = harness();
   await h.service.checkout(TOKEN, REQUEST, [1, 2]);
+  h.retrieve.mockResolvedValue(paidSession());
+  h.repo.attempt.mockClear();
   return h;
 }
 
@@ -416,11 +419,10 @@ describe("PayableInvoiceService checkout", () => {
     expect(attempt.state).toBe("pending");
   });
 
-  it("propagates the test-only atomic reservation conflict for a wrong subset", async () => {
+  it("rejects changing selection under an existing request UUID before touching its checkout", async () => {
     const h = harness();
     await h.repo.reserve(42, REQUEST, [1]);
-    await expect(h.service.checkout(TOKEN, OTHER_REQUEST, [2])).rejects.toMatchObject({ code: "PAYMENT_ATTEMPT_CONFLICT" });
-    await expect(h.service.checkout(TOKEN, REQUEST, [1, 2])).rejects.toMatchObject({ code: "PAYMENT_ATTEMPT_CONFLICT" });
+    await expect(h.service.checkout(TOKEN, REQUEST, [1, 2])).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
     expect(h.stripe).not.toHaveBeenCalled();
     expect(h.repo.attempts.size).toBe(1);
   });

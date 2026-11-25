@@ -514,7 +514,6 @@ export class MysqlInvoiceRepository implements InvoiceRepository {
       if (invoiceRows[0].activeAttemptId != null) return fail("CHECKOUT_IN_PROGRESS", "Another checkout is unresolved for this invoice. Review or resume it before starting another.");
       const invoice = await this.invoiceView(tx, invoiceRows[0]);
       const amount = selectedBalance(invoice, ids);
-      await this.verifyInvoiceCollection(tx, invoice, ids, invoiceRows[0]);
       // Selection represents complete unpaid lines, not arbitrary partial cents.
       if (ids.some(id => invoice.lines.find(line => line.id === id)!.paidCents !== 0)) return fail("PAYMENT_REVIEW_REQUIRED", "A partially allocated service needs review.");
       const id = randomUUID();

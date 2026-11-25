@@ -134,6 +134,10 @@ function fakeSql() {
       result = { affectedRows: 1, insertId: 0 };
     } else if (sql === "UPDATE payable_invoices SET activeAttemptId = ? WHERE id = ? AND activeAttemptId IS NULL AND status IN ('open', 'partially_paid')") {
       result = { affectedRows: 1, insertId: 0 };
+    } else if (sql === "UPDATE payable_invoice_attempts SET state = 'expired' WHERE id = ? AND invoiceId = ? AND state IN ('pending', 'session_open')") {
+      const matching = state.attempts.find(row => row.id === values[0] && row.invoiceId === values[1] && ["pending", "session_open"].includes(String(row.state)));
+      if (matching) matching.state = "expired";
+      result = { affectedRows: matching ? 1 : 0, insertId: 0 };
     } else if (sql === "UPDATE payable_invoices SET activeAttemptId = NULL WHERE id = ? AND activeAttemptId = ?") {
       // One narrowly parameterized CAS spy, not general SQL execution/transactions.
       const matching = state.invoices.find(row => row.id === values[0] && row.activeAttemptId === values[1]);
@@ -336,6 +340,38 @@ describe("MysqlInvoiceRepository offline mocked transaction contracts", () => {
     expect(h.rollback).not.toHaveBeenCalled();
     expect(h.release).toHaveBeenCalledTimes(2);
   });
+
+  it("expires only the matching open attempt, then releases its own reservation with invoice-first locking", async () => {
+    const h = fakeSql(); h.state.invoices[0].activeAttemptId = ATTEMPT; h.state.attempts = [attemptRow()];
+    await h.repo.expire(ATTEMPT, SESSION);
+    expect(h.state.attempts[0].state).toBe("expired"); expect(h.state.invoices[0].activeAttemptId).toBeNull();
+    expect(h.mutations()).toEqual([
+      ["UPDATE payable_invoice_attempts SET state = 'expired' WHERE id = ? AND invoiceId = ? AND state IN ('pending', 'session_open')", [ATTEMPT, 42]],
+      ["UPDATE payable_invoices SET activeAttemptId = NULL WHERE id = ? AND activeAttemptId = ?", [42, ATTEMPT]],
+    ]);
+    expect(h.execute.mock.calls[1][0]).toMatch(/FROM payable_invoices.*FOR UPDATE$/);
+    expect(h.execute.mock.calls[2][0]).toMatch(/FROM payable_invoice_attempts.*FOR UPDATE$/);
+    expect(h.commit).toHaveBeenCalledTimes(1); expect(h.rollback).not.toHaveBeenCalled();
+  });
+
+  it("rejects expiration for a different stored provider session without releasing any reservation", async () => {
+    const h = fakeSql(); h.state.invoices[0].activeAttemptId = ATTEMPT; h.state.attempts = [attemptRow()];
+    await expect(h.repo.expire(ATTEMPT, "cs_test_wrong")).rejects.toMatchObject({ code: "PAYMENT_IDENTITY_MISMATCH" });
+    expect(h.state.invoices[0].activeAttemptId).toBe(ATTEMPT); expect(h.state.attempts[0].state).toBe("session_open");
+    expect(h.mutations()).toEqual([]); expectRolledBack(h);
+  });
+
+  it("does not release another attempt when an unexpired predecessor no longer owns the invoice", async () => {
+    const h = fakeSql(); h.state.invoices[0].activeAttemptId = LATER_ATTEMPT; h.state.attempts = [attemptRow()];
+    await expect(h.repo.expire(ATTEMPT, SESSION)).rejects.toMatchObject({ code: "PAYMENT_REVIEW_REQUIRED" });
+    expect(h.state.invoices[0].activeAttemptId).toBe(LATER_ATTEMPT); expect(h.mutations()).toEqual([]); expectRolledBack(h);
+  });
+
+  it("rejects settlement of an expired nonactive attempt rather than weakening allocation guards for switching", async () => {
+    const h = fakeSql(); h.state.invoices[0].activeAttemptId = LATER_ATTEMPT; h.state.attempts = [attemptRow({ state: "expired" })];
+    await expect(h.repo.settle(ATTEMPT, SESSION, "pi_test_owned", 12_345)).rejects.toMatchObject({ code: "PAYMENT_REVIEW_REQUIRED" });
+    expect(h.state.invoices[0].activeAttemptId).toBe(LATER_ATTEMPT); expect(h.mutations()).toEqual([]); expectRolledBack(h);
+  });
 });
 
 
@@ -373,11 +409,11 @@ describe("existing collection and manual already-paid repository guarantees", ()
     h.state.claims[0].invoiceId = 99;
     await expect(h.repo.assertCollectionReady({ id: 42, clientId: 17 } as never)).rejects.toMatchObject({ code: "SOURCE_ALREADY_INVOICED" });
   });
-  it("rejects checkout after a service amount changes using transaction-current source reads", async () => {
+  it("reserves the saved unpaid invoice amount without re-reading a later changed service amount", async () => {
     const h = fakeSql(); h.state.jobs = [jobRow({ jobTotalCents: 20000 })];
-    await expect(h.repo.reserve(42, REQUEST, [1])).rejects.toMatchObject({ code: "SERVICE_REVIEW_REQUIRED" });
-    expect(h.mutations()).toEqual([]); expectRolledBack(h);
-    expect(h.execute.mock.calls.find(([sql]) => sql.includes("FROM leadflow_jobs j FORCE INDEX"))![0]).toMatch(/FOR UPDATE$/);
+    expect(await h.repo.reserve(42, REQUEST, [1])).toMatchObject({ amountCents: 12_345, lineIds: [1], state: "pending" });
+    expect(h.execute.mock.calls.some(([sql]) => /FROM (leadflow_jobs|bookings|customer_portal_accounts|booking_payment_profiles|payment_authorizations|booking_cash_app_payments)\b/.test(sql))).toBe(false);
+    expect(h.mutations()).toHaveLength(2); expect(h.commit).toHaveBeenCalledOnce(); expect(h.rollback).not.toHaveBeenCalled();
   });
   it("retains and blocks every ambiguous first-date projection rather than choosing one", async () => {
     const h = fakeSql();

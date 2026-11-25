@@ -144,7 +144,7 @@ describe("invoice-owned matched contact snapshots (offline)", () => {
   it.each([
     { label: "phone-only", phone: PHONE, email: "", contacts: { customerPhone: PHONE, customerEmail: OTHER_EMAIL } },
     { label: "email-only", phone: "", email: EMAIL, contacts: { customerPhone: OTHER_PHONE, customerEmail: EMAIL } },
-  ])("uses the same OR contact rule at listing, issuance and reservation for $label", async ({ phone, email, contacts }) => {
+  ])("uses OR contacts at listing/issuance and the saved invoice at reservation for $label", async ({ phone, email, contacts }) => {
     const h = fixture(); h.state.bookings = [booking(contacts)];
     const f = await reviewed(h, phone, email); const invoice = await f.issue();
     expect(invoice).toMatchObject({ clientId: 0, status: "open", clientName: "Janice Matched" });
@@ -152,9 +152,11 @@ describe("invoice-owned matched contact snapshots (offline)", () => {
     const admin = await h.repo.adminInvoice(42);
     expect(admin.client).toEqual({ id: 0, name: "Janice Matched", phone, email: email || null });
     await h.repo.assertCollectionReady(invoice);
+    const reads = h.sourceCalls().length;
     expect(await h.repo.reserve(42, CHECKOUT, [1])).toMatchObject({ amountCents: 500, state: "pending", lineIds: [1] });
+    expect(h.sourceCalls()).toHaveLength(reads);
     expect(h.sourceCalls().every(([sql]) => sql.includes("= NULLIF(?, '') OR"))).toBe(true);
-    expect(h.sourceCalls().filter(([sql]) => sql.endsWith(" FOR UPDATE")).length).toBe(6);
+    expect(h.sourceCalls().filter(([sql]) => sql.endsWith(" FOR UPDATE")).length).toBe(4);
     h.noPortal();
     expect(h.writes().every(([sql]) => /^\s*(?:INSERT INTO payable_invoice|UPDATE payable_invoices)/.test(sql))).toBe(true);
   });
@@ -255,8 +257,8 @@ describe("matched issuance, replay and collection guards (offline)", () => {
     await expect(f.issue()).rejects.toMatchObject({ code: "SOURCE_ALREADY_INVOICED" }); h.noPortal();
   });
 
-  it.each(["amount", "date", "paid", "hold", "cancelled", "contact", "claim"])("blocks snapshot checkout after %s changes without reserving", async change => {
-    const h = fixture(); const f = await reviewed(h); await f.issue(); h.execute.mockClear();
+  it.each(["amount", "date", "paid", "hold", "cancelled", "contact", "claim"])("reserves the saved unpaid invoice without an operational re-audit after %s changes", async change => {
+    const h = fixture(); const f = await reviewed(h); const invoice = await f.issue(); h.execute.mockClear();
     if (change === "amount") h.state.bookings[0].firstCleaningTotalCents = 501;
     if (change === "date") h.state.bookings[0].requestedLocalDate = "2026-11-04";
     if (change === "paid") h.state.profiles = [{ bookingId: 201, paymentStatus: "captured" }];
@@ -264,7 +266,14 @@ describe("matched issuance, replay and collection guards (offline)", () => {
     if (change === "cancelled") h.state.bookings[0].status = "cancelled";
     if (change === "contact") h.state.bookings[0].customerPhone = OTHER_PHONE;
     if (change === "claim") h.state.claims = [{ occurrenceKey: KEY, invoiceId: 99 }];
-    await expect(h.repo.reserve(42, CHECKOUT, [1])).rejects.toBeDefined(); expect(h.writes()).toEqual([]); h.noPortal();
+    expect(await h.repo.reserve(42, CHECKOUT, [1])).toMatchObject({ amountCents: 500, lineIds: [1], state: "pending" });
+    expect(h.sourceCalls()).toHaveLength(0);
+    expect(h.execute.mock.calls.some(([sql]) => /FROM (booking_payment_profiles|payment_authorizations|booking_cash_app_payments|payable_invoice_manual_payments)\b/.test(sql))).toBe(false);
+    expect(h.writes()).toHaveLength(2); h.noPortal();
+    // Explicit operational review retains every original source-change rejection.
+    h.execute.mockClear();
+    await expect(h.repo.assertCollectionReady(invoice)).rejects.toBeDefined();
+    expect(h.sourceCalls().length).toBeGreaterThan(0); expect(h.writes()).toEqual([]); h.noPortal();
   });
 
   it("preserves invoice-level reservation and immutable request selection guards", async () => {

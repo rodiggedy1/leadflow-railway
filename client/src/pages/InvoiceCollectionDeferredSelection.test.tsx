@@ -57,15 +57,15 @@ const button = (label: string) => {
   expect(node, `Expected button ${label}`).toBeDefined();
   return node!;
 };
+const rows = () => descendants(tree).filter(node => node.props?.className?.includes("ic-service-row"));
+const row = (id: number) => rows().find(node => node.key === String(id))!;
 const rowInputs = () => descendants(tree).filter(node => node.type === "input" && node.props["aria-label"]?.startsWith("Pay "));
-const selectedIds = () => rowInputs().filter(node => node.props.checked).map(node => {
-  const index = rowInputs().indexOf(node);
-  return (hooks.slots[0] as PayableInvoice).lines[index].id;
-});
+const rowInput = (id: number) => descendants(row(id)).find(node => node.type === "input")!;
+const selectedIds = () => rows().filter(node => descendants(node).some(child => child.type === "input" && child.props.checked)).map(node => Number(node.key)).sort((a, b) => a - b);
 const expectSelection = (ids: number[], amount: string) => {
   expect(selectedIds()).toEqual(ids);
   expect(text(tree)).toContain(`Selected service dates${ids.length}`);
-  expect(text(tree)).toContain(`Total to pay${amount}`);
+  expect(text(tree)).toContain(`Total to pay selected${amount}`);
 };
 const line = (id: number, amountCents: number, paidCents = 0): PayableInvoice["lines"][number] => ({ id, occurrenceKey: `job:${id}`, date: `2026-11-${String(id % 10 + 1).padStart(2, "0")}`, description: `Service ${id}`, address: "Test address", amountCents, paidCents });
 const invoice = (): PayableInvoice => ({ id: 901, number: "TEST-DEFERRED", clientId: 0, clientName: "Matched customer", from: "2026-11-01", to: "2026-11-09", dueDate: "2026-11-16", currency: "usd", status: "partially_paid", receipts: [], activeAttemptId: null, lines: [line(11, 500, 500), line(12, 500), line(13, 700, 200)] });
@@ -97,7 +97,7 @@ describe("customer invoice deferred functional selection", () => {
   it("defaults to every unpaid ID after first refresh completes, with a nonzero enabled payment and exact checkout IDs", async () => {
     await firstLoad();
     expectSelection([12, 13], "$10.00");
-    expect(rowInputs()[0].props).toMatchObject({ checked: false, disabled: true });
+    expect(rowInput(11).props).toMatchObject({ checked: false, disabled: true });
     expect(button("Pay $10.00").props.disabled).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/test_deferred" }));
@@ -108,8 +108,17 @@ describe("customer invoice deferred functional selection", () => {
     expect(window.location.assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/test_deferred");
   });
 
+  it("pays a row by its exact ID while a deferred deselection is still pending", async () => {
+    await firstLoad();
+    rowInput(12).props.onChange();
+    expect(hooks.pending).toHaveLength(1);
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/exact" }));
+    await descendants(row(12)).find(node => node.props?.className === "ic-row-pay")!.props.onClick(); render();
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body).lineIds).toEqual([12]);
+  });
+
   it("later refresh preserves deselection, does not add new unpaid IDs, and removes newly paid selected IDs", async () => {
-    await firstLoad(); rowInputs()[1].props.onChange();
+    await firstLoad(); rowInput(12).props.onChange();
     expect(hooks.pending).toHaveLength(1); render();
     expectSelection([13], "$5.00");
     const next = { ...invoice(), lines: [...invoice().lines, line(14, 900)] };
@@ -122,7 +131,7 @@ describe("customer invoice deferred functional selection", () => {
 
   it("a token change resets initialization and selects the new invoice unpaid IDs without remounting the harness", async () => {
     await firstLoad();
-    rowInputs()[1].props.onChange(); render(); rowInputs()[2].props.onChange(); render();
+    rowInput(12).props.onChange(); render(); rowInput(13).props.onChange(); render();
     expectSelection([], "$0.00");
     const next = { ...invoice(), id: 902, number: "TEST-SECOND", lines: [line(21, 500, 500), line(22, 800), line(23, 400)] };
     window.location.pathname = "/invoice/second-token";
@@ -133,18 +142,18 @@ describe("customer invoice deferred functional selection", () => {
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual(["/api/payable-invoices/first-token", "/api/payable-invoices/second-token"]);
   });
 
-  it("active attempts retain their exact unpaid IDs on first load and later refresh and resume instead of checkout", async () => {
+  it("active attempts never override first-load defaults or later customer selections, and payment sends those selections", async () => {
     await firstLoad({ ...invoice(), activeAttemptId: "active", activeLineIds: [12, 11, 999] });
-    expectSelection([12], "$5.00");
-    expect(rowInputs().every(node => node.props.disabled)).toBe(true);
-    rowInputs()[1].props.onChange(); render(); expectSelection([12], "$5.00");
+    expectSelection([12, 13], "$10.00");
+    expect(rowInputs().map(node => node.props.disabled)).toEqual([false, false, true]);
+    rowInput(13).props.onChange(); render(); expectSelection([12], "$5.00");
     await refresh({ ...invoice(), activeAttemptId: "active", activeLineIds: [13, 11, 999] });
-    expectSelection([13], "$5.00"); expect(button("Resume secure checkout").props.disabled).toBe(false);
-    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/test_resume" }));
-    await button("Resume secure checkout").props.onClick(); render();
+    expectSelection([12], "$5.00"); expect(button("Pay $5.00").props.disabled).toBe(false);
+    fetchMock.mockImplementation(() => response({ url: "https://checkout.stripe.com/c/pay/test_selection" }));
+    await button("Pay $5.00").props.onClick(); render();
     const [path, options] = fetchMock.mock.calls.at(-1)!;
-    expect(path).toBe("/api/payable-invoices/first-token/resume"); expect(JSON.parse(options.body)).toEqual({});
-    expect(fetchMock.mock.calls.some(([path]) => path.endsWith("/checkout"))).toBe(false);
+    expect(path).toBe("/api/payable-invoices/first-token/checkout"); expect(JSON.parse(options.body)).toEqual({ requestId: expect.any(String), lineIds: [12] });
+    expect(fetchMock.mock.calls.some(([path]) => path.endsWith("/resume"))).toBe(false);
     expect(window.location.assign).toHaveBeenCalledTimes(1);
   });
 });

@@ -127,13 +127,86 @@ export class PayableInvoiceService {
   private verifySession(session: Stripe.Checkout.Session, attempt: InvoiceAttempt) {
     if ((attempt.sessionId && session.id !== attempt.sessionId) || session.mode !== "payment" || session.client_reference_id !== attempt.id || session.metadata?.invoiceAttemptId !== attempt.id || session.metadata?.invoiceId !== String(attempt.invoiceId) || session.metadata?.leadflowInvoice !== INVOICE_PAYMENT_MARKER || session.amount_total !== attempt.amountCents || session.currency !== attempt.currency) throw new InvoiceError("PAYMENT_IDENTITY_MISMATCH", 409, "Payment reconciliation needs review.");
   }
-  async checkout(token: string, requestId: string, lineIds: number[]) {
-    const invoice = await this.view(token);
-    await this.deps.assertCollectionReady(invoice);
+  async checkout(token: string, requestId: string, lineIds: number[]): Promise<{ url?: string; refresh?: boolean }> {
+    let invoice = await this.view(token);
     selectedBalance(invoice, lineIds);
-    const attempt = await this.deps.repo.reserve(invoice.id, requestId, lineIds.slice().sort((a,b) => a-b));
+    const ids = lineIds.slice().sort((a,b) => a-b);
+    let attempt: InvoiceAttempt;
+    try {
+      // Validate immutable request history before touching an existing checkout.
+      attempt = await this.deps.repo.reserve(invoice.id, requestId, ids);
+    } catch (error) {
+      if (!(error instanceof InvoiceError) || error.code !== "CHECKOUT_IN_PROGRESS") throw error;
+      invoice = await this.view(token);
+      if (!invoice.activeAttemptId) throw error;
+      const active = await this.deps.repo.attempt(invoice.activeAttemptId);
+      if (!active || active.invoiceId !== invoice.id) throw new InvoiceError("PAYMENT_REVIEW_REQUIRED", 409, "Invoice payment state needs review.");
+      if (JSON.stringify(active.lineIds) === JSON.stringify(ids)) {
+        attempt = await this.deps.repo.reserve(invoice.id, active.requestId, ids);
+      } else {
+        const session = await this.checkoutSession(token, invoice, active);
+        await this.retireCheckout(session, active);
+        invoice = await this.view(token);
+        if (ids.some(id => !invoice.lines.some(row => row.id === id && row.paidCents < row.amountCents))) return { refresh: true };
+        selectedBalance(invoice, ids);
+        // One captured predecessor only: a concurrent winner is never canceled here.
+        attempt = await this.deps.repo.reserve(invoice.id, requestId, ids);
+      }
+    }
     if (attempt.state === "paid") throw new InvoiceError("ALREADY_PAID", 409, "This payment has already been recorded. Refresh the invoice.");
-    if (attempt.sessionId && attempt.sessionUrl) return { url: attempt.sessionUrl };
+    if (attempt.sessionId) {
+      const session = await this.checkoutSession(token, invoice, attempt);
+      if (session.payment_status === "paid") { await this.settleSession(session, session.livemode); return { refresh: true }; }
+      if (session.status === "open" && session.payment_status === "unpaid" && session.url && /^https:\/\/checkout\.stripe\.com\//.test(session.url)) return { url: session.url };
+      await this.retireCheckout(session, attempt);
+      if (requestId === attempt.requestId) return { refresh: true };
+      invoice = await this.view(token);
+      if (ids.some(id => !invoice.lines.some(row => row.id === id && row.paidCents < row.amountCents))) return { refresh: true };
+      selectedBalance(invoice, ids);
+      attempt = await this.deps.repo.reserve(invoice.id, requestId, ids);
+      if (attempt.state === "paid") return { refresh: true };
+    }
+    return this.openCheckoutAttempt(token, invoice, attempt);
+  }
+  private async checkoutSession(token: string, invoice: PayableInvoice, attempt: InvoiceAttempt): Promise<Stripe.Checkout.Session> {
+    if (!attempt.sessionId) {
+      // A missing binding can hide a successful create. Recover its original key,
+      // parameters and expiration before considering a replacement checkout.
+      await this.openCheckoutAttempt(token, invoice, attempt);
+      const bound = await this.deps.repo.attempt(attempt.id);
+      if (!bound || bound.invoiceId !== invoice.id || !bound.sessionId) throw new InvoiceError("PAYMENT_REVIEW_REQUIRED", 409, "Checkout binding needs review.");
+      attempt = bound;
+    }
+    const session = await this.deps.stripe().checkout.sessions.retrieve(attempt.sessionId!);
+    this.verifySession(session, attempt);
+    return session;
+  }
+  private async retireCheckout(session: Stripe.Checkout.Session, attempt: InvoiceAttempt): Promise<void> {
+    attempt = { ...attempt, sessionId: session.id };
+    if (session.payment_status === "paid") { await this.settleSession(session, session.livemode); return; }
+    if (!this.deps.repo.expire) throw new InvoiceError("PAYMENT_REVIEW_REQUIRED", 409, "Checkout expiration needs review.");
+    if (session.status === "open" && session.payment_status === "unpaid") {
+      try { session = await this.deps.stripe().checkout.sessions.expire(session.id); }
+      catch { session = await this.deps.stripe().checkout.sessions.retrieve(session.id); }
+      this.verifySession(session, attempt);
+      if (session.payment_status === "paid") { await this.settleSession(session, session.livemode); return; }
+    }
+    if (session.status !== "expired" || session.payment_status !== "unpaid") throw new InvoiceError("PAYMENT_PROCESSING", 409, "Your payment is still being confirmed. No new charge was created.");
+    try { await this.deps.repo.expire(attempt.id, session.id); }
+    catch (error) {
+      if (!(error instanceof InvoiceError) || error.code !== "ALREADY_PAID") throw error;
+      const recorded = await this.deps.repo.attempt(attempt.id);
+      if (!recorded || recorded.invoiceId !== attempt.invoiceId || recorded.sessionId !== session.id || recorded.state !== "paid") throw error;
+    }
+  }
+  private async openCheckoutAttempt(token: string, invoice: PayableInvoice, attempt: InvoiceAttempt): Promise<{ url?: string; refresh?: boolean }> {
+    if (attempt.state === "paid") return { refresh: true };
+    if (attempt.sessionId) {
+      const session = await this.checkoutSession(token, invoice, attempt);
+      if (session.payment_status === "paid") { await this.settleSession(session, session.livemode); return { refresh: true }; }
+      if (session.status !== "open" || session.payment_status !== "unpaid" || !session.url || !/^https:\/\/checkout\.stripe\.com\//.test(session.url)) return { refresh: true };
+      return { url: session.url };
+    }
     const now = (this.deps.now ?? Date.now)();
     if (now - attempt.createdAt >= 23 * 60 * 60 * 1000) throw new InvoiceError("PAYMENT_REVIEW_REQUIRED", 409, "A previous payment attempt needs review. No new charge was created.");
     const metadata = { leadflowInvoice: INVOICE_PAYMENT_MARKER, invoiceId: String(invoice.id), invoiceAttemptId: attempt.id };
@@ -146,6 +219,7 @@ export class PayableInvoiceService {
     }, { idempotencyKey: `leadflow:invoice:${invoice.id}:attempt:${attempt.id}` });
     if (!session.url || !/^https:\/\/checkout\.stripe\.com\//.test(session.url)) throw new InvoiceError("CHECKOUT_UNAVAILABLE", 503, "Secure checkout is not available yet. Your payment attempt is retained.");
     await this.deps.repo.attachSession(attempt.id, session.id, session.url);
+    if ((await this.deps.repo.attempt(attempt.id))?.state === "paid") return { refresh: true };
     return { url: session.url };
   }
   async resume(token: string): Promise<{ url?: string; refresh?: boolean }> {

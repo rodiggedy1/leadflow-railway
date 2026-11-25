@@ -295,10 +295,18 @@ describe("existing invoice actual-source UI, synthetic transport only", () => {
 });
 
 describe("source-exact creation/customer preservation and minimal mount", () => {
-  it("the four additive integration lines are the only page changes against the approved HEAD", () => {
+  it("the four additive integration lines remain the only creation-page changes; date-payment changes stay customer-only", () => {
     const restored = read(pagePath).split("\n").filter(line => !line.includes('import ExistingInvoicePanel from ') && !line.includes('const [existingMode, setExistingMode]') && !line.includes('if (!review && existingMode) return') && !line.includes('Open existing invoice</button>')).join("\n");
-    expect(restored).toBe(baseline);
-    expect(read(pagePath).split("export function CustomerInvoicePage")[1]).toBe(baseline.split("export function CustomerInvoicePage")[1]);
+    expect(restored.split("export function CustomerInvoicePage")[0]).toBe(baseline.split("export function CustomerInvoicePage")[0]);
+    const customer = read(pagePath).split("export function CustomerInvoicePage")[1];
+    expect(customer).toContain('onClick={() => pay([row.id])}');
+    expect(customer).toContain('href={pdfHref} download referrerPolicy="no-referrer"');
+    expect(customer).toContain('url.origin !== "https://checkout.stripe.com"');
+  });
+  it("keeps payment and download controls out of printed customer invoices", () => {
+    const css = read("client/src/pages/invoice-collection.css");
+    expect(css).toMatch(/@media\s+print\s*\{\s*\.ic-customer\s+\.ic-row-actions\s*\{\s*display\s*:\s*none\s*!important/);
+    expect(css).toMatch(/@media\s+print\s*\{[^\n]*\.ic-customer\s+\.ic-service-row\s*\{\s*grid-template-columns\s*:\s*auto minmax\(0,1fr\) auto/);
   });
   it("actual review SSR is unchanged and all review actions remain request-free", async () => {
     const blocked = vi.fn(() => { throw new Error("No transport permitted in static review"); });
