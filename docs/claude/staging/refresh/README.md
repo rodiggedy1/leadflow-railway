@@ -11,7 +11,7 @@
 | B2 | Owner's TiDB account | Prepare a temporary, private "cleaning" database (exact choice after B1, based on size) | No |
 | B3 | Owner's Mac | Export production with `mysqldump --single-transaction`: one consistent read, no locks, no writes. Quiet evening hour | Reads (one pass) |
 | B4 | Cleaning database | `prepare.sql` → `verify.sql` → `sanitize.sql` → `verify.sql` (must show **no** failing rows; counts only are shared with Claude) | No |
-| B5 | Cleaning → staging | Export the cleaned data only and load it into `leadflow_staging`; re-apply the owner's staging login and the locked demo accounts | No |
+| B5 | Cleaning → staging | Export the cleaned copy without the sanitizer's helper tables, and load it into `leadflow_staging`, replacing it, so staging gets **production's exact structure** (B1 showed production has 6 tables and 95 columns that are not in the code). Re-apply the owner's staging login and the locked demo accounts | No |
 | B6 | Railway staging | Redeploy staging; check `[staging-sim] ACTIVE`, sign-in and pages | No |
 | B7 | Owner | Delete the raw export file and the cleaning database | No |
 

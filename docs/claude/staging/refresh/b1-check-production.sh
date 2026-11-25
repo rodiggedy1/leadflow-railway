@@ -75,7 +75,17 @@ LC_ALL=C comm -23 "$TMP/prod.txt" "$TMP/map.txt" > "$TMP/extra.txt"
 LC_ALL=C comm -13 "$TMP/prod.txt" "$TMP/map.txt" > "$TMP/missing.txt"
 echo "  production columns: $(wc -l < "$TMP/prod.txt" | tr -d ' ') | in map: $(wc -l < "$TMP/map.txt" | tr -d ' ')"
 echo "  in production but NOT in the map: $(wc -l < "$TMP/extra.txt" | tr -d ' ')"
-head -n 150 "$TMP/extra.txt" | sed 's/^/    + /'
+if [ -s "$TMP/extra.txt" ]; then
+  # structure only (table, column, type, nullable, key, extra), so the sanitizer can be given a rule for each one
+  q "SELECT CONCAT(table_name, '.', column_name, '|', column_type, '|', data_type, '|', is_nullable, '|', column_key, '|', extra) FROM information_schema.columns WHERE table_schema = DATABASE()" | LC_ALL=C sort > "$TMP/types.txt"
+  awk -F'|' 'NR == FNR { want[$0] = 1; next } ($1 in want)' "$TMP/extra.txt" "$TMP/types.txt" | head -n 300 | sed 's/^/    + /'
+  echo "  tables in production that the map does not know at all:"
+  cut -d. -f1 "$TMP/prod.txt" | LC_ALL=C sort -u > "$TMP/prod-t.txt"
+  cut -d. -f1 "$TMP/map.txt" | LC_ALL=C sort -u > "$TMP/map-t.txt"
+  LC_ALL=C comm -23 "$TMP/prod-t.txt" "$TMP/map-t.txt" | while IFS= read -r t; do
+    echo "    $t ($(q "SELECT table_rows FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '$t'") rows approx.)"
+  done
+fi
 echo "  in the map but NOT in production: $(wc -l < "$TMP/missing.txt" | tr -d ' ')"
 head -n 150 "$TMP/missing.txt" | sed 's/^/    - /'
 echo "--- Export tool on this Mac"
