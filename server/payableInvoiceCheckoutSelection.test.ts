@@ -295,6 +295,7 @@ describe("PayableInvoiceService offline checkout selection replacement", () => {
     const next = active(h);
     expect(result).toEqual({ url: next.sessionUrl });
     expect(next).toMatchObject({ requestId: UUID_B, lineIds: [2], amountCents: 6_789 });
+    expect(h.repo.assertCollectionReady).not.toHaveBeenCalled();
     expect(h.repo.attempts.get(old.id)!.state).toBe("expired");
     expect(h.provider.expire).toHaveBeenCalledWith(old.sessionId);
     expectCreate(h, old); expectCreate(h, next);
@@ -326,6 +327,7 @@ describe("PayableInvoiceService offline checkout selection replacement", () => {
     expect(h.provider.create).toHaveBeenCalledTimes(1);
     expect(h.provider.expire).not.toHaveBeenCalled();
     expect(h.repo.attempts.size).toBe(1);
+    expect(h.repo.assertCollectionReady).not.toHaveBeenCalled();
   });
 
   it("does not duplicate the session on an exact UUID replay", async () => {

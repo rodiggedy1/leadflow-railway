@@ -129,7 +129,6 @@ export class PayableInvoiceService {
   }
   async checkout(token: string, requestId: string, lineIds: number[]): Promise<{ url?: string; refresh?: boolean }> {
     let invoice = await this.view(token);
-    await this.deps.assertCollectionReady(invoice);
     selectedBalance(invoice, lineIds);
     const ids = lineIds.slice().sort((a,b) => a-b);
     let attempt: InvoiceAttempt;
@@ -149,7 +148,6 @@ export class PayableInvoiceService {
         await this.retireCheckout(session, active);
         invoice = await this.view(token);
         if (ids.some(id => !invoice.lines.some(row => row.id === id && row.paidCents < row.amountCents))) return { refresh: true };
-        await this.deps.assertCollectionReady(invoice);
         selectedBalance(invoice, ids);
         // One captured predecessor only: a concurrent winner is never canceled here.
         attempt = await this.deps.repo.reserve(invoice.id, requestId, ids);
@@ -164,7 +162,6 @@ export class PayableInvoiceService {
       if (requestId === attempt.requestId) return { refresh: true };
       invoice = await this.view(token);
       if (ids.some(id => !invoice.lines.some(row => row.id === id && row.paidCents < row.amountCents))) return { refresh: true };
-      await this.deps.assertCollectionReady(invoice);
       selectedBalance(invoice, ids);
       attempt = await this.deps.repo.reserve(invoice.id, requestId, ids);
       if (attempt.state === "paid") return { refresh: true };

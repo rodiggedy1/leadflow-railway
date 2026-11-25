@@ -232,15 +232,17 @@ describe("billing identity correction — real repository, offline filtering SQL
         : [`booking:101:first:${FROM}`, `booking:103:first:${DATE}`, `booking:102:first:${TO}`]);
       expect(listing.services.every(s => s.eligible)).toBe(true);
     });
-    it("rejects a stale service email at checkout before reserving any payment", async () => {
+    it("uses the saved invoice at checkout without re-reading a subsequently changed service email", async () => {
       const h = fixture(kind);
       const before = await reviewed(h);
       h.retain(before.lookup.services[0]);
       h.source().customerEmail = "conflict@example.test"; // phone still matches
-      await expect(h.repo.reserve(42, REQUEST, [1])).rejects.toMatchObject({ code: "SERVICE_REVIEW_REQUIRED" });
-      expectRolledBack(h);
+      const start = h.trace.length;
+      expect(await h.repo.reserve(42, REQUEST, [1])).toMatchObject({ invoiceId: 42, amountCents: 23000, state: "pending" });
+      expect(h.trace.slice(start).some(t => /FROM (leadflow_jobs|bookings|customer_portal_accounts)\b/.test(t.sql))).toBe(false);
+      expect(h.commit).toHaveBeenCalledOnce(); expect(h.rollback).not.toHaveBeenCalled(); expect(h.writes()).toHaveLength(2);
     });
-    it("allows checkout rechecks when the billing email stays the same but the service phone changes", async () => {
+    it("uses the saved invoice without source rechecks when the service phone changes", async () => {
       const h = fixture(kind);
       const before = await reviewed(h);
       h.retain(before.lookup.services[0]);
@@ -249,8 +251,7 @@ describe("billing identity correction — real repository, offline filtering SQL
       expect(h.commit).toHaveBeenCalledTimes(1);
       expect(h.rollback).not.toHaveBeenCalled();
       const sourceReads = h.trace.filter(t => /FROM (leadflow_jobs j|bookings b) FORCE INDEX/.test(t.sql) && t.sql.endsWith("FOR UPDATE"));
-      expect(sourceReads).toHaveLength(2);
-      expect(sourceReads[0].sql).toContain("FROM bookings b FORCE INDEX");
+      expect(sourceReads).toHaveLength(0);
       expect(h.writes()).toHaveLength(2);
     });
     it("rejects a stale nonempty email during issuance's transaction-current reread", async () => {

@@ -409,11 +409,11 @@ describe("existing collection and manual already-paid repository guarantees", ()
     h.state.claims[0].invoiceId = 99;
     await expect(h.repo.assertCollectionReady({ id: 42, clientId: 17 } as never)).rejects.toMatchObject({ code: "SOURCE_ALREADY_INVOICED" });
   });
-  it("rejects checkout after a service amount changes using transaction-current source reads", async () => {
+  it("reserves the saved unpaid invoice amount without re-reading a later changed service amount", async () => {
     const h = fakeSql(); h.state.jobs = [jobRow({ jobTotalCents: 20000 })];
-    await expect(h.repo.reserve(42, REQUEST, [1])).rejects.toMatchObject({ code: "SERVICE_REVIEW_REQUIRED" });
-    expect(h.mutations()).toEqual([]); expectRolledBack(h);
-    expect(h.execute.mock.calls.find(([sql]) => sql.includes("FROM leadflow_jobs j FORCE INDEX"))![0]).toMatch(/FOR UPDATE$/);
+    expect(await h.repo.reserve(42, REQUEST, [1])).toMatchObject({ amountCents: 12_345, lineIds: [1], state: "pending" });
+    expect(h.execute.mock.calls.some(([sql]) => /FROM (leadflow_jobs|bookings|customer_portal_accounts|booking_payment_profiles|payment_authorizations|booking_cash_app_payments)\b/.test(sql))).toBe(false);
+    expect(h.mutations()).toHaveLength(2); expect(h.commit).toHaveBeenCalledOnce(); expect(h.rollback).not.toHaveBeenCalled();
   });
   it("retains and blocks every ambiguous first-date projection rather than choosing one", async () => {
     const h = fakeSql();
