@@ -5,6 +5,32 @@ Each entry records what went live, the rollback point, and how it was verified.
 
 ---
 
+## 2026-11-25 — History window: last 30 messages plus saved bookings and open tasks
+
+| | |
+|---|---|
+| Released by | Owner, from their Mac, with `scripts/push-main-safe.sh` |
+| `main` before | `88b9aa3c02c20629d7d17eb034029adc70c89682` |
+| `main` after | `ffb0d3021169aa04b8d26103b3fc4d5edbd2cdca` (fast-forward, 1 commit) |
+| Rollback tag | `pre-production-20261125-history-window` → `88b9aa3…` |
+| Tested on | Staging (`staging` at `4e7f4a0`) |
+
+**What went live** (model payloads only; stored history, evidence validation, reply rules, task creation unchanged; no database changes)
+- SMS: Claude sees the last 30 messages (original positions kept; evidence still validated against the full history),
+  plus this conversation's unfinished staff tasks and this phone's bookings from the existing booking lookup
+  (upcoming = confirmed only; past labeled completed / cancelled / rescheduled / past). Staff-only notes not sent.
+  A failed lookup never blocks the reply and is reported to Claude as unavailable.
+- Email: last 30 emails; older emails without the thread quoted inside them; the answered email sent whole.
+
+**Checks before release**: 79 regression files, no new failures (91 pre-existing; one more in a file added to the run fails
+identically on the released code); TypeScript 583 (unchanged); build succeeded.
+
+**Verification after release**: GitHub (read-only by Claude): `main` = `ffb0d30…`; rollback tag at `88b9aa3…`.
+
+**Rollback**: Railway → production → Deployments → previous deployment → Redeploy. Database: nothing to undo.
+
+---
+
 ## 2026-11-25 — Token trim: less duplicated content sent to Claude
 
 | | |
