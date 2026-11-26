@@ -60,8 +60,8 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
     bookingAction: opsChatProcedure.input(idInput).output(bookingActionViewSchema.nullable())
       .query(({ input }) => bookingActions((actions, db) => actions.getBookingActionView(db, input.id), false)),
     /** Shared by every task card: one request and one indexed query, however many cards are on screen. */
-    bookingActionTaskIds: opsChatProcedure.output(z.array(z.number().int().positive()))
-      .query(() => bookingActions((actions, db) => actions.bookingActionTaskIds(db), false)),
+    bookingActionVersions: opsChatProcedure.output(z.record(z.string().regex(/^[1-9]\d*$/), z.string()))
+      .query(() => bookingActions((actions, db) => actions.bookingActionVersions(db), false)),
     bookingActionVisits: opsChatProcedure.input(idInput).output(z.array(bookingActionVisitSchema))
       .query(({ input }) => bookingActions((actions, db) => actions.taskUpcomingVisits(db, input.id), false)),
     setupBookingAction: bookingsAgentProcedure.input(bookingRequestInput.extend({ itemId: z.string().min(1).nullable() }).strict())

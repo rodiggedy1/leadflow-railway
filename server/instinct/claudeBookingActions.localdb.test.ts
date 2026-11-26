@@ -307,12 +307,16 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     const counted = db as unknown as { execute: (...args: unknown[]) => unknown };
     const execute = counted.execute.bind(db); let queries = 0;
     counted.execute = (...args: unknown[]) => { queries++; return execute(...args); };
-    const ids = await actions.bookingActionTaskIds(db);
+    const versions = await actions.bookingActionVersions(db);
     counted.execute = execute;
     expect(queries).toBe(1);
-    expect(ids).toEqual(expect.arrayContaining([proposed, staff]));
-    for (const id of [...ordinary, 999999]) expect(ids).not.toContain(id);
-    expect(ids.indexOf(staff)).toBeLessThan(ids.indexOf(proposed)); // newest first
+    expect(Object.keys(versions)).toEqual(expect.arrayContaining([String(proposed), String(staff)]));
+    for (const id of [...ordinary, 999999]) expect(versions).not.toHaveProperty(String(id));
+    // The fingerprint changes on every write to that record only.
+    await actions.editBookingAction(db, staff, { revision: 1, request: { type: "cancel_visit", visitDate: addDays(date, 1), jobId: null, newDate: null, newTime: null, evidenceQuote: null } }, ben);
+    const after = await actions.bookingActionVersions(db);
+    expect(after[String(staff)]).not.toBe(versions[String(staff)]);
+    expect(after[String(proposed)]).toBe(versions[String(proposed)]);
   });
 
   it("invalid proposals are dropped silently and the task stays manual", async () => {
