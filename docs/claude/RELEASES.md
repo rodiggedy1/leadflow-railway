@@ -5,6 +5,35 @@ Each entry records what went live, the rollback point, and how it was verified.
 
 ---
 
+## 2026-11-26 — Command Chat load speed
+
+| | |
+|---|---|
+| Released by | Owner, from their Mac, with `scripts/push-main-safe.sh` |
+| `main` before | `ffb0d3021169aa04b8d26103b3fc4d5edbd2cdca` |
+| `main` after | `459f8949a074d8e5a454724b63342941251a8cfd` (fast-forward, 1 commit) |
+| Rollback tag | `pre-production-20261126-command-chat-load` → `ffb0d30…` |
+| Tested on | Staging (`staging` at `71c569d`), by the owner in the browser |
+
+**What went live** (no database or schema changes; ordering, unanswered indicators, draft cards, polling and real-time updates preserved)
+- Essentials (channel feed, text inbox, email inbox, Thumbtack leads) are sent as their own requests; secondary
+  information is batched separately and starts once the feed has loaded. Other pages batch as before.
+- The feed's first fetch waits for the live stream's "connected" event (1.5 s fallback), so no message can be missed
+  and the duplicate startup reload is gone. Reconnects reload as before.
+- Channel feed query: same 500 messages in the same order, read via the (channel, createdAt) index plus active draft cards.
+- Command Chat call history omits transcripts; a call card loads its transcript when its details are opened.
+- Leftover debug logging of every query removed.
+
+**Checks before release**: 36 related test files, no new failures (55 pre-existing); 10 new tests; TypeScript errors
+unchanged (583); build succeeded.
+
+**Verification after release**: GitHub (read-only by Claude): `main` = `459f894…`; rollback tag at `ffb0d30…`.
+Owner reported Command Chat loading much faster.
+
+**Rollback**: Railway → production → Deployments → previous deployment → Redeploy. Database: nothing to undo.
+
+---
+
 ## 2026-11-25 — History window: last 30 messages plus saved bookings and open tasks
 
 | | |
