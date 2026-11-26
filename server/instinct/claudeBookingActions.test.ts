@@ -49,7 +49,14 @@ describe("Claude's proposal is optional and can never fail or change the reply",
     expect(await attachProposedBookingAction(tx, task, { ...valid, evidenceQuote: "not in the message" }, "Can you move it to Friday?")).toBe(false);
     expect(await attachProposedBookingAction(tx, task, { type: "cancel_visit" }, "Can you move it to Friday?")).toBe(false);
     expect(await attachProposedBookingAction(tx, task, undefined, "Can you move it to Friday?")).toBe(false);
+    // A reschedule without the customer's new date is not proposed (the task stays manual).
+    expect(await attachProposedBookingAction(tx, task, { ...valid, newDate: null, newTime: null }, "Can you move it to Friday?")).toBe(false);
+    expect(await attachProposedBookingAction(tx, task, { ...valid, newDate: null, newTime: "14:00" }, "Can you move it to Friday?")).toBe(false);
     expect(inserted).toHaveLength(0);
+    // A cancellation needs no new date, and a reschedule keeping the current time (newTime null) is still proposed.
+    expect(await attachProposedBookingAction(tx, task, { ...valid, type: "cancel_visit", newDate: null, newTime: null }, "Can you move it to Friday?")).toBe(true);
+    expect(await attachProposedBookingAction(tx, task, { ...valid, newTime: null }, "Can you move it to Friday?")).toBe(true);
+    inserted.length = 0;
     expect(await attachProposedBookingAction(tx, task, valid, "Can you move it to Friday?")).toBe(true);
     expect(inserted[0]).toMatchObject({ channel: BOOKING_ACTION_CHANNEL, activeDedupKey: bookingActionKey(7) });
     expect(JSON.parse((inserted[0] as { metadata: string }).metadata)).toMatchObject({ taskId: 7, source: "claude", itemId: "item-1", status: "proposed",
