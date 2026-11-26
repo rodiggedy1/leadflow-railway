@@ -311,6 +311,17 @@ function summary(request: BookingActionRequest): string {
   return request.type === "cancel_visit" ? `Cancel ${visit}` : `Reschedule ${visit} to ${request.newDate ?? "?"} ${request.newTime ?? "(current time)"}`;
 }
 
+/** Which tasks have a booking-change record: ONE indexed query for the whole task list, so task cards without a
+ * booking change make no request of their own. Newest first; bounded so it stays small as records accumulate. */
+export const BOOKING_ACTION_TASK_IDS_LIMIT = 1000;
+export async function bookingActionTaskIds(db: Db): Promise<number[]> {
+  const rows = rowsOf(await db.execute(sql`SELECT activeDedupKey FROM ops_chat_messages
+    WHERE channel = ${BOOKING_ACTION_CHANNEL} AND quickAction = ${BOOKING_ACTION_QUICK_ACTION} ORDER BY id DESC LIMIT ${BOOKING_ACTION_TASK_IDS_LIMIT}`));
+  const prefix = bookingActionKey(0).slice(0, -1);
+  const ids = rows.map(row => String(row.activeDedupKey ?? "")).filter(key => key.startsWith(prefix))
+    .map(key => Number(key.slice(prefix.length))).filter(id => Number.isSafeInteger(id) && id > 0);
+  return [...new Set(ids)];
+}
 export async function getBookingActionView(db: Db, taskId: number): Promise<BookingActionView | null> {
   const found = await readRecord(db, taskId);
   if (!found) return null;

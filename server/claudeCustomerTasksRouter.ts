@@ -59,6 +59,9 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
   return router({
     bookingAction: opsChatProcedure.input(idInput).output(bookingActionViewSchema.nullable())
       .query(({ input }) => bookingActions((actions, db) => actions.getBookingActionView(db, input.id), false)),
+    /** Shared by every task card: one request and one indexed query, however many cards are on screen. */
+    bookingActionTaskIds: opsChatProcedure.output(z.array(z.number().int().positive()))
+      .query(() => bookingActions((actions, db) => actions.bookingActionTaskIds(db), false)),
     bookingActionVisits: opsChatProcedure.input(idInput).output(z.array(bookingActionVisitSchema))
       .query(({ input }) => bookingActions((actions, db) => actions.taskUpcomingVisits(db, input.id), false)),
     setupBookingAction: bookingsAgentProcedure.input(bookingRequestInput.extend({ itemId: z.string().min(1).nullable() }).strict())
@@ -83,7 +86,7 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
       .mutation(({ input, ctx }) => bookingActions(async (actions, db) => {
         const begun = await actions.beginBookingConfirmation(db, input.id, input.text, bookingsActor(ctx.agent));
         return { text: begun.text, sessionId: begun.sessionId };
-      })),
+      }, false)), // reserving the send changes nothing others need to see now; finishing it broadcasts once
     finishBookingConfirmation: bookingsAgentProcedure.input(z.object({ id, outcome: z.enum(["sent", "failed", "skipped", "mark_sent", "mark_not_sent"]) }).strict())
       .output(bookingActionRecordSchema)
       .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.finishBookingConfirmation(db, input.id, input.outcome, bookingsActor(ctx.agent)))),

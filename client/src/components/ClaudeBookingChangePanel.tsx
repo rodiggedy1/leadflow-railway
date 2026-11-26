@@ -56,7 +56,11 @@ export async function sendBookingConfirmation(steps: ConfirmationSteps): Promise
 export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
   const sms = !("call" in task) && !("email" in task) && Number.isSafeInteger(task.sessionId);
   const utils = trpc.useUtils();
-  const view = trpc.claudeCustomerTasks.bookingAction.useQuery({ id: task.id }, { enabled: sms, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
+  // One shared request for every card (same cache entry) says which tasks have a booking change; only those cards
+  // load their own details. Ordinary task cards make no booking-change request of their own.
+  const withRecords = trpc.claudeCustomerTasks.bookingActionTaskIds.useQuery(undefined, { enabled: sms, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
+  const hasRecord = sms && (withRecords.data?.includes(task.id) ?? false);
+  const view = trpc.claudeCustomerTasks.bookingAction.useQuery({ id: task.id }, { enabled: hasRecord, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -80,14 +84,18 @@ export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
     catch (caught) { setError(errorText(caught)); }
     finally {
       busyRef.current = false; setBusy(false);
-      try { await utils.claudeCustomerTasks.invalidate(); } catch { /* the next refresh picks it up */ }
+      // Refresh only what this card's step can change: its own booking change, which tasks have one, and the task list.
+      try {
+        await Promise.all([utils.claudeCustomerTasks.bookingAction.invalidate({ id: task.id }),
+          utils.claudeCustomerTasks.bookingActionTaskIds.invalidate(), utils.claudeCustomerTasks.list.invalidate()]);
+      } catch { /* the next refresh picks it up */ }
     }
   };
 
-  const data = view.data;
-  if (view.isLoading) return null;
+  const data = hasRecord ? view.data : null;
+  if (withRecords.isLoading || (hasRecord && view.isLoading)) return null;
   if (!data) {
-    if (task.status === "done" || view.isError) return null;
+    if (task.status === "done" || withRecords.isError || (hasRecord && view.isError)) return null;
     return editing
       ? <BookingRequestForm task={task} busy={busy} error={error} onCancel={() => setEditing(false)}
           onSave={(request, itemId) => void run(async () => { await setup.mutateAsync({ id: task.id, request, itemId }); setEditing(false); })} />
