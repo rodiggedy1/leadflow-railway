@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ts from "typescript";
 import { PUBLIC_BOOKING_PRICED_EXTRAS, type PublicBookingPricingInput } from "../../shared/publicBookingPricing";
 import { buildSystemPrompt } from "../csReplyStream";
+import { claudeWritingPrompt } from "./claudeWritingPrompt";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "../knowledgeBase";
 import type { InitialLeadDraftOptions } from "./claudeAgentClient";
 import { renderSmsBookingQuoteText } from "./bookingQuotePresentation";
@@ -113,14 +114,16 @@ describe("SMS-only writing instructions", () => {
       "replyText for quotes AND ordinary customer-service SMS", "Answer the current message directly",
       "shortest complete, warm reply", "skip repeated greetings, repeated reassurance",
       "Ask the next needed question rather than recap every collected fact",
-      "Preserve necessary answers, important clarifications, approved knowledge",
-      "truthful pending-human task acknowledgements", "Never shorten task titles, checklist actions or literal evidence for style",
-      "No character or token limit, truncation, extra model call or output rewriting",
       "friendly acknowledgement plus only useful grounded details, on separate short lines",
       "label it as requested, not confirmed", "Do not repeat the full address, rooms, condition, recurrence and extras",
-      "Do not repeat the price, selected-extras summary or booking-page instructions",
+      "price, selected-extras summary, booking/page instruction",
       "not over safety or required facts",
     ]) expect(instructions).toContain(rule);
+    // Consolidated (2026-11-26): stated once, in the shared reply style rules every SMS also receives.
+    for (const rule of ["preserve approved knowledge, truthful pending-human acknowledgment and every requested action",
+      "Do not change task titles, checklist content or evidence quotes for stylistic reasons",
+      "Do not impose a character limit or cut off a reply", "details needed to answer the customer correctly"])
+      expect(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS).toContain(rule);
   });
   it("requires one relevant emoji-led plain SMS line per canonical extra, with quantities and no repeated menu", () => {
     const instructions = SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS;
@@ -268,7 +271,7 @@ describe("ordinary SMS uses the same additive writing rules without changing sha
     expect(sent.systemPrompt).toContain("replyText for quotes AND ordinary customer-service SMS");
     expect(sent.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
     expect(sent.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);
-    expect(sent.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(sent.systemPrompt.endsWith(claudeWritingPrompt())).toBe(true);
     expect(sent.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(JSON.parse(sent.userPrompt).context).not.toHaveProperty("knowledgeBase");
     expect(sent.systemPrompt.split(MAIDS_IN_BLACK_KNOWLEDGE_BASE)).toHaveLength(2); // once, in the fixed instructions

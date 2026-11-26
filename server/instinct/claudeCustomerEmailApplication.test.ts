@@ -7,6 +7,7 @@ const modelBinding = (bound: CustomerEmailBinding) => ({ mailboxEmail: bound.mai
 const KNOWLEDGE_AT_END = `${CLAUDE_KNOWLEDGE_BASE_HEADING}COMPLETE EXISTING APPROVED KNOWLEDGE`;
 import type { CustomerEmailBinding, CustomerEmailStore } from "./claudeCustomerEmail";
 import { buildSystemPrompt } from "../csReplyStream";
+import { claudeWritingPrompt } from "./claudeWritingPrompt";
 function rawThread(text = "Please add a key note.") {
   return { id: "real-thread", messages: [{ id: "original-gmail-id", threadId: "real-thread", internalDate: "1000", labelIds: ["INBOX", "UNREAD"],
     payload: { mimeType: "text/plain", headers: [
@@ -43,7 +44,7 @@ describe("actual email counterpart application, no network", () => {
     const x = setup(); expect(await x.app.captured(x.event)).toBe(true);
     expect(x.trace).toEqual(["claim", "existing-agent", "durable-task-and-reply", "existing-Gmail-sender", "receipt"]);
     const request = x.runner.mock.calls[0][0] as any;
-    expect(request.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS); expect(request.systemPrompt.endsWith(`${buildSystemPrompt()}${KNOWLEDGE_AT_END}`)).toBe(true);
+    expect(request.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS); expect(request.systemPrompt.endsWith(`${claudeWritingPrompt()}${KNOWLEDGE_AT_END}`)).toBe(true);
     const input = JSON.parse(request.userPrompt);
     expect(input.incomingMessage).toBe("Please add a key note."); expect(input.context).not.toHaveProperty("knowledgeBase");
     expect(input.context.binding).toEqual(modelBinding(x.bound()));
@@ -66,7 +67,7 @@ describe("actual email counterpart application, no network", () => {
     const first = x.runner.mock.calls[0][0] as any, second = x.runner.mock.calls[1][0] as any;
     expect(second).toBe(first); expect(second.systemPrompt).toBe(first.systemPrompt); expect(second.userPrompt).toBe(first.userPrompt);
     expect(second.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
-    expect(second.systemPrompt.endsWith(`${buildSystemPrompt()}${KNOWLEDGE_AT_END}`)).toBe(true);
+    expect(second.systemPrompt.endsWith(`${claudeWritingPrompt()}${KNOWLEDGE_AT_END}`)).toBe(true);
     const input = JSON.parse(second.userPrompt);
     expect(input.incomingMessage).toBe("Please add a key note.");
     expect(input.context).not.toHaveProperty("knowledgeBase");

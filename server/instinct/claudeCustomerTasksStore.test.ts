@@ -539,7 +539,7 @@ describe("customer task store — offline transactional SQL port", () => {
     const h = port(), trace: string[] = [];
     h.binding.createdAt = Date.parse("2026-11-16T18:00:00Z"); h.binding.receivedAt = h.binding.createdAt + 10;
     const generate = createClaudeCustomerSmsGenerator({ readKnowledge: async () => "Complete synthetic company facts for offline transport only.",
-      runner: async options => { expect(options.systemPrompt).toContain("COMPLETE CURRENT CS WRITING PROMPT");
+      runner: async options => { expect(options.systemPrompt).toContain("=== CS WRITING PROMPT ===");
         expect(options.userPrompt).toContain(h.binding.inboundText); trace.push("existing-agent-generation-mocked");
         return { finalSmsText: JSON.stringify(plan) }; } });
     const send = vi.fn(async input => {

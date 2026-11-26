@@ -478,7 +478,7 @@ describe("SMS new-booking quote application: real generator â†’ qualification â†
     expect(prompt.context.originalConversation).toHaveLength(3); expect(prompt.context.originalConversation[1].role).toBe("assistant");
     expect(prompt.context).not.toHaveProperty("knowledgeBase");
     expect(h.runner.mock.calls[1][0].systemPrompt.endsWith(`${CLAUDE_KNOWLEDGE_BASE_HEADING}${KNOWLEDGE}`)).toBe(true);
-    expect(h.runner.mock.calls[1][0].systemPrompt).toContain("COMPLETE CURRENT CS WRITING PROMPT");
+    expect(h.runner.mock.calls[1][0].systemPrompt).toContain("=== CS WRITING PROMPT ===");
     expect(h.runner.mock.calls[1][0].systemPrompt).toContain("never repeat known usable fields");
     const third = await h.turn("No extras. Please show my quote.", { extras: [], extrasConfirmed: true }, "quote", { quoteTextTemplate: QUOTE_TEMPLATE });
     expect(third.result).toEqual({ outcome: "accepted" }); expect(h.state().funnels).toHaveLength(1);
