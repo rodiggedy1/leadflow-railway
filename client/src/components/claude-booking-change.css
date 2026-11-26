@@ -1,6 +1,6 @@
 /* Booking-change panel inside Claude SMS task cards (additive; cbc- prefix only). */
 .cbc-setup { margin-top: 6px; }
-.cbc-panel { display: grid; gap: 6px; margin-top: 8px; padding: 9px; border: 1px solid #4f6a8a; border-left: 3px solid #7fb0ee; border-radius: 7px; background: #222a36; color: #dfe6f1; font-size: 11px; line-height: 1.45; }
+.cbc-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: 8px; padding: 9px; border: 1px solid #4f6a8a; border-left: 3px solid #7fb0ee; border-radius: 7px; background: #222a36; color: #dfe6f1; font-size: 11px; line-height: 1.45; }
 .cbc-panel h4 { display: flex; align-items: center; gap: 5px; margin: 0; color: #cfe2ff; font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .cbc-panel p { margin: 0; overflow-wrap: anywhere; }
 .cbc-visit, .cbc-note { color: #aab4c4; font-size: 10px; }
@@ -14,10 +14,10 @@
 .cbc-check { display: flex; align-items: flex-start; gap: 6px; color: #e4ebf6; cursor: pointer; }
 .cbc-check input { margin-top: 2px; }
 .cbc-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.cbc-label { display: grid; gap: 3px; color: #aab4c4; font-size: 10px; }
-.cbc-label select, .cbc-label input, .cbc-panel textarea { width: 100%; min-height: 27px; padding: 4px 6px; border: 1px solid #46536a; border-radius: 6px; background: #1a2029; color: #eef2f8; font: inherit; font-size: 11px; }
+.cbc-label { display: grid; gap: 3px; min-width: 0; color: #aab4c4; font-size: 10px; }
+.cbc-label select, .cbc-label input, .cbc-panel textarea { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; min-height: 27px; padding: 4px 6px; border: 1px solid #46536a; border-radius: 6px; background: #1a2029; color: #eef2f8; font: inherit; font-size: 11px; }
 .cbc-panel textarea { min-height: 64px; resize: vertical; }
-.cbc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cbc-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
 .cbc-verified, .cbc-closed { border-color: #496c5d; border-left-color: #7fd1a6; background: #1f2c27; }
 .cbc-verified h4, .cbc-closed h4 { color: #bfeed3; }
 .cbc-unverified { border-color: #8a6a3f; border-left-color: #f0b35e; background: #2d261c; }
