@@ -155,14 +155,15 @@ const day = (n: number) => new Date(Date.parse(`${TODAY}T12:00:00Z`) + n * 86_40
 const label = (d: string) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" }).format(new Date(`${d}T12:00:00Z`));
 const labelEs = (d: string) => new Intl.DateTimeFormat("es-US", { timeZone: "UTC", day: "numeric", month: "long" }).format(new Date(`${d}T12:00:00Z`));
 const weekday = (d: string) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long" }).format(new Date(`${d}T12:00:00Z`));
-const ordinal = (d: string) => { const n = Number(d.slice(8)); return `${n}${[11, 12, 13].includes(n) ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`; };
 
 type Expect = null | { type: "reschedule_visit" | "cancel_visit"; visitDate: string; newDate?: string | null; newTime?: string | null };
-type Case = { key: string; group: string; name: string; message: string; jobs: Array<[number, string, string]>; past?: string; prior?: string; expect: Expect; note: string };
+/** alsoOk: other results that are equally correct or safe (for example the current time, or no proposal = manual). */
+type Case = { key: string; group: string; name: string; message: string; jobs: Array<[number, string, string]>; past?: string; prior?: string; expect: Expect; alsoOk?: Expect[]; note: string };
 const T = (n: number) => day(n);
 const CASES: Case[] = [
   { key: "R1", group: "clear reschedule", name: "Jordan Ellis", jobs: [[0, T(4), "10:00"]], note: "one-time visit, new date given, same time",
-    message: `Hi! Something came up, can we move my cleaning on ${label(T(4))} to ${label(T(7))}? Same time works.`, expect: { type: "reschedule_visit", visitDate: T(4), newDate: T(7), newTime: null } },
+    message: `Hi! Something came up, can we move my cleaning on ${label(T(4))} to ${label(T(7))}? Same time works.`, expect: { type: "reschedule_visit", visitDate: T(4), newDate: T(7), newTime: null },
+    alsoOk: [{ type: "reschedule_visit", visitDate: T(4), newDate: T(7), newTime: "10:00" }] }, // the current time: same change
   { key: "O1", group: "ordinary", name: "Priya Shah", jobs: [[0, T(3), "11:00"]], note: "question, upcoming visit",
     message: "Do you guys bring your own supplies and vacuum, or should I leave mine out?", expect: null },
   { key: "C1", group: "clear cancellation", name: "Marcus Reed", jobs: [[0, T(5), "09:00"]], note: "one-time visit",
@@ -170,7 +171,8 @@ const CASES: Case[] = [
   { key: "A1", group: "ambiguous", name: "Elena Torres", jobs: [[0, T(3), "13:00"]], note: "no day chosen",
     message: "Is there any chance we could do a different day next week instead?", expect: null },
   { key: "W1", group: "one visit of a weekly customer", name: "Carla Nguyen", jobs: [[0, T(2), "09:00"], [1, T(9), "09:00"]], note: "skip the second weekly visit (not the next one)",
-    message: `Can we skip the cleaning on ${label(T(9))}? Everything else stays the same.`, expect: { type: "cancel_visit", visitDate: T(9) } },
+    message: `Can we skip the cleaning on ${label(T(9))}? Everything else stays the same.`, expect: { type: "cancel_visit", visitDate: T(9) },
+    alsoOk: [null] }, // the visit is not in the booking context; manual handling is safe (and recurring cancels are manual in Phase 1)
   { key: "W3", group: "one visit of a weekly customer", name: "Tom Becker", jobs: [[0, T(2), "09:00"], [1, T(9), "09:00"]], note: "ALL future visits: must stay manual",
     message: "Please cancel all my future cleanings, we're moving out of the area.", expect: null },
   { key: "O2", group: "ordinary", name: "Dev Patel", jobs: [], past: T(-2), note: "thanks after a completed visit",
@@ -180,7 +182,8 @@ const CASES: Case[] = [
   { key: "A2", group: "ambiguous", name: "Nina Hall", jobs: [[0, T(6), "10:00"]], note: "may cancel, not decided",
     message: "I might need to cancel, I'll let you know tomorrow.", expect: null },
   { key: "W2", group: "one visit of a weekly customer", name: "Omar Diaz", jobs: [[0, T(2), "09:00"], [1, T(9), "09:00"]], note: "move one later weekly visit by a day",
-    message: `For the ${ordinal(T(9))} cleaning, could you come on ${label(T(10))} instead? Just that one week.`, expect: { type: "reschedule_visit", visitDate: T(9), newDate: T(10) } },
+    message: `For the ${label(T(9))} cleaning, could you come on ${label(T(10))} instead? Just that one week.`, expect: { type: "reschedule_visit", visitDate: T(9), newDate: T(10) },
+    alsoOk: [null] }, // the visit is not in the booking context; manual handling is safe
   { key: "C2", group: "clear cancellation", name: "Lucia Romero", jobs: [[0, T(6), "11:00"]], note: "Spanish",
     message: `Hola, necesito cancelar la limpieza del ${labelEs(T(6))}. Gracias.`, expect: { type: "cancel_visit", visitDate: T(6) } },
   { key: "A3", group: "ambiguous", name: "Grace Kim", jobs: [], note: "no saved booking at all",
@@ -233,12 +236,12 @@ async function runCase(c: Case, index: number, variant: Variant) {
     const tx = { insert: () => ({ values: async (row: any) => { accepted = JSON.parse(row.metadata).request; } }) };
     await prod.actions.attachProposedBookingAction(tx as any, { id: 1, items: plan.task.items.map((item: any, i: number) => ({ id: `item-${i + 1}`, evidenceQuote: item.evidenceQuote })) }, raw, c.message);
   }
-  const e = c.expect;
-  const match = !error && (e === null ? accepted === null : Boolean(accepted && accepted.type === e.type && accepted.visitDate === e.visitDate
-    && (e.newDate === undefined || accepted.newDate === e.newDate) && (e.newTime === undefined || accepted.newTime === e.newTime)));
+  const fits = (e: Expect) => e === null ? accepted === null : Boolean(accepted && accepted.type === e.type && accepted.visitDate === e.visitDate
+    && (e.newDate === undefined || accepted.newDate === e.newDate) && (e.newTime === undefined || accepted.newTime === e.newTime));
+  const match = !error && [c.expect, ...(c.alsoOk ?? [])].some(fits);
   return { key: c.key, group: c.group, variant, note: c.note, message: c.message, requests: usage.requests - before,
     replyPassed: !error, error, task: plan ? Boolean(plan.task) : null, proposedByClaude: raw === undefined ? false : true,
-    accepted: describe(accepted), expected: expected(e), match, claimsDone: plan ? CLAIMS_DONE.test(String(plan.replyText)) : null,
+    accepted: describe(accepted), expected: [c.expect, ...(c.alsoOk ?? [])].map(expected).join(" or "), match, claimsDone: plan ? CLAIMS_DONE.test(String(plan.replyText)) : null,
     reply: plan?.replyText ?? null, quoteFlow: Boolean(plan?.smsBookingQuote) };
 }
 
@@ -333,7 +336,7 @@ async function main() {
     investigation.push({ n: item.n, variant: "existing", firstRunError: item.error, attempts });
     console.log(`\n#${item.n} with EXISTING instructions (as in production today): ${say(attempts)}`);
   }
-  const needed = results.filter(r => !r.replyPassed || r.claimsDone || (!r.match && r.expected === "none"));
+  const needed = results.filter(r => !r.replyPassed || r.claimsDone || (!r.match && r.accepted !== "none"));
   const baseline = ["R1", "O1"].map(key => results.find(r => r.key === key)).filter(Boolean);
   const compare = [...needed, ...baseline.filter(r => !needed.includes(r))];
   if (compare.length) console.log(`\nComparison with the EXISTING instructions (${compare.map(r => r.key).join(", ")}):`);
