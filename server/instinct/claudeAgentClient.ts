@@ -4,7 +4,10 @@
  * caller's ANTHROPIC_API_KEY environment variable; no application wiring exists.
  * Official wire definitions: Managed Agents sessions/tools/events-and-streaming
  * and anthropics/anthropic-sdk-typescript src/resources/beta/{agents,sessions}.
+ * runInitialLeadDraft (no tools) can instead use the direct Messages API through the
+ * official SDK; see CLAUDE_TRANSPORT below.
  */
+import Anthropic from "@anthropic-ai/sdk";
 export const EXISTING_AGENT_ID = "agent_01Naiw8VvfB75yd2VWUtVP6v";
 export const EXISTING_AGENT_VERSION = 1;
 /** Model every session runs on, set per session. The saved agent is not changed; its other model settings
@@ -531,13 +534,110 @@ export interface InitialLeadDraftOptions {
   readonly signal?: AbortSignal;
   readonly onEvent?: RunOptions["onEvent"];
   readonly onTrace?: RunOptions["onTrace"];
+  /** How long the shared instructions stay cached on the direct connection (default 5 minutes). */
+  readonly cacheTtl?: "5m" | "1h";
+}
+
+/** Which connection runInitialLeadDraft uses. ROLLBACK: set to "managed_agents" and release;
+ * that restores the previous saved-agent session path unchanged. No database impact. */
+export const CLAUDE_TRANSPORT: "messages_api" | "managed_agents" = "messages_api";
+/** The saved agent's effort setting, sent explicitly on the direct connection. */
+export const MESSAGES_API_EFFORT = "low";
+export const MESSAGES_API_MAX_TOKENS = 16000;
+
+/** Token usage for one direct request. Counts only: never prompt, reply or customer text. */
+export interface MessagesApiUsageLog {
+  transport: "messages_api";
+  messageId: string;
+  model: string;
+  cacheTtl: "5m" | "1h";
+  inputTokens: number;
+  cacheCreation5mTokens: number;
+  cacheCreation1hTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+  stopReason: string | null;
+  durationMs: number;
+}
+function logMessagesApiUsage(entry: MessagesApiUsageLog): void {
+  try { console.info(`[claude-usage] ${JSON.stringify(entry)}`); } catch { /* logging never changes the outcome */ }
+}
+
+/** Direct Messages API request: the same model, effort, instructions and customer text as the
+ * saved-agent session, no tools, the SDK's automatic retries OFF (callers keep their own single
+ * retry), refusal fallback off. The fixed instructions are the only cached block; the customer
+ * part is the single user message after the cache marker and is never part of the cached prefix. */
+async function runMessagesApiDraft(options: InitialLeadDraftOptions): Promise<RunResult> {
+  if (!nonempty(options.userPrompt)) throw new ManagedAgentDemoError("INVALID_PAYLOAD", undefined, undefined, "not_started");
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key || !key.trim()) throw new ManagedAgentDemoError("MISSING_API_KEY", undefined, undefined, "not_started");
+  if (options.signal?.aborted) throw new ManagedAgentDemoError("CANCELLED", undefined, undefined, "not_started");
+  const cacheTtl = options.cacheTtl ?? "5m";
+  const started = Date.now();
+  let messageId: string | undefined;
+  try {
+    let message: Anthropic.Message;
+    try {
+      // Same fixed address as the session path; no environment setting can redirect it.
+      message = await new Anthropic({ apiKey: key, baseURL: ORIGIN, maxRetries: 0 }).messages.create({
+        model: SESSION_MODEL_ID,
+        max_tokens: MESSAGES_API_MAX_TOKENS,
+        output_config: { effort: MESSAGES_API_EFFORT },
+        ...(options.systemPrompt ? { system: [{ type: "text" as const, text: options.systemPrompt,
+          cache_control: { type: "ephemeral" as const, ttl: cacheTtl } }] } : {}),
+        messages: [{ role: "user", content: options.userPrompt }],
+      }, options.signal ? { signal: options.signal } : undefined);
+    } catch (error) {
+      // Never keep or log the provider error body.
+      if (error instanceof Anthropic.APIUserAbortError || options.signal?.aborted) throw new ManagedAgentDemoError("CANCELLED");
+      if (error instanceof Anthropic.APIError && typeof error.status === "number") {
+        const ambiguous = error.status >= 500 || error.status === 408;
+        throw new ManagedAgentDemoError(ambiguous ? "UNKNOWN_POST_OUTCOME" : "PROVIDER_HTTP_ERROR", undefined, error.status, ambiguous ? "unknown" : "rejected");
+      }
+      throw new ManagedAgentDemoError("UNKNOWN_POST_OUTCOME");
+    }
+    if (!object(message) || !nonempty(message.id) || !Array.isArray(message.content) || !object(message.usage)) {
+      throw new ManagedAgentDemoError("INVALID_RESPONSE");
+    }
+    messageId = message.id;
+    const usage = message.usage;
+    logMessagesApiUsage({ transport: "messages_api", messageId, model: String(message.model), cacheTtl,
+      inputTokens: usage.input_tokens ?? 0,
+      cacheCreation5mTokens: usage.cache_creation?.ephemeral_5m_input_tokens ?? 0,
+      cacheCreation1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
+      cacheReadTokens: usage.cache_read_input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0,
+      stopReason: message.stop_reason ?? null, durationMs: Date.now() - started });
+    await options.onTrace?.({ stage: "http_response", method: "POST", path: "/v1/messages", status: 200, sessionId: messageId });
+    // Thinking blocks are ignored; anything other than thinking and text is unexpected with no tools.
+    if (message.content.some(block => !["text", "thinking", "redacted_thinking"].includes(block.type))) {
+      throw new ManagedAgentDemoError("INVALID_RESPONSE", messageId);
+    }
+    const finalSmsText = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("");
+    // A refusal, a cut-off reply or an empty reply is an incomplete turn, as on the session path.
+    if (message.stop_reason !== "end_turn" || !finalSmsText.trim()) throw new ManagedAgentDemoError("INCOMPLETE_TURN", messageId);
+    await options.onEvent?.({ id: messageId, type: "agent.message", texts: [finalSmsText] });
+    await options.onTrace?.({ stage: "completed", sessionId: messageId });
+    return { sessionId: messageId, agentId: EXISTING_AGENT_ID, agentVersion: EXISTING_AGENT_VERSION,
+      environmentId: EXISTING_ENVIRONMENT_ID, agentMessages: [{ providerEventId: messageId, text: finalSmsText }],
+      finalSmsText, toolCalls: [] };
+  } catch (error) {
+    const safe = error instanceof ManagedAgentDemoError ? error : new ManagedAgentDemoError("HOOK_FAILED", messageId);
+    try { void Promise.resolve(options.onTrace?.({ stage: "failed", sessionId: messageId, code: safe.code })).catch(() => undefined); }
+    catch { /* redacted */ }
+    throw safe;
+  }
 }
 /** First-lead drafting with exact caller instructions and no tools or business
  * operations. Replaces only the session system; never edits the saved agent. */
 export function runInitialLeadDraft(options: InitialLeadDraftOptions): Promise<RunResult> {
+  return runInitialLeadDraftOn(CLAUDE_TRANSPORT, options);
+}
+/** The same draft on an explicit connection (tests and the comparison run use both). */
+export function runInitialLeadDraftOn(transport: "messages_api" | "managed_agents", options: InitialLeadDraftOptions): Promise<RunResult> {
   if (typeof options.systemPrompt !== "string") {
     throw new ManagedAgentDemoError("INVALID_PAYLOAD", undefined, undefined, "not_started");
   }
+  if (transport === "messages_api") return runMessagesApiDraft(options);
   const backend: Backend = {
     tools: [],
     callTool() { throw new ManagedAgentDemoError("UNSAFE_TOOL"); },

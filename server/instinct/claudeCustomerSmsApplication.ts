@@ -52,7 +52,7 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
       signal,
       smsBookingQuote: { readState: quoteStore.read },
       readCustomerRecords: readCustomerRecords,
-      runner: options => runInitialLeadDraft({ ...options, signal }),
+      runner: options => runInitialLeadDraft({ ...options, cacheTtl: "1h", signal }),
     }))(binding, session),
     store: { ...taskStore, prepare: async (claim, plan, failure) => {
       linkPrepared = false;

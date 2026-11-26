@@ -7,7 +7,7 @@ import {
   ANTHROPIC_BETA, ANTHROPIC_VERSION, EXISTING_AGENT_ID,
   EXISTING_AGENT_VERSION, EXISTING_ENVIRONMENT_ID, ManagedAgentDemoError, SESSION_MODEL_ID,
   runGeneralSmsDraft, type Backend, type ObservedEvent, type GeneralSmsDraftOptions,
-  runInitialLeadDraft, type InitialLeadDraftOptions, type TraceEntry,
+  runInitialLeadDraft, runInitialLeadDraftOn, type InitialLeadDraftOptions, type TraceEntry,
 } from "./claudeAgentClient";
 
 type Obj = Record<string, any>;
@@ -113,7 +113,8 @@ function harness(config: HarnessOptions = {}): Harness {
         onTrace: entry => { traces.push(entry); }, ...extra });
     },
     async runInitial(extra: Partial<InitialLeadDraftOptions> = {}) {
-      return runInitialLeadDraft({ systemPrompt: INITIAL_SYSTEM, userPrompt: INITIAL_USER,
+      // The saved-agent session path is the rollback connection; it stays fully tested.
+      return runInitialLeadDraftOn("managed_agents", { systemPrompt: INITIAL_SYSTEM, userPrompt: INITIAL_USER,
         ...config.initialLead,
         onEvent: received => { events.push(received); },
         onTrace: entry => { traces.push(entry); }, ...extra });
@@ -517,7 +518,8 @@ describe("MOCKED TRANSPORT ONLY: extracted existing-agent general SMS draft", ()
 
   it("import exposes only opt-in code; no package, application, proxy or data dependency", () => {
     const source = readFileSync(new URL("./claudeAgentClient.ts", import.meta.url), "utf8");
-    expect(source).not.toMatch(/^import\s/m);
+    // The only import is the official Anthropic SDK (owner-approved for the direct Messages API connection).
+    expect(source.match(/^import\s.*$/gm)).toEqual(['import Anthropic from "@anthropic-ai/sdk";']);
     expect(source).not.toMatch(/invokeLLM|listLLMModels|manus-proxy|createPool|createConnection|\.listen\(/);
     expect(source).not.toContain(["cleaner", "jobs"].join("_"));
     expect(source).not.toContain(["cleaner", "Jobs"].join(""));
