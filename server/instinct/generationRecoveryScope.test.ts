@@ -53,7 +53,8 @@ describe("one-extra-generation recovery exact local scope", () => {
   // Owner-approved reviewed changes to protected files: exact new bytes pinned; any further edit still fails.
   const reviewedProtected: Record<string, string> = {
     // History window (2026-11-25): reads saved bookings and unfinished tasks as optional SMS context.
-    "server/instinct/claudeCustomerSmsApplication.ts": "e5c7ff921c8f81b6db0aac09081a80d2a50f1aa14b8598709031edb0c60c80b6",
+    // Messages API (2026-11-26): automatic SMS replies ask for the 1-hour cache (cacheTtl: "1h"); nothing else changed.
+    "server/instinct/claudeCustomerSmsApplication.ts": "1f2a7582ff1bacd476d6b48d2d59549a9496bc7c799448f78da31609ee4e4d41",
   };
   it.each(protectedSources)("preserves delivery, authority, state, transport and prompts byte-for-byte: %s", path => {
     const source = readFileSync(path, "utf8");
