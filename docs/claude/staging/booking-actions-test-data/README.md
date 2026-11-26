@@ -20,14 +20,20 @@ Safety details:
 - Payment status is `not_started` and no payment records exist, so nothing can be charged.
 - Staging's simulator blocks real SMS, so confirmations are recorded, not sent.
 
-**Steps**
-1. Paste `01-create.sql` into the SQL editor and run it. The first result must show `leadflow_staging`. The last result
-   should show `4 bookings, 5 visits, 4 tasks, 2 proposals`.
-2. In Command Chat → Tasks, the four "(Staging Test)" tasks appear.
-3. When finished, run `02-remove.sql`, which removes them along with any visits the tests created. Running
-   `01-create.sql` again also starts afresh.
+**Steps** (TiDB Cloud SQL Editor)
+1. Choose the **`leadflow_staging`** database in the editor. The script has no `USE` statement.
+2. Paste `01-create.sql`. Run the steps **one at a time, in order**: click inside a step, or select just that step, then
+   click Run. After each step, compare the result with the step's **Expected** line.
+   - **Step 1** is read-only. It must show `current_database = leadflow_staging`, `missing_columns = NULL`,
+     `required_columns_not_filled = NULL` and `timezone_check = 2026-12-01 15:00:00`. If anything differs, stop and send
+     that row: it names any column in staging's tables that the script doesn't match.
+   - **Steps 2–7** remove earlier test rows. They change 0 rows the first time.
+   - **Steps 8–14** create the data. Expected rows affected: 4, 4, 1, 5, 4, 4, 2.
+   - **Step 15** shows one row per test customer, with its booking, visits, task and proposal counts.
+3. In Command Chat → Tasks, the four "(Staging Test)" tasks appear.
+4. When finished, run `02-remove.sql` the same way, one step at a time. Its last step should show 0 and 0.
 
-Tested on a local TiDB with the app's own code:
+Tested on a local TiDB, with each step run in its own session as the editor does, and then checked with the app's own code:
 - the task list loads;
 - Alice's proposal executes and verifies;
 - Ben's set-up cancellation executes and verifies;
