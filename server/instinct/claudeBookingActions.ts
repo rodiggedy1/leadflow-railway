@@ -320,7 +320,7 @@ export async function bookingActionTaskIds(db: Db): Promise<number[]> {
   const prefix = bookingActionKey(0).slice(0, -1);
   const ids = rows.map(row => String(row.activeDedupKey ?? "")).filter(key => key.startsWith(prefix))
     .map(key => Number(key.slice(prefix.length))).filter(id => Number.isSafeInteger(id) && id > 0);
-  return [...new Set(ids)];
+  return Array.from(new Set(ids));
 }
 export async function getBookingActionView(db: Db, taskId: number): Promise<BookingActionView | null> {
   const found = await readRecord(db, taskId);
