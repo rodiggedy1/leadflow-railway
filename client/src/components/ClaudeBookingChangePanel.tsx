@@ -55,13 +55,23 @@ export async function sendBookingConfirmation(steps: ConfirmationSteps): Promise
 
 export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
   const sms = !("call" in task) && !("email" in task) && Number.isSafeInteger(task.sessionId);
-  const utils = trpc.useUtils();
-  // One shared request for every card (same cache entry) says which tasks have a booking change; only those cards
-  // load their own details. Ordinary task cards make no booking-change request of their own.
+  // One shared request for every card (same cache entry) says which tasks have a booking change. Ordinary task cards
+  // make no booking-change request and build only the set-up button; the full panel exists only where it is used.
   const withRecords = trpc.claudeCustomerTasks.bookingActionTaskIds.useQuery(undefined, { enabled: sms, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
-  const hasRecord = sms && (withRecords.data?.includes(task.id) ?? false);
+  const [settingUp, setSettingUp] = useState(false);
+  if (!sms) return null;
+  const hasRecord = withRecords.data?.includes(task.id) ?? false;
+  if (hasRecord || settingUp) return <BookingChangeDetails task={task} hasRecord={hasRecord} startEditing={settingUp} onSetupClosed={() => setSettingUp(false)} />;
+  if (withRecords.isLoading || withRecords.isError || task.status === "done") return null;
+  return <div className="cbc-setup"><button type="button" onClick={() => setSettingUp(true)}><CalendarClock />Set up booking change</button></div>;
+}
+
+function BookingChangeDetails({ task, hasRecord, startEditing, onSetupClosed }: {
+  task: CustomerTask; hasRecord: boolean; startEditing: boolean; onSetupClosed: () => void;
+}) {
+  const utils = trpc.useUtils();
   const view = trpc.claudeCustomerTasks.bookingAction.useQuery({ id: task.id }, { enabled: hasRecord, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(startEditing);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -74,7 +84,6 @@ export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
   const begin = trpc.claudeCustomerTasks.beginBookingConfirmation.useMutation();
   const finish = trpc.claudeCustomerTasks.finishBookingConfirmation.useMutation();
   const send = trpc.leads.sendMessage.useMutation();
-  if (!sms) return null;
 
   /** One request at a time per card; the server separately guarantees each step happens at most once. */
   const run = async (request: () => Promise<unknown>) => {
@@ -93,11 +102,11 @@ export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
   };
 
   const data = hasRecord ? view.data : null;
-  if (withRecords.isLoading || (hasRecord && view.isLoading)) return null;
+  if (hasRecord && view.isLoading) return null;
   if (!data) {
-    if (task.status === "done" || withRecords.isError || (hasRecord && view.isError)) return null;
+    if (task.status === "done" || (hasRecord && view.isError)) return null;
     return editing
-      ? <BookingRequestForm task={task} busy={busy} error={error} onCancel={() => setEditing(false)}
+      ? <BookingRequestForm task={task} busy={busy} error={error} onCancel={() => { setEditing(false); onSetupClosed(); }}
           onSave={(request, itemId) => void run(async () => { await setup.mutateAsync({ id: task.id, request, itemId }); setEditing(false); })} />
       : <div className="cbc-setup"><button type="button" disabled={busy} onClick={() => { setError(""); setEditing(true); }}><CalendarClock />Set up booking change</button></div>;
   }
