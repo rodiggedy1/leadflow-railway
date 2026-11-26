@@ -7,6 +7,8 @@ export type TaskActor = z.infer<typeof taskActorSchema>;
 export const proposedCustomerTaskSchema = z.object({
   title: z.string().trim().min(1),
   items: z.array(z.object({ title: z.string().trim().min(1), evidenceQuote: z.string().trim().min(1) }).strict()).min(1),
+  /** Optional SMS booking-change proposal. Validated separately; an unusable one is dropped, never failing the reply. */
+  bookingAction: z.unknown().optional(),
 }).strict();
 export const customerReplyPlanSchema = z.object({
   replyText: z.string().trim().min(1), task: proposedCustomerTaskSchema.nullable(),

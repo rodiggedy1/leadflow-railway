@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { customerTaskSchema, taskActorSchema, type CustomerTask, type TaskActor } from "../shared/claudeCustomerTasks";
-import { opsChatProcedure, router } from "./_core/trpc";
+import { bookingsAgentProcedure, opsChatProcedure, router } from "./_core/trpc";
+import { bookingActionRecordSchema, bookingActionRequestSchema, bookingActionViewSchema, bookingActionVisitSchema } from "../shared/claudeBookingActions";
 import {
   createClaudeCustomerTasksStore, CustomerTaskStoreError, type ClaudeCustomerTasksStore,
 } from "./instinct/claudeCustomerTasksStore";
@@ -13,6 +14,8 @@ export interface CustomerTasksRouterOptions {
   broadcast(): void | Promise<void>;
   readCallRecordingUrl?: (providerCallId: string) => Promise<string | null>;
   readStaffCallRecordingUrl?: (providerCallId: string) => Promise<string | null>;
+  /** Booking changes (Phase 1). Injectable for offline tests. */
+  getDatabase?: () => Promise<import("./instinct/claudeBookingActions").BookingActionDb>;
 }
 /** Injectable offline seam. Staff identity comes exclusively from opsChatProcedure. */
 export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOptions) {
@@ -32,7 +35,58 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
     try { await options.broadcast(); } catch { /* the task write is already committed */ }
     return result;
   }
+  async function bookingActions<T>(operation: (actions: typeof import("./instinct/claudeBookingActions"), db: import("./instinct/claudeBookingActions").BookingActionDb) => Promise<T>, broadcast = true): Promise<T> {
+    const actions = await import("./instinct/claudeBookingActions");
+    try {
+      const db = options.getDatabase ? await options.getDatabase() : await (async () => {
+        const { getDb } = await import("./db");
+        const database = await getDb();
+        if (!database) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable." });
+        return database;
+      })();
+      const result = await operation(actions, db);
+      if (broadcast) { try { await options.broadcast(); } catch { /* the write is already committed */ } }
+      return result;
+    } catch (error) {
+      if (error instanceof TRPCError) throw error;
+      if (error instanceof actions.BookingActionError || error instanceof CustomerTaskStoreError) throw new TRPCError({ code: error.code, message: error.message });
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The booking change could not be saved or loaded.", cause: error });
+    }
+  }
+  // Executing staff: the existing "bookings" page permission, the same as rescheduling or cancelling by hand.
+  const bookingsActor = (agent: { agentId: number; agentName: string }): TaskActor => ({ id: String(agent.agentId), name: agent.agentName });
+  const bookingRequestInput = z.object({ id, request: bookingActionRequestSchema }).strict();
   return router({
+    bookingAction: opsChatProcedure.input(idInput).output(bookingActionViewSchema.nullable())
+      .query(({ input }) => bookingActions((actions, db) => actions.getBookingActionView(db, input.id), false)),
+    bookingActionVisits: opsChatProcedure.input(idInput).output(z.array(bookingActionVisitSchema))
+      .query(({ input }) => bookingActions((actions, db) => actions.taskUpcomingVisits(db, input.id), false)),
+    setupBookingAction: bookingsAgentProcedure.input(bookingRequestInput.extend({ itemId: z.string().min(1).nullable() }).strict())
+      .output(bookingActionRecordSchema)
+      .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.setupBookingAction(db, input.id, { request: input.request, itemId: input.itemId }, bookingsActor(ctx.agent)))),
+    editBookingAction: bookingsAgentProcedure.input(bookingRequestInput.extend({ revision: z.number().int().positive() }).strict())
+      .output(bookingActionRecordSchema)
+      .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.editBookingAction(db, input.id, { revision: input.revision, request: input.request }, bookingsActor(ctx.agent)))),
+    executeBookingAction: bookingsAgentProcedure.input(z.object({ id, revision: z.number().int().positive(), jobId: z.number().int().positive(),
+      availabilityConfirmed: z.boolean() }).strict()).output(bookingActionRecordSchema)
+      .mutation(({ input, ctx }) => bookingActions(async (actions, db) => {
+        const actor = bookingsActor(ctx.agent);
+        const { record } = await actions.executeBookingAction(db, input.id, { revision: input.revision, jobId: input.jobId, availabilityConfirmed: input.availabilityConfirmed }, actor);
+        // Verification is a separate step: its failure never re-executes and can be retried on its own.
+        if (record.status !== "executed") return record;
+        try { return await actions.verifyBookingAction(db, input.id, actor); } catch { return record; }
+      })),
+    verifyBookingAction: bookingsAgentProcedure.input(idInput).output(bookingActionRecordSchema)
+      .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.verifyBookingAction(db, input.id, bookingsActor(ctx.agent)))),
+    beginBookingConfirmation: bookingsAgentProcedure.input(z.object({ id, text: z.string().min(1).max(1600) }).strict())
+      .output(z.object({ text: z.string(), sessionId: z.number().int().positive() }).strict())
+      .mutation(({ input, ctx }) => bookingActions(async (actions, db) => {
+        const begun = await actions.beginBookingConfirmation(db, input.id, input.text, bookingsActor(ctx.agent));
+        return { text: begun.text, sessionId: begun.sessionId };
+      })),
+    finishBookingConfirmation: bookingsAgentProcedure.input(z.object({ id, outcome: z.enum(["sent", "failed", "skipped", "mark_sent", "mark_not_sent"]) }).strict())
+      .output(bookingActionRecordSchema)
+      .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.finishBookingConfirmation(db, input.id, input.outcome, bookingsActor(ctx.agent)))),
     identity: opsChatProcedure.output(taskActorSchema).query(({ ctx }) => actor(ctx.opsCaller)),
     list: opsChatProcedure.input(z.object({}).strict()).output(z.array(customerTaskSchema))
       .query(() => run(store => store.list())),
