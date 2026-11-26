@@ -57,6 +57,10 @@ describe("one-extra-generation recovery exact local scope", () => {
     // History window (2026-11-25): reads saved bookings and unfinished tasks as optional SMS context.
     // Messages API (2026-11-26): automatic SMS replies ask for the 1-hour cache (cacheTtl: "1h"); nothing else changed.
     "server/instinct/claudeCustomerSmsApplication.ts": "1f2a7582ff1bacd476d6b48d2d59549a9496bc7c799448f78da31609ee4e4d41",
+    // Phase 1 booking changes (2026-11-26): optional bookingAction on the reply plan (never stored in the task) and
+    // attaching a proposal to its own private record when the task is created. Nothing else changed.
+    "server/instinct/claudeCustomerTasksStore.ts": "8e274df8b24adb1a4e69436f71d364ed465ef8b4d1517b25ddc0fb2a73acd6f8",
+    "shared/claudeCustomerTasks.ts": "57ce1ad7fefe44da89a92986fdb0fd951029263794a705a383c408ff31972e10",
   };
   it.each(protectedSources)("preserves delivery, authority, state, transport and prompts byte-for-byte: %s", path => {
     const source = readFileSync(path, "utf8");

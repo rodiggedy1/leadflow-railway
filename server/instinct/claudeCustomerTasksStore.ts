@@ -12,6 +12,7 @@ import type { getDb } from "../db";
 import { normalizePhone } from "../utils/phone";
 import { customerSmsFailureDetailsSchema, type CustomerSmsFailureDetails } from "./claudeCustomerSmsFailure";
 import { customerSmsContextHash, customerSmsEnvelopes, customerSmsIds, customerSmsTurnAfter } from "./customerSmsFreshness";
+import { attachProposedBookingAction } from "./claudeBookingActions";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -264,6 +265,9 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
         receivedAt: claim.binding.receivedAt, receivingPhoneNumberId: claim.binding.receivingPhoneNumberId,
         receivingPhoneNumber: claim.binding.receivingPhoneNumber,
       }, plan, taskKeyFor(claim.binding));
+      // Optional booking-change proposal in its own private record; an unusable one is ignored (task stays manual).
+      if (id !== null && plan.task) await attachProposedBookingAction(tx, { id, items: plan.task.items.map((item, index) => ({ id: `item-${index + 1}`,
+        evidenceQuote: item.evidenceQuote })) }, plan.task.bookingAction, claim.binding.inboundText);
       const changed = header(await tx.execute(sql`UPDATE madison_sms_drafts SET status = 'SENDING', generatedDraft = ${plan.replyText},
         approvedText = ${plan.replyText}, capabilityResult = ${JSON.stringify({ phase: "submission_started", taskId: id })},
         updatedAt = NOW(3) WHERE id = ${claim.draftId} AND capability = ${capability} AND status = 'TOOLS_RUNNING'`));

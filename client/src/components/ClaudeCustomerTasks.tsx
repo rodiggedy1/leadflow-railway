@@ -6,6 +6,7 @@ import { proxyRecordingUrl } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import "./claude-customer-tasks.css";
+import { ClaudeBookingChangePanel } from "./ClaudeBookingChangePanel";
 
 export type CustomerTaskView = "open" | "mine" | "done";
 export type CustomerTaskActions = {
@@ -381,6 +382,7 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
     </div>
     {"call" in task ? <CustomerTaskCallEvidence task={task} /> : <button type="button" className="cct-conversation-link" disabled={!onOpenConversation || !("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)}
       onClick={() => { if (onOpenConversation && ("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)) onOpenConversation(task); }}>Open full conversation</button>}
+    {!("call" in task) && !("email" in task) && <ClaudeBookingChangePanel task={task} />}
     <details className="cct-details"><summary>{"call" in task ? task.call.provider === "openphone" ? "Call evidence" : "Caller evidence" : <>{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment </>}<ChevronDown /></summary><div className="cct-details-body">
       <section className="cct-source-message"><h4>{"call" in task ? task.call.provider === "openphone" ? "Call evidence" : "Caller evidence" : "email" in task ? "Customer email" : "Customer text"}</h4>{"email" in task && task.email.bodyFormat === "html"
         ? <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.sourceText, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />

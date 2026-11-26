@@ -1,3 +1,4 @@
+import { withoutApprovedBookingActions } from "./bookingActionsSourceControl";
 /** Test-only fixed current-to-d09e6315 timeline UI hunks; all behavioral tests run raw source. */
 const approved: Record<string, Array<[string, string]>> = {
   "client/src/components/ClaudeCustomerTasks.tsx": [
@@ -28,6 +29,7 @@ const approved: Record<string, Array<[string, string]>> = {
   ]
 };
 export function withoutApprovedSmsTaskTimeline(path: string, source: string): string {
+  source = withoutApprovedBookingActions(path, source);
   for (const [current, original] of approved[path] ?? []) {
     const count = source.split(current).length - 1;
     if (count !== 0 && count !== 1) throw new Error(`Unexpected SMS timeline preservation hunk: ${path}`);
