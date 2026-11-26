@@ -13,10 +13,44 @@ import "./claude-booking-change.css";
 const background = { trpc: { context: { batch: "background" } } } as const;
 const visitLabel = (visit: BookingActionVisit) => `${formatBookingDate(visit.date)} · ${visit.arrivalWindow
   ? `${formatArrivalWindow(visit.arrivalWindow)} window` : visit.time ? formatBookingTime(visit.time) : "time unavailable"} · ${visit.publicBookingNumber}`;
-function errorText(error: unknown): string {
+/** Only LeadFlow's own booking-change messages reach the screen; database and other server errors never do. */
+class PanelMessage extends Error {}
+const OWN_MESSAGE_CODES = new Set(["CONFLICT", "NOT_FOUND", "PRECONDITION_FAILED"]);
+const SOMETHING_WENT_WRONG = "Something went wrong. Nothing was repeated. Refresh the task and check its status before trying again.";
+function ownMessage(error: unknown): string | null {
+  if (error instanceof PanelMessage) return error.message;
   const data = (error as { data?: { code?: string } })?.data;
   if (data?.code === "FORBIDDEN" || data?.code === "UNAUTHORIZED") return "You need booking access to do this.";
-  return error instanceof Error && error.message ? error.message : "The booking change could not be saved. Refresh and try again.";
+  if (data?.code && OWN_MESSAGE_CODES.has(data.code) && error instanceof Error && error.message) return error.message;
+  return null;
+}
+export function errorText(error: unknown): string {
+  return ownMessage(error) ?? SOMETHING_WENT_WRONG;
+}
+type ConfirmationSteps = {
+  begin: () => Promise<{ sessionId: number; text: string }>;
+  send: (reserved: { sessionId: number; text: string }) => Promise<{ smsSent?: boolean; duplicate?: boolean }>;
+  finish: (outcome: "sent" | "failed") => Promise<unknown>;
+};
+/** "Send confirmation": reserve, send once, record the outcome once. A failure says whether the text may have gone out. */
+export async function sendBookingConfirmation(steps: ConfirmationSteps): Promise<void> {
+  let reserved: { sessionId: number; text: string };
+  try { reserved = await steps.begin(); }
+  catch (caught) { throw new PanelMessage(ownMessage(caught) ?? "The confirmation was not sent. Refresh the task and try again."); }
+  let outcome: "sent" | "failed" = "failed";
+  let sendFailed = false;
+  try {
+    const sent = await steps.send(reserved);
+    outcome = sent.duplicate || sent.smsSent ? "sent" : "failed";
+  } catch { sendFailed = true; }
+  try { await steps.finish(outcome); }
+  catch {
+    throw new PanelMessage(outcome === "sent"
+      ? "The confirmation was sent, but saving that failed. Don't send it again: refresh the task in two minutes and choose \"It was sent\"."
+      : "The confirmation may not have been sent, and its status could not be saved. Refresh the task in two minutes and check the conversation before choosing.");
+  }
+  if (sendFailed) throw new PanelMessage("The confirmation may not have been sent. Check the conversation before trying again.");
+  if (outcome === "failed") throw new PanelMessage("The confirmation was not sent. Check the conversation, then try again.");
 }
 
 export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
@@ -119,17 +153,11 @@ export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
   const verifiedLine = verification ? `Verified ${new Date(verification.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} (${verification.method === "instinct" ? "Instinct verifier" : "exact re-read"})` : "";
   if (record.status === "verified" && confirmation) {
     const text = confirmationText ?? confirmation.text;
-    const sendConfirmation = () => void run(async () => {
-      const reserved = await begin.mutateAsync({ id: task.id, text });
-      let outcome: "sent" | "failed" = "failed";
-      try {
-        const sent = await send.mutateAsync({ sessionId: reserved.sessionId, message: reserved.text });
-        outcome = sent.duplicate || sent.smsSent ? "sent" : "failed";
-      } finally {
-        await finish.mutateAsync({ id: task.id, outcome });
-      }
-      if (outcome === "failed") throw new Error("The confirmation was not sent. Check the conversation, then try again.");
-    });
+    const sendConfirmation = () => void run(() => sendBookingConfirmation({
+      begin: () => begin.mutateAsync({ id: task.id, text }),
+      send: reserved => send.mutateAsync({ sessionId: reserved.sessionId, message: reserved.text }),
+      finish: outcome => finish.mutateAsync({ id: task.id, outcome }),
+    }));
     return <section className="cbc-panel cbc-verified" aria-label="Booking change">
       <h4><Check />{heading}</h4>
       <p><strong>Executed and verified.</strong> {result}</p>

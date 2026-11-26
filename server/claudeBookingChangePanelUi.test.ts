@@ -69,3 +69,47 @@ it("renders every booking-change state with the right controls; nothing for call
   expect(out["7"]).toContain("may have been sent"); expect(out["7"]).toContain("It was sent"); expect(out["7"]).not.toContain("Send confirmation");
   expect(out["8"]).toContain("Confirmation sent (Ana)"); expect(out["8"]).not.toMatch(/<button/);
 });
+
+// Staff never see raw database errors (staging, 2026-11-26: a failed staff-record lookup showed its SQL text).
+const raw = "Failed query: select `id`, `name`, `email` from `agents` where `agents`.`id` = ? limit ?\nparams: 210001,1";
+const serverError = (code: string, message = raw) => Object.assign(new Error(message), { data: { code } });
+it("shows only LeadFlow's own messages, never database or other server text", async () => {
+  const { errorText } = await import("../client/src/components/ClaudeBookingChangePanel");
+  const generic = "Something went wrong. Nothing was repeated. Refresh the task and check its status before trying again.";
+  for (const error of [serverError("INTERNAL_SERVER_ERROR"), new Error(raw), serverError("BAD_REQUEST", '[{"code":"invalid_type"}]'), serverError("TIMEOUT"), "boom", null])
+    expect(errorText(error)).toBe(generic);
+  expect(errorText(serverError("CONFLICT", "This confirmation is not ready to send. Refresh the task."))).toBe("This confirmation is not ready to send. Refresh the task.");
+  expect(errorText(serverError("PRECONDITION_FAILED", "The confirmation must be 1 to 1600 characters."))).toBe("The confirmation must be 1 to 1600 characters.");
+  expect(errorText(serverError("NOT_FOUND", "Booking change not found."))).toBe("Booking change not found.");
+  expect(errorText(serverError("FORBIDDEN", "bookings access required"))).toBe("You need booking access to do this.");
+});
+
+it("Send confirmation: one send, one recorded outcome, and a failure says whether the text may have gone out", async () => {
+  const { sendBookingConfirmation, errorText } = await import("../client/src/components/ClaudeBookingChangePanel");
+  const reserved = { sessionId: 4, text: "Hi Maya, you're all set!" };
+  const run = async (steps: { begin?: () => Promise<any>; send?: () => Promise<any>; finish?: () => Promise<any> }) => {
+    const calls: string[] = [];
+    let message: string | null = null;
+    try {
+      await sendBookingConfirmation({
+        begin: async () => { calls.push("begin"); return steps.begin ? steps.begin() : reserved; },
+        send: async r => { calls.push(`send:${r.sessionId}`); return steps.send ? steps.send() : { success: true, smsSent: true }; },
+        finish: async outcome => { calls.push(`finish:${outcome}`); return steps.finish ? steps.finish() : {}; },
+      });
+    } catch (caught) { message = errorText(caught); }
+    expect(message ?? "").not.toMatch(/Failed query|agents|params|select/i);
+    return { calls, message };
+  };
+  const fails = async () => { throw serverError("INTERNAL_SERVER_ERROR"); };
+  expect(await run({})).toEqual({ calls: ["begin", "send:4", "finish:sent"], message: null });
+  expect(await run({ send: async () => ({ success: true, smsSent: false, duplicate: true }) })).toEqual({ calls: ["begin", "send:4", "finish:sent"], message: null });
+  expect(await run({ begin: fails })).toEqual({ calls: ["begin"], message: "The confirmation was not sent. Refresh the task and try again." });
+  expect(await run({ begin: async () => { throw serverError("CONFLICT", "This confirmation is not ready to send. Refresh the task."); } }))
+    .toEqual({ calls: ["begin"], message: "This confirmation is not ready to send. Refresh the task." });
+  expect(await run({ send: fails })).toEqual({ calls: ["begin", "send:4", "finish:failed"], message: "The confirmation may not have been sent. Check the conversation before trying again." });
+  expect(await run({ send: async () => ({ success: true, smsSent: false }) })).toEqual({ calls: ["begin", "send:4", "finish:failed"], message: "The confirmation was not sent. Check the conversation, then try again." });
+  expect(await run({ finish: fails })).toEqual({ calls: ["begin", "send:4", "finish:sent"],
+    message: "The confirmation was sent, but saving that failed. Don't send it again: refresh the task in two minutes and choose \"It was sent\"." });
+  expect(await run({ send: fails, finish: fails })).toEqual({ calls: ["begin", "send:4", "finish:failed"],
+    message: "The confirmation may not have been sent, and its status could not be saved. Refresh the task in two minutes and check the conversation before choosing." });
+});
