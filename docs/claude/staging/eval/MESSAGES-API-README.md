@@ -1,5 +1,21 @@
 # One-time comparison: today's connection vs the direct Messages API (all Claude request types)
 
+## Release check (the owner's choice: use this instead of the full comparison)
+```bash
+pnpm exec tsx docs/claude/staging/eval/messages-api-compare.ts --quick
+```
+- About 8 real requests, on the **new direct connection only**, through production's own code:
+  - 3 automatic SMS replies, back to back, to check the 1-hour cache;
+  - 1 each of email reply, customer AI-call task, staff-call task, Thumbtack first response and complaint scan.
+- Each request goes through that request type's production checks, with the single retry.
+- After 6 quiet minutes, one more SMS request checks that the cache was kept.
+- No requests on today's connection, no judge.
+- Read-only, no customer contact.
+- About $0.10-0.30, with a $1 stop.
+- Takes about 8 minutes.
+- Results go to `~/leadflow-messages-api-check/`. Paste the "RELEASE CHECK SUMMARY" block it prints.
+
+
 A standalone, one-time test. It is not an app feature. Production, the saved agent and the database are not changed.
 
 **What it does**

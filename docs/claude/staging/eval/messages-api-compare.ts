@@ -4,6 +4,8 @@
  * Run on the owner's Mac from the LeadFlow folder, on branch claude/messages-api:
  *   pnpm exec tsx docs/claude/staging/eval/messages-api-compare.ts --smoke     (2 SMS messages, a few cents)
  *   pnpm exec tsx docs/claude/staging/eval/messages-api-compare.ts             (full run, about 18 requests)
+ *   pnpm exec tsx docs/claude/staging/eval/messages-api-compare.ts --quick     (release check: direct connection only,
+ *     one real request of each kind + 3 SMS for the cache + the 6-minute cache check; no judge; about $0.10-0.30)
  *
  *  - Reads recent production requests from the saved agent's session history, read-only: the exact fixed instructions
  *    and exact customer part production sent. Kinds: automatic SMS replies (3 callers: SMS generation, booking quote,
@@ -29,12 +31,13 @@ import { z } from "zod";
 
 // ---------- settings ----------
 const MOCK_ORIGIN = process.env.EVAL_ANTHROPIC_ORIGIN; // tests only: a local fake server
-const OUT_DIR = process.env.EVAL_OUT_DIR ?? path.join(os.homedir(), "leadflow-messages-api");
+const QUICK = process.argv.includes("--quick");
+const OUT_DIR = process.env.EVAL_OUT_DIR ?? path.join(os.homedir(), QUICK ? "leadflow-messages-api-check" : "leadflow-messages-api");
 const SMOKE = process.argv.includes("--smoke");
-const TOTAL_STOP_DOLLARS = 5, NEW_CASE_STOP_DOLLARS = 4.4, MAX_SESSIONS_SCANNED = 4000;
+const TOTAL_STOP_DOLLARS = QUICK ? 1 : 5, NEW_CASE_STOP_DOLLARS = QUICK ? 0.8 : 4.4, MAX_SESSIONS_SCANNED = 4000;
 const TTL_CHECK_AFTER_MS = Number(process.env.EVAL_TTL_CHECK_AFTER_MS ?? 6 * 60_000);
 type Kind = "sms" | "email" | "customer_call" | "staff_call" | "thumbtack" | "complaint";
-const PLAN: Record<Kind, number> = SMOKE ? { sms: 2, email: 0, customer_call: 0, staff_call: 0, thumbtack: 0, complaint: 0 }
+const PLAN: Record<Kind, number> = QUICK ? { sms: 3, email: 1, customer_call: 1, staff_call: 1, thumbtack: 1, complaint: 1 } : SMOKE ? { sms: 2, email: 0, customer_call: 0, staff_call: 0, thumbtack: 0, complaint: 0 }
   : { sms: 8, email: 2, customer_call: 2, staff_call: 2, thumbtack: 2, complaint: 2 };
 const KIND_LABEL: Record<Kind, string> = { sms: "Automatic SMS reply", email: "Email reply", customer_call: "Customer AI-call task",
   staff_call: "Staff-call task", thumbtack: "Thumbtack first response", complaint: "Complaint scan" };
@@ -44,7 +47,8 @@ const PRICE = { // $ per million tokens (published)
   sonnet: { in: 2, out: 10, read: 0.1, write5m: 2.5, write1h: 4 }, opus: { in: 4, out: 20, read: 0.2, write5m: 5 } };
 const RUNTIME_PER_HOUR = 0.08;
 type Arm = "managed" | "direct";
-const ARMS: Arm[] = ["managed", "direct"];
+const ARMS: Arm[] = QUICK ? ["direct"] : ["managed", "direct"];
+const NOT_RUN: ArmResult = { ok: false, error: "not run (quick check)", calls: [], ms: 0, cost: 0 };
 const ARM_LABEL: Record<Arm, string> = { managed: "Today (Managed Agents)", direct: "New (direct Messages API)" };
 
 // ---------- only Anthropic may be contacted ----------
@@ -378,7 +382,8 @@ function report(store: Store): string {
 
 // ---------- main ----------
 async function main() {
-  console.log("LeadFlow one-time comparison: today's connection (Managed Agents) vs the direct Messages API.");
+  console.log(QUICK ? "LeadFlow release check: real requests on the direct Messages API connection (read-only, no customer contact)."
+    : "LeadFlow one-time comparison: today's connection (Managed Agents) vs the direct Messages API.");
   fs.mkdirSync(OUT_DIR, { recursive: true, mode: 0o700 });
   const resultsPath = path.join(OUT_DIR, "results.json"), reportPath = path.join(OUT_DIR, "report.html");
   KEY = await ask("Paste the Anthropic API key created for this test (hidden), then press Enter: ", true);
@@ -434,7 +439,7 @@ async function main() {
   const order: Kind[] = ["sms", "email", "customer_call", "staff_call", "thumbtack", "complaint"];
   const chosen = order.flatMap(k => found[k].slice().reverse()); // oldest first within a kind
   for (const k of order) if (found[k].length < PLAN[k]) store.notes.push(`${KIND_LABEL[k]}: ${found[k].length} of ${PLAN[k]} found in the recent history`);
-  if (!wanted && !SMOKE) { store.dataset = chosen.map(c => c.key); }
+  if (!wanted && !SMOKE && !QUICK) { store.dataset = chosen.map(c => c.key); }
   save();
   console.log(`Scanned ${scanned} sessions: ${order.map(k => `${KIND_LABEL[k]} ${found[k].length}`).join(", ")}.`);
   if (!chosen.length) throw new Error("STOP: no recent production requests were found.");
@@ -446,7 +451,7 @@ async function main() {
     if (store.cases.some(c => c.key === g.key)) continue;
     if (spent() >= NEW_CASE_STOP_DOLLARS) { store.stoppedForBudget = true; console.log(`Stopped: spend reached ${money(spent())}.`); break; }
     process.stdout.write(`${KIND_LABEL[g.kind]} ${store.cases.length + 1}/${chosen.length}: `);
-    const arms = {} as Record<Arm, ArmResult>;
+    const arms = { managed: NOT_RUN } as Record<Arm, ArmResult>;
     for (const arm of ARMS) {
       arms[arm] = await runArm(arm, g.kind, g.system, g.userText, g.created, store.ownIds);
       if (arm === "direct" && g.kind === "sms") lastSmsDirectAt = Date.now();
@@ -454,7 +459,7 @@ async function main() {
     const c: CaseResult = { key: g.key, kind: g.kind, createdAt: new Date(g.created).toISOString(), userText: g.userText, systemChars: g.system.length,
       arms, aIs: randomInt(2) === 0 ? "managed" : "direct" };
     process.stdout.write(`today ${arms.managed.ok ? "ok" : "FAILED"}, direct ${arms.direct.ok ? "ok" : "FAILED"}; judging... `);
-    if (arms.managed.ok || arms.direct.ok) {
+    if (!QUICK && (arms.managed.ok || arms.direct.ok)) {
       try { c.judge = await judge(g.system, c); store.judgeCost += c.judge.cost; }
       catch (e: any) { c.judge = { a: zeroSide(), b: zeroSide(), meaningful_difference: false, difference_summary: "", cost: 0, error: String(e?.message ?? e).slice(0, 160) }; }
     }
@@ -475,6 +480,18 @@ async function main() {
   save();
 
   // 4. Summary without customer details.
+  if (QUICK) {
+    console.log("\n===== RELEASE CHECK SUMMARY (safe to paste: no customer details) =====");
+    console.log(`Saved agent model settings: ${JSON.stringify(store.agentModel)} (match the direct connection: yes)`);
+    for (const c of store.cases) {
+      const a = c.arms.direct, k = a.calls[0];
+      console.log(`${KIND_LABEL[c.kind]}: ${a.ok ? "PASSED production checks" : `FAILED (${a.error})`} | attempts ${a.calls.length} | ${((k?.ms ?? 0) / 1000).toFixed(1)}s | ${k ? tok(k.usage) : "-"} | ${money(a.cost)}`);
+    }
+    if (store.ttlCheck) console.log(`Cache after ${store.ttlCheck.minutesAfterLastSms.toFixed(1)} min with no SMS: ${tok(store.ttlCheck.usage)} -> ${store.ttlCheck.usage.cacheRead > 0 ? "STILL CACHED" : "NOT CACHED"}${store.ttlCheck.error ? ` (${store.ttlCheck.error})` : ""}`);
+    console.log(`Kinds found: ${order.map(k => `${KIND_LABEL[k]} ${found[k].length}`).join(", ")}${store.notes.length ? ` | notes: ${store.notes.join("; ")}` : ""}`);
+    console.log(`Spend ${money(spent())} | Details: ${reportPath}`);
+    rl.close(); process.exit(0);
+  }
   const line = (title: string, cases: CaseResult[]) => {
     if (!cases.length) return `${title}: none`;
     const m = summary(cases, "managed"), d = summary(cases, "direct");
