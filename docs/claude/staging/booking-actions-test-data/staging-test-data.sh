@@ -170,7 +170,7 @@ FROM (
   SELECT 'STG-TEST-C' AS b, DATE_FORMAT(CURDATE() + INTERVAL 3 DAY, '%Y-%m-%d') AS d, DATE_FORMAT(CONVERT_TZ(CONCAT(DATE_FORMAT(CURDATE() + INTERVAL 3 DAY, '%Y-%m-%d'), ' 09:00:00'), 'America/New_York', '+00:00'), '%Y-%m-%dT%H:%i:%s.000Z') AS dt, 'Weekly' AS fr, 0 AS later UNION ALL
   SELECT 'STG-TEST-C' AS b, DATE_FORMAT(CURDATE() + INTERVAL 10 DAY, '%Y-%m-%d') AS d, DATE_FORMAT(CONVERT_TZ(CONCAT(DATE_FORMAT(CURDATE() + INTERVAL 10 DAY, '%Y-%m-%d'), ' 09:00:00'), 'America/New_York', '+00:00'), '%Y-%m-%dT%H:%i:%s.000Z') AS dt, 'Weekly' AS fr, 1 AS later UNION ALL
   SELECT 'STG-TEST-D' AS b, DATE_FORMAT(CURDATE() + INTERVAL 8 DAY, '%Y-%m-%d') AS d, DATE_FORMAT(CONVERT_TZ(CONCAT(DATE_FORMAT(CURDATE() + INTERVAL 8 DAY, '%Y-%m-%d'), ' 08:00:00'), 'America/New_York', '+00:00'), '%Y-%m-%dT%H:%i:%s.000Z') AS dt, 'One time' AS fr, 0 AS later
-) AS x JOIN bookings bk ON bk.publicBookingNumber = x.b WHERE DATABASE() = 'leadflow_staging';
+) AS x JOIN bookings bk ON CAST(bk.publicBookingNumber AS BINARY) = CAST(x.b AS BINARY) WHERE DATABASE() = 'leadflow_staging';
 SELECT CONCAT(RPAD('Step 11: Create their 5 scheduled visits', 62, '.'), ' ', ROW_COUNT(), ' rows (expected 5) ', JSON_UNQUOTE(CAST(IF(ROW_COUNT() = 5, '"OK"', 'STOP_UNEXPECTED_ROW_COUNT') AS JSON)));
 -- Step 12: Create 4 task rows (hidden until the next step)
 INSERT INTO ops_chat_messages (channel, authorName, authorRole, body, quickAction, sessionId, cardStatus, activeDedupKey, lastActivityAt)
@@ -179,7 +179,7 @@ SELECT NULL, 'Instinct', 'system', x.ti, NULL, cs.id, 'active', x.dk, UNIX_TIMES
   SELECT '+12025550102' AS p, 'Ben (Staging Test)' AS n, 'Cancel cleaning' AS ti, 'staging-test-task:B' AS dk UNION ALL
   SELECT '+12025550103' AS p, 'Carla (Staging Test)' AS n, 'Reschedule second recurring visit' AS ti, 'staging-test-task:C' AS dk UNION ALL
   SELECT '+12025550104' AS p, 'Dana (Staging Test)' AS n, 'Reschedule cleaning (arrival window)' AS ti, 'staging-test-task:D' AS dk
-) AS x JOIN conversation_sessions cs ON cs.leadPhone = x.p AND cs.leadName = x.n WHERE DATABASE() = 'leadflow_staging';
+) AS x JOIN conversation_sessions cs ON CAST(cs.leadPhone AS BINARY) = CAST(x.p AS BINARY) AND CAST(cs.leadName AS BINARY) = CAST(x.n AS BINARY) WHERE DATABASE() = 'leadflow_staging';
 SELECT CONCAT(RPAD('Step 12: Create 4 task rows (hidden until the next step)', 62, '.'), ' ', ROW_COUNT(), ' rows (expected 4) ', JSON_UNQUOTE(CAST(IF(ROW_COUNT() = 4, '"OK"', 'STOP_UNEXPECTED_ROW_COUNT') AS JSON)));
 -- Step 13: Complete the 4 tasks and show them in Command Chat
 UPDATE ops_chat_messages SET channel = 'command', quickAction = 'claude_customer_task', metadata = JSON_OBJECT('taskId', id, 'task', JSON_OBJECT(
@@ -202,7 +202,7 @@ SELECT 'instinct_booking_action', 'Instinct', 'system', 'Booking change proposal
 FROM (
   SELECT 'staging-test-task:A' AS dk, DATE_FORMAT(CURDATE() + INTERVAL 5 DAY, '%Y-%m-%d') AS vd, DATE_FORMAT(CURDATE() + INTERVAL 8 DAY, '%Y-%m-%d') AS nd, '14:00' AS nt, 'move my cleaning three days later, at 2pm' AS q UNION ALL
   SELECT 'staging-test-task:C', DATE_FORMAT(CURDATE() + INTERVAL 10 DAY, '%Y-%m-%d'), DATE_FORMAT(CURDATE() + INTERVAL 12 DAY, '%Y-%m-%d'), NULL, 'move next week''s cleaning (the second one) two days later'
-) AS x JOIN ops_chat_messages m ON m.activeDedupKey = x.dk AND m.quickAction = 'claude_customer_task' WHERE DATABASE() = 'leadflow_staging';
+) AS x JOIN ops_chat_messages m ON CAST(m.activeDedupKey AS BINARY) = CAST(x.dk AS BINARY) AND m.quickAction = 'claude_customer_task' WHERE DATABASE() = 'leadflow_staging';
 SELECT CONCAT(RPAD('Step 14: Add Claude-style proposals for Alice and Carla', 62, '.'), ' ', ROW_COUNT(), ' rows (expected 2) ', JSON_UNQUOTE(CAST(IF(ROW_COUNT() = 2, '"OK"', 'STOP_UNEXPECTED_ROW_COUNT') AS JSON)));
 COMMIT;
 SQL
@@ -261,8 +261,8 @@ CHECK="$(query "$(cat <<'SQL'
 SELECT CONCAT_WS('|', cs.leadName, IFNULL(bk.publicBookingNumber, 'no booking'), IFNULL(bk.recurrence, '-'),
   (SELECT COUNT(*) FROM leadflow_jobs j WHERE j.bookingId = bk.id AND j.origin = 'native_booking'),
   (SELECT COUNT(*) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task' AND m.channel = 'command'),
-  (SELECT COUNT(*) FROM ops_chat_messages p WHERE p.activeDedupKey IN (SELECT CONCAT('claude-booking-action:v1:', m.id) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task')))
-FROM conversation_sessions cs LEFT JOIN bookings bk ON bk.customerPhone = cs.leadPhone AND bk.publicBookingNumber LIKE 'STG-TEST-%'
+  (SELECT COUNT(*) FROM ops_chat_messages p WHERE CAST(p.activeDedupKey AS BINARY) IN (SELECT CAST(CONCAT('claude-booking-action:v1:', m.id) AS BINARY) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task')))
+FROM conversation_sessions cs LEFT JOIN bookings bk ON CAST(bk.customerPhone AS BINARY) = CAST(cs.leadPhone AS BINARY) AND bk.publicBookingNumber LIKE 'STG-TEST-%'
 WHERE cs.leadName LIKE '% (Staging Test)' AND cs.leadPhone IN ('+12025550101', '+12025550102', '+12025550103', '+12025550104') ORDER BY cs.leadName;
 SELECT CONCAT('weekly series for Carla|', COUNT(*)) FROM booking_series s JOIN bookings b ON b.id = s.bookingId WHERE b.publicBookingNumber = 'STG-TEST-C';
 SELECT CONCAT('arrival window for Dana|', JSON_UNQUOTE(JSON_EXTRACT(priceSnapshot, '$.input.arrivalPreference.startLocalTime')), '-', JSON_UNQUOTE(JSON_EXTRACT(priceSnapshot, '$.input.arrivalPreference.endLocalTime'))) FROM bookings WHERE publicBookingNumber = 'STG-TEST-D';
@@ -289,8 +289,8 @@ sql -t <<'SQL'
 SELECT cs.leadName AS customer, bk.publicBookingNumber AS booking, bk.recurrence, bk.requestedLocalDate AS first_visit_date, bk.requestedLocalTime AS visit_time,
   (SELECT COUNT(*) FROM leadflow_jobs j WHERE j.bookingId = bk.id) AS visits,
   (SELECT COUNT(*) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task') AS task,
-  (SELECT COUNT(*) FROM ops_chat_messages p WHERE p.activeDedupKey IN (SELECT CONCAT('claude-booking-action:v1:', m.id) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task')) AS proposal
-FROM conversation_sessions cs LEFT JOIN bookings bk ON bk.customerPhone = cs.leadPhone AND bk.publicBookingNumber LIKE 'STG-TEST-%'
+  (SELECT COUNT(*) FROM ops_chat_messages p WHERE CAST(p.activeDedupKey AS BINARY) IN (SELECT CAST(CONCAT('claude-booking-action:v1:', m.id) AS BINARY) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task')) AS proposal
+FROM conversation_sessions cs LEFT JOIN bookings bk ON CAST(bk.customerPhone AS BINARY) = CAST(cs.leadPhone AS BINARY) AND bk.publicBookingNumber LIKE 'STG-TEST-%'
 WHERE cs.leadName LIKE '% (Staging Test)' AND cs.leadPhone IN ('+12025550101', '+12025550102', '+12025550103', '+12025550104') ORDER BY cs.leadName;
 SQL
 printf '\n\033[32mDONE: staging test data created and verified.\033[0m Open Command Chat > Tasks on the staging site.\n'

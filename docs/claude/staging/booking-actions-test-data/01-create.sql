@@ -3,7 +3,8 @@
 -- (click inside a step, or select just that step, then Run) and compare its result with "Expected".
 -- No USE statement and no session variables are needed. Every write only happens when the current database is
 -- leadflow_staging (anywhere else it changes 0 rows). Steps 2-7 remove earlier test rows, so the whole script can be
--- run again. Fictional customers only (555-01xx numbers, example.com emails); no payment rows; nothing is sent.
+-- run again. Text matches use CAST(... AS BINARY) so they work whatever collation each table uses.
+-- Fictional customers only (555-01xx numbers, example.com emails); no payment rows; nothing is sent.
 
 -- ===== Step 1: Read-only check. Expected: current_database = leadflow_staging, missing_columns = NULL, required_columns_not_filled = NULL, timezone_check = 2026-12-01 15:00:00. If any differs, stop and send me this row.
 SELECT DATABASE() AS current_database,
@@ -65,7 +66,7 @@ FROM (
   SELECT 'STG-TEST-C' AS b, DATE_FORMAT(CURDATE() + INTERVAL 3 DAY, '%Y-%m-%d') AS d, DATE_FORMAT(CONVERT_TZ(CONCAT(DATE_FORMAT(CURDATE() + INTERVAL 3 DAY, '%Y-%m-%d'), ' 09:00:00'), 'America/New_York', '+00:00'), '%Y-%m-%dT%H:%i:%s.000Z') AS dt, 'Weekly' AS fr, 0 AS later UNION ALL
   SELECT 'STG-TEST-C' AS b, DATE_FORMAT(CURDATE() + INTERVAL 10 DAY, '%Y-%m-%d') AS d, DATE_FORMAT(CONVERT_TZ(CONCAT(DATE_FORMAT(CURDATE() + INTERVAL 10 DAY, '%Y-%m-%d'), ' 09:00:00'), 'America/New_York', '+00:00'), '%Y-%m-%dT%H:%i:%s.000Z') AS dt, 'Weekly' AS fr, 1 AS later UNION ALL
   SELECT 'STG-TEST-D' AS b, DATE_FORMAT(CURDATE() + INTERVAL 8 DAY, '%Y-%m-%d') AS d, DATE_FORMAT(CONVERT_TZ(CONCAT(DATE_FORMAT(CURDATE() + INTERVAL 8 DAY, '%Y-%m-%d'), ' 08:00:00'), 'America/New_York', '+00:00'), '%Y-%m-%dT%H:%i:%s.000Z') AS dt, 'One time' AS fr, 0 AS later
-) AS x JOIN bookings bk ON bk.publicBookingNumber = x.b WHERE DATABASE() = 'leadflow_staging';
+) AS x JOIN bookings bk ON CAST(bk.publicBookingNumber AS BINARY) = CAST(x.b AS BINARY) WHERE DATABASE() = 'leadflow_staging';
 
 -- ===== Step 12: Create 4 task rows (hidden until the next step). Expected: 4 rows affected.
 INSERT INTO ops_chat_messages (channel, authorName, authorRole, body, quickAction, sessionId, cardStatus, activeDedupKey, lastActivityAt)
@@ -74,7 +75,7 @@ SELECT NULL, 'Instinct', 'system', x.ti, NULL, cs.id, 'active', x.dk, UNIX_TIMES
   SELECT '+12025550102' AS p, 'Ben (Staging Test)' AS n, 'Cancel cleaning' AS ti, 'staging-test-task:B' AS dk UNION ALL
   SELECT '+12025550103' AS p, 'Carla (Staging Test)' AS n, 'Reschedule second recurring visit' AS ti, 'staging-test-task:C' AS dk UNION ALL
   SELECT '+12025550104' AS p, 'Dana (Staging Test)' AS n, 'Reschedule cleaning (arrival window)' AS ti, 'staging-test-task:D' AS dk
-) AS x JOIN conversation_sessions cs ON cs.leadPhone = x.p AND cs.leadName = x.n WHERE DATABASE() = 'leadflow_staging';
+) AS x JOIN conversation_sessions cs ON CAST(cs.leadPhone AS BINARY) = CAST(x.p AS BINARY) AND CAST(cs.leadName AS BINARY) = CAST(x.n AS BINARY) WHERE DATABASE() = 'leadflow_staging';
 
 -- ===== Step 13: Complete the 4 tasks and show them in Command Chat. Expected: 4 rows affected.
 UPDATE ops_chat_messages SET channel = 'command', quickAction = 'claude_customer_task', metadata = JSON_OBJECT('taskId', id, 'task', JSON_OBJECT(
@@ -97,12 +98,12 @@ SELECT 'instinct_booking_action', 'Instinct', 'system', 'Booking change proposal
 FROM (
   SELECT 'staging-test-task:A' AS dk, DATE_FORMAT(CURDATE() + INTERVAL 5 DAY, '%Y-%m-%d') AS vd, DATE_FORMAT(CURDATE() + INTERVAL 8 DAY, '%Y-%m-%d') AS nd, '14:00' AS nt, 'move my cleaning three days later, at 2pm' AS q UNION ALL
   SELECT 'staging-test-task:C', DATE_FORMAT(CURDATE() + INTERVAL 10 DAY, '%Y-%m-%d'), DATE_FORMAT(CURDATE() + INTERVAL 12 DAY, '%Y-%m-%d'), NULL, 'move next week''s cleaning (the second one) two days later'
-) AS x JOIN ops_chat_messages m ON m.activeDedupKey = x.dk AND m.quickAction = 'claude_customer_task' WHERE DATABASE() = 'leadflow_staging';
+) AS x JOIN ops_chat_messages m ON CAST(m.activeDedupKey AS BINARY) = CAST(x.dk AS BINARY) AND m.quickAction = 'claude_customer_task' WHERE DATABASE() = 'leadflow_staging';
 
 -- ===== Step 15: Final report: one row per test customer. Expected: 4 rows, each with a booking, visits, a task (Alice and Carla also a proposal).
 SELECT cs.leadName AS customer, bk.publicBookingNumber AS booking, bk.recurrence, bk.requestedLocalDate AS first_visit_date, bk.requestedLocalTime AS visit_time,
   (SELECT COUNT(*) FROM leadflow_jobs j WHERE j.bookingId = bk.id) AS visits,
   (SELECT COUNT(*) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task') AS task,
-  (SELECT COUNT(*) FROM ops_chat_messages p WHERE p.activeDedupKey IN (SELECT CONCAT('claude-booking-action:v1:', m.id) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task')) AS proposal
-FROM conversation_sessions cs LEFT JOIN bookings bk ON bk.customerPhone = cs.leadPhone AND bk.publicBookingNumber LIKE 'STG-TEST-%'
+  (SELECT COUNT(*) FROM ops_chat_messages p WHERE CAST(p.activeDedupKey AS BINARY) IN (SELECT CAST(CONCAT('claude-booking-action:v1:', m.id) AS BINARY) FROM ops_chat_messages m WHERE m.sessionId = cs.id AND m.quickAction = 'claude_customer_task')) AS proposal
+FROM conversation_sessions cs LEFT JOIN bookings bk ON CAST(bk.customerPhone AS BINARY) = CAST(cs.leadPhone AS BINARY) AND bk.publicBookingNumber LIKE 'STG-TEST-%'
 WHERE cs.leadName LIKE '% (Staging Test)' AND cs.leadPhone IN ('+12025550101', '+12025550102', '+12025550103', '+12025550104') ORDER BY cs.leadName;
