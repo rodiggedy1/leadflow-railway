@@ -314,10 +314,9 @@ export const commandCenterRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database unavailable");
 
-      const inboundMessageActivityFilter = sql`(
-        JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
-        OR JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
-      )`;
+      // "Has the customer ever messaged?" from the stored summary column (set from the same history by
+      // computeSessionSummary on every write) instead of searching every conversation's full history.
+      const inboundMessageActivityFilter = isNotNull(conversationSessions.lastCustomerMessageTs);
       const inboundVoiceCallActivityFilter = sql`EXISTS (
         SELECT 1 FROM voice_calls vc WHERE vc.sessionId = ${conversationSessions.id}
       )`;

@@ -25,6 +25,7 @@ import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
 
 import { buildCallBookingQuoteToolDefinitions, callBookingQuoteServerToken, withCallBookingQuoteInstructions } from "./instinct/callBookingQuote";
+import { computeSessionSummary } from "./sessionSummary";
 
 const VAPI_API_BASE = "https://api.vapi.ai";
 
@@ -1061,6 +1062,7 @@ export async function handleCreateLead(args: {
           extras: extrasJson ?? existingSession.extras,
           leadSource: "ai_call",
           messageHistory: JSON.stringify(messages),
+          lastCustomerMessageTs: computeSessionSummary(messages as any).lastCustomerMessageTs,
           // Move to QUOTE_SENT if currently in an earlier stage
           stage: ["UNHANDLED", "WIDGET_SIZING", "AVAILABILITY"].includes(existingSession.stage as string)
             ? "QUOTE_SENT"

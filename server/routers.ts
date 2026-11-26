@@ -4504,7 +4504,7 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
 
         const merged = [...existing, ...toMerge].sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
         await db.update(conversationSessions)
-          .set({ messageHistory: JSON.stringify(merged) } as any)
+          .set({ messageHistory: JSON.stringify(merged), lastCustomerMessageTs: computeSessionSummary(merged).lastCustomerMessageTs } as any)
           .where(eq(conversationSessions.id, input.sessionId));
 
         return { added: toMerge.length, total: merged.length };
