@@ -40,6 +40,8 @@ export const voiceRouter = router({
         dateTo: z.string().optional(),
         /** Filter by call outcome, e.g. 'booked', 'callback_requested' */
         outcome: z.string().optional(),
+        /** Command Chat: leave out transcripts and structured data (loaded on demand); adds hasTranscript. */
+        omitTranscripts: z.boolean().optional(),
       })
     )
     .query(async ({ input }) => {
@@ -63,11 +65,12 @@ export const voiceRouter = router({
           sessionId: voiceCalls.sessionId,
           callerPhone: voiceCalls.callerPhone,
           durationSeconds: voiceCalls.durationSeconds,
-          transcript: voiceCalls.transcript,
+          transcript: input.omitTranscripts ? sql<string | null>`NULL` : voiceCalls.transcript,
+          ...(input.omitTranscripts ? { hasTranscript: sql<number>`(${voiceCalls.transcript} IS NOT NULL AND TRIM(${voiceCalls.transcript}) <> '')` } : {}),
           summary: voiceCalls.summary,
           recordingUrl: voiceCalls.recordingUrl,
           outcome: voiceCalls.outcome,
-          structuredData: voiceCalls.structuredData,
+          structuredData: input.omitTranscripts ? sql<string | null>`NULL` : voiceCalls.structuredData,
           endedReason: voiceCalls.endedReason,
           successEvaluation: voiceCalls.successEvaluation,
           createdAt: voiceCalls.createdAt,
@@ -86,7 +89,21 @@ export const voiceRouter = router({
         .from(voiceCalls)
         .where(whereClause);
 
-      return { calls: rows, total: Number(count) };
+      const calls = input.omitTranscripts
+        ? rows.map((row: any) => ({ ...row, hasTranscript: Number(row.hasTranscript) === 1 }))
+        : rows;
+      return { calls, total: Number(count) };
+    }),
+
+  /** One call's transcript, loaded on demand (Command Chat call cards). Read-only. */
+  getCallTranscript: agentProcedure
+    .input(z.object({ vapiCallId: z.string().min(1).max(128) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { transcript: null };
+      const [row] = await db.select({ transcript: voiceCalls.transcript }).from(voiceCalls)
+        .where(eq(voiceCalls.vapiCallId, input.vapiCallId)).orderBy(desc(voiceCalls.createdAt)).limit(1);
+      return { transcript: row?.transcript ?? null };
     }),
 
   /**

@@ -533,7 +533,10 @@ describe("Customer task additive integration and style contract", () => {
   it("adds no SSE connection, timers, fuzzy customer lookup, sender, booking writes, or identity inputs", () => {
     expect(pageSource.match(/useOpsStream\(\{/g)).toHaveLength(1);
     expect(pageSource).toContain("onTaskUpdate: () => { void utils.claudeCustomerTasks.invalidate(); void utils.opsChat.listChannelMessages.invalidate({ channel }); }");
-    expect(pageSource).toContain("onConnected: () => { void utils.claudeCustomerTasks.invalidate(); void utils.opsChat.listChannelMessages.invalidate({ channel }); }");
+    // Load speed (2026-11-26): the connect handler still refreshes tasks and the feed, then opens the feed's first-fetch gate.
+    const onConnected = pageSource.slice(pageSource.indexOf("onConnected: () => {"), pageSource.indexOf("}, { enabled: isAuthenticated, label: \"CommandChatExactLive\" });"));
+    for (const call of ["void utils.claudeCustomerTasks.invalidate();", "void utils.opsChat.listChannelMessages.invalidate({ channel });",
+      'setFeedStreamGate((gate) => gate === "waiting" ? "connected" : gate);']) expect(onConnected).toContain(call);
     expect(pageSource).toContain("message.quickAction === CLAUDE_CUSTOMER_TASK_ACTION");
     expect(pageSource).toContain("taskId={customerTaskIdFromMessage(message)}");
     for (const forbidden of ["EventSource", "useOpsStream", "refetchInterval", "setInterval", "setTimeout", "getClientProfile", "customerProfile", "newest", "cleaner_jobs", "cleanerJobs", "sendMessage", "sendWorkspaceMessage", "bookingFunnel", ".slice(0,"]) expect(componentSource).not.toContain(forbidden);

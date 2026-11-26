@@ -1,4 +1,5 @@
 import React from "react";
+import { withoutApprovedCommandChatLoad } from "./commandChatLoadSourceControl";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -172,7 +173,7 @@ describe("lead call notes popup — actual UI, offline", () => {
     expect(css).toContain('.lcn-note-button.has-notes{color:#d9c891;');
   });
   it("adds only the authenticated lightweight query and preserves the complete released voice router", () => {
-    const routerPath = "server/voiceRouter.ts", current = readFileSync(routerPath, "utf8");
+    const routerPath = "server/voiceRouter.ts", current = withoutApprovedCommandChatLoad(routerPath, readFileSync(routerPath, "utf8"));
     const original = execFileSync("git", ["show", `ca4cdad7b7bfb9ab19798e7f02fec07818472d0d:${routerPath}`], { encoding: "utf8" });
     expect(current).toContain('getLeadCallNotes: agentProcedure.input(leadCallNotesInputSchema)\n    .query(({ input }) => getLeadCallNotes(input)),');
     expect(current).toContain('getLeadCallNotesAvailability: agentProcedure.input(leadCallNotesAvailabilityInputSchema)\n    .query(({ input }) => getLeadCallNotesAvailability(input)),');

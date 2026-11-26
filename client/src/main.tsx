@@ -4,9 +4,9 @@ console.log("[BUILD]", (window as any).__BUILD_ID__);
 import { trpc } from "@/lib/trpc";
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { TRPCClientError } from "@trpc/client";
+import { createTrpcLinks } from "@/lib/trpcLinks";
 import { createRoot } from "react-dom/client";
-import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
@@ -89,39 +89,7 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
-// ── INSTRUMENTATION: log every query fetch + invalidation during freeze ──────
-// Remove this block once the freeze root cause is identified.
-queryClient.getQueryCache().subscribe(event => {
-  if (event.type === 'updated' && event.action.type === 'fetch') {
-    const key = JSON.stringify(event.query.queryKey);
-    console.count('[QUERY FETCH] ' + key);
-  }
-});
-// Patch invalidateQueries to log every call with its filter key
-const _origInvalidate = queryClient.invalidateQueries.bind(queryClient);
-(queryClient as any).invalidateQueries = (...args: any[]) => {
-  const filter = args[0];
-  const key = filter ? JSON.stringify(filter) : '(all)';
-  console.count('[INVALIDATE] ' + key);
-  return (_origInvalidate as any)(...args);
-};
-// ── END INSTRUMENTATION ───────────────────────────────────────────────────────
-
-const trpcClient = trpc.createClient({
-  links: [
-    httpBatchLink({
-      url: "/api/trpc",
-      methodOverride: "POST",
-      transformer: superjson,
-      fetch(input, init) {
-        return globalThis.fetch(input, {
-          ...(init ?? {}),
-          credentials: "include",
-        });
-      },
-    }),
-  ],
-});
+const trpcClient = trpc.createClient({ links: createTrpcLinks() });
 
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>

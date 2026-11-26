@@ -168,7 +168,9 @@ type IncomingCallHandoff = {
 
 type VoiceCallEvidence = {
   summary: string | null;
+  /** Not in the initial call list; loaded on demand when the call's details are opened. */
   transcript: string | null;
+  hasTranscript: boolean;
   endedReason: string | null;
   recordingUrl: string | null;
 };
@@ -1007,39 +1009,58 @@ export default function CommandChatExactLive() {
     }
   }, [selectedEmailThreadId]);
 
-  const { data: profile } = trpc.opsChat.getMyProfile.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
-  const { data: photosData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, { enabled: isAuthenticated, retry: false, staleTime: 5 * 60 * 1000 });
-  const { data: channelMessages = [], isLoading: messagesLoading } = trpc.opsChat.listChannelMessages.useQuery(
+  // Load speed: the channel feed's FIRST fetch starts only once the live stream is connected (the server
+  // registers the listener before it says "connected"), so nothing created between the fetch and the stream
+  // can be missed and no catch-up reload is needed. If the stream is not up within 1.5 s the feed loads anyway
+  // and the existing reload on connect still runs. Later reconnects reload exactly as before.
+  const [feedStreamGate, setFeedStreamGate] = useState<"waiting" | "connected" | "timeout">("waiting");
+  useEffect(() => {
+    if (!isAuthenticated || feedStreamGate !== "waiting") return;
+    const timer = setTimeout(() => setFeedStreamGate((gate) => gate === "waiting" ? "timeout" : gate), 1_500);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, feedStreamGate]);
+  // Essentials are sent on their own (never waiting for slower queries); secondary information is batched
+  // separately and starts once the channel feed has loaded. Polling and real-time updates are unchanged.
+  const ownRequest = { trpc: { context: { batch: "none" } } } as const;
+  const background = { trpc: { context: { batch: "background" } } } as const;
+  const { data: channelMessages = [], isLoading: feedFetching } = trpc.opsChat.listChannelMessages.useQuery(
     { channel },
-    { enabled: isAuthenticated, refetchInterval: 30_000, refetchIntervalInBackground: false },
+    { enabled: isAuthenticated && feedStreamGate !== "waiting", refetchInterval: 30_000, refetchIntervalInBackground: false, ...ownRequest },
   );
+  // Waiting for the stream counts as loading, so the feed shows its spinner rather than an empty channel.
+  const messagesLoading = feedFetching || (isAuthenticated && feedStreamGate === "waiting");
+  const backgroundReady = isAuthenticated && !messagesLoading && feedStreamGate !== "waiting";
+  const { data: profile } = trpc.opsChat.getMyProfile.useQuery(undefined, { enabled: backgroundReady, retry: false, staleTime: 5 * 60 * 1000, ...background });
+  const { data: photosData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, { enabled: backgroundReady, retry: false, staleTime: 5 * 60 * 1000, ...background });
   const { data: nativeThumbtackLeads = [], isLoading: nativeThumbtackLoading } = trpc.thumbtackLead.listNative.useQuery(undefined, {
+    ...ownRequest,
     enabled: isAuthenticated,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
   const { playSound, muted: notifMuted } = useNotificationSound();
   const { isLeader: isNotifLeader } = useTabLeader();
-  const { data: openIssues = [] } = trpc.opsChat.listIssues.useQuery({ status: "open", limit: 12 }, { enabled: isAuthenticated, refetchInterval: 30_000 });
-  const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: isAuthenticated, refetchInterval: 30_000 });
-  const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 60_000 });
-  const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 30_000 });
+  const { data: openIssues = [] } = trpc.opsChat.listIssues.useQuery({ status: "open", limit: 12 }, { enabled: backgroundReady, refetchInterval: 30_000, ...background });
+  const { data: activePin } = trpc.opsChat.getChannelPin.useQuery({ channel }, { enabled: backgroundReady, refetchInterval: 30_000, ...background });
+  const { data: agents = { agents: [] } } = trpc.opsChat.getAgentStatusList.useQuery(undefined, { enabled: backgroundReady, refetchInterval: 60_000, ...background });
+  const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, { enabled: backgroundReady, refetchInterval: 30_000, ...background });
   const { data: todayBookingStats } = trpc.bookings.todayStats.useQuery(undefined, {
-    enabled: isAuthenticated,
+    ...background,
+    enabled: backgroundReady,
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
   });
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(undefined, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 3_000, refetchIntervalInBackground: false });
-  const { data: superAlertMessageIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery({ channel }, { enabled: isAuthenticated, staleTime: 0, refetchInterval: 60_000 });
+  const { data: superAlertMessageIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery({ channel }, { enabled: backgroundReady, staleTime: 0, refetchInterval: 60_000, ...background });
   const { data: threadDetail } = trpc.opsChat.getThreadReplies.useQuery({ parentId: threadId ?? 0 }, { enabled: isAuthenticated && threadId !== null });
   const { data: smsInboxRows = [], isLoading: smsInboxLoading } = trpc.commandCenter.listCommandChatInbox.useQuery(
     undefined,
-    { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
+    { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000, ...ownRequest },
   );
   const { data: emailInboxData, isLoading: emailInboxLoading } = trpc.opsChat.listEmailInboxThreads.useQuery(
     undefined,
-    { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
+    { enabled: isAuthenticated, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 15_000, ...ownRequest },
   );
   const smsInbox = useMemo(() => (smsInboxRows as unknown as SmsInboxConversation[])
     .filter((conversation) => Boolean(conversation.leadPhone))
@@ -1078,11 +1099,12 @@ export default function CommandChatExactLive() {
   );
   const { data: teamSmsEvents = [] } = trpc.commandCenter.listInboundTeamSmsEvents.useQuery(
     { sessionIds: leftTeamSmsSessionIds },
-    { enabled: isAuthenticated && leftTeamSmsSessionIds.length > 0, staleTime: 15_000, refetchOnWindowFocus: false, refetchInterval: 15_000 },
+    { enabled: backgroundReady && leftTeamSmsSessionIds.length > 0, staleTime: 15_000, refetchOnWindowFocus: false, refetchInterval: 15_000, ...background },
   );
+  // Transcripts are loaded on demand when a call card's details are opened.
   const { data: inboundVoiceCallHistory } = trpc.voice.listCalls.useQuery(
-    { limit: 50, offset: 0 },
-    { enabled: isAuthenticated, staleTime: 30_000, refetchInterval: 30_000, refetchIntervalInBackground: false },
+    { limit: 50, offset: 0, omitTranscripts: true },
+    { enabled: backgroundReady, staleTime: 30_000, refetchInterval: 30_000, refetchIntervalInBackground: false, ...background },
   );
   const voiceCallIdentityByVapiId = useMemo(() => new Map<string, VoiceCallerIdentity>(
     (inboundVoiceCallHistory?.calls ?? [])
@@ -1092,7 +1114,7 @@ export default function CommandChatExactLive() {
   const voiceCallEvidenceByVapiId = useMemo(() => new Map<string, VoiceCallEvidence>(
     (inboundVoiceCallHistory?.calls ?? [])
       .filter((call) => Boolean(call.vapiCallId))
-      .map((call) => [call.vapiCallId, { summary: call.summary, transcript: call.transcript, endedReason: call.endedReason, recordingUrl: call.recordingUrl }]),
+      .map((call) => [call.vapiCallId, { summary: call.summary, transcript: call.transcript, hasTranscript: Boolean(call.hasTranscript ?? call.transcript?.trim()), endedReason: call.endedReason, recordingUrl: call.recordingUrl }]),
   ), [inboundVoiceCallHistory?.calls]);
 
   const messageIds = useMemo(() => (channelMessages as ChannelMessage[]).map((message) => message.id).filter((id) => id > 0).slice(-500), [channelMessages]);
@@ -1231,7 +1253,7 @@ export default function CommandChatExactLive() {
   );
   const { data: leadSessionStatuses = [] } = trpc.opsChat.getLeadSessionStatuses.useQuery(
     { sessionIds: commandLeadSessionIds },
-    { enabled: isAuthenticated && commandLeadSessionIds.length > 0, refetchInterval: 30_000, refetchIntervalInBackground: false },
+    { enabled: backgroundReady && commandLeadSessionIds.length > 0, refetchInterval: 30_000, refetchIntervalInBackground: false, ...background },
   );
   const commandLeads = useMemo(() => {
     const statusById = new Map(leadSessionStatuses.map((status) => [status.id, status]));
@@ -1601,7 +1623,13 @@ export default function CommandChatExactLive() {
       void utils.opsChat.getSuperAlertMessageIds.invalidate({ channel });
     },
     onTaskUpdate: () => { void utils.claudeCustomerTasks.invalidate(); void utils.opsChat.listChannelMessages.invalidate({ channel }); },
-    onConnected: () => { void utils.claudeCustomerTasks.invalidate(); void utils.opsChat.listChannelMessages.invalidate({ channel }); },
+    onConnected: () => {
+      void utils.claudeCustomerTasks.invalidate();
+      // While the feed is still waiting for this first connection it has not fetched yet, so this is a no-op and
+      // the fetch it is about to start is the only one; after a timeout or on a reconnect it reloads as before.
+      void utils.opsChat.listChannelMessages.invalidate({ channel });
+      setFeedStreamGate((gate) => gate === "waiting" ? "connected" : gate);
+    },
   }, { enabled: isAuthenticated, label: "CommandChatExactLive" });
 
   // The exact Command Chat already owns the command-channel query, so use it for
@@ -1964,7 +1992,13 @@ function IncomingCallHandoffCard({ handoff, evidence, timestamp }: { handoff: In
   const recordingUrl = proxyRecordingUrl(handoff.recordingUrl);
   const playLabel = recordingUrl ? (playing ? "Pause incoming call recording" : "Play incoming call recording") : "Recording unavailable";
   const cue = callCueLabel(evidence?.summary || evidence?.endedReason);
-  const transcript = evidence?.transcript?.trim() || null;
+  const preloadedTranscript = evidence?.transcript?.trim() || null;
+  const transcriptQuery = trpc.voice.getCallTranscript.useQuery({ vapiCallId: handoff.vapiCallId ?? "" }, {
+    enabled: detailsOpen && !preloadedTranscript && Boolean(evidence?.hasTranscript && handoff.vapiCallId), staleTime: 5 * 60_000,
+    trpc: { context: { batch: "none" } },
+  });
+  const transcript = preloadedTranscript || transcriptQuery.data?.transcript?.trim() || null;
+  const transcriptPending = !transcript && Boolean(evidence?.hasTranscript) && transcriptQuery.isLoading;
   const detailText = evidence?.summary?.trim() || evidence?.endedReason?.trim() || null;
   const togglePlayback = () => {
     if (!audioRef.current) return;
@@ -1978,10 +2012,11 @@ function IncomingCallHandoffCard({ handoff, evidence, timestamp }: { handoff: In
     <footer><span><Headphones />{recordingUrl ? (playing ? "Playing call recording" : "Recording available") : "No recording stored"}</span><time>{dateLabel(timestamp)} · {formatTime(timestamp)}</time></footer>
     <div className="ccc-voice-handoff-details">
       <span className="ccc-voice-handoff-cue">{cue}</span>
-      {(detailText || transcript) && <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="ccc-voice-handoff-details-toggle">{detailsOpen ? "Hide call details" : "View call details"}<ChevronDown className={detailsOpen ? "is-open" : ""} /></button>}
+      {(detailText || transcript || evidence?.hasTranscript) && <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="ccc-voice-handoff-details-toggle">{detailsOpen ? "Hide call details" : "View call details"}<ChevronDown className={detailsOpen ? "is-open" : ""} /></button>}
       {detailsOpen && <div className="ccc-voice-handoff-details-panel">
         {detailText && <p><strong>Call cue</strong>{detailText}</p>}
         {transcript && <div><strong>Transcript</strong><pre>{transcript}</pre></div>}
+        {transcriptPending && <div><strong>Transcript</strong><p>Loading transcript…</p></div>}
       </div>}
     </div>
   </article>;
