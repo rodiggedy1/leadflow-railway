@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Check, Loader2, RefreshCw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import {
@@ -55,22 +56,31 @@ export async function sendBookingConfirmation(steps: ConfirmationSteps): Promise
 
 export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
   const sms = !("call" in task) && !("email" in task) && Number.isSafeInteger(task.sessionId);
-  // One shared request for every card (same cache entry) says which tasks have a booking change. Ordinary task cards
-  // make no booking-change request and build only the set-up button; the full panel exists only where it is used.
-  const withRecords = trpc.claudeCustomerTasks.bookingActionTaskIds.useQuery(undefined, { enabled: sms, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
+  // One shared request for every card (same cache entry) lists the tasks that have a booking change, each with a
+  // fingerprint of its record. Ordinary task cards make no booking-change request and build only the set-up button.
+  const versions = trpc.claudeCustomerTasks.bookingActionVersions.useQuery(undefined, { enabled: sms, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
   const [settingUp, setSettingUp] = useState(false);
   if (!sms) return null;
-  const hasRecord = withRecords.data?.includes(task.id) ?? false;
-  if (hasRecord || settingUp) return <BookingChangeDetails task={task} hasRecord={hasRecord} startEditing={settingUp} onSetupClosed={() => setSettingUp(false)} />;
-  if (withRecords.isLoading || withRecords.isError || task.status === "done") return null;
+  const version = versions.data?.[String(task.id)] ?? null;
+  if (version !== null || settingUp) return <BookingChangeDetails task={task} version={version} startEditing={settingUp} onSetupClosed={() => setSettingUp(false)} />;
+  if (versions.isLoading || versions.isError || task.status === "done") return null;
   return <div className="cbc-setup"><button type="button" onClick={() => setSettingUp(true)}><CalendarClock />Set up booking change</button></div>;
 }
 
-function BookingChangeDetails({ task, hasRecord, startEditing, onSetupClosed }: {
-  task: CustomerTask; hasRecord: boolean; startEditing: boolean; onSetupClosed: () => void;
+function BookingChangeDetails({ task, version, startEditing, onSetupClosed }: {
+  task: CustomerTask; version: string | null; startEditing: boolean; onSetupClosed: () => void;
 }) {
   const utils = trpc.useUtils();
-  const view = trpc.claudeCustomerTasks.bookingAction.useQuery({ id: task.id }, { enabled: hasRecord, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
+  const hasRecord = version !== null;
+  // Keyed by the record's fingerprint, outside the task-list cache: the existing "refresh every task" after any task
+  // update does not reload it; it reloads only when this booking change itself changed (or after 60 s on refocus).
+  const view = useQuery({
+    queryKey: ["claudeBookingChange", task.id, version],
+    queryFn: () => utils.client.claudeCustomerTasks.bookingAction.query({ id: task.id }, { context: { batch: "background" } }),
+    enabled: hasRecord, staleTime: 60_000, refetchOnWindowFocus: true, retry: false, placeholderData: previous => previous,
+    // "Sending" turns into "may have been sent" after two minutes without any write: check again while it lasts.
+    refetchInterval: query => query.state.data?.record.confirmation?.status === "sending" ? 30_000 : false,
+  });
   const [editing, setEditing] = useState(startEditing);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -93,10 +103,10 @@ function BookingChangeDetails({ task, hasRecord, startEditing, onSetupClosed }: 
     catch (caught) { setError(errorText(caught)); }
     finally {
       busyRef.current = false; setBusy(false);
-      // Refresh only what this card's step can change: its own booking change, which tasks have one, and the task list.
+      // Refresh only what this card's step can change: the booking-change fingerprints (a changed one reloads this
+      // card's details) and the task list.
       try {
-        await Promise.all([utils.claudeCustomerTasks.bookingAction.invalidate({ id: task.id }),
-          utils.claudeCustomerTasks.bookingActionTaskIds.invalidate(), utils.claudeCustomerTasks.list.invalidate()]);
+        await Promise.all([utils.claudeCustomerTasks.bookingActionVersions.invalidate(), utils.claudeCustomerTasks.list.invalidate()]);
       } catch { /* the next refresh picks it up */ }
     }
   };

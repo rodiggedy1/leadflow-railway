@@ -311,16 +311,21 @@ function summary(request: BookingActionRequest): string {
   return request.type === "cancel_visit" ? `Cancel ${visit}` : `Reschedule ${visit} to ${request.newDate ?? "?"} ${request.newTime ?? "(current time)"}`;
 }
 
-/** Which tasks have a booking-change record: ONE indexed query for the whole task list, so task cards without a
- * booking change make no request of their own. Newest first; bounded so it stays small as records accumulate. */
-export const BOOKING_ACTION_TASK_IDS_LIMIT = 1000;
-export async function bookingActionTaskIds(db: Db): Promise<number[]> {
-  const rows = rowsOf(await db.execute(sql`SELECT activeDedupKey FROM ops_chat_messages
-    WHERE channel = ${BOOKING_ACTION_CHANNEL} AND quickAction = ${BOOKING_ACTION_QUICK_ACTION} ORDER BY id DESC LIMIT ${BOOKING_ACTION_TASK_IDS_LIMIT}`));
+/** Which tasks have a booking-change record, with a short fingerprint of each record (it changes on every write): ONE
+ * indexed query for the whole task list. Task cards without a booking change make no request of their own, and a card
+ * reloads its details only when its own record changed. Newest first; bounded so it stays small as records accumulate. */
+export const BOOKING_ACTION_VERSIONS_LIMIT = 1000;
+export async function bookingActionVersions(db: Db): Promise<Record<string, string>> {
+  const rows = rowsOf(await db.execute(sql`SELECT activeDedupKey, LEFT(SHA1(metadata), 16) AS version FROM ops_chat_messages
+    WHERE channel = ${BOOKING_ACTION_CHANNEL} AND quickAction = ${BOOKING_ACTION_QUICK_ACTION} ORDER BY id DESC LIMIT ${BOOKING_ACTION_VERSIONS_LIMIT}`));
   const prefix = bookingActionKey(0).slice(0, -1);
-  const ids = rows.map(row => String(row.activeDedupKey ?? "")).filter(key => key.startsWith(prefix))
-    .map(key => Number(key.slice(prefix.length))).filter(id => Number.isSafeInteger(id) && id > 0);
-  return Array.from(new Set(ids));
+  const versions: Record<string, string> = {};
+  for (const row of rows) {
+    const key = String(row.activeDedupKey ?? "");
+    const id = key.startsWith(prefix) ? Number(key.slice(prefix.length)) : NaN;
+    if (Number.isSafeInteger(id) && id > 0 && !(String(id) in versions)) versions[String(id)] = String(row.version ?? "");
+  }
+  return versions;
 }
 export async function getBookingActionView(db: Db, taskId: number): Promise<BookingActionView | null> {
   const found = await readRecord(db, taskId);

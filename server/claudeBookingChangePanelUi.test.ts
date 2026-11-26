@@ -5,21 +5,24 @@ import { renderToStaticMarkup } from "react-dom/server";
 (globalThis as any).React = React; // harness compiles JSX classically; the app build does not need this
 
 let current: any = null;
-let withRecords: { data?: number[]; isLoading: boolean; isError: boolean } = { data: [], isLoading: false, isError: false };
+let withRecords: { data?: Record<string, string>; isLoading: boolean; isError: boolean } = { data: {}, isLoading: false, isError: false };
 const detailQueries: Array<{ id: number; enabled: boolean }> = [];
 const visits = [
   { jobId: 501, bookingId: 77, publicBookingNumber: "B-10432", date: "2026-12-04", time: "09:00", arrivalWindow: null, serviceName: "Standard cleaning", address: "123 Main St", teamName: "Team A", recurrence: "one-time", canonicalVisit: true },
 ];
+vi.mock("@tanstack/react-query", () => ({
+  // The card's details query (keyed by its record fingerprint): enabled only for cards with a booking change.
+  useQuery: (options: { queryKey: [string, number, string | null]; enabled: boolean }) => {
+    detailQueries.push({ id: options.queryKey[1], enabled: options.enabled });
+    return options.enabled ? { data: current, isLoading: false, isError: false } : { data: undefined, isLoading: false, isError: false };
+  },
+}));
 vi.mock("@/lib/trpc", () => {
   const mutation = () => ({ useMutation: () => ({ mutateAsync: async () => ({}) }) });
   return { trpc: {
     useUtils: () => ({ claudeCustomerTasks: { invalidate: async () => {} } }),
     claudeCustomerTasks: {
-      bookingAction: { useQuery: (input: { id: number }, options: { enabled: boolean }) => {
-        detailQueries.push({ id: input.id, enabled: options.enabled });
-        return options.enabled ? { data: current, isLoading: false, isError: false } : { data: undefined, isLoading: false, isError: false };
-      } },
-      bookingActionTaskIds: { useQuery: () => withRecords },
+      bookingActionVersions: { useQuery: () => withRecords },
       bookingActionVisits: { useQuery: () => ({ data: visits, isLoading: false }) },
       setupBookingAction: mutation(), editBookingAction: mutation(), executeBookingAction: mutation(), verifyBookingAction: mutation(),
       beginBookingConfirmation: mutation(), finishBookingConfirmation: mutation(),
@@ -29,7 +32,7 @@ vi.mock("@/lib/trpc", () => {
 });
 
 const html = (data: any, task: any) => {
-  current = data; withRecords = { data: data ? [task.id] : [], isLoading: false, isError: false };
+  current = data; withRecords = { data: data ? { [String(task.id)]: "v1" } : {}, isLoading: false, isError: false };
   return renderToStaticMarkup(React.createElement(Panel, { task }));
 };
 let Panel: any;
@@ -134,7 +137,7 @@ it("ordinary task cards make no booking-change request of their own; only cards 
       expected: { date: "2026-12-04", time: "09:00", arrivalWindow: null, cancelled: true }, availabilityConfirmed: false, lateRescheduleWarning: false },
     verification: { outcome: "verified", method: "direct_readback", explanation: "ok", checkedAt: 2, attempts: 1 },
     confirmation: { text: "x", status: "skipped", by: { id: "11", name: "Ana" }, at: 3 }, history: [] } };
-  withRecords = { data: [7], isLoading: false, isError: false };
+  withRecords = { data: { "7": "3f2a9c0d11e4b7a8" }, isLoading: false, isError: false };
   detailQueries.length = 0;
   const cards = Array.from({ length: 150 }, (_, n) => card(n + 100));
   const out = cards.map(render);
