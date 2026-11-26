@@ -85,6 +85,17 @@ describe("scope, permissions and switches", () => {
     expect(module).toContain("await cancelCanonicalBookingInTransaction(tx,");
     expect(module).not.toMatch(/stripe|sendSms|captureHold|cancelHold|placeHold|chargeSavedCard|fetch\(/i);
   });
+  it("task cards share one booking-change status request; reserving a confirmation sends no live update", () => {
+    expect(router).toMatch(/bookingActionTaskIds: opsChatProcedure\.output\(z\.array\(z\.number\(\)\.int\(\)\.positive\(\)\)\)\n\s+\.query\(\(\) => bookingActions\(\(actions, db\) => actions\.bookingActionTaskIds\(db\), false\)\)/);
+    const begin = router.slice(router.indexOf("beginBookingConfirmation:"), router.indexOf("finishBookingConfirmation:"));
+    expect(begin).toContain("}, false)), // reserving the send changes nothing others need to see now");
+    const finish = router.slice(router.indexOf("finishBookingConfirmation:"), router.indexOf("identity:"));
+    expect(finish).not.toMatch(/, false\)/); // finishing broadcasts once
+    const panel = read("client/src/components/ClaudeBookingChangePanel.tsx");
+    expect(panel).toContain("trpc.claudeCustomerTasks.bookingActionTaskIds.useQuery(undefined,");
+    expect(panel).toContain("trpc.claudeCustomerTasks.bookingAction.useQuery({ id: task.id }, { enabled: hasRecord,");
+    expect(panel).not.toContain("utils.claudeCustomerTasks.invalidate()");
+  });
   it("the off switch is a single code setting", () => {
     expect(CLAUDE_BOOKING_ACTIONS_ENABLED).toBe(true);
     expect(module).toContain('if (!CLAUDE_BOOKING_ACTIONS_ENABLED) manual.push("Booking changes are switched off. Handle this task manually.");');

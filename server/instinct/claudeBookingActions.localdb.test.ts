@@ -296,6 +296,25 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     expect(open.status).toBe("claimed"); expect(open.items.map(item => Boolean(item.completedBy))).toEqual([true, false]);
   });
 
+  it("one shared query lists exactly the tasks that have a booking change, however many ordinary tasks exist", async () => {
+    const date = addDays(today(), 10);
+    const proposed = await task(newPhone(), "Can we move it to Friday?", { type: "reschedule_visit", visitDate: date, newDate: addDays(date, 2), newTime: null, evidenceQuote: "move it to Friday" });
+    const staff = await task(newPhone(), "Please cancel it", null);
+    await actions.setupBookingAction(db, staff, { request: { type: "cancel_visit", visitDate: date, jobId: null, newDate: null, newTime: null, evidenceQuote: null }, itemId: "item-1" }, ana);
+    const ordinary: number[] = [];
+    for (let n = 0; n < 25; n++) ordinary.push(await task(newPhone(), "What time is my cleaning?", null));
+    await pool.query("INSERT INTO ops_chat_messages (channel, authorName, authorRole, body, cardStatus) VALUES ('command', 'Staff', 'admin', 'claude-booking-action:v1:999999', 'active')");
+    const counted = db as unknown as { execute: (...args: unknown[]) => unknown };
+    const execute = counted.execute.bind(db); let queries = 0;
+    counted.execute = (...args: unknown[]) => { queries++; return execute(...args); };
+    const ids = await actions.bookingActionTaskIds(db);
+    counted.execute = execute;
+    expect(queries).toBe(1);
+    expect(ids).toEqual(expect.arrayContaining([proposed, staff]));
+    for (const id of [...ordinary, 999999]) expect(ids).not.toContain(id);
+    expect(ids.indexOf(staff)).toBeLessThan(ids.indexOf(proposed)); // newest first
+  });
+
   it("invalid proposals are dropped silently and the task stays manual", async () => {
     const phone = newPhone();
     for (const proposal of [{ type: "reschedule_visit" }, { type: "move", visitDate: "2026-12-01", newDate: null, newTime: null, evidenceQuote: "x" },

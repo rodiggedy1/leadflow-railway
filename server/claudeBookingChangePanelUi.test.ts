@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 (globalThis as any).React = React; // harness compiles JSX classically; the app build does not need this
 
 let current: any = null;
+let withRecords: { data?: number[]; isLoading: boolean; isError: boolean } = { data: [], isLoading: false, isError: false };
+const detailQueries: Array<{ id: number; enabled: boolean }> = [];
 const visits = [
   { jobId: 501, bookingId: 77, publicBookingNumber: "B-10432", date: "2026-12-04", time: "09:00", arrivalWindow: null, serviceName: "Standard cleaning", address: "123 Main St", teamName: "Team A", recurrence: "one-time", canonicalVisit: true },
 ];
@@ -13,7 +15,11 @@ vi.mock("@/lib/trpc", () => {
   return { trpc: {
     useUtils: () => ({ claudeCustomerTasks: { invalidate: async () => {} } }),
     claudeCustomerTasks: {
-      bookingAction: { useQuery: () => ({ data: current, isLoading: false, isError: false }) },
+      bookingAction: { useQuery: (input: { id: number }, options: { enabled: boolean }) => {
+        detailQueries.push({ id: input.id, enabled: options.enabled });
+        return options.enabled ? { data: current, isLoading: false, isError: false } : { data: undefined, isLoading: false, isError: false };
+      } },
+      bookingActionTaskIds: { useQuery: () => withRecords },
       bookingActionVisits: { useQuery: () => ({ data: visits, isLoading: false }) },
       setupBookingAction: mutation(), editBookingAction: mutation(), executeBookingAction: mutation(), verifyBookingAction: mutation(),
       beginBookingConfirmation: mutation(), finishBookingConfirmation: mutation(),
@@ -22,7 +28,10 @@ vi.mock("@/lib/trpc", () => {
   } };
 });
 
-const html = (data: any, task: any) => { current = data; return renderToStaticMarkup(React.createElement(Panel, { task })); };
+const html = (data: any, task: any) => {
+  current = data; withRecords = { data: data ? [task.id] : [], isLoading: false, isError: false };
+  return renderToStaticMarkup(React.createElement(Panel, { task }));
+};
 let Panel: any;
 it("renders every booking-change state with the right controls; nothing for call and email tasks", async () => {
   Panel = (await import("../client/src/components/ClaudeBookingChangePanel")).ClaudeBookingChangePanel;
@@ -112,4 +121,30 @@ it("Send confirmation: one send, one recorded outcome, and a failure says whethe
     message: "The confirmation was sent, but saving that failed. Don't send it again: refresh the task in two minutes and choose \"It was sent\"." });
   expect(await run({ send: fails, finish: fails })).toEqual({ calls: ["begin", "send:4", "finish:failed"],
     message: "The confirmation may not have been sent, and its status could not be saved. Refresh the task in two minutes and check the conversation before choosing." });
+});
+
+it("ordinary task cards make no booking-change request of their own; only cards listed by the shared request load details", async () => {
+  Panel ??= (await import("../client/src/components/ClaudeBookingChangePanel")).ClaudeBookingChangePanel;
+  const render = (task: any) => renderToStaticMarkup(React.createElement(Panel, { task }));
+  const card = (id: number, status = "claimed") => ({ id, sessionId: 40 + id, customerPhone: "+13025550147", customerName: "Maya Lane", status,
+    items: [{ id: "item-1", title: "Move the cleaning", evidenceQuote: "x", completedBy: null, completedAt: null }] });
+  current = { enabled: true, visits: [], assessment: null, record: { version: 1, taskId: 7, source: "staff", itemId: "item-1", revision: 1, status: "closed",
+    request: { type: "cancel_visit", visitDate: "2026-12-04", jobId: 501, newDate: null, newTime: null, evidenceQuote: null }, execution: { by: { id: "11", name: "Ana" },
+      at: 1, bookingId: 77, jobId: 501, publicBookingNumber: "B-1", canonicalVisit: true, previous: { date: "2026-12-04", time: "09:00" },
+      expected: { date: "2026-12-04", time: "09:00", arrivalWindow: null, cancelled: true }, availabilityConfirmed: false, lateRescheduleWarning: false },
+    verification: { outcome: "verified", method: "direct_readback", explanation: "ok", checkedAt: 2, attempts: 1 },
+    confirmation: { text: "x", status: "skipped", by: { id: "11", name: "Ana" }, at: 3 }, history: [] } };
+  withRecords = { data: [7], isLoading: false, isError: false };
+  detailQueries.length = 0;
+  const cards = Array.from({ length: 150 }, (_, n) => card(n + 100));
+  const out = cards.map(render);
+  expect(detailQueries.filter(q => q.enabled)).toHaveLength(0); // 150 ordinary cards: no detail request at all
+  expect(out.every(markup => markup.includes("Set up booking change"))).toBe(true);
+  expect(render(card(7))).toContain("Executed and verified"); // the one card with a booking change loads it
+  expect(detailQueries.filter(q => q.enabled).map(q => q.id)).toEqual([7]);
+  expect(render(card(101, "done"))).toBe("");
+  withRecords = { data: undefined, isLoading: true, isError: false };
+  expect(render(card(7))).toBe(""); // nothing flashes while the shared request loads
+  withRecords = { data: undefined, isLoading: false, isError: true };
+  expect(render(card(101))).toBe(""); // shared request failed: no misleading set-up button
 });
