@@ -52,6 +52,8 @@ describe("one-extra-generation recovery exact local scope", () => {
   });
   // Owner-approved reviewed changes to protected files: exact new bytes pinned; any further edit still fails.
   const reviewedProtected: Record<string, string> = {
+    // Inbox query (2026-11-26): inbound paths also store lastCustomerMessageTs.
+    "server/webhooks.ts": "ed56fa0cad016d1e37e9f620aac010f87b794885d709cec5388825be9fb93f24",
     // History window (2026-11-25): reads saved bookings and unfinished tasks as optional SMS context.
     "server/instinct/claudeCustomerSmsApplication.ts": "e5c7ff921c8f81b6db0aac09081a80d2a50f1aa14b8598709031edb0c60c80b6",
   };

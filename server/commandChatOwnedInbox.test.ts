@@ -14,7 +14,9 @@ describe("Command Chat owned SMS inbox", () => {
 
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
-    expect(procedure).toContain("conversationSessions.messageHistory");
+    // Inbox query (2026-11-26): membership uses the stored summary column, never the full history.
+    expect(procedure).not.toContain("conversationSessions.messageHistory");
+    expect(procedure).toContain("conversationSessions.lastCustomerMessageTs");
     expect(procedure).toContain("conversationSessions.lastInboundPhoneNumberId");
     expect(procedure).toContain("conversationSessions.lastMessageText");
     expect(procedure).toContain("conversationSessions.lastMessageTs");

@@ -1213,7 +1213,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
         // Do NOT send any auto-reply.
         await db
           .update(conversationSessions)
-          .set({ messageHistory: JSON.stringify(history) })
+          .set({ messageHistory: JSON.stringify(history), lastCustomerMessageTs: computeSessionSummary(history).lastCustomerMessageTs })
           .where(eq(conversationSessions.id, session.id));
         console.log("[Webhook] Interview reply recorded (no auto-reply) for " + fromPhone);
         return;
@@ -2552,6 +2552,7 @@ async function handleCsInboundMessage(msg: any) {
         .update(conversationSessions)
         .set({
           messageHistory: JSON.stringify(hiringHistory),
+          lastCustomerMessageTs: computeSessionSummary(hiringHistory as any).lastCustomerMessageTs,
           updatedAt: new Date(),
           ...(inboundPhoneNumberId ? { lastInboundPhoneNumberId: inboundPhoneNumberId } : {}),
         } as any)
@@ -2571,6 +2572,7 @@ async function handleCsInboundMessage(msg: any) {
           leadSource: sessionSource,
           lastInboundPhoneNumberId: inboundPhoneNumberId,
           messageHistory: JSON.stringify(history),
+          lastCustomerMessageTs: computeSessionSummary(history as any).lastCustomerMessageTs,
           stage: "OPEN",
           createdAt: new Date(),
           updatedAt: new Date(),

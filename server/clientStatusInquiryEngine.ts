@@ -27,6 +27,7 @@ import {
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 import { invokeLLM } from "./_core/llm";
+import { computeSessionSummary } from "./sessionSummary";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -234,16 +235,18 @@ export async function tryHandleClientStatusInquiry(params: {
   }
 
   // 4. Create CLIENT_STATUS_INQUIRY session
+  const statusInquiryHistory = [
+    { role: "user", content: inboundText, ts: Date.now() },
+    { role: "assistant", content: ackText, ts: Date.now() },
+  ];
   const [sessionInsert] = await db.insert(conversationSessions).values({
     leadPhone: fromPhone,
     leadName: clientName ?? null,
     stage: "CLIENT_STATUS_INQUIRY" as any,
     leadSource: "client_status_inquiry",
     aiMode: 1,
-    messageHistory: JSON.stringify([
-      { role: "user", content: inboundText, ts: Date.now() },
-      { role: "assistant", content: ackText, ts: Date.now() },
-    ]),
+    messageHistory: JSON.stringify(statusInquiryHistory),
+    lastCustomerMessageTs: computeSessionSummary(statusInquiryHistory).lastCustomerMessageTs,
   });
   const sessionId = (sessionInsert as any).insertId as number;
 

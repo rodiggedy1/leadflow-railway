@@ -191,14 +191,15 @@ async function run(
   expect(db.delete).not.toHaveBeenCalled();
   // Inspect real compiled SQL, not just fixture eligibility.
   expect(filters).toHaveLength(1);
-  expect(filters[0]).toContain("JSON_SEARCH");
-  expect(filters[0]).toContain("'$[*].role'");
+  // Inbox query (2026-11-26): "customer has messaged" comes from the stored lastCustomerMessageTs column,
+  // not a search of every full history.
+  expect(filters[0]).not.toContain("JSON_SEARCH");
+  expect(filters[0]).toContain("`lastCustomerMessageTs` is not null");
   expect(filters[0]).toContain("`csQueue` = ?");
   expect(filters[0]).toContain("`csResolvedAt` is null");
   expect(filters[0]).toContain("FROM voice_calls vc WHERE vc.sessionId");
   expect(filters[0]).toContain("`lastCalledAt` is not null");
-  expect(filters[0]).toContain("'one', 'user'");
-  expect(filters[0]).toContain("'one', 'customer'");
+  expect(filters[0]).not.toContain("messageHistory");
   expect(filterParams).toEqual([["CS"]]);
   const paused = factory === makeHandler && process.env.RAILWAY_ENVIRONMENT_NAME === "production";
   expect(filters[0].includes("openphone_call_recordings")).toBe(!paused);
@@ -475,7 +476,14 @@ describe("Production-only retained-call read pause", () => {
     expect(body.split(late)).toHaveLength(2);
     const original = body.replace(guard, "")
       .replace(membership, "and(retainedOutboundCallActivityFilter, isNull(conversationSessions.csResolvedAt))")
-      .replace(late, "if (calledPhoneDigits.length > 0)");
+      .replace(late, "if (calledPhoneDigits.length > 0)")
+      // Approved 2026-11-26: inbox membership reads lastCustomerMessageTs instead of searching full histories.
+      .replace(`      // "Has the customer ever messaged?" from the stored summary column (set from the same history by
+      // computeSessionSummary on every write) instead of searching every conversation's full history.
+      const inboundMessageActivityFilter = isNotNull(conversationSessions.lastCustomerMessageTs);`, `      const inboundMessageActivityFilter = sql\`(
+        JSON_SEARCH(\${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+        OR JSON_SEARCH(\${conversationSessions.messageHistory}, 'one', 'customer', NULL, '$[*].role') IS NOT NULL
+      )\`;`);
     expect(createHash("sha256").update(original).digest("hex"))
       .toBe("617fdd7e0e49fe751e4dfb637d9aa41194d033f42702d6ddb773433eb92396c2");
   });
