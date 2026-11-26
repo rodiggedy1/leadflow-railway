@@ -25,7 +25,7 @@ const recoveryHashes: Record<string, string> = {
 };
 // Token trim (2026-11-25): reviewed knowledge-placement change on top of the pinned candidate above.
 const tokenTrimHashes: Record<string, string> = {
-  "server/instinct/claudeCustomerSmsGeneration.ts": "1c9dd8b5e8f2ebe0cffa7994f9527254ee69b3029e36c53cccc7cb076aed320f",
+  "server/instinct/claudeCustomerSmsGeneration.ts": "9fc0527ac8175c183442a6dfa86c89e4c40b8ce1ef7138feac5fe0f8f6c07db3", // + Claude writing prompt trim (2026-11-26)
 };
 function phraseRemovalSource(path: string): string {
   const source = readFileSync(path, "utf8"), hash = createHash("sha256").update(source).digest("hex");

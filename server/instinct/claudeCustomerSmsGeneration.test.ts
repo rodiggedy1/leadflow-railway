@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CLAUDE_SMS_DRAFT_INSTRUCTIONS } from "./claudeSmsAlternative";
 import type { InitialLeadDraftOptions } from "./claudeAgentClient";
 import { buildSystemPrompt } from "../csReplyStream";
+import { claudeWritingPrompt } from "./claudeWritingPrompt";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "../knowledgeBase";
 import {
   CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS, CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS, CLAUDE_KNOWLEDGE_BASE_HEADING, createClaudeCustomerSmsGenerator, createClaudeCustomerReplyGenerator,
@@ -38,7 +39,7 @@ function knowledgeIn(request: { systemPrompt: string; userPrompt: string }): str
   if (at >= 0) return request.systemPrompt.slice(at + CLAUDE_KNOWLEDGE_BASE_HEADING.length);
   return request.systemPrompt.includes(MAIDS_IN_BLACK_KNOWLEDGE_BASE) ? MAIDS_IN_BLACK_KNOWLEDGE_BASE : undefined;
 }
-const withKnowledge = (knowledge: string) => buildSystemPrompt().includes(knowledge) ? buildSystemPrompt() : `${buildSystemPrompt()}${CLAUDE_KNOWLEDGE_BASE_HEADING}${knowledge}`;
+const withKnowledge = (knowledge: string) => claudeWritingPrompt().includes(knowledge) ? claudeWritingPrompt() : `${claudeWritingPrompt()}${CLAUDE_KNOWLEDGE_BASE_HEADING}${knowledge}`;
 function harness(result: unknown = { replyText: pendingReply, task }, options: ClaudeCustomerSmsGenerationOptions = {}) {
   const readKnowledge = vi.fn(async () => HARNESS_KNOWLEDGE);
   const runner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: typeof result === "string" ? result : JSON.stringify(result) }));
@@ -55,7 +56,7 @@ describe("content-only Claude customer SMS plan", () => {
       incomingMessage: f.binding.inboundText, context, protectedIds: [f.binding.providerMessageId, f.binding.receivingPhoneNumberId],
     });
     expect(shared.runner.mock.calls[0][0]).toEqual(sms.runner.mock.calls[0][0]);
-    expect(sms.runner.mock.calls[0][0].systemPrompt).toBe(`=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe complete current CS writing prompt below supplies tone and approved company knowledge. Its operational examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If its examples or plain-SMS output direction conflict, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== COMPLETE CURRENT CS WRITING PROMPT ===\n${withKnowledge(HARNESS_KNOWLEDGE)}`);
+    expect(sms.runner.mock.calls[0][0].systemPrompt).toBe(`=== CURRENT CAPABILITY — HIGHEST PRIORITY ===\n${CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS}\n\nThe CS writing prompt below supplies tone and approved company knowledge. Its examples are style examples only, NEVER evidence of performed actions, current bookings, identities or availability. If anything in it conflicts, the current capability's pending-human safety and strict JSON contract above take precedence. Only use exact saved contact/history for customer facts.\n\n=== CS WRITING PROMPT ===\n${withKnowledge(HARNESS_KNOWLEDGE)}`);
   });
 
   it("accepts full actual email context without a new agent/prompt, clipping or evidence source", async () => {
@@ -87,7 +88,7 @@ describe("content-only Claude customer SMS plan", () => {
     expect(options.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
     expect(options.systemPrompt.endsWith(withKnowledge(HARNESS_KNOWLEDGE))).toBe(true);
     expect(options.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
-    expect(options.systemPrompt.indexOf(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS)).toBeLessThan(options.systemPrompt.indexOf(buildSystemPrompt()));
+    expect(options.systemPrompt.indexOf(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS)).toBeLessThan(options.systemPrompt.indexOf(claudeWritingPrompt()));
     const payload = JSON.parse(options.userPrompt);
     expect(payload.incomingMessage).toBe(binding.inboundText);
     expect(payload.context.originalConversation).toEqual(JSON.parse(session.messageHistory as string));
@@ -105,7 +106,7 @@ describe("content-only Claude customer SMS plan", () => {
       const runner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText: pendingReply, task }) }));
       await createClaudeCustomerSmsGenerator({ runner })(f.binding, f.session);
       const options = runner.mock.calls[0][0];
-      expect(options.systemPrompt).toContain(buildSystemPrompt());
+      expect(options.systemPrompt).toContain(claudeWritingPrompt());
       expect(options.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
       expect(knowledgeIn(options)).toBe(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
       expect(options.systemPrompt.split(MAIDS_IN_BLACK_KNOWLEDGE_BASE)).toHaveLength(2); // exactly once
@@ -129,7 +130,7 @@ describe("content-only Claude customer SMS plan", () => {
     const prompt = h.runner.mock.calls[0][0].systemPrompt;
     expect(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS.endsWith("\n\n" + CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toBe(true);
     expect(prompt.split(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toHaveLength(2);
-    expect(prompt.indexOf(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toBeLessThan(prompt.indexOf(buildSystemPrompt()));
+    expect(prompt.indexOf(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS)).toBeLessThan(prompt.indexOf(claudeWritingPrompt()));
     expect(prompt.endsWith(withKnowledge(HARNESS_KNOWLEDGE))).toBe(true);
     for (const instruction of ["not friendliness", "Do not impose a character limit", "Use emojis naturally wherever they fit", "Vary them to suit the actual message and cleaning context", "rather than defaulting to the same smiley face", "There is no fixed emoji count", "use multiple emojis", "or none when they do not fit", "Avoid playful emojis for complaints or sensitive issues", "Do not use em dashes (U+2014), en dashes (U+2013)", "dash-separated phrases or dash bullet lists", "Do not change task titles, checklist content or evidence quotes"]) {
       expect(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS).toContain(instruction);

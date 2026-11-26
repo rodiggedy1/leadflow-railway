@@ -6,6 +6,7 @@ import ts from "typescript";
 import type { CreateCustomerBookingLinkInput } from "../../shared/bookingFunnel";
 import { createPublicBookingPriceSnapshot, PUBLIC_BOOKING_PRICED_EXTRAS, type PublicBookingPricingInput } from "../../shared/publicBookingPricing";
 import { buildSystemPrompt } from "../csReplyStream";
+import { claudeWritingPrompt } from "./claudeWritingPrompt";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "../knowledgeBase";
 import type { InitialLeadDraftOptions } from "./claudeAgentClient";
 import { buildCallBookingQuoteSms, createSmsBookingQuotePresentation, renderSmsBookingQuoteText } from "./bookingQuotePresentation";
@@ -99,7 +100,7 @@ describe("SMS-only additive quote generation", () => {
     expect(prompts.systemPrompt).toContain(SMS_BOOKING_QUOTE_INSTRUCTIONS);
     expect(prompts.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
     expect(prompts.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);
-    expect(prompts.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(prompts.systemPrompt.endsWith(claudeWritingPrompt())).toBe(true);
     expect(prompts.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
     expect(Object.keys(prompts).sort()).toEqual(["systemPrompt", "userPrompt"]);
     expect(JSON.parse(prompts.userPrompt)).toEqual(modelPayload(input, { state: null, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }));
@@ -168,7 +169,7 @@ describe("SMS-only additive quote generation", () => {
     const runner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText: "Thanks for letting us know.", task: null }) }));
     await createClaudeCustomerReplyGenerator({ runner, readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE })(input);
     expect(runner.mock.calls[0][0].systemPrompt).not.toContain("PRICE OBJECTIONS (ordinary customer-service SMS");
-    expect(runner.mock.calls[0][0].systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(runner.mock.calls[0][0].systemPrompt.endsWith(claudeWritingPrompt())).toBe(true);
     expect(runner).toHaveBeenCalledTimes(1);
   });
 
@@ -534,7 +535,7 @@ describe("SMS-only additive quote generation", () => {
     expect(firstRequest.signal).toBe(controller.signal);
     expect(secondRequest.signal).toBe(controller.signal);
     expect(firstRequest.systemPrompt).toContain(MAIDS_IN_BLACK_KNOWLEDGE_BASE);
-    expect(firstRequest.systemPrompt.endsWith(buildSystemPrompt())).toBe(true);
+    expect(firstRequest.systemPrompt.endsWith(claudeWritingPrompt())).toBe(true);
     expect(JSON.parse(firstRequest.userPrompt)).toEqual(modelPayload(input, { state: previous, currentLocalDate: "2026-11-17", currentLocalTime: "12:00" }));
     expect(h.readKnowledge).toHaveBeenCalledTimes(1);
     expect(h.readKnowledge).toHaveBeenCalledWith(input.incomingMessage);
@@ -937,9 +938,11 @@ describe("SMS-only additive quote generation", () => {
     // The only approved cap: the owner-approved 30-message history window (model payload only).
     expect(source.match(/\.slice\(/g)).toEqual([".slice("]);
     expect(source).toContain("originalConversation.slice(windowStart)");
-    for (const instruction of ["CURRENT incomingMessage", "zero-based", "restart:true ONLY", "phone is ALWAYS", "never a phone-confirmation question", "COMPLETE customer-facing quote", "quotePresentationLanguage", "its layout is never rendered"]) {
+    for (const instruction of ["CURRENT incomingMessage", "zero-based", "restart:true ONLY", "phone is ALWAYS", "never a phone-confirmation question", "COMPLETE customer-facing quote", "quotePresentationLanguage"]) {
       expect(SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS).toContain(instruction);
     }
+    // The never-rendered legacy template field is no longer described to the model (still accepted and validated).
+    expect(SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS).not.toContain("quoteTextTemplate");
   });
 });
 
