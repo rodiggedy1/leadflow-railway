@@ -133,6 +133,9 @@ export async function attachProposedBookingAction(tx: Tx, task: { id: number; it
     const proposal = modelBookingActionSchema.safeParse(raw);
     if (!proposal.success || !inboundText.includes(proposal.data.evidenceQuote)) return false;
     const p = proposal.data;
+    // A reschedule is proposed only once the customer has given the new date; otherwise the task stays manual
+    // (staff can still set one up by hand).
+    if (p.type === "reschedule_visit" && !p.newDate) return false;
     const matching = task.items.find(item => item.evidenceQuote === p.evidenceQuote);
     const now = Date.now();
     await insertRecord(tx, {
