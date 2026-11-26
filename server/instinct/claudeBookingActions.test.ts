@@ -85,12 +85,13 @@ describe("scope, permissions and switches", () => {
     expect(module).toContain("await cancelCanonicalBookingInTransaction(tx,");
     expect(module).not.toMatch(/stripe|sendSms|captureHold|cancelHold|placeHold|chargeSavedCard|fetch\(/i);
   });
-  it("task cards share one booking-change status request; reserving a confirmation sends no live update", () => {
+  it("task cards share one booking-change status request; reserving and finishing a confirmation each update other screens", () => {
     expect(router).toMatch(/bookingActionVersions: opsChatProcedure\.output\(z\.record\(z\.string\(\)\.regex\(\/\^\[1-9\]\\d\*\$\/\), z\.string\(\)\)\)\n\s+\.query\(\(\) => bookingActions\(\(actions, db\) => actions\.bookingActionVersions\(db\), false\)\)/);
     const begin = router.slice(router.indexOf("beginBookingConfirmation:"), router.indexOf("finishBookingConfirmation:"));
-    expect(begin).toContain("}, false)), // reserving the send changes nothing others need to see now");
+    expect(begin).toContain("})), // other open screens must see \"Sending\"");
+    expect(begin).not.toMatch(/, false\)/);
     const finish = router.slice(router.indexOf("finishBookingConfirmation:"), router.indexOf("identity:"));
-    expect(finish).not.toMatch(/, false\)/); // finishing broadcasts once
+    expect(finish).not.toMatch(/, false\)/);
     const panel = read("client/src/components/ClaudeBookingChangePanel.tsx");
     expect(panel).toContain("trpc.claudeCustomerTasks.bookingActionVersions.useQuery(undefined,");
     // Details are keyed by the record fingerprint, outside the task cache, so "refresh every task" doesn't reload them.

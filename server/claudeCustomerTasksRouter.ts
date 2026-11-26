@@ -86,7 +86,7 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
       .mutation(({ input, ctx }) => bookingActions(async (actions, db) => {
         const begun = await actions.beginBookingConfirmation(db, input.id, input.text, bookingsActor(ctx.agent));
         return { text: begun.text, sessionId: begun.sessionId };
-      }, false)), // reserving the send changes nothing others need to see now; finishing it broadcasts once
+      })), // other open screens must see "Sending" (and later "may have been sent") instead of a Send button
     finishBookingConfirmation: bookingsAgentProcedure.input(z.object({ id, outcome: z.enum(["sent", "failed", "skipped", "mark_sent", "mark_not_sent"]) }).strict())
       .output(bookingActionRecordSchema)
       .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.finishBookingConfirmation(db, input.id, input.outcome, bookingsActor(ctx.agent)))),
