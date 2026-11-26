@@ -45,7 +45,8 @@ import {
   gmailThreadMeta,
 } from "../drizzle/schema";
 import { retrySmsDraft } from "./madisonSmsAgent";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { orderChannelFeed } from "./opsChannelFeedOrder";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { sendGmailReply, getInboxEmailAddress } from "./gmailService";
@@ -763,21 +764,29 @@ export const opsChatRouter = router({
       const db = await getDb();
       if (!db) return [];
 
-      const msgs = await db
-        .select()
-        .from(opsChatMessages)
-        .where(eq(opsChatMessages.channel, input.channel))
-        .orderBy(
-          // Active madison_sms_draft cards sort by lastActivityAt so they resurface
-          // when a customer replies. Everything else keeps its original createdAt order.
-          desc(sql`CASE
+      // Active madison_sms_draft cards sort by lastActivityAt so they resurface
+      // when a customer replies. Everything else keeps its original createdAt order.
+      const sortKey = sql<number>`CASE
             WHEN ${opsChatMessages.quickAction} = 'madison_sms_draft'
              AND ${opsChatMessages.cardStatus} = 'active'
             THEN COALESCE(${opsChatMessages.lastActivityAt}, UNIX_TIMESTAMP(${opsChatMessages.createdAt}) * 1000)
             ELSE UNIX_TIMESTAMP(${opsChatMessages.createdAt}) * 1000
-          END`)
-        )
-        .limit(500);
+          END`;
+      // Load speed: the same 500 messages in the same order, without sorting the whole channel. Only active
+      // draft cards can rank above their creation time, so the top 500 by sortKey always lies within all active
+      // draft cards plus the newest (500 + their count) messages by createdAt (an indexed read). The order is
+      // then applied with the identical SQL expression.
+      const columns = { ...getTableColumns(opsChatMessages), sortKey };
+      const activeDraftCards = await db.select(columns).from(opsChatMessages).where(and(
+        eq(opsChatMessages.channel, input.channel),
+        eq(opsChatMessages.quickAction, "madison_sms_draft"),
+        eq(opsChatMessages.cardStatus, "active"),
+      ));
+      const newest = await db.select(columns).from(opsChatMessages)
+        .where(eq(opsChatMessages.channel, input.channel))
+        .orderBy(desc(opsChatMessages.createdAt), desc(opsChatMessages.id))
+        .limit(500 + activeDraftCards.length);
+      const msgs = orderChannelFeed([...activeDraftCards, ...newest], 500);
 
       // Count thread replies per parent message
       const rootMsgs = msgs.filter(m => !m.threadParentId);

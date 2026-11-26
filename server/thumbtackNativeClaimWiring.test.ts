@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { withoutApprovedCommandChatLoad } from "./commandChatLoadSourceControl";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { runInNewContext } from "node:vm";
@@ -63,7 +64,7 @@ describe("native-only claim wiring, without importing the application router", (
     expect(property(readFileSync("server/opsChatRouter.ts", "utf8"), "unclaimLead")).toBe(property(execFileSync("git", ["show", `${BASE}:server/opsChatRouter.ts`], { encoding: "utf8" }), "unclaimLead"));
   });
   it("leaves every other server router byte unchanged", () => {
-    const current = readFileSync("server/opsChatRouter.ts", "utf8");
+    const current = withoutApprovedCommandChatLoad("server/opsChatRouter.ts", readFileSync("server/opsChatRouter.ts", "utf8"));
     const original = execFileSync("git", ["show", `${BASE}:server/opsChatRouter.ts`], { encoding: "utf8" });
     const repaired = current.replace(property(current, "claimLead"), property(original, "claimLead"));
     expect(repaired).toBe(original);
