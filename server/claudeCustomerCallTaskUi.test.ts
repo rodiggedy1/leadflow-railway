@@ -127,7 +127,7 @@ function harness(api: unknown = {}, initialContext?: unknown, input = source) {
       if (id === "@/components/ui/dialog") return { Dialog, DialogContent, DialogTrigger, DialogDescription: div, DialogTitle: div };
       if (id.endsWith(".css")) return {};
       // Phase 1 booking-change panel: rendered and tested separately (claudeBookingChangePanelUi.test.ts).
-      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null };
+      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null, useBookingChange: () => ({ data: null }), bookingChangeStatus: () => null, bookingChangeHistory: () => [] };
       throw new Error(`Forbidden offline UI import: ${id}`);
     } }, { timeout: 1500 });
   const ui = module.exports;
@@ -169,10 +169,14 @@ function rig(task: CustomerTask, input = source, callerId = actor.id) {
   const work = harness({ claudeCustomerTasks: { get: { useQuery: get }, recording: { useQuery: recording } } }, context, input);
   const render = (placement: "queue" | "stream", pending = false) => {
     context.pendingIds = pending ? new Set([task.id]) : new Set();
-    let tree = work.expand(work.render(placement === "queue" ? "ClaudeCustomerTasksQueue" : "ClaudeCustomerTaskStreamCard", placement === "queue" ? {} : { taskId: task.id }), placement);
+    const draw = () => work.expand(work.render(placement === "queue" ? "ClaudeCustomerTasksQueue" : "ClaudeCustomerTaskStreamCard", placement === "queue" ? {} : { taskId: task.id }), placement);
+    let tree = draw();
     if (placement === "queue" && task.status === "done" && !nodes(tree).some(node => node.props.className === "cct-card-status")) {
-      button(tree, "Done1").props.onClick(); tree = work.expand(work.render("ClaudeCustomerTasksQueue", {}), placement);
+      button(tree, "Done1").props.onClick(); tree = draw();
     }
+    // Approved 320px design: cards start collapsed; these checks read the expanded card, as staff do.
+    const collapsed = nodes(tree).find(node => node.props.className === "cct-expand" && node.props["aria-expanded"] === false);
+    if (collapsed) { collapsed.props.onClick(); tree = draw(); }
     return tree;
   };
   return { ...work, a, onOpenConversation, get, recording, recordingUrl, context, render, html: (placement: "queue" | "stream", pending = false) => renderToStaticMarkup(render(placement, pending)) };
@@ -183,7 +187,7 @@ describe("Canonical AI customer call task evidence in the actual queue and strea
     sanitizer.sanitize.mockClear();
     const task = call({ sourceText: "  Please add the oven.\n<script>literal caller evidence</script>\nKeep all spacing.  ", items: [{ ...call().items[0], evidenceQuote: "<b>literal caller quote</b>" }] });
     const work = rig(task); const tree = work.render(placement); const html = work.html(placement);
-    expect(text(nodes(tree).find(node => node.props.className === "cct-task-label"))).toBe("Customer task · AI CALL");
+    expect(text(nodes(tree).find(node => node.props.className === "cct-card-meta"))).toContain(" · AI call · ");
     expect(text(nodes(tree).find(node => node.props.className === "cct-customer-phone"))).toBe(task.customerPhone);
     expect(text(nodes(tree).find(node => node.props.className === "cct-source-message"))).toBe(`Caller evidence${task.sourceText}`);
     expect(text(nodes(tree).find(node => node.type === "blockquote"))).toBe(task.items[0].evidenceQuote);
@@ -310,12 +314,18 @@ describe("Task-call playback and transcript presentation repair — offline", ()
     }
   });
   it("normalizes only the exact approved display hunks and still detects unrelated changes", () => {
+    // The released card (ac36ea3) still normalizes exactly to the original; the approved 320px redesign (2026-11-27) keeps the
+    // call playback, transcript and evidence code and its styles byte-for-byte.
+    const released = (path: string) => execFileSync("git", ["show", `ac36ea3dad109368be9d4ac5166c7d461ae60db0:${path}`], { encoding: "utf8" });
     for (const path of [componentPath, "client/src/components/claude-customer-tasks.css"]) {
       const original = execFileSync("git", ["show", `af1b1337:${path}`], { encoding: "utf8" });
-      const current = readFileSync(path, "utf8");
-      expect(withoutApprovedTaskCallPlayback(path, current)).toBe(original);
-      expect(withoutApprovedTaskCallPlayback(path, current + "\n// UNAUTHORIZED_CHANGE\n")).not.toBe(original);
+      expect(withoutApprovedTaskCallPlayback(path, released(path))).toBe(original);
+      expect(withoutApprovedTaskCallPlayback(path, released(path) + "\n// UNAUTHORIZED_CHANGE\n")).not.toBe(original);
     }
+    const calls = (source: string) => source.slice(source.indexOf("export function CustomerTaskCallRecording"), source.indexOf("export function TaskCompletionConfirm"));
+    expect(calls(readFileSync(componentPath, "utf8"))).toBe(calls(released(componentPath)));
+    const callStyles = (css: string) => css.split("\n").filter(line => /cct-call|cct-phone-transcript/.test(line)).join("\n");
+    expect(callStyles(readFileSync("client/src/components/claude-customer-tasks.css", "utf8"))).toBe(callStyles(released("client/src/components/claude-customer-tasks.css")));
   });
 });
 
@@ -329,7 +339,7 @@ describe("Staff Quo calls reuse the unchanged task card and human controls", () 
   it.each(["queue", "stream"] as const)("renders a PHONE CALL in %s with exact caller evidence and the same full-call dialog", placement => {
     const task = staffCall(), work = rig(task);
     let tree = work.render(placement);
-    expect(text(nodes(tree).find(node => node.props.className === "cct-task-label"))).toBe("Staff task · PHONE CALL");
+    expect(text(nodes(tree).find(node => node.props.className === "cct-card-meta"))).toContain(" · Phone call · ");
     expect(text(tree)).toContain(task.customerPhone!); expect(text(tree)).toContain(task.items[0].evidenceQuote);
     expect(text(tree)).not.toContain("Acknowledgment"); expect(work.get).not.toHaveBeenCalled(); expect(work.recording).not.toHaveBeenCalled();
     button(tree, "Open full call").props.onClick(); tree = work.render(placement);
@@ -346,7 +356,7 @@ describe("Staff Quo calls reuse the unchanged task card and human controls", () 
     const work = rig(task); let tree = work.render(placement);
     expect(text(nodes(tree).find(node => node.props.className === "cct-source-message"))).toBe(`Call evidence${task.sourceText}`);
     expect(text(tree)).not.toContain("Caller evidence"); expect(text(tree)).not.toContain("Customer task");
-    expect(text(nodes(tree).find(node => node.props.className === "cct-customer-identity"))).toContain("Caller");
+    expect(text(nodes(tree).find(node => node.props.className === "cct-card-meta"))).toContain("Caller");
     button(tree, "Open full call").props.onClick(); tree = work.render(placement);
     expect(text(tree)).toContain(transcript); expect(task.call.staffUserId).toBeNull(); expect(task.owner).toBeNull();
     for (const action of Object.values(work.a)) expect(action).not.toHaveBeenCalled();
@@ -380,7 +390,7 @@ describe("AI call task human confirmation and canonical state remain unchanged (
     expect(button(unclaimed.render(placement, true), "Claiming…").props.disabled).toBe(true);
     const task = call({ customerName: null, status: "claimed", owner: actor, claimedAt: NOW }); const work = rig(task);
     let tree = work.render(placement); expect(text(tree)).toContain(`Claimed by ${actor.name}`);
-    button(tree, "Confirm item").props.onClick(); await flush(); expect(work.a.completeItem).toHaveBeenCalledWith(903, "oven");
+    nodes(tree).find(node => String(node.props["aria-label"]).startsWith("Confirm completed item"))!.props.onClick(); await flush(); expect(work.a.completeItem).toHaveBeenCalledWith(903, "oven");
     button(work.render(placement), "Mark done").props.onClick(); tree = work.render(placement);
     expect(text(tree)).toContain("human confirmation"); expect(text(tree)).toContain("not system verification");
     expect(text(tree)).toContain("No booking change, customer call, customer text, or conversation closure is performed.");
@@ -390,10 +400,10 @@ describe("AI call task human confirmation and canonical state remain unchanged (
     tree = work.render(placement); expect(button(tree, "Confirm done").props.disabled).toBe(false);
     button(tree, "Confirm done").props.onClick(); await flush(); expect(work.a.complete).toHaveBeenCalledWith(903, "Staff reviewed the caller request"); expect(task.status).toBe("claimed");
     const other = rig(call({ status: "claimed", owner: { id: "different-owner", name: actor.name } }));
-    expect(button(other.render(placement), "Mark done")).toBeUndefined(); expect(button(other.render(placement), "Confirm item")).toBeUndefined();
+    expect(button(other.render(placement), "Mark done")).toBeUndefined(); expect(nodes(other.render(placement)).find(node => String(node.props["aria-label"]).startsWith("Confirm completed item"))).toBeUndefined();
     const done = rig(call({ status: "done", owner: actor, completedBy: confirmer, completedAt: NOW, completionNote: "Actual staff confirmation note" }));
-    expect(text(nodes(done.render(placement)).find(node => node.props.className === "cct-card-status"))).toBe(`Confirmed by ${confirmer.name}`);
-    expect(done.html(placement)).toContain("Actual staff confirmation note"); expect(done.html(placement)).toContain("not system-verified");
+    expect(text(nodes(done.render(placement)).find(node => node.props.className === "cct-card-status"))).toBe(`Completed by ${confirmer.name}`);
+    expect(done.html(placement)).toContain("Actual staff confirmation note"); expect(done.html(placement)).not.toContain("Verified");
   });
 
   it("reconciles call records through the same list/get caches, pending lock and conflict refresh", async () => {
@@ -542,7 +552,7 @@ describe("SMS conversation to canonical task navigation — offline", () => {
     const tree = r.render();
     expect(nodes(tree).filter(node => node.props.className === "cct-message-task-status").map(text)).toEqual(["Done"]);
     expect(nodes(tree).find(node => node.props["data-task-id"] === task.id)!.props["data-task-status"]).toBe("done");
-    expect(text(tree)).toContain("Confirmed by Confirming staff"); expect(button(tree, "Mark done")).toBeUndefined();
+    expect(text(tree)).toContain("Completed by Confirming staff"); expect(button(tree, "Mark done")).toBeUndefined();
     r.context.tasks = [...r.context.tasks, sms({ id: 999, sessionId: 43 })];
     expect(nodes(r.render(43)).some(node => node.props.role === "dialog")).toBe(false);
     expect(task.status).toBe("claimed");

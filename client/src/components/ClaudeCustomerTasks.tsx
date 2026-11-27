@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import DOMPurify from "dompurify";
-import { Check, ChevronDown, ClipboardList, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Clock3, History, Loader2, RefreshCw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import "./claude-customer-tasks.css";
-import { ClaudeBookingChangePanel } from "./ClaudeBookingChangePanel";
+import { ClaudeBookingChangePanel, bookingChangeHistory, bookingChangeStatus, useBookingChange } from "./ClaudeBookingChangePanel";
 
 export type CustomerTaskView = "open" | "mine" | "done";
 export type CustomerTaskActions = {
@@ -186,7 +186,7 @@ export function ClaudeSmsConversationTasks({ sessionId, children }: { sessionId:
     <Dialog open={Boolean(selected)} onOpenChange={open => { if (!open) setSelectedId(null); }}>
       <DialogContent className="cct-confirm-dialog cct-related-task-dialog" onCloseAutoFocus={event => { event.preventDefault(); opener.current?.focus({ preventScroll: true }); }}><DialogTitle>Task details</DialogTitle><DialogDescription>Existing task from this SMS conversation</DialogDescription>
         <TaskContext.Provider value={{ ...context, onOpenConversation: () => setSelectedId(null) }}>
-          {selected && <ClaudeCustomerTaskStreamCard taskId={selected.id} />}
+          {selected && <ClaudeCustomerTaskStreamCard taskId={selected.id} defaultExpanded />}
         </TaskContext.Provider>
       </DialogContent>
     </Dialog>
@@ -226,7 +226,7 @@ export function CustomerTaskQueue({ tasks, callerId, loading = false, failed = f
 }
 
 /** Stream metadata is an id pointer, never a stale task snapshot or message-body inference. */
-export function ClaudeCustomerTaskStreamCard({ taskId }: { taskId: number | null }) {
+export function ClaudeCustomerTaskStreamCard({ taskId, defaultExpanded = false }: { taskId: number | null; defaultExpanded?: boolean }) {
   const context = useCustomerTasks();
   const validId = taskId !== null && Number.isSafeInteger(taskId) && taskId > 0;
   if (!validId) return <p className="cct-feedback" role="status">Task reference unavailable.</p>;
@@ -236,7 +236,7 @@ export function ClaudeCustomerTaskStreamCard({ taskId }: { taskId: number | null
   if (!task) return <p className="cct-feedback" role="status">Task record unavailable.</p>;
   return <>
     <TaskCard key={task.id} task={task} callerId={context.callerId} pending={context.pendingIds.has(task.id)}
-      actions={context.actions} onOpenConversation={context.onOpenConversation} placement="stream" />
+      actions={context.actions} onOpenConversation={context.onOpenConversation} placement="stream" defaultExpanded={defaultExpanded} />
     {context.failed && <p className="cct-feedback" role="alert">Task could not be refreshed. Showing the last loaded status. <button type="button" onClick={() => void context.refresh()}>Retry</button></p>}
   </>;
 }
@@ -345,11 +345,12 @@ export function TaskCompletionConfirm({ task, note, pending, error, allowed, onN
 }
 
 /** Same compact card in the queue and stream, always supplied a canonical backend record. */
-export function TaskCard({ task, callerId, pending = false, actions, onOpenConversation, placement = "queue", now = Date.now() }: {
+export function TaskCard({ task, callerId, pending = false, actions, onOpenConversation, placement = "queue", now = Date.now(), defaultExpanded = false }: {
   task: CustomerTask; callerId: string; pending?: boolean; actions: CustomerTaskActions;
-  onOpenConversation?: (task: CustomerTask) => void; placement?: "queue" | "stream"; now?: number;
+  onOpenConversation?: (task: CustomerTask) => void; placement?: "queue" | "stream"; now?: number; defaultExpanded?: boolean;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -358,6 +359,7 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
   const mine = customerTaskIsMine(task, callerId);
   const editable = task.status === "claimed" && mine;
   const canComplete = editable;
+  const booking = useBookingChange(task, expanded);
   const update = async (request: () => Promise<void>) => {
     if (busy || busyRef.current) return;
     busyRef.current = true;
@@ -367,11 +369,43 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
     catch { setError("Task update failed. The latest owner and status are being refreshed; retry after reviewing them."); }
     finally { busyRef.current = false; setSaving(false); }
   };
-  return <article className={`cct-card cct-card-${placement}`} data-task-id={task.id} data-task-status={task.status} aria-label={`Task: ${task.title}`}>
-    <header className="cct-card-heading"><span className="cct-task-icon"><ClipboardList /></span><div><span className="cct-task-label">{"call" in task && task.call.provider === "openphone" ? "Staff task" : "Customer task"} · {"call" in task ? task.call.provider === "openphone" ? "PHONE CALL" : "AI CALL" : "email" in task ? "EMAIL" : "SMS"}</span><strong>{task.title}</strong>
-      <small className="cct-customer-identity"><span>{task.customerName || ("call" in task && task.call.provider === "openphone" ? "Caller" : "Customer")}</span><span className="cct-customer-phone">{"email" in task ? task.email.fromEmail : task.customerPhone}</span></small></div><time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></header>
+  const call = "call" in task ? task.call : null;
+  const channel = call ? call.provider === "openphone" ? "Phone call" : "AI call" : "email" in task ? "Email" : "SMS";
+  const name = task.customerName || (call?.provider === "openphone" ? "Caller" : "Customer");
+  const contact = "email" in task ? task.email.fromEmail : task.customerPhone;
+  const done = task.status === "done";
+  const status = bookingChangeStatus(booking.data);
+  const record = booking.data?.record ?? null;
+  // Booking-related cards focus on the appointment once it has changed; others show the request and checklist.
+  const showRequest = !call && !("email" in task) && !record;
+  const showChecklist = !record || task.items.length > 1;
+  const created = task.activity.find((entry) => entry.action === "created")?.at ?? task.receivedAt;
+  // Audit trail. Activity notes can hold internal ids (item ids, owner ids), so only human text is shown.
+  const history = [
+    { at: created, text: "Task prepared" },
+    ...task.activity.filter((entry) => entry.action === "claimed").map((entry) => ({ at: entry.at, text: `Claimed${entry.actor ? ` · ${entry.actor.name}` : ""}` })),
+    ...task.items.filter((item) => item.completedBy !== null && item.completedAt !== null)
+      .map((item) => ({ at: item.completedAt!, text: `Confirmed "${item.title}" · ${item.completedBy!.name}` })),
+    ...(done ? [{ at: task.completedAt ?? created, text: `Marked done · ${task.completedBy?.name || "Staff"}${task.completionNote ? ` · ${task.completionNote}` : ""}` }] : []),
+    ...bookingChangeHistory(record),
+    ...(booking.dismissed ?? []).flatMap((dismissed) => bookingChangeHistory(dismissed)),
+  ].sort((a, b) => a.at - b.at);
+  const sourceLabel = call ? call.provider === "openphone" ? "Call evidence" : "Caller evidence" : "email" in task ? "Customer email" : "Customer text";
+  const canOpenConversation = !call && Boolean(onOpenConversation) && ("email" in task ? Boolean(task.email.threadId) : typeof task.sessionId === "number" && Number.isSafeInteger(task.sessionId) && task.sessionId > 0);
+  return <article className={`cct-card cct-card-${placement}${expanded ? " cct-card-open" : ""}`} data-task-id={task.id} data-task-status={task.status} aria-label={`Task: ${task.title}`}>
+    <header className="cct-card-heading">
+      <span className="cct-task-icon" aria-hidden="true">{done ? <CheckCircle2 /> : <ClipboardList />}</span>
+      <div className="cct-card-title">
+        <strong className={expanded ? undefined : "cct-clamp"} title={expanded ? undefined : task.title}>{task.title}</strong>
+        <small className="cct-card-meta">{name} · {channel} · <time dateTime={new Date(task.receivedAt).toISOString()} title={taskTimestamp(task.receivedAt)}>{taskAge(task.receivedAt, now)}</time></small>
+        {expanded && contact && <small className="cct-customer-phone">{contact}</small>}
+      </div>
+      <button type="button" className="cct-expand" aria-expanded={expanded} aria-label={expanded ? "Collapse task" : "Expand task"} onClick={() => setExpanded((open) => !open)}>
+        {expanded ? <ChevronUp /> : <ChevronDown />}</button>
+    </header>
+    {!expanded && status && <p className={`cbc-status cbc-status-${status.tone}`}>{status.tone === "done" ? <CheckCircle2 aria-hidden="true" /> : status.tone === "warning" ? <AlertTriangle aria-hidden="true" /> : <Clock3 aria-hidden="true" />}{status.text}</p>}
     <div className="cct-card-status">
-      <span>{task.status === "done" ? `Confirmed by ${task.completedBy?.name || "Staff"}` : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
+      <span>{done ? `Completed by ${task.completedBy?.name || "Staff"}` : task.owner ? `Claimed by ${task.owner.name}` : "Unclaimed"}</span>
       {task.status === "unclaimed" && <button type="button" className="cct-primary" disabled={busy || !callerId}
         onClick={() => void update(() => actions.claim(task.id))}>{busy ? <><Loader2 aria-hidden="true" />Claiming…</> : "Claim"}</button>}
       {task.status === "claimed" && !mine && task.owner && <button type="button" className="cct-primary" disabled={busy || !callerId}
@@ -380,30 +414,35 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
       {editable && <button type="button" disabled={busy || !canComplete} title="Confirm all actions in this task are complete"
         onClick={() => { if (!canComplete || busy) return; setError(""); setNote(""); setConfirmOpen(true); }}>Mark done</button>}
     </div>
-    {"call" in task ? <CustomerTaskCallEvidence task={task} /> : <button type="button" className="cct-conversation-link" disabled={!onOpenConversation || !("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)}
-      onClick={() => { if (onOpenConversation && ("email" in task ? Boolean(task.email.threadId) : Number.isSafeInteger(task.sessionId) && task.sessionId > 0)) onOpenConversation(task); }}>Open full conversation</button>}
-    {!("call" in task) && !("email" in task) && <ClaudeBookingChangePanel task={task} />}
-    <details className="cct-details"><summary>{"call" in task ? task.call.provider === "openphone" ? "Call evidence" : "Caller evidence" : <>{"email" in task ? "Customer email" : "Customer text"} &amp; acknowledgment </>}<ChevronDown /></summary><div className="cct-details-body">
-      <section className="cct-source-message"><h4>{"call" in task ? task.call.provider === "openphone" ? "Call evidence" : "Caller evidence" : "email" in task ? "Customer email" : "Customer text"}</h4>{"email" in task && task.email.bodyFormat === "html"
-        ? <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.sourceText, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />
-        : <p className="cct-verbatim">{task.sourceText}</p>}</section>
-      <section><ul className="cct-items">{task.items.map((item) => {
+    {"call" in task ? <CustomerTaskCallEvidence task={task} /> : <button type="button" className="cct-conversation-link" disabled={!canOpenConversation}
+      onClick={() => { if (canOpenConversation && onOpenConversation) onOpenConversation(task); }}>Open full conversation</button>}
+    {expanded && <div className="cct-card-body">
+      {showRequest && <section className="cct-block"><h5>Customer request</h5><p className="cct-verbatim cct-request">{task.sourceText}</p></section>}
+      {!call && !("email" in task) && <ClaudeBookingChangePanel task={task} />}
+      {showChecklist && <section className="cct-block"><h5>Checklist</h5><ul className="cct-items">{task.items.map((item) => {
         const confirmed = item.completedBy !== null && item.completedAt !== null;
-        return <li key={item.id}><div><strong>{item.title}</strong>
-          {"call" in task && <blockquote>{item.evidenceQuote}</blockquote>}
-          {"email" in task && task.email.bodyFormat === "html" && <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.evidenceQuote, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />}
-          {confirmed && <small>Human-confirmed by {item.completedBy!.name} · {taskTimestamp(item.completedAt!)}</small>}</div>
-          {confirmed ? <Check aria-label="Item human-confirmed" /> : editable ? <button type="button" disabled={busy}
-            aria-label={`Confirm completed item: ${item.title}`} onClick={() => void update(() => actions.completeItem(task.id, item.id))}>Confirm item</button> : <small>Not confirmed</small>}
+        return <li key={item.id}>
+          {confirmed ? <span className="cct-check cct-check-done" role="img" aria-label="Item human-confirmed"><Check /></span>
+            : editable ? <button type="button" className="cct-check" disabled={busy} aria-label={`Confirm completed item: ${item.title}`}
+              onClick={() => void update(() => actions.completeItem(task.id, item.id))} />
+            : <span className="cct-check" role="img" aria-label="Not confirmed" />}
+          <div><span>{item.title}</span>
+            {call && <blockquote>{item.evidenceQuote}</blockquote>}
+            {"email" in task && task.email.bodyFormat === "html" && <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.evidenceQuote, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />}
+          </div>
         </li>;
-      })}</ul></section>
-      {!("call" in task) && <section className={`cct-reply cct-reply-${task.reply.status}`}><h4>Acknowledgment</h4><strong>{customerTaskReplyStatus(task.reply.status)}</strong>
-        <p className="cct-verbatim">{task.reply.text}</p></section>}
-      {task.status === "done" && <section className="cct-completion"><h4>Staff confirmation</h4><p>Human-confirmed by {task.completedBy?.name || "Staff"}{task.completedAt !== null && ` · ${taskTimestamp(task.completedAt)}`} · not system-verified.</p>
-        {task.completionNote && <p className="cct-verbatim">{task.completionNote}</p>}</section>}
-      <div className="cct-prepared"><span>Task prepared</span><time dateTime={new Date(task.activity.find((entry) => entry.action === "created")?.at ?? task.receivedAt).toISOString()}>
-        {taskTimestamp(task.activity.find((entry) => entry.action === "created")?.at ?? task.receivedAt)}</time></div>
-    </div></details>
+      })}</ul></section>}
+      <details className="cct-details"><summary>{call ? sourceLabel : <>{sourceLabel} &amp; acknowledgment</>}<ChevronDown /></summary><div className="cct-details-body">
+        <section className="cct-source-message"><h5>{sourceLabel}</h5>{"email" in task && task.email.bodyFormat === "html"
+          ? <div className="cct-verbatim" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.sourceText, { USE_PROFILES: { html: true }, FORBID_ATTR: ["style", "color", "bgcolor"] }) }} />
+          : <p className="cct-verbatim">{task.sourceText}</p>}</section>
+        {!call && <section className={`cct-reply cct-reply-${task.reply.status}`}><h5>Acknowledgment · {customerTaskReplyStatus(task.reply.status)}</h5>
+          <p className="cct-verbatim">{task.reply.text}</p></section>}
+      </div></details>
+      <details className="cct-details"><summary><span><History aria-hidden="true" />Activity history ({history.length})</span><ChevronDown /></summary>
+        <ul className="cct-log">{history.map((entry, index) => <li key={index}><time dateTime={new Date(entry.at).toISOString()}>{taskTimestamp(entry.at)}</time><span>{entry.text}</span></li>)}</ul>
+      </details>
+    </div>}
     {error && !confirmOpen && <p className="cct-feedback" role="alert">{error}</p>}
     <Dialog open={confirmOpen} onOpenChange={(open) => { if (!busy) setConfirmOpen(open); }}>
       <DialogContent className="cct-confirm-dialog"><DialogTitle>Mark task done?</DialogTitle>

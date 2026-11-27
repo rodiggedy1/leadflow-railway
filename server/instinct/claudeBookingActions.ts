@@ -12,7 +12,7 @@ import {
   opsChatMessages, paymentAuthorizations,
 } from "../../drizzle/schema";
 import {
-  BOOKING_ACTION_CHANNEL, BOOKING_ACTION_QUICK_ACTION, CLAUDE_BOOKING_ACTIONS_ENABLED, bookingActionKey,
+  BOOKING_ACTION_CHANNEL, BOOKING_ACTION_QUICK_ACTION, CLAUDE_BOOKING_ACTIONS_ENABLED, bookingActionKey, dismissedBookingActionKey,
   bookingActionRecordSchema, bookingActionRequestSchema, bookingConfirmationText, formatArrivalWindow, formatBookingDate,
   formatBookingTime, modelBookingActionSchema,
   type BookingActionAssessment, type BookingActionRecord, type BookingActionRequest, type BookingActionView,
@@ -293,6 +293,22 @@ export async function setupBookingAction(db: Db, taskId: number, input: { reques
     return record;
   });
 }
+/** Dismiss a booking change that has not been executed. The task stays open for manual handling; nothing else changes.
+ * The record and its history are kept (archive key), so the dismissal stays on record. */
+export async function dismissBookingAction(db: Db, taskId: number, input: { revision: number }, actor: TaskActor): Promise<{ dismissed: true }> {
+  return db.transaction(async tx => {
+    const current = await lockRecord(tx, taskId) ?? fail("NOT_FOUND", "Booking change not found. Refresh the task.");
+    const { rowId, record } = current;
+    if (record.status !== "proposed") fail("CONFLICT", "This booking change was already executed. It can't be dismissed.");
+    if (record.revision !== input.revision) fail("CONFLICT", "This booking change was edited by someone else. Refresh it.");
+    const at = Date.now();
+    const next = bookingActionRecordSchema.parse({ ...record, history: [...record.history, { action: "dismissed", actor, at, note: null }] });
+    const changed = affected(await tx.execute(sql`UPDATE ops_chat_messages SET metadata = ${JSON.stringify(next)}, activeDedupKey = ${dismissedBookingActionKey(taskId, at)},
+      cardStatus = 'dismissed', lastActivityAt = ${at} WHERE id = ${rowId} AND activeDedupKey = ${bookingActionKey(taskId)} AND channel = ${BOOKING_ACTION_CHANNEL}`));
+    if (changed !== 1) fail("CONFLICT", "The booking change could not be dismissed. Refresh the task.");
+    return { dismissed: true as const };
+  });
+}
 export async function editBookingAction(db: Db, taskId: number, input: { revision: number; request: BookingActionRequest }, actor: TaskActor): Promise<BookingActionRecord> {
   const request = bookingActionRequestSchema.parse(normalizeRequest(input.request));
   return db.transaction(async tx => {
@@ -318,6 +334,13 @@ function summary(request: BookingActionRequest): string {
  * indexed query for the whole task list. Task cards without a booking change make no request of their own, and a card
  * reloads its details only when its own record changed. Newest first; bounded so it stays small as records accumulate. */
 export const BOOKING_ACTION_VERSIONS_LIMIT = 1000;
+/** Read-only: this task's dismissed booking changes (archived records), so Activity history keeps the dismissal. */
+export async function dismissedBookingActions(q: Q, taskId: number): Promise<BookingActionRecord[]> {
+  const rows = rowsOf(await q.execute(sql`SELECT metadata FROM ops_chat_messages WHERE activeDedupKey LIKE ${`${bookingActionKey(taskId)}:dismissed:%`}
+    AND channel = ${BOOKING_ACTION_CHANNEL} AND quickAction = ${BOOKING_ACTION_QUICK_ACTION} ORDER BY id LIMIT 20`));
+  return rows.map(row => bookingActionRecordSchema.safeParse(decode(row.metadata)))
+    .flatMap(parsed => parsed.success && parsed.data.taskId === taskId ? [parsed.data] : []);
+}
 export async function bookingActionVersions(db: Db): Promise<Record<string, string>> {
   const rows = rowsOf(await db.execute(sql`SELECT activeDedupKey, LEFT(SHA1(metadata), 16) AS version FROM ops_chat_messages
     WHERE channel = ${BOOKING_ACTION_CHANNEL} AND quickAction = ${BOOKING_ACTION_QUICK_ACTION} ORDER BY id DESC LIMIT ${BOOKING_ACTION_VERSIONS_LIMIT}`));

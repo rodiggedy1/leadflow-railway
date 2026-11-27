@@ -3,6 +3,7 @@ import React from "react";
 import * as recordingUtils from "../client/src/lib/utils";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import * as ts from "typescript";
@@ -66,7 +67,7 @@ function load(react = React, trpc: unknown = {}): Ui {
       if (id === "@/components/ui/dialog") return { Dialog: dialog, DialogContent: div, DialogDescription: div, DialogTitle: div };
       if (id.endsWith(".css")) return {};
       // Phase 1 booking-change panel: rendered and tested separately (claudeBookingChangePanelUi.test.ts).
-      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null };
+      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null, useBookingChange: () => ({ data: null }), bookingChangeStatus: () => null, bookingChangeHistory: () => [] };
       throw new Error(`Unexpected customer task UI import: ${id}`);
     },
   }, { timeout: 1500 });
@@ -142,7 +143,7 @@ describe("Customer task compact queue and exact canonical identity", () => {
 
   it.each(["prepared", "sent", "uncertain", "suppressed"] as const)("shows actual acknowledgment status %s, never delivery or operational verification", (status) => {
     const task = fixture({ reply: { text: "Synthetic acknowledgment", status, providerMessageId: status === "sent" ? "OM_SYNTHETIC_ACCEPTED" : null } });
-    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW });
+    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW, defaultExpanded: true }); // approved 320px design: details when expanded
     expect(rendered).toContain(ui.customerTaskReplyStatus(status));
     if (status === "sent") { expect(rendered).toContain("provider accepted, delivery not verified"); expect(rendered).not.toContain("OM_SYNTHETIC_ACCEPTED"); }
     if (status === "prepared" || status === "suppressed") expect(rendered).toContain("not sent");
@@ -152,7 +153,7 @@ describe("Customer task compact queue and exact canonical identity", () => {
 
   it("keeps exact customer text and acknowledgment, removes technical clutter, and preserves all inline item controls", () => {
     const task = fixture({ customerName: '<script>synthetic</script>' });
-    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW });
+    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW, defaultExpanded: true });
     expect(rendered).toContain("30m"); expect(rendered).toContain('class="cct-details"'); expect(rendered).not.toContain('class="cct-details" open');
     for (const value of [task.customerPhone, "Handle Friday visit request", "Handle oven add-on request", task.reply.text]) expect(rendered).toContain(value);
     for (const value of [task.sourceMessageId, task.receivingPhoneNumber, task.receivingPhoneNumberId, "Provider reference:", "cct-context", "Completion log", "Proposed staff request", "cct-checklist"]) expect(rendered).not.toContain(value);
@@ -167,24 +168,26 @@ describe("Customer task compact queue and exact canonical identity", () => {
     const sourceText = 'Exact customer text\n<script>not HTML</script> ' + "full message ".repeat(120);
     const replyText = 'Exact acknowledgment\nSecond line';
     const task = fixture({ sourceText, reply: { text: replyText, status: "sent", providerMessageId: "PROVIDER_DO_NOT_RENDER" } });
-    const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), placement, now: NOW });
+    const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), placement, now: NOW, defaultExpanded: true });
     const body = elements(tree).find(node => node.props.className === "cct-details-body")!;
     const sections = React.Children.toArray(body.props.children).filter(React.isValidElement) as Element[];
-    expect(sections[0].props.className).toBe("cct-source-message"); expect(text(sections[0])).toContain(sourceText);
+    expect(text(sections[0])).toContain(sourceText);
     const acknowledgment = elements(body).find(node => String(node.props.className).startsWith("cct-reply "))!;
     expect(text(acknowledgment)).toContain(replyText);
-    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), placement, now: NOW });
+    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), placement, now: NOW, defaultExpanded: true });
     expect(rendered).not.toContain("PROVIDER_DO_NOT_RENDER"); expect(rendered).toContain("&lt;script&gt;not HTML&lt;/script&gt;");
     expect(rendered).not.toContain("<script>"); expect(task.sourceText).toBe(sourceText); expect(task.reply.text).toBe(replyText);
-    expect(css).not.toContain("line-clamp"); expect(css).toContain("white-space: pre-wrap");
+    // Only the collapsed card title is shortened (two lines); the expanded card shows it in full, and no text is ever clipped.
+    expect(css.match(/line-clamp/g)).toHaveLength(1); expect(css).toMatch(/\.cct-clamp \{[^}]*line-clamp: 2/); expect(css).toContain("white-space: pre-wrap");
   });
 
   it("keeps the actual Task prepared timestamp but omits verbose activity logs and internal item IDs", () => {
     const preparedAt = NOW - 60000;
     const task = fixture({ activity: [{ action: "created", actor: null, at: preparedAt, note: null }, { action: "item_completed", actor, at: NOW, note: "INTERNAL_ITEM_ID_DO_NOT_RENDER" }] });
-    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW });
+    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW, defaultExpanded: true });
     expect(rendered).toContain(new Date(preparedAt).toISOString()); expect(rendered).not.toContain("INTERNAL_ITEM_ID_DO_NOT_RENDER");
-    expect(rendered).not.toContain('class="cct-log"'); expect(rendered).toContain("Task prepared");
+    // Approved design: the audit trail is kept in a closed "Activity history" section, with no internal ids.
+    expect(rendered).toContain("Activity history"); expect(rendered).not.toContain('class="cct-details" open'); expect(rendered).toContain("Task prepared");
   });
 
   it("preserves every pre-existing button and completion/cache lifecycle around the explicit takeover additions", () => {
@@ -203,13 +206,24 @@ describe("Customer task compact queue and exact canonical identity", () => {
       // Only Retry now reads the shared list; all task-action button JSX stays identical.
       visit(ast); return [...new Set(result)];
     };
-    expect(hash(JSON.stringify(buttons(componentSource)))).toBe("a252f9ab6d7d4b78ca48c4d339a8e4c57eed7332b415730eaeb991efe5732411");
+    // Approved 320px design (2026-11-27): the released card (ac36ea3) still matches the historical guard, and its Claim and
+    // Mark done buttons are byte-identical in the redesigned card. The item check-off is the round checklist button with the
+    // same handler; the conversation link keeps its behaviour; expand/collapse is new.
+    const released = execFileSync("git", ["show", "ac36ea3dad109368be9d4ac5166c7d461ae60db0:client/src/components/ClaudeCustomerTasks.tsx"], { encoding: "utf8" });
+    expect(hash(JSON.stringify(buttons(released)))).toBe("a252f9ab6d7d4b78ca48c4d339a8e4c57eed7332b415730eaeb991efe5732411");
+    const kept = buttons(released).filter(jsx => /Claiming…|Mark done/.test(jsx));
+    expect(kept).toHaveLength(2); expect(buttons(componentSource)).toEqual(expect.arrayContaining(kept));
+    expect(componentSource).toContain("onClick={() => void update(() => actions.completeItem(task.id, item.id))}");
     const baselineActions = componentSource.replace(
       '    claim: (id, expectedOwnerId) => run(id, () => expectedOwnerId === undefined\n      ? claim.mutateAsync({ id })\n      : claim.mutateAsync({ id, expectedOwnerId })),',
       '    claim: (id) => run(id, () => claim.mutateAsync({ id })),');
     expect(hash(baselineActions.slice(baselineActions.indexOf('  const run ='), baselineActions.indexOf('  return <TaskContext.Provider')))).toBe("ce3e4148342bb5aa0dcc7289c8177f32d92c8c84729f05c46d71c7c0a6154c07");
-    const confirmStart = componentSource.indexOf('  const [confirmOpen');
-    expect(hash(componentSource.slice(confirmStart, componentSource.indexOf('  return <article', confirmStart)))).toBe("7804809679708c1360153b78dddaf31f418ac8edc0d81d96b33d55ea3d00614f");
+    const segment = (source: string) => { const start = source.indexOf('  const [confirmOpen'); return source.slice(start, source.indexOf('  return <article', start)); };
+    // Approved 320px design: the released card's state and update code (still the historical bytes) is kept line for line,
+    // in order; the redesign only adds lines (expanded state, booking-change status, display values).
+    expect(hash(segment(released))).toBe("7804809679708c1360153b78dddaf31f418ac8edc0d81d96b33d55ea3d00614f");
+    const added = segment(componentSource).split("\n"); let at = 0;
+    for (const line of segment(released).split("\n")) { const found = added.indexOf(line, at); expect(found, line).toBeGreaterThanOrEqual(at); at = found + 1; }
     expect(hash(componentSource.slice(componentSource.indexOf('{error && !confirmOpen')))).toBe("2693e4f9f82fe9fb3659260f70de3baf74eb24e224b8bff31dda9237f5a78587");
   });
 
@@ -218,9 +232,11 @@ describe("Customer task compact queue and exact canonical identity", () => {
       const task = fixture({ status, owner: status === "unclaimed" ? null : actor });
       const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), placement, now: NOW });
       const heading = elements(tree).find(node => node.type === "header" && node.props.className === "cct-card-heading")!;
-      expect(text(heading)).toContain("Customer task");
-      expect(text(heading)).toContain(task.customerName);
-      expect(text(heading)).toContain(task.customerPhone);
+      // Approved design: the collapsed header shows name · channel · age; the phone appears once the card is expanded.
+      expect(text(heading)).toContain(`${task.customerName} · SMS · `);
+      expect(text(heading)).not.toContain(task.customerPhone);
+      const open = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), placement, now: NOW, defaultExpanded: true });
+      expect(text(elements(open).find(node => node.type === "header")!)).toContain(task.customerPhone);
       const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), placement, now: NOW });
       expect(rendered).not.toContain('class="cct-details" open');
       expect(rendered).not.toContain("tel:");
@@ -234,7 +250,7 @@ describe("Customer task compact queue and exact canonical identity", () => {
     const tree = stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), now: NOW });
     const heading = elements(tree).find(node => node.type === "header")!;
     expect(text(heading)).toContain("Customer");
-    expect(text(heading)).toContain(task.customerPhone);
+    expect(text(elements(stateHarness().render("TaskCard", { task, callerId: "17", actions: actions(), now: NOW, defaultExpanded: true })).find(node => node.type === "header")!)).toContain(task.customerPhone);
     const rendered = html(ui.TaskCard, { task: fixture({ customerName: '<script>synthetic</script>' }), callerId: "17", actions: actions(), now: NOW });
     expect(rendered).toContain("&lt;script&gt;synthetic&lt;/script&gt;");
     expect(rendered).not.toContain("<script>");
@@ -290,7 +306,7 @@ describe("Customer task human completion and authoritative updates", () => {
     const nextProps = { ...props, task: saved };
     let tree = harness.render("TaskCard", nextProps);
     expect(button(tree, "Take over")).toBeUndefined();
-    expect(text(tree)).toContain("Human-confirmed by Original staff");
+    expect(text(stateHarness().render("TaskCard", { ...nextProps, defaultExpanded: true }))).toMatch(/Confirmed ".+" · Original staff/); // kept in Activity history
     button(tree, "Mark done").props.onClick(); tree = harness.render("TaskCard", nextProps);
     const confirm = elements(tree).find(node => node.type === harness.ui.TaskCompletionConfirm)!;
     expect(confirm.props.allowed).toBe(true);
@@ -346,12 +362,12 @@ describe("Customer task human completion and authoritative updates", () => {
 
   it("individually confirms items and blocks non-owner completion despite identical display names", async () => {
     const a = actions(); const harness = stateHarness(); const task = fixture({ status: "claimed", owner: actor });
-    const props = { task, callerId: "17", actions: a, now: NOW };
+    const props = { task, callerId: "17", actions: a, now: NOW, defaultExpanded: true };
     const tree = harness.render("TaskCard", props);
     elements(tree).find((node) => node.props["aria-label"] === "Confirm completed item: Handle oven add-on request")!.props.onClick(); await flush();
     expect(a.completeItem).toHaveBeenCalledWith(101, "oven"); expect(a.complete).not.toHaveBeenCalled();
     const other = html(ui.TaskCard, { ...props, task: fixture({ status: "claimed", owner: { id: "18", name: actor.name } }) });
-    expect(other).toContain("Claimed by Synthetic staff"); expect(other).not.toContain("Mark done"); expect(other).not.toContain("Confirm item");
+    expect(other).toContain("Claimed by Synthetic staff"); expect(other).not.toContain("Mark done"); expect(other).not.toContain("Confirm completed item");
     const saving = stateHarness().render("TaskCard", { ...props, pending: true });
     expect(button(saving, "Mark done").props.disabled).toBe(true);
   });
@@ -367,9 +383,10 @@ describe("Customer task human completion and authoritative updates", () => {
   it("renders human-confirmed completion actor/time/note and log, never system verified", () => {
     const task = fixture({ status: "done", owner: actor, completedBy: actor, completedAt: NOW,
       completionNote: "Synthetic confirmation only", activity: [{ action: "completed", actor, at: NOW, note: "Synthetic confirmation only" }] });
-    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW });
-    expect(rendered).toContain("Confirmed by Synthetic staff"); expect(rendered).toContain("Human-confirmed by Synthetic staff");
-    expect(rendered).toContain("not system-verified"); expect(rendered).toContain("Synthetic confirmation only");
+    const rendered = html(ui.TaskCard, { task, callerId: "17", actions: actions(), now: NOW, defaultExpanded: true });
+    // Approved design: "Completed by" on the card; actor, time and note in Activity history; never "verified" for a manual completion.
+    expect(rendered).toContain("Completed by Synthetic staff"); expect(rendered).toContain("Marked done · Synthetic staff · Synthetic confirmation only");
+    expect(rendered).not.toContain("system-verified"); expect(rendered).not.toContain("Verified");
     expect(rendered).not.toContain("Mark done"); expect(rendered).not.toContain(">Claim</button>");
   });
 
@@ -377,7 +394,7 @@ describe("Customer task human completion and authoritative updates", () => {
     const task = fixture({ status: "done", owner: { id: "owner", name: "Claiming agent" }, completedBy: { id: "confirmer", name: "Confirming agent" }, completedAt: NOW });
     const tree = stateHarness().render("TaskCard", { task, callerId: "viewer", actions: actions(), placement, now: NOW });
     const badge = elements(tree).find(node => node.props.className === "cct-card-status")!;
-    expect(text(badge)).toBe("Confirmed by Confirming agent"); expect(text(badge)).not.toContain("Claiming agent");
+    expect(text(badge)).toBe("Completed by Confirming agent"); expect(text(badge)).not.toContain("Claiming agent");
     const rendered = html(ui.TaskCard, { task, callerId: "viewer", actions: actions(), placement, now: NOW });
     expect(rendered).not.toContain('class="cct-details" open'); expect(rendered).not.toContain("Done · human-confirmed");
     expect(button(tree, "Open full conversation")).toBeDefined(); expect(button(tree, "Claim")).toBeUndefined(); expect(button(tree, "Mark done")).toBeUndefined();
@@ -387,10 +404,10 @@ describe("Customer task human completion and authoritative updates", () => {
   it.each(["queue", "stream"] as const)("does not invent a completion agent for missing attribution and safely renders full names in %s", placement => {
     const task = fixture({ status: "done", owner: actor, completedBy: null });
     const badge = (value: CustomerTask) => elements(stateHarness().render("TaskCard", { task: value, callerId: "17", actions: actions(), placement, now: NOW })).find(node => node.props.className === "cct-card-status")!;
-    expect(text(badge(task))).toBe("Confirmed by Staff"); expect(text(badge(task))).not.toContain(actor.name);
+    expect(text(badge(task))).toBe("Completed by Staff"); expect(text(badge(task))).not.toContain(actor.name);
     const name = '<script>not HTML</script> & ' + 'Full agent name '.repeat(12);
     const named = fixture({ status: "done", completedBy: { id: "confirmer", name } });
-    expect(text(badge(named))).toBe(`Confirmed by ${name}`);
+    expect(text(badge(named))).toBe(`Completed by ${name}`);
     const rendered = html(ui.TaskCard, { task: named, callerId: "17", actions: actions(), placement, now: NOW });
     expect(rendered).toContain('&lt;script&gt;not HTML&lt;/script&gt; &amp;'); expect(rendered).not.toContain('<script>');
   });

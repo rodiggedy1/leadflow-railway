@@ -59,6 +59,9 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
   return router({
     bookingAction: opsChatProcedure.input(idInput).output(bookingActionViewSchema.nullable())
       .query(({ input }) => bookingActions((actions, db) => actions.getBookingActionView(db, input.id), false)),
+    /** Dismissed booking changes of one task, for its Activity history (loaded only while the card is open). */
+    dismissedBookingActions: opsChatProcedure.input(idInput).output(z.array(bookingActionRecordSchema))
+      .query(({ input }) => bookingActions((actions, db) => actions.dismissedBookingActions(db, input.id), false)),
     /** Shared by every task card: one request and one indexed query, however many cards are on screen. */
     bookingActionVersions: opsChatProcedure.output(z.record(z.string().regex(/^[1-9]\d*$/), z.string()))
       .query(() => bookingActions((actions, db) => actions.bookingActionVersions(db), false)),
@@ -70,6 +73,10 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
     editBookingAction: bookingsAgentProcedure.input(bookingRequestInput.extend({ revision: z.number().int().positive() }).strict())
       .output(bookingActionRecordSchema)
       .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.editBookingAction(db, input.id, { revision: input.revision, request: input.request }, bookingsActor(ctx.agent)))),
+    /** Dismiss a booking change that has not been executed; the task stays open for manual handling. */
+    dismissBookingAction: bookingsAgentProcedure.input(z.object({ id, revision: z.number().int().positive() }).strict())
+      .output(z.object({ dismissed: z.literal(true) }).strict())
+      .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.dismissBookingAction(db, input.id, { revision: input.revision }, bookingsActor(ctx.agent)))),
     executeBookingAction: bookingsAgentProcedure.input(z.object({ id, revision: z.number().int().positive(), jobId: z.number().int().positive(),
       availabilityConfirmed: z.boolean() }).strict()).output(bookingActionRecordSchema)
       .mutation(({ input, ctx }) => bookingActions(async (actions, db) => {

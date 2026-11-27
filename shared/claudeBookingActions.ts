@@ -10,6 +10,9 @@ export const BOOKING_ACTION_CHANNEL = "instinct_booking_action" as const;
 export const BOOKING_ACTION_QUICK_ACTION = "claude_booking_action" as const;
 /** One private action record per task (unique ops_chat_messages.activeDedupKey). */
 export const bookingActionKey = (taskId: number) => `claude-booking-action:v1:${taskId}`;
+/** A dismissed proposal keeps its row and history under this archive key: the task has no booking change any more
+ * (it can get a new one), and older code, which looks only at the key above, never sees it. */
+export const dismissedBookingActionKey = (taskId: number, at: number) => `claude-booking-action:v1:${taskId}:dismissed:${at}`;
 
 const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -78,7 +81,7 @@ export const bookingActionRecordSchema = z.object({
   }).strict().nullable(),
   history: z.array(z.object({
     action: z.enum(["proposed", "set_up", "edited", "executed", "execution_failed", "verified", "verification_failed",
-      "confirmation_sending", "confirmation_sent", "confirmation_failed", "confirmation_skipped", "closed"]),
+      "confirmation_sending", "confirmation_sent", "confirmation_failed", "confirmation_skipped", "closed", "dismissed"]),
     actor: taskActorSchema.nullable(), at: z.number().finite(), note: z.string().nullable(),
   }).strict()),
 }).strict();
