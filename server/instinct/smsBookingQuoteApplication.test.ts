@@ -119,11 +119,11 @@ function transactionalDb() {
     const s = q.sql.replace(/\s+/g, " ").trim(), p = q.params;
     if (s.endsWith("FOR UPDATE")) expect(inTransaction).toBe(true);
     if (s.startsWith("SELECT")) {
-      if (/^SELECT (?:id|\*) FROM madison_sms_drafts WHERE inboundOpenPhoneId = \?$/.test(s)) return read(state.drafts.filter(row => row.inboundOpenPhoneId === p[0]));
+      if (/^SELECT (?:id|\*) FROM madison_sms_drafts WHERE inboundOpenPhoneId = \?(?: FOR UPDATE)?$/.test(s)) return read(state.drafts.filter(row => row.inboundOpenPhoneId === p[0]));
       if (s === "SELECT * FROM madison_sms_drafts WHERE id = ? FOR UPDATE") return read(state.drafts.filter(row => row.id === p[0]));
       if (s === "SELECT * FROM conversation_sessions WHERE id = ? FOR UPDATE") return read(state.sessions.filter(row => row.id === p[0]));
       if (s === "SELECT id FROM sms_opt_outs WHERE phone = ?") return read(state.optouts.filter(row => row.phone === p[0]));
-      if (/^SELECT \* FROM ops_chat_messages WHERE activeDedupKey = \?(?: FOR UPDATE)?$/.test(s)) return read(state.cards.filter(row => row.activeDedupKey === p[0]));
+      if (/^SELECT (?:id|\*) FROM ops_chat_messages WHERE activeDedupKey = \?(?: FOR UPDATE)?$/.test(s)) return read(state.cards.filter(row => row.activeDedupKey === p[0]));
       if (/^SELECT \* FROM ops_chat_messages WHERE id = \? AND quickAction = \?(?: FOR UPDATE)?$/.test(s)) return read(state.cards.filter(row => row.id === p[0] && row.quickAction === p[1]));
       if (s === "SELECT * FROM ops_chat_messages WHERE quickAction = ? AND channel = 'command' ORDER BY id DESC") return read(state.cards.filter(row => row.quickAction === p[0] && row.channel === "command").sort((a, b) => b.id - a.id));
       return unknown(s);
@@ -402,8 +402,9 @@ describe("SMS new-booking quote application: real generator â†’ qualification â†
       });
       expect(await h.run(input)).toEqual({ outcome: "failed" });
       expect(h.send).not.toHaveBeenCalled(); expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]);
-      if (change === "config-changed") expectInternalFailure(h, input);
-      else expect(h.tasks()).toEqual([]);
+      // Staff must know: only an opt-out or a conversation now owned by another phone skips the failure-review task.
+      if (["global-optout", "session-optout", "phone-changed"].includes(change)) expect(h.tasks()).toEqual([]);
+      else expectInternalFailure(h, input);
     });
   it("withholds price/link for 'What is the price' until address/date/time are collected, then fulfills a legacy quote action with one complete summary", async () => {
     const h = harness();
@@ -1162,7 +1163,15 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
     expect(await h.run(input)).toEqual({ outcome: "suppressed" });
     expect(h.state().drafts[0].status).toBe("DISMISSED"); expect(h.state().funnels).toEqual([]); expect(h.quoteRows()).toEqual([]); expect(h.send).not.toHaveBeenCalled();
     if (change === "config-changed") expectUnsubmittedFailureReview(h, input, "CONFIG_CHANGED");
-    else expect(h.state().cards).toEqual([]);
+    else if (["global-optout", "session-optout", "phone-changed"].includes(change)) expect(h.state().cards).toEqual([]);
+    else {
+      // A newer text, a reply, a changed line or changed history no longer hides the stopped attempt.
+      const tasks = h.tasks().filter(value => value.sourceMessageId === input.providerMessageId);
+      expect(tasks).toHaveLength(1); expect(h.state().cards).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({ title: "Review customer message after reply failure", status: "unclaimed",
+        reply: { text: "No customer reply was submitted.", status: "suppressed", providerMessageId: null } });
+      expect(h.state().drafts[0].capabilityResult).toMatchObject({ taskId: tasks[0].id, failureReviewRecorded: true, failureReviewCode: "CUSTOMER_REPLY_PREPARATION_STOPPED" });
+    }
   });
 
   it.each(["STOP", " stop ", "unsubscribe"])("excludes exact opt-out %j before any generation, receipt or quote state writes", async text => {
@@ -1297,7 +1306,13 @@ describe("SMS booking quote original intake gates, atomic rollback and submissio
     expect(await h.run(input)).toEqual({ outcome: "failed" });
     expect(h.quoteRows()).toEqual([]); expect(h.state().funnels).toEqual([]);
     if (["funnel", "state-insert", "state-save", "receipt-prepare"].includes(fault)) expectInternalFailure(h, input);
-    else expect(h.state().cards).toEqual([]);
+    else if (fault === "receipt-insert") {
+      // The reply attempt could not be saved: the existing review task is created on the verified line; nothing is sent.
+      const tasks = h.tasks(); expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({ title: "Review customer message after reply failure", sourceMessageId: input.providerMessageId,
+        receivingPhoneNumberId: input.receivingPhoneNumberId, receivingPhoneNumber: BUSINESS,
+        reply: { text: "No customer reply was submitted.", status: "suppressed", providerMessageId: null } });
+    } else expect(h.state().cards).toEqual([]);
     expect(h.row().messageHistory).toBe(beforeHistory); expect(h.send).not.toHaveBeenCalled();
     if (fault === "receipt-insert") expect(h.state().drafts).toEqual([]);
     else expect(h.state().drafts[0]).toMatchObject({ status: "DISMISSED", errorCode: "GENERATION_OR_PERSISTENCE_FAILED" });

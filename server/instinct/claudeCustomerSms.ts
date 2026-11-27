@@ -58,7 +58,7 @@ export interface CustomerSmsStore {
   markUncertain(claim: CustomerSmsClaim): Promise<void>;
   suppress(claim: CustomerSmsClaim, code: string): Promise<void>;
   verifyBeforeSubmission?(claim: CustomerSmsClaim): Promise<boolean>;
-  reportFailure?(claim: CustomerSmsClaim, code: string, uncertain?: boolean): Promise<{ taskId: number; notify: boolean } | null>;
+  reportFailure?(claim: CustomerSmsClaim, code: string, uncertain?: boolean): Promise<{ taskId: number; notify: boolean } | { skipped: string } | null>;
   suppressBeforeSubmission(claim: CustomerSmsClaim, code: string, failure?: CustomerSmsFailureDetails): Promise<void>;
   /** Receiving line could not be verified (before any claim): the existing staff review task, or why it was skipped. */
   reportUnverifiedLineFailure?(identity: UnverifiedLineIdentity, code: string): Promise<{ taskId: number; notify: boolean } | { skipped: string }>;
@@ -66,6 +66,8 @@ export interface CustomerSmsStore {
 export interface UnverifiedLineIdentity {
   sessionId: number; customerName: string | null; customerPhone: string; sourceMessageId: string; sourceText: string;
   receivedAt: number; receivingPhoneNumberId: string;
+  /** The verified receiving number when the failure happened after the line lookup; absent = "unverified". */
+  receivingPhoneNumber?: string;
 }
 export interface CustomerSmsOptions {
   config: () => CustomerSmsConfig | null;
@@ -206,21 +208,47 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       if (!hasTask) return;
       try { await options.onTaskChange?.(); } catch { /* A refresh is not the committed task/send outcome. */ }
     };
+    // Staff must know when a customer text was not handled: every failure-review outcome is logged
+    // (created, skipped with its reason, or creation failed), and a failed creation keeps the owner alert.
+    const alertWithoutTask = async (code: string) => {
+      try { await options.onFailure?.({ taskId: null, code, sessionId: input.sessionId }); }
+      catch { console.warn("[ClaudeCustomerSMS] Independent owner alert unavailable", { sessionId: input.sessionId, code }); }
+    };
+    const reviewCreated = async (review: { taskId: number; notify: boolean }, code: string) => {
+      logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "failed", reason: "REVIEW_TASK_CREATED", receiptClaimAttempted, generationReached });
+      hasTask = true;
+      await refreshTask();
+      try { if (review.notify) await options.onFailure?.({ taskId: review.taskId, code, sessionId: input.sessionId }); }
+      catch { console.warn("[ClaudeCustomerSMS] Independent owner alert unavailable", { sessionId: input.sessionId, code }); }
+    };
+    const reviewSkipped = (reason: string) => logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "failed",
+      reason: "REVIEW_TASK_SKIPPED", exclusion: reason, receiptClaimAttempted, generationReached });
+    const reviewFailed = (error: unknown) => logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "REVIEW_TASK_FAILED",
+      receiptClaimAttempted, generationReached, error });
+    // A failure before any reply attempt was recorded: the existing review task, or the existing owner alert alone.
+    let unclaimedIdentity: UnverifiedLineIdentity | null = null;
+    const reviewUnclaimed = async (code: string, identity: UnverifiedLineIdentity) => {
+      let review: { taskId: number; notify: boolean } | { skipped: string } | null = null;
+      try { review = await options.store.reportUnverifiedLineFailure?.(identity, code) ?? null; }
+      catch (taskError) { reviewFailed(taskError); }
+      if (review && "taskId" in review) { await reviewCreated(review, code); return; }
+      if (review) reviewSkipped(review.skipped);
+      await alertWithoutTask(code);
+    };
     const reportFailure = async (code: string, uncertain = false) => {
-      const alertWithoutTask = async () => {
-        try { await options.onFailure?.({ taskId: null, code, sessionId: input.sessionId }); }
-        catch { console.warn("[ClaudeCustomerSMS] Independent owner alert unavailable", { sessionId: input.sessionId, code }); }
-      };
-      if (!claim) { await alertWithoutTask(); return; }
+      if (!claim) {
+        if (unclaimedIdentity) await reviewUnclaimed(code, unclaimedIdentity);
+        else await alertWithoutTask(code);
+        return;
+      }
       try {
         const review = await options.store.reportFailure?.(claim, code, uncertain);
-        if (!review) return;
-        hasTask = true;
-        await refreshTask();
-        if (review.notify) await options.onFailure?.({ taskId: review.taskId, code, sessionId: input.sessionId });
-      } catch {
+        if (review && "taskId" in review) { await reviewCreated(review, code); return; }
+        reviewSkipped(review ? review.skipped : "NO_REVIEW_METHOD");
+      } catch (taskError) {
+        reviewFailed(taskError);
         console.warn("[ClaudeCustomerSMS] Failure review persistence or notification unavailable", { sessionId: input.sessionId, code });
-        await alertWithoutTask();
+        await alertWithoutTask(code);
       }
     };
     try {
@@ -241,25 +269,9 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
         // The receiving line could not be verified: nothing is generated or sent. Staff get the existing
         // review task (or, if it is not created, the existing owner alert alone).
         logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "EXCEPTION", receiptClaimAttempted, generationReached, error });
-        const code = "RECEIVING_LINE_UNAVAILABLE";
-        let review: Awaited<ReturnType<NonNullable<CustomerSmsStore["reportUnverifiedLineFailure"]>>> | null = null;
-        try {
-          review = await options.store.reportUnverifiedLineFailure?.({ sessionId: input.sessionId, customerName: session.contact.displayName,
-            customerPhone: phone, sourceMessageId: input.providerMessageId, sourceText: input.inboundText, receivedAt: input.receivedAt,
-            receivingPhoneNumberId: input.receivingPhoneNumberId }, code) ?? null;
-        } catch (taskError) {
-          logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "REVIEW_TASK_FAILED", receiptClaimAttempted, generationReached, error: taskError });
-        }
-        if (review && "taskId" in review) {
-          logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "failed", reason: "REVIEW_TASK_CREATED", receiptClaimAttempted, generationReached });
-          hasTask = true;
-          await refreshTask();
-          try { if (review.notify) await options.onFailure?.({ taskId: review.taskId, code, sessionId: input.sessionId }); }
-          catch { console.warn("[ClaudeCustomerSMS] Independent owner alert unavailable", { sessionId: input.sessionId, code }); }
-        } else {
-          if (review) logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "failed", reason: "REVIEW_TASK_SKIPPED", exclusion: review.skipped, receiptClaimAttempted, generationReached });
-          await reportFailure(code);
-        }
+        await reviewUnclaimed("RECEIVING_LINE_UNAVAILABLE", { sessionId: input.sessionId, customerName: session.contact.displayName,
+          customerPhone: phone, sourceMessageId: input.providerMessageId, sourceText: input.inboundText, receivedAt: input.receivedAt,
+          receivingPhoneNumberId: input.receivingPhoneNumberId });
         return { outcome: "failed" };
       }
       if (normalizePhone(receivingPhoneNumber) !== receivingPhoneNumber || !receivingPhoneNumber || receivingPhoneNumber === phone) {
@@ -270,6 +282,10 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       const binding: CustomerSmsBinding = { sessionId: input.sessionId, providerMessageId: input.providerMessageId, fromPhone: phone,
         receivingPhoneNumberId: input.receivingPhoneNumberId, receivingPhoneNumber, inboundText: input.inboundText,
         createdAt, receivedAt: input.receivedAt, customerName: session.contact.displayName, historyHash: customerHistoryHash(session.messageHistory), historyContextHash: customerSmsContextHash(session.messageHistory) ?? undefined };
+      // If the claim itself fails, the existing review task is created with this verified line (reportFailure below).
+      unclaimedIdentity = { sessionId: input.sessionId, customerName: session.contact.displayName, customerPhone: phone,
+        sourceMessageId: input.providerMessageId, sourceText: input.inboundText, receivedAt: input.receivedAt,
+        receivingPhoneNumberId: input.receivingPhoneNumberId, receivingPhoneNumber };
       diagnosticStage = "receipt_claim"; receiptClaimAttempted = true;
       logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "RECEIPT_CLAIM_REACHED", receiptClaimAttempted, generationReached });
       claim = await options.store.claim(binding);

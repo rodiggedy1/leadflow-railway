@@ -71,7 +71,7 @@ export interface ClaudeCustomerTasksStore {
   suppress(claim: CustomerSmsClaim, code: string): Promise<void>;
   suppressBeforeSubmission(claim: CustomerSmsClaim, code: string, failure?: CustomerSmsFailureDetails): Promise<void>;
   verifyBeforeSubmission(claim: CustomerSmsClaim): Promise<boolean>;
-  reportFailure(claim: CustomerSmsClaim, code: string, uncertain?: boolean): Promise<{ taskId: number; notify: boolean } | null>;
+  reportFailure(claim: CustomerSmsClaim, code: string, uncertain?: boolean): Promise<{ taskId: number; notify: boolean } | { skipped: string }>;
   reportUnverifiedLineFailure(identity: UnverifiedLineIdentity, code: string): Promise<{ taskId: number; notify: boolean } | { skipped: string }>;
   list(): Promise<CustomerTask[]>;
   get(id: number): Promise<CustomerTask | null>;
@@ -194,6 +194,15 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
       }
     }
     return rows(await tx.execute(sql`SELECT id FROM sms_opt_outs WHERE phone = ${binding.fromPhone}`)).length === 0;
+  }
+  /** Why a failure review must still be skipped: the conversation no longer belongs to this customer, or the customer
+   * opted out (conversation flag, opt-out list or a STOP text). Locks the conversation row like fresh(). */
+  async function reviewBlock(tx: Tx, binding: CustomerSmsBinding): Promise<string | null> {
+    const [session] = rows(await tx.execute(sql`SELECT * FROM conversation_sessions WHERE id = ${binding.sessionId} FOR UPDATE`));
+    if (!session || normalizePhone(session.leadPhone) !== binding.fromPhone) return "SESSION_CHANGED";
+    if (Number(session.smsOptOut) !== 0 || stop(binding.inboundText)
+      || rows(await tx.execute(sql`SELECT id FROM sms_opt_outs WHERE phone = ${binding.fromPhone}`)).length > 0) return "OPTED_OUT";
+    return null;
   }
   function taskId(draft: Record<string, any>): number | null {
     const state = decode(draft.capabilityResult);
@@ -357,11 +366,14 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
     }),
     reportFailure: (claim, code, uncertain = false) => db.transaction(async tx => {
       const draft = await receipt(tx, claim);
-      if (draft.outboundOpenPhoneId || draft.sentAt || ["SENT", "DELIVERED"].includes(draft.status)
-        || draft.dismissedAt || draft.dismissedBy) return null;
-      if (!uncertain && !await fresh(tx, claim.binding, false)) return null;
+      if (draft.outboundOpenPhoneId || draft.sentAt || ["SENT", "DELIVERED"].includes(draft.status)) return { skipped: "REPLY_SENT" };
+      if (draft.dismissedAt || draft.dismissedBy) return { skipped: "ATTEMPT_DISMISSED_BY_STAFF" };
+      // A newer customer text or a later reply no longer hides a failed attempt: staff must know. Only an opt-out
+      // (or a conversation that no longer belongs to this customer) skips it.
+      const blocked = uncertain ? null : await reviewBlock(tx, claim.binding);
+      if (blocked) return { skipped: blocked };
       const state = decode(draft.capabilityResult) ?? {};
-      if (state.failureReviewRecorded === true && (!uncertain || state.failureReviewCode === "SUBMISSION_UNCERTAIN")) return null;
+      if (state.failureReviewRecorded === true && (!uncertain || state.failureReviewCode === "SUBMISSION_UNCERTAIN")) return { skipped: "REVIEW_ALREADY_RECORDED" };
       let task = await replyTask(tx, draft, claim);
       let id = task?.id ?? null;
       if (!task) {
@@ -393,8 +405,9 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
       if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_FAILURE_REVIEW_SAVE_FAILED");
       return { taskId: id!, notify: true };
     }),
-    // The receiving line could not be verified before any reply attempt: create the existing failure-review
-    // task unless something already covers this text. Nothing is generated or sent here.
+    // A failure before any reply attempt was recorded (receiving line not verified, or the claim itself failed):
+    // create the existing failure-review task unless the customer opted out or this text already has an attempt
+    // or a task. Nothing is generated or sent here.
     async reportUnverifiedLineFailure(identity, code) {
       try {
         return await db.transaction(async tx => {
@@ -407,11 +420,7 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
           if (!Array.isArray(history) || history.some(turn => !turn || typeof turn !== "object" || typeof turn.role !== "string")) return { skipped: "HISTORY_UNREADABLE" };
           const anchor = history.find(turn => isInbound(turn) && ids(turn).includes(identity.sourceMessageId));
           if (!anchor) return { skipped: "MESSAGE_NOT_IN_HISTORY" };
-          const after = history.filter(turn => turn !== anchor && customerSmsTurnAfter(history, turn, anchor));
-          // Existing human-reply safeguard: a reply after the text (staff or automatic) already covers it.
-          if (after.some(turn => ["assistant", "agent", "office"].includes(turn.role))) return { skipped: "LATER_REPLY_EXISTS" };
-          // A newer customer text gets its own reply attempt, which sees this text in the conversation.
-          if (after.some(isInbound)) return { skipped: "LATER_CUSTOMER_MESSAGE" };
+          // A newer customer text or a later reply no longer hides this failure: staff must know.
           // An existing reply attempt (Claude or Madison) for this text: never a second path.
           // Locking reads: they see rows committed by a simultaneous call that held the conversation lock first.
           if (rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${identity.sourceMessageId} FOR UPDATE`)).length) return { skipped: "REPLY_ATTEMPT_EXISTS" };
@@ -419,7 +428,8 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
           if (rows(await tx.execute(sql`SELECT id FROM ops_chat_messages WHERE activeDedupKey = ${key} FOR UPDATE`)).length) return { skipped: "TASK_EXISTS" };
           const id = await createTask(tx, { sessionId: identity.sessionId, customerName: identity.customerName, customerPhone: identity.customerPhone,
             sourceMessageId: identity.sourceMessageId, sourceText: identity.sourceText, receivedAt: identity.receivedAt,
-            receivingPhoneNumberId: identity.receivingPhoneNumberId, receivingPhoneNumber: UNVERIFIED_RECEIVING_LINE,
+            receivingPhoneNumberId: identity.receivingPhoneNumberId,
+            receivingPhoneNumber: identity.receivingPhoneNumber && /^\+[1-9]\d{7,14}$/.test(identity.receivingPhoneNumber) ? identity.receivingPhoneNumber : UNVERIFIED_RECEIVING_LINE,
           }, { replyText: "No customer reply was submitted.", task: { title: "Review customer message after reply failure",
             items: [{ title: "Review the unanswered customer message and follow up", evidenceQuote: identity.sourceText }] } }, key);
           if (id === null) throw new Error("CUSTOMER_REPLY_FAILURE_REVIEW_SAVE_FAILED");
