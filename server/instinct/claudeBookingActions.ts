@@ -12,7 +12,7 @@ import {
   opsChatMessages, paymentAuthorizations,
 } from "../../drizzle/schema";
 import {
-  BOOKING_ACTION_CHANNEL, BOOKING_ACTION_QUICK_ACTION, CLAUDE_BOOKING_ACTIONS_ENABLED, bookingActionKey,
+  BOOKING_ACTION_CHANNEL, BOOKING_ACTION_QUICK_ACTION, CLAUDE_BOOKING_ACTIONS_ENABLED, bookingActionKey, dismissedBookingActionKey,
   bookingActionRecordSchema, bookingActionRequestSchema, bookingConfirmationText, formatArrivalWindow, formatBookingDate,
   formatBookingTime, modelBookingActionSchema,
   type BookingActionAssessment, type BookingActionRecord, type BookingActionRequest, type BookingActionView,
@@ -291,6 +291,22 @@ export async function setupBookingAction(db: Db, taskId: number, input: { reques
       history: [{ action: "set_up", actor, at: Date.now(), note: summary(request) }] };
     await insertRecord(tx, record);
     return record;
+  });
+}
+/** Dismiss a booking change that has not been executed. The task stays open for manual handling; nothing else changes.
+ * The record and its history are kept (archive key), so the dismissal stays on record. */
+export async function dismissBookingAction(db: Db, taskId: number, input: { revision: number }, actor: TaskActor): Promise<{ dismissed: true }> {
+  return db.transaction(async tx => {
+    const current = await lockRecord(tx, taskId) ?? fail("NOT_FOUND", "Booking change not found. Refresh the task.");
+    const { rowId, record } = current;
+    if (record.status !== "proposed") fail("CONFLICT", "This booking change was already executed. It can't be dismissed.");
+    if (record.revision !== input.revision) fail("CONFLICT", "This booking change was edited by someone else. Refresh it.");
+    const at = Date.now();
+    const next = bookingActionRecordSchema.parse({ ...record, history: [...record.history, { action: "dismissed", actor, at, note: null }] });
+    const changed = affected(await tx.execute(sql`UPDATE ops_chat_messages SET metadata = ${JSON.stringify(next)}, activeDedupKey = ${dismissedBookingActionKey(taskId, at)},
+      cardStatus = 'dismissed', lastActivityAt = ${at} WHERE id = ${rowId} AND activeDedupKey = ${bookingActionKey(taskId)} AND channel = ${BOOKING_ACTION_CHANNEL}`));
+    if (changed !== 1) fail("CONFLICT", "The booking change could not be dismissed. Refresh the task.");
+    return { dismissed: true as const };
   });
 }
 export async function editBookingAction(db: Db, taskId: number, input: { revision: number; request: BookingActionRequest }, actor: TaskActor): Promise<BookingActionRecord> {

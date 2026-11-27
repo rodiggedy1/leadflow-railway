@@ -20,11 +20,11 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@/lib/trpc", () => {
   const mutation = () => ({ useMutation: () => ({ mutateAsync: async () => ({}) }) });
   return { trpc: {
-    useUtils: () => ({ claudeCustomerTasks: { invalidate: async () => {} } }),
+    useUtils: () => ({ claudeCustomerTasks: { invalidate: async () => {} }, client: {} }),
     claudeCustomerTasks: {
       bookingActionVersions: { useQuery: () => withRecords },
       bookingActionVisits: { useQuery: () => ({ data: visits, isLoading: false }) },
-      setupBookingAction: mutation(), editBookingAction: mutation(), executeBookingAction: mutation(), verifyBookingAction: mutation(),
+      setupBookingAction: mutation(), editBookingAction: mutation(), dismissBookingAction: mutation(), executeBookingAction: mutation(), verifyBookingAction: mutation(),
       beginBookingConfirmation: mutation(), finishBookingConfirmation: mutation(),
     },
     leads: { sendMessage: mutation() },
@@ -70,16 +70,22 @@ it("renders every booking-change state with the right controls; nothing for call
   expect(html(null, { ...task, status: "done" })).toBe("");
   expect(html(null, { ...task, call: {} })).toBe("");
   expect(html(null, { ...task, email: {} })).toBe("");
-  expect(out["2"]).toContain("Approve &amp; execute"); expect(out["2"]).toContain("I confirmed a team is available");
-  expect(out["2"]).toMatch(/<button type="button" class="cct-primary" disabled="">Approve &amp; execute/); // disabled until availability is confirmed
+  // Approved 320px design (2026-11-27): one approval button (no availability checkbox), previous and new appointment,
+  // Edit change and Dismiss proposal; every other state keeps its safeguards.
+  expect(out["2"]).toContain("Awaiting approval"); expect(out["2"]).toContain("Customer request");
+  expect(out["2"]).toMatch(/<button type="button" class="cbc-primary">Approve &amp; reschedule<\/button>/); // enabled: the click is the approval
+  expect(out["2"]).not.toContain("I confirmed a team is available"); expect(out["2"]).not.toContain("team availability");
+  expect(out["2"]).toContain("<s class=\"cbc-before\">Fri, Dec 4 · 9 AM</s>"); expect(out["2"]).toContain("Sat, Dec 5"); expect(out["2"]).toContain("2:00 PM");
+  expect(out["2"]).toContain("Only this appointment will change."); expect(out["2"]).toContain("Edit change"); expect(out["2"]).toContain("Dismiss proposal");
   expect(out["2"]).toContain("late-reschedule fee may apply. Staff decide; nothing is charged.");
-  expect(out["3"]).toContain("8:00 AM–12:00 PM window"); expect(out["3"]).toContain("Keeps the booking&#x27;s morning arrival window");
-  expect(out["4"]).toContain("Manual: Cancelling one visit of a recurring booking isn&#x27;t supported yet."); expect(out["4"]).not.toContain("I confirmed a team");
-  expect(out["5"]).toContain("Executed, not verified yet."); expect(out["5"]).toContain("Verify again"); expect(out["5"]).toContain("will not be executed again");
-  expect(out["5"]).not.toContain("Approve &amp; execute");
-  expect(out["6"]).toContain("Send confirmation"); expect(out["6"]).toContain("No confirmation needed"); expect(out["6"]).toContain("Hi Maya, you&#x27;re all set!");
-  expect(out["7"]).toContain("may have been sent"); expect(out["7"]).toContain("It was sent"); expect(out["7"]).not.toContain("Send confirmation");
-  expect(out["8"]).toContain("Confirmation sent (Ana)"); expect(out["8"]).not.toMatch(/<button/);
+  expect(out["3"]).toContain("8:00 AM–12:00 PM"); expect(out["3"]).toContain("Arrival window preserved"); expect(out["3"]).toContain("Keeps the booking&#x27;s morning arrival window");
+  expect(out["4"]).toContain("Needs manual handling"); expect(out["4"]).toContain("Cancelling one visit of a recurring booking isn&#x27;t supported yet.");
+  expect(out["4"]).toMatch(/<button type="button" class="cbc-primary" disabled="">Approve &amp; cancel<\/button>/);
+  expect(out["5"]).toContain("Rescheduled · not verified yet"); expect(out["5"]).toContain("Verify again"); expect(out["5"]).toContain("will not be made again");
+  expect(out["5"]).not.toContain("Approve &amp;");
+  expect(out["6"]).toContain("Rescheduled &amp; verified"); expect(out["6"]).toContain("Send confirmation"); expect(out["6"]).toContain("No confirmation needed"); expect(out["6"]).toContain("Hi Maya, you&#x27;re all set!");
+  expect(out["7"]).toContain("may have been sent"); expect(out["7"]).toContain("It was sent"); expect(out["7"]).toContain("It was not sent"); expect(out["7"]).not.toContain("Send confirmation");
+  expect(out["8"]).toContain("Verified · Confirmation sent"); expect(out["8"]).toContain("Sat, Dec 5 · 2 PM"); expect(out["8"]).not.toMatch(/<button/);
 });
 
 // Staff never see raw database errors (staging, 2026-11-26: a failed staff-record lookup showed its SQL text).
@@ -143,11 +149,12 @@ it("ordinary task cards make no booking-change request of their own; only cards 
   const out = cards.map(render);
   expect(detailQueries.filter(q => q.enabled)).toHaveLength(0); // 150 ordinary cards: no detail request at all
   expect(out.every(markup => markup.includes("Set up booking change"))).toBe(true);
-  expect(render(card(7))).toContain("Executed and verified"); // the one card with a booking change loads it
+  expect(render(card(7))).toContain("Verified · No confirmation needed"); // the one card with a booking change loads it
   expect(detailQueries.filter(q => q.enabled).map(q => q.id)).toEqual([7]);
   expect(render(card(101, "done"))).toBe("");
   withRecords = { data: undefined, isLoading: true, isError: false };
-  expect(render(card(7))).toBe(""); // nothing flashes while the shared request loads
+  expect(render(card(7))).toContain("Loading booking change"); // no misleading set-up button while the shared request loads
+  expect(render(card(7))).not.toContain("Set up booking change");
   withRecords = { data: undefined, isLoading: false, isError: true };
   expect(render(card(101))).toBe(""); // shared request failed: no misleading set-up button
 });

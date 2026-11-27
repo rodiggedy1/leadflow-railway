@@ -70,6 +70,10 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
     editBookingAction: bookingsAgentProcedure.input(bookingRequestInput.extend({ revision: z.number().int().positive() }).strict())
       .output(bookingActionRecordSchema)
       .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.editBookingAction(db, input.id, { revision: input.revision, request: input.request }, bookingsActor(ctx.agent)))),
+    /** Dismiss a booking change that has not been executed; the task stays open for manual handling. */
+    dismissBookingAction: bookingsAgentProcedure.input(z.object({ id, revision: z.number().int().positive() }).strict())
+      .output(z.object({ dismissed: z.literal(true) }).strict())
+      .mutation(({ input, ctx }) => bookingActions((actions, db) => actions.dismissBookingAction(db, input.id, { revision: input.revision }, bookingsActor(ctx.agent)))),
     executeBookingAction: bookingsAgentProcedure.input(z.object({ id, revision: z.number().int().positive(), jobId: z.number().int().positive(),
       availabilityConfirmed: z.boolean() }).strict()).output(bookingActionRecordSchema)
       .mutation(({ input, ctx }) => bookingActions(async (actions, db) => {

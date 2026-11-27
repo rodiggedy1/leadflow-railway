@@ -81,7 +81,7 @@ describe("scope, permissions and switches", () => {
   const router = read("server/claudeCustomerTasksRouter.ts");
   const module = read("server/instinct/claudeBookingActions.ts");
   it("changes require the existing bookings permission; existing task actions are unchanged", () => {
-    for (const name of ["setupBookingAction", "editBookingAction", "executeBookingAction", "verifyBookingAction", "beginBookingConfirmation", "finishBookingConfirmation"])
+    for (const name of ["setupBookingAction", "editBookingAction", "dismissBookingAction", "executeBookingAction", "verifyBookingAction", "beginBookingConfirmation", "finishBookingConfirmation"])
       expect(router, name).toMatch(new RegExp(`${name}: bookingsAgentProcedure`));
     for (const name of ["claim", "completeItem", "complete", "list", "get"]) expect(router, name).toMatch(new RegExp(`\\n    ${name}: opsChatProcedure`));
   });
@@ -105,6 +105,13 @@ describe("scope, permissions and switches", () => {
     expect(panel).toContain('queryKey: ["claudeBookingChange", task.id, version]');
     expect(panel).not.toContain("trpc.claudeCustomerTasks.bookingAction.useQuery(");
     expect(panel).not.toContain("utils.claudeCustomerTasks.invalidate()");
+  });
+  it("approved 320px design: Approve is the staff approval (no checkbox); Mark done is untouched", () => {
+    const panel = read("client/src/components/ClaudeBookingChangePanel.tsx");
+    expect(panel).toContain("execute.mutateAsync({ id: task.id, revision: record.revision, jobId: visit.jobId, availabilityConfirmed: true })");
+    expect(panel).not.toContain("I confirmed a team is available");
+    expect(module).toContain('if (reschedule && !input.availabilityConfirmed) fail("PRECONDITION_FAILED", "Confirm team availability before executing.");'); // server rule unchanged
+    expect(panel).not.toMatch(/actions\.complete|completeTask|Mark done/); // the booking panel never completes or gates the task
   });
   it("the off switch is a single code setting", () => {
     expect(CLAUDE_BOOKING_ACTIONS_ENABLED).toBe(true);

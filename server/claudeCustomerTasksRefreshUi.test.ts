@@ -57,7 +57,7 @@ function load(react: typeof React, trpc: unknown): Ui {
       if (id === "@/components/ui/dialog") return { Dialog: (props: any) => props.open ? div(props) : null, DialogContent: div, DialogDescription: div, DialogTitle: div, DialogTrigger: div };
       if (id.endsWith(".css")) return {};
       // Phase 1 booking-change panel: rendered and tested separately (claudeBookingChangePanelUi.test.ts).
-      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null };
+      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null, useBookingChange: () => ({ data: null }), bookingChangeStatus: () => null, bookingChangeHistory: () => [] };
       throw new Error(`Unexpected UI import: ${id}`);
     },
   }, { timeout: 1500 });
@@ -96,7 +96,7 @@ function card(tree: Element, h: ReturnType<typeof harness>, task: CustomerTask) 
   expect(tree.type).toBe(React.Fragment);
   const first = tree.props.children[0] as Element;
   expect(first.type).toBe(h.ui.TaskCard); expect(first.key).toBe(String(task.id)); expect(first.props.task).toBe(task);
-  expect(first.props).toEqual({ task, callerId: h.context.callerId, actions: h.context.actions, pending: h.context.pendingIds.has(task.id), onOpenConversation: h.context.onOpenConversation, placement: "stream" });
+  expect(first.props).toEqual({ task, callerId: h.context.callerId, actions: h.context.actions, pending: h.context.pendingIds.has(task.id), onOpenConversation: h.context.onOpenConversation, placement: "stream", defaultExpanded: false }); // feed cards start collapsed
   return first;
 }
 function blocked(h: ReturnType<typeof harness>) {
@@ -215,7 +215,7 @@ describe("Stream shared-list refresh display-only boundary", () => {
     const initial = fixture("email", "claimed"), h = harness([initial]); card(h.render(), h, initial);
     const otherOwner = contract.customerTaskSchema.parse({ ...initial, owner: { id: "18", name: "Other synthetic staff" } });
     h.state.list = query([otherOwner]); h.provide(); card(h.render(), h, otherOwner); expect(h.html()).toContain("Claimed by Other synthetic staff"); expect(h.html()).not.toContain("Mark done");
-    const done = fixture("email", "done"); h.state.list = query([done]); h.provide(); card(h.render(), h, done); expect(h.html()).toContain("Confirmed by Synthetic staff");
+    const done = fixture("email", "done"); h.state.list = query([done]); h.provide(); card(h.render(), h, done); expect(h.html()).toContain("Completed by Synthetic staff");
     for (const rows of [[], undefined]) {
       h.state.list = query(rows); h.provide(); expect(text(h.render())).toBe("Task record unavailable."); expect(h.html()).not.toContain("data-task-id");
       h.state.list = query(rows, new Error("Synthetic missing shared row failure")); h.provide(); blocked(h);

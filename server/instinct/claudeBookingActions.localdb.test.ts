@@ -319,6 +319,32 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     expect(after[String(proposed)]).toBe(versions[String(proposed)]);
   });
 
+  it("dismissing a proposal keeps the task open, archives the record, and allows a new booking change later", async () => {
+    const phone = newPhone(), date = addDays(today(), 10), newDate = addDays(today(), 12);
+    const b = await booking({ phone, date, time: "10:00" }); const j = await visit(b, date, "10:00");
+    const id = await task(phone, "Can we move it to Friday at 2pm?", { type: "reschedule_visit", visitDate: date, newDate, newTime: "14:00", evidenceQuote: "move it to Friday at 2pm" });
+    const before = (await actions.getBookingActionView(db, id))!.record;
+    await expect(actions.dismissBookingAction(db, id, { revision: before.revision + 1 }, ana)).rejects.toThrow(/edited by someone else/);
+    expect(await actions.dismissBookingAction(db, id, { revision: before.revision }, ana)).toEqual({ dismissed: true });
+    // The task is untouched and open; the booking is untouched; no booking change is shown any more.
+    const t = await taskOf(id);
+    expect(t.status).not.toBe("done"); expect(t.items.every(item => !item.completedBy)).toBe(true);
+    expect((await bookingOf(b)).requestedLocalDate).toBe(date); expect((await jobOf(j)).jobDate).toBe(date);
+    expect(await actions.getBookingActionView(db, id)).toBeNull();
+    expect(Object.keys(await actions.bookingActionVersions(db))).not.toContain(String(id));
+    // The record and its history stay on file under the archive key (older code only looks at the active key).
+    const [[row]] = await pool.query("SELECT activeDedupKey, cardStatus, metadata FROM ops_chat_messages WHERE activeDedupKey LIKE ?", [`claude-booking-action:v1:${id}:dismissed:%`]) as any;
+    expect(row.cardStatus).toBe("dismissed");
+    expect(JSON.parse(row.metadata).history.at(-1)).toMatchObject({ action: "dismissed", actor: ana });
+    await expect(actions.dismissBookingAction(db, id, { revision: 1 }, ana)).rejects.toThrow(/not found/);
+    // Staff can still set up a booking change by hand afterwards.
+    const setUp = await actions.setupBookingAction(db, id, { request: { type: "reschedule_visit", visitDate: date, jobId: j, newDate, newTime: null, evidenceQuote: null }, itemId: "item-1" }, ben);
+    expect(setUp).toMatchObject({ source: "staff", status: "proposed" });
+    // An executed change can't be dismissed.
+    await actions.executeBookingAction(db, id, { revision: setUp.revision, jobId: j, availabilityConfirmed: true }, ana);
+    await expect(actions.dismissBookingAction(db, id, { revision: setUp.revision }, ana)).rejects.toThrow(/already executed/);
+  });
+
   it("invalid proposals are dropped silently and the task stays manual", async () => {
     const phone = newPhone();
     for (const proposal of [{ type: "reschedule_visit" }, { type: "move", visitDate: "2026-12-01", newDate: null, newTime: null, evidenceQuote: "x" },
