@@ -62,7 +62,7 @@ const isSmsTask = (task: CustomerTask) => !("call" in task) && !("email" in task
 /** The card's booking change, if any. One shared request for every card (same cache entry) lists the tasks that have
  * a booking change with a fingerprint of each record; only those cards load their details, and they reload only when
  * their own record changed. Ordinary task cards make no booking-change request. Safe to call from several places. */
-export function useBookingChange(task: CustomerTask) {
+export function useBookingChange(task: CustomerTask, expanded = false) {
   const sms = isSmsTask(task);
   const utils = trpc.useUtils();
   const versions = trpc.claudeCustomerTasks.bookingActionVersions.useQuery(undefined, { enabled: sms, staleTime: 30_000, refetchOnWindowFocus: false, retry: false, ...background });
@@ -77,7 +77,14 @@ export function useBookingChange(task: CustomerTask) {
     // "Sending" turns into "may have been sent" after two minutes without any write: check again while it lasts.
     refetchInterval: query => query.state.data?.record.confirmation?.status === "sending" ? 30_000 : false,
   });
-  return { sms, version, hasRecord, versions, view, data: hasRecord ? (view.data ?? null) : null };
+  // Dismissed proposals (Activity history), only while the card is open; reloads when this task's booking change changes.
+  const dismissed = useQuery({
+    queryKey: ["claudeBookingChangeDismissed", task.id, version],
+    queryFn: () => utils.client.claudeCustomerTasks.dismissedBookingActions.query({ id: task.id }, { context: { batch: "background" } }),
+    // staleTime 0: "no booking change" before and after a dismissal share one key, so a key change always reloads.
+    enabled: sms && expanded, staleTime: 0, refetchOnWindowFocus: false, retry: false, placeholderData: previous => previous,
+  });
+  return { sms, version, hasRecord, versions, view, data: hasRecord ? (view.data ?? null) : null, dismissed: dismissed.data ?? [] };
 }
 
 type StatusTone = "pending" | "done" | "warning";

@@ -334,6 +334,13 @@ function summary(request: BookingActionRequest): string {
  * indexed query for the whole task list. Task cards without a booking change make no request of their own, and a card
  * reloads its details only when its own record changed. Newest first; bounded so it stays small as records accumulate. */
 export const BOOKING_ACTION_VERSIONS_LIMIT = 1000;
+/** Read-only: this task's dismissed booking changes (archived records), so Activity history keeps the dismissal. */
+export async function dismissedBookingActions(q: Q, taskId: number): Promise<BookingActionRecord[]> {
+  const rows = rowsOf(await q.execute(sql`SELECT metadata FROM ops_chat_messages WHERE activeDedupKey LIKE ${`${bookingActionKey(taskId)}:dismissed:%`}
+    AND channel = ${BOOKING_ACTION_CHANNEL} AND quickAction = ${BOOKING_ACTION_QUICK_ACTION} ORDER BY id LIMIT 20`));
+  return rows.map(row => bookingActionRecordSchema.safeParse(decode(row.metadata)))
+    .flatMap(parsed => parsed.success && parsed.data.taskId === taskId ? [parsed.data] : []);
+}
 export async function bookingActionVersions(db: Db): Promise<Record<string, string>> {
   const rows = rowsOf(await db.execute(sql`SELECT activeDedupKey, LEFT(SHA1(metadata), 16) AS version FROM ops_chat_messages
     WHERE channel = ${BOOKING_ACTION_CHANNEL} AND quickAction = ${BOOKING_ACTION_QUICK_ACTION} ORDER BY id DESC LIMIT ${BOOKING_ACTION_VERSIONS_LIMIT}`));

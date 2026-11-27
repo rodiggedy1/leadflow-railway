@@ -359,7 +359,7 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
   const mine = customerTaskIsMine(task, callerId);
   const editable = task.status === "claimed" && mine;
   const canComplete = editable;
-  const booking = useBookingChange(task);
+  const booking = useBookingChange(task, expanded);
   const update = async (request: () => Promise<void>) => {
     if (busy || busyRef.current) return;
     busyRef.current = true;
@@ -388,6 +388,7 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
       .map((item) => ({ at: item.completedAt!, text: `Confirmed "${item.title}" · ${item.completedBy!.name}` })),
     ...(done ? [{ at: task.completedAt ?? created, text: `Marked done · ${task.completedBy?.name || "Staff"}${task.completionNote ? ` · ${task.completionNote}` : ""}` }] : []),
     ...bookingChangeHistory(record),
+    ...(booking.dismissed ?? []).flatMap((dismissed) => bookingChangeHistory(dismissed)),
   ].sort((a, b) => a.at - b.at);
   const sourceLabel = call ? call.provider === "openphone" ? "Call evidence" : "Caller evidence" : "email" in task ? "Customer email" : "Customer text";
   const canOpenConversation = !call && Boolean(onOpenConversation) && ("email" in task ? Boolean(task.email.threadId) : typeof task.sessionId === "number" && Number.isSafeInteger(task.sessionId) && task.sessionId > 0);

@@ -59,6 +59,9 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
   return router({
     bookingAction: opsChatProcedure.input(idInput).output(bookingActionViewSchema.nullable())
       .query(({ input }) => bookingActions((actions, db) => actions.getBookingActionView(db, input.id), false)),
+    /** Dismissed booking changes of one task, for its Activity history (loaded only while the card is open). */
+    dismissedBookingActions: opsChatProcedure.input(idInput).output(z.array(bookingActionRecordSchema))
+      .query(({ input }) => bookingActions((actions, db) => actions.dismissedBookingActions(db, input.id), false)),
     /** Shared by every task card: one request and one indexed query, however many cards are on screen. */
     bookingActionVersions: opsChatProcedure.output(z.record(z.string().regex(/^[1-9]\d*$/), z.string()))
       .query(() => bookingActions((actions, db) => actions.bookingActionVersions(db), false)),

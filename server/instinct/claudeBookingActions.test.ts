@@ -113,6 +113,16 @@ describe("scope, permissions and switches", () => {
     expect(module).toContain('if (reschedule && !input.availabilityConfirmed) fail("PRECONDITION_FAILED", "Confirm team availability before executing.");'); // server rule unchanged
     expect(panel).not.toMatch(/actions\.complete|completeTask|Mark done/); // the booking panel never completes or gates the task
   });
+  it("Activity history includes dismissed proposals through a read-only lookup used only by an open card", () => {
+    const fn = module.slice(module.indexOf("export async function dismissedBookingActions"), module.indexOf("export async function bookingActionVersions"));
+    expect(fn).toContain("SELECT metadata FROM ops_chat_messages WHERE activeDedupKey LIKE");
+    expect(fn).not.toMatch(/UPDATE|INSERT|DELETE|transaction/);
+    expect(router).toContain("dismissedBookingActions: opsChatProcedure.input(idInput).output(z.array(bookingActionRecordSchema))\n      .query(");
+    const panel = read("client/src/components/ClaudeBookingChangePanel.tsx"), card = read("client/src/components/ClaudeCustomerTasks.tsx");
+    expect(panel).toContain("enabled: sms && expanded,");
+    expect(card).toContain("useBookingChange(task, expanded)");
+    expect(card).toContain("...(booking.dismissed ?? []).flatMap((dismissed) => bookingChangeHistory(dismissed)),");
+  });
   it("the off switch is a single code setting", () => {
     expect(CLAUDE_BOOKING_ACTIONS_ENABLED).toBe(true);
     expect(module).toContain('if (!CLAUDE_BOOKING_ACTIONS_ENABLED) manual.push("Booking changes are switched off. Handle this task manually.");');

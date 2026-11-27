@@ -193,6 +193,40 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     expect(view!.assessment!.manualReasons[0]).toContain("No native booking visit was found");
   });
 
+  it("Launch27 stays manual: native-only choices, Launch27 visits never executed, Launch27-only customers keep their task", async () => {
+    const launch27Visit = async (phone: string, date: string) => {
+      const [inserted] = await db.insert(leadflowJobs).values({ origin: "launch27_manual_import", launch27BookingId: 900000 + ++seq, jobDate: date,
+        serviceDateTime: iso(date, "09:00"), customerName: "Maya Lane", customerPhone: phone, bookingStatus: "assigned", jobTotalCents: 1 });
+      return Number((inserted as any).insertId);
+    };
+    // Customer with both a native booking and a Launch27 booking (the Launch27 visit comes first).
+    const phone = newPhone(), nativeDate = addDays(today(), 9), l27Date = addDays(today(), 6);
+    const b = await booking({ phone, date: nativeDate, time: "10:00" }); const j = await visit(b, nativeDate, "10:00");
+    const l27 = await launch27Visit(phone, l27Date); const l27Before = await jobOf(l27);
+    const mixed = await task(phone, "Can we move my cleaning?", null);
+    expect((await actions.taskUpcomingVisits(db, mixed)).map(v => v.jobId)).toEqual([j]);
+    // Staff point a change at the Launch27 visit anyway: it is not executable and executing is refused.
+    const staff = await actions.setupBookingAction(db, mixed, { request: { type: "reschedule_visit", visitDate: l27Date, jobId: l27,
+      newDate: addDays(l27Date, 2), newTime: null, evidenceQuote: null }, itemId: null }, ana);
+    expect((await actions.getBookingActionView(db, mixed))!.assessment!.executable).toBe(false);
+    await expect(actions.executeBookingAction(db, mixed, { revision: staff.revision, jobId: l27, availabilityConfirmed: true }, ana)).rejects.toThrow(/No native booking visit/);
+    // A native proposal executed with the Launch27 visit's id is refused too.
+    const nativeTask = await task(phone, "Please move my cleaning", { type: "reschedule_visit", visitDate: nativeDate, newDate: addDays(nativeDate, 1), newTime: null, evidenceQuote: "move my cleaning" });
+    await expect(actions.executeBookingAction(db, nativeTask, { revision: 1, jobId: l27, availabilityConfirmed: true }, ana)).rejects.toThrow(/visit for this booking change has changed/);
+    expect(await jobOf(l27)).toEqual(l27Before);
+    expect(await bookingOf(b)).toMatchObject({ requestedLocalDate: nativeDate, requestedLocalTime: "10:00" });
+    // Customer with only a Launch27 booking: the task and its reply are created as usual; the change stays manual.
+    const onlyPhone = newPhone(), onlyDate = addDays(today(), 7); const only = await launch27Visit(onlyPhone, onlyDate); const onlyBefore = await jobOf(only);
+    const onlyTask = await task(onlyPhone, "Could you move my cleaning to Friday?", { type: "reschedule_visit", visitDate: onlyDate, newDate: addDays(onlyDate, 2), newTime: null, evidenceQuote: "move my cleaning to Friday" });
+    expect(await taskOf(onlyTask)).toMatchObject({ status: "unclaimed", items: [{ title: "Move the cleaning" }] });
+    expect(await actions.taskUpcomingVisits(db, onlyTask)).toEqual([]);
+    const onlyView = await actions.getBookingActionView(db, onlyTask);
+    expect(onlyView!.assessment).toMatchObject({ executable: false, visit: null });
+    expect(onlyView!.assessment!.manualReasons[0]).toContain("No LeadFlow booking was found");
+    await expect(actions.executeBookingAction(db, onlyTask, { revision: 1, jobId: only, availabilityConfirmed: true }, ana)).rejects.toThrow(/No LeadFlow booking was found/);
+    expect(await jobOf(only)).toEqual(onlyBefore);
+  });
+
   it("simultaneous approvals execute exactly once", async () => {
     const phone = newPhone(), date = addDays(today(), 11), newDate = addDays(today(), 15);
     const b = await booking({ phone, date, time: "13:00" }); const j = await visit(b, date, "13:00");
@@ -336,6 +370,11 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     const [[row]] = await pool.query("SELECT activeDedupKey, cardStatus, metadata FROM ops_chat_messages WHERE activeDedupKey LIKE ?", [`claude-booking-action:v1:${id}:dismissed:%`]) as any;
     expect(row.cardStatus).toBe("dismissed");
     expect(JSON.parse(row.metadata).history.at(-1)).toMatchObject({ action: "dismissed", actor: ana });
+    // Activity history reads the archived record: the dismissal stays visible on the task card.
+    const dismissed = await actions.dismissedBookingActions(db, id);
+    expect(dismissed).toHaveLength(1);
+    expect(dismissed[0].history.at(-1)).toMatchObject({ action: "dismissed", actor: ana });
+    expect(await actions.dismissedBookingActions(db, id + 100000)).toEqual([]);
     await expect(actions.dismissBookingAction(db, id, { revision: 1 }, ana)).rejects.toThrow(/not found/);
     // Staff can still set up a booking change by hand afterwards.
     const setUp = await actions.setupBookingAction(db, id, { request: { type: "reschedule_visit", visitDate: date, jobId: j, newDate, newTime: null, evidenceQuote: null }, itemId: "item-1" }, ben);
