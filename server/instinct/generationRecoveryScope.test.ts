@@ -61,10 +61,14 @@ describe("one-extra-generation recovery exact local scope", () => {
     // attaching a proposal to its own private record when the task is created. Nothing else changed.
     // Receiving-line reliability (2026-11-27): reportUnverifiedLineFailure creates the existing failure-review task when
     // the line cannot be verified (opt-out, later reply/text, existing attempt or task: skipped). Never sends.
-    "server/instinct/claudeCustomerTasksStore.ts": "2528b6838cdf38c74f596e118d51d2ca2d80048b983923907034efbed4ee00aa",
+    // Failure visibility (2026-11-28): a failed attempt's review task is skipped only for an opt-out or a conversation
+    // now owned by another phone (no longer for a newer text, a later reply or a changed line); skips return their reason.
+    "server/instinct/claudeCustomerTasksStore.ts": "68c26cbb3bdc0fd3817c7cc67731a445da6af177ca44a7c56219e5199a06821c",
     // Receiving-line reliability (2026-11-27): every exclusion logs its rule (decisions unchanged); an unverified line
     // creates the existing review task or keeps the existing owner alert. No generation or send on that path.
-    "server/instinct/claudeCustomerSms.ts": "4a0915ecc2acd76e0f1efaf16a5b2c19b4cb73ac2cf38d7048ac169155f349b9",
+    // Failure visibility (2026-11-28): every failure-review outcome is logged (created / skipped with reason / failed, owner
+    // alert kept); a claim that fails after the line lookup gets the existing review task on the verified line.
+    "server/instinct/claudeCustomerSms.ts": "83ebec215fa74d3ccbbe0ef5b3aa9e6f2b4e33a912d1c8918ce7439b80300d34",
     // Receiving-line reliability (2026-11-27): the guard-decline log line names the declining rule; the guard is unchanged.
     "server/webhooks.ts": "84ee309c9c0caceffe422234184f6c7fc1e3db2da5c5f4c9a52dff8473bc5259",
     "shared/claudeCustomerTasks.ts": "57ce1ad7fefe44da89a92986fdb0fd951029263794a705a383c408ff31972e10",

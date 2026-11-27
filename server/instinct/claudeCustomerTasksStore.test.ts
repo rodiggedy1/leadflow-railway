@@ -171,34 +171,50 @@ describe("customer task store — offline transactional SQL port", () => {
     expect(await h.store.prepare(c, plan)).toBe(false);
     const review = await h.store.reportFailure(c, "CUSTOMER_REPLY_PREPARATION_STOPPED");
     expect(review).toMatchObject({ notify: true }); expect(h.task().reply.status).toBe("suppressed");
-    expect(await h.store.reportFailure(c, "CUSTOMER_REPLY_PREPARATION_STOPPED")).toBeNull();
+    expect(await h.store.reportFailure(c, "CUSTOMER_REPLY_PREPARATION_STOPPED")).toEqual({ skipped: "REVIEW_ALREADY_RECORDED" });
     expect(h.state().cards).toHaveLength(1);
   });
   it("durably records a config-stop failure task once without preparation or send", async () => {
     const h = port(), c = (await h.store.claim(h.binding))!;
     await h.store.suppress(c, "CONFIG_CHANGED");
     expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toMatchObject({ taskId: expect.any(Number), notify: true });
-    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toBeNull();
+    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toEqual({ skipped: "REVIEW_ALREADY_RECORDED" });
     expect(h.state().cards).toHaveLength(1); expect(h.task().reply.status).toBe("suppressed");
     expect(h.state().drafts[0].status).toBe("DISMISSED");
     expect(h.state().drafts[0].generatedDraft).toBeUndefined();
     expect(h.state().drafts[0].capabilityResult.failureReviewText).toBe("No customer reply was submitted.");
   });
-  it.each(["new_inbound", "human_reply", "optout", "wrong_phone", "wrong_line"])("never escalates a legitimate %s stop as a failed unanswered turn", async kind => {
+  it.each([["optout", "OPTED_OUT"], ["wrong_phone", "SESSION_CHANGED"]])("never escalates a %s stop: skipped with reason %s", async (kind, reason) => {
     const h = port(), c = (await h.store.claim(h.binding))!;
     if (kind === "optout") h.state().sessions[0].smsOptOut = 1;
     if (kind === "wrong_phone") h.state().sessions[0].leadPhone = "+12025559876";
+    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toEqual({ skipped: reason }); expect(h.state().cards).toHaveLength(0);
+  });
+  it("the opt-out list also blocks the review task", async () => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
+    h.state().optouts.push({ id: 1, phone: h.binding.fromPhone });
+    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toEqual({ skipped: "OPTED_OUT" }); expect(h.state().cards).toHaveLength(0);
+  });
+  // Staff must know: a newer customer text, a later reply or a changed line no longer hides a failed attempt.
+  it.each(["new_inbound", "human_reply", "wrong_line"])("a %s change still creates the failure-review task (nothing is sent)", async kind => {
+    const h = port(), c = (await h.store.claim(h.binding))!;
     if (kind === "wrong_line") h.state().sessions[0].lastInboundPhoneNumberId = "PN-other";
     if (kind === "new_inbound" || kind === "human_reply") h.state().sessions[0].messageHistory = JSON.stringify([
       ...JSON.parse(h.state().sessions[0].messageHistory), { role: kind === "new_inbound" ? "user" : "assistant", content: "Later", ts: 120, opMsgId: "later" }]);
-    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toBeNull(); expect(h.state().cards).toHaveLength(0);
+    const history = h.state().sessions[0].messageHistory;
+    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toMatchObject({ taskId: expect.any(Number), notify: true });
+    expect(h.state().cards).toHaveLength(1);
+    expect(h.task()).toMatchObject({ title: "Review customer message after reply failure", sourceMessageId: h.binding.providerMessageId,
+      reply: { text: "No customer reply was submitted.", status: "suppressed", providerMessageId: null } });
+    expect(h.state().sessions[0].messageHistory).toBe(history);
+    expect(await h.store.reportFailure(c, "CONFIG_CHANGED")).toEqual({ skipped: "REVIEW_ALREADY_RECORDED" }); expect(h.state().cards).toHaveLength(1);
   });
   it("uncertain ordinary replies receive one review task and remain blocked from resubmission", async () => {
     const h = port(), c = (await h.store.claim(h.binding))!;
     await h.store.prepare(c, { replyText: "Ordinary answer", task: null }); await h.store.markUncertain(c);
     expect(await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true)).toMatchObject({ notify: true });
     expect(h.task().reply.status).toBe("uncertain"); expect(h.state().drafts[0].status).toBe("SENDING");
-    expect(await h.store.claim(h.binding)).toBeNull(); expect(await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true)).toBeNull();
+    expect(await h.store.claim(h.binding)).toBeNull(); expect(await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true)).toEqual({ skipped: "REVIEW_ALREADY_RECORDED" });
   });
   it("even a supplied matching history hash cannot authorize an already replied-to source", async () => {
     const h = port(), s = h.state().sessions[0];
@@ -285,7 +301,7 @@ describe("customer task store — offline transactional SQL port", () => {
     expect(h.state().drafts[0].generatedDraft).toBeUndefined(); expect(h.state().drafts[0].outboundOpenPhoneId).toBeUndefined();
     expect(h.state().sessions[0].messageHistory).toBe(before);
     expect(await h.store.recordAcceptance(c, "never-submitted")).toBe(false); expect(await h.store.claim(h.binding)).toBeNull();
-    expect(await h.store.reportFailure(c, "GENERATION_OR_PERSISTENCE_FAILED")).toBeNull(); expect(h.state().cards).toHaveLength(1);
+    expect(await h.store.reportFailure(c, "GENERATION_OR_PERSISTENCE_FAILED")).toEqual({ skipped: "REVIEW_ALREADY_RECORDED" }); expect(h.state().cards).toHaveLength(1);
   });
   it("rolls back failure details and fallback task when durable preparation fails", async () => {
     const h = port(), c = (await h.store.claim(h.binding))!;
@@ -577,7 +593,7 @@ it("upgrades a prior generation review to uncertainty on the same task without d
   await h.store.markUncertain(c); await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true);
   expect(h.state().cards).toHaveLength(1); expect(h.task().reply.status).toBe("uncertain");
   expect(h.task().items.find((item: any) => item.id === "reply-failure-review").title).toContain("Verify SMS acceptance");
-  expect(await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true)).toBeNull();
+  expect(await h.store.reportFailure(c, "SUBMISSION_UNCERTAIN", true)).toEqual({ skipped: "REVIEW_ALREADY_RECORDED" });
 });
 
 it("escalates a human-won send attempt only if its exact inbound remains actually unanswered", async () => {

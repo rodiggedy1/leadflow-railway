@@ -238,6 +238,8 @@ describe("offline customer SMS diagnostics preserve the existing service decisio
     expect(diagnostics()).toEqual([
       ...successfulDiagnostics,
       { ...base, stage: "generation", reason: "EXCEPTION", ...generationFlags, errorCode: "UNCLASSIFIED_ERROR", errorName: "SyntaxError" },
+      // Every failure-review outcome is logged (here: the existing review task was created).
+      { ...base, stage: "generation", outcome: "failed", reason: "REVIEW_TASK_CREATED", ...generationFlags },
     ]);
     expect(JSON.stringify(logSpy.mock.calls)).not.toContain(body);
   });
@@ -296,9 +298,10 @@ describe("offline customer SMS diagnostics preserve the existing service decisio
     { outcome: "disabled", logs: 0, setup: f => { f.config.mockReturnValue(null); } },
     { outcome: "excluded", logs: 1, setup: () => undefined, event: { ...input, direction: "outgoing" } },
     { outcome: "duplicate", logs: 4, setup: f => { f.store.claim.mockResolvedValue(null); } },
-    { outcome: "suppressed", logs: 4, setup: f => { f.store.prepare.mockResolvedValue(false); } },
-    { outcome: "uncertain", logs: 4, setup: f => { f.send.mockResolvedValue({ success: false }); } },
-    { outcome: "failed", logs: 5, setup: f => { f.generate.mockRejectedValue(new SyntaxError("Private generation response")); } },
+    // Each failure adds one review-outcome line (created / skipped / creation failed).
+    { outcome: "suppressed", logs: 5, setup: f => { f.store.prepare.mockResolvedValue(false); } },
+    { outcome: "uncertain", logs: 5, setup: f => { f.send.mockResolvedValue({ success: false }); } },
+    { outcome: "failed", logs: 6, setup: f => { f.generate.mockRejectedValue(new SyntaxError("Private generation response")); } },
   ];
   it.each(loggerOutcomes)("a throwing logger preserves $outcome and all dependency call counts", async ({ outcome, logs, setup, event = input }) => {
     const control = fixture(); setup(control);

@@ -168,9 +168,43 @@ describe("the unverified-line marker is never used to send", () => {
     expect(readers.sort()).toEqual(["server/instinct/claudeCustomerSmsGeneration.ts", "server/instinct/claudeCustomerTasksStore.ts",
       "server/instinct/claudeSmsAlternative.ts", "server/instinct/customerSmsAttribution.ts"]);
     const store = readFileSync("server/instinct/claudeCustomerTasksStore.ts", "utf8");
-    expect(store.match(/\.receivingPhoneNumber\b/g)?.length).toBe((store.match(/binding\.receivingPhoneNumber\b/g) ?? []).length);
+    // The store reads a receiving number only from the verified reply binding, or from the verified number the pipeline
+    // passes in after its own line lookup (identity.receivingPhoneNumber, otherwise "unverified") — never from a task.
+    expect(store.match(/\.receivingPhoneNumber\b/g)?.length).toBe((store.match(/(?:binding|identity)\.receivingPhoneNumber\b/g) ?? []).length);
+    expect(store).toMatch(/identity\.receivingPhoneNumber && \/\^\\\+\[1-9\]\\d\{7,14\}\$\/\.test\(identity\.receivingPhoneNumber\) \? identity\.receivingPhoneNumber : UNVERIFIED_RECEIVING_LINE/);
     expect(store).not.toMatch(/task\.receivingPhoneNumber\b/);
     const openphone = readFileSync("server/openphone.ts", "utf8");
     expect(openphone).not.toMatch(/receivingPhoneNumber\b/);
+  });
+});
+
+// ── Failed reply attempts (after a claim): every review outcome is logged; a failed creation keeps the owner alert ──
+function claimedPipeline(reportFailure: () => Promise<any>) {
+  const store = { claim: vi.fn(async (binding: any) => ({ draftId: 9, key: binding.providerMessageId, binding })), prepare: vi.fn(), recordAcceptance: vi.fn(),
+    markUncertain: vi.fn(), suppress: vi.fn(), suppressBeforeSubmission: vi.fn(async () => undefined), reportFailure: vi.fn(reportFailure) };
+  const generate = vi.fn(async () => { throw new SyntaxError("invalid model output"); }), send = vi.fn(), onFailure = vi.fn(async () => undefined);
+  const run = createClaudeCustomerSmsService({ config: () => ({ ...config }), readSession: async () => session(), readReceivingLine: async () => "+12025550999",
+    generate, store: store as any, send, onFailure, onTaskChange: async () => undefined });
+  return { store, generate, send, onFailure, run };
+}
+const reviewOutcomes = () => diagnostics().filter(line => /^REVIEW_TASK_/.test(line.reason ?? "")).map(line => [line.reason, line.exclusion, line.errorCode]);
+describe("failed reply attempts: every review outcome is logged", () => {
+  it("created: logged, owner alerted with the task", async () => {
+    const p = claimedPipeline(async () => ({ taskId: 77, notify: true }));
+    expect(await p.run(input)).toEqual({ outcome: "failed" });
+    expect(reviewOutcomes()).toEqual([["REVIEW_TASK_CREATED", undefined, undefined]]);
+    expect(p.onFailure.mock.calls).toEqual([[{ taskId: 77, code: "GENERATION_OR_PERSISTENCE_FAILED", sessionId: 71 }]]); expect(p.send).not.toHaveBeenCalled();
+  });
+  it("skipped: logged with the explicit reason", async () => {
+    const p = claimedPipeline(async () => ({ skipped: "OPTED_OUT" }));
+    expect(await p.run(input)).toEqual({ outcome: "failed" });
+    expect(reviewOutcomes()).toEqual([["REVIEW_TASK_SKIPPED", "OPTED_OUT", undefined]]); expect(p.send).not.toHaveBeenCalled();
+  });
+  it("creation failed: logged with the error code, and the owner alert is still sent", async () => {
+    const p = claimedPipeline(async () => { throw Object.assign(new Error("private database detail"), { code: "ER_LOCK_WAIT_TIMEOUT" }); });
+    expect(await p.run(input)).toEqual({ outcome: "failed" });
+    expect(reviewOutcomes()).toEqual([["REVIEW_TASK_FAILED", undefined, "ER_LOCK_WAIT_TIMEOUT"]]);
+    expect(p.onFailure.mock.calls).toEqual([[{ taskId: null, code: "GENERATION_OR_PERSISTENCE_FAILED", sessionId: 71 }]]);
+    expect(JSON.stringify(logSpy.mock.calls)).not.toContain("private database detail"); expect(p.send).not.toHaveBeenCalled();
   });
 });
