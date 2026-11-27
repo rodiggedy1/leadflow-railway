@@ -13,6 +13,7 @@ import { normalizePhone } from "../utils/phone";
 import { customerSmsFailureDetailsSchema, type CustomerSmsFailureDetails } from "./claudeCustomerSmsFailure";
 import { customerSmsContextHash, customerSmsEnvelopes, customerSmsIds, customerSmsTurnAfter } from "./customerSmsFreshness";
 import { attachProposedBookingAction } from "./claudeBookingActions";
+import type { UnverifiedLineIdentity } from "./claudeCustomerSms";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -58,6 +59,9 @@ const taskKeyFor = (binding: CustomerSmsBinding) => `cs-task:v1:${hash(JSON.stri
 const isInbound = (turn: any) => turn && ["user", "customer"].includes(turn.role);
 const ids = customerSmsIds;
 const stop = (text: string) => /^\s*(stop|unsubscribe|quit|end|remove me|opt.?out)\s*$/i.test(text);
+/** Receiving-number marker on a review task whose line could not be verified. Never a phone number and
+ * never used to send: replies are sent from the conversation's own receiving-line ID, not this field. */
+export const UNVERIFIED_RECEIVING_LINE = "unverified";
 
 export interface ClaudeCustomerTasksStore {
   claim(binding: CustomerSmsBinding): Promise<CustomerSmsClaim | null>;
@@ -68,6 +72,7 @@ export interface ClaudeCustomerTasksStore {
   suppressBeforeSubmission(claim: CustomerSmsClaim, code: string, failure?: CustomerSmsFailureDetails): Promise<void>;
   verifyBeforeSubmission(claim: CustomerSmsClaim): Promise<boolean>;
   reportFailure(claim: CustomerSmsClaim, code: string, uncertain?: boolean): Promise<{ taskId: number; notify: boolean } | null>;
+  reportUnverifiedLineFailure(identity: UnverifiedLineIdentity, code: string): Promise<{ taskId: number; notify: boolean } | { skipped: string }>;
   list(): Promise<CustomerTask[]>;
   get(id: number): Promise<CustomerTask | null>;
   claimTask(id: number, actor: TaskActor, expectedOwnerId?: string): Promise<CustomerTask>;
@@ -388,6 +393,48 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
       if (changed.affectedRows !== 1) throw new Error("CUSTOMER_REPLY_FAILURE_REVIEW_SAVE_FAILED");
       return { taskId: id!, notify: true };
     }),
+    // The receiving line could not be verified before any reply attempt: create the existing failure-review
+    // task unless something already covers this text. Nothing is generated or sent here.
+    async reportUnverifiedLineFailure(identity, code) {
+      try {
+        return await db.transaction(async tx => {
+          const [session] = rows(await tx.execute(sql`SELECT * FROM conversation_sessions WHERE id = ${identity.sessionId} FOR UPDATE`));
+          if (!session || normalizePhone(session.leadPhone) !== identity.customerPhone) return { skipped: "SESSION_CHANGED" };
+          if (Number(session.smsOptOut) !== 0 || stop(identity.sourceText)
+            || rows(await tx.execute(sql`SELECT id FROM sms_opt_outs WHERE phone = ${identity.customerPhone}`)).length) return { skipped: "OPTED_OUT" };
+          let history: any;
+          try { history = JSON.parse(session.messageHistory); } catch { return { skipped: "HISTORY_UNREADABLE" }; }
+          if (!Array.isArray(history) || history.some(turn => !turn || typeof turn !== "object" || typeof turn.role !== "string")) return { skipped: "HISTORY_UNREADABLE" };
+          const anchor = history.find(turn => isInbound(turn) && ids(turn).includes(identity.sourceMessageId));
+          if (!anchor) return { skipped: "MESSAGE_NOT_IN_HISTORY" };
+          const after = history.filter(turn => turn !== anchor && customerSmsTurnAfter(history, turn, anchor));
+          // Existing human-reply safeguard: a reply after the text (staff or automatic) already covers it.
+          if (after.some(turn => ["assistant", "agent", "office"].includes(turn.role))) return { skipped: "LATER_REPLY_EXISTS" };
+          // A newer customer text gets its own reply attempt, which sees this text in the conversation.
+          if (after.some(isInbound)) return { skipped: "LATER_CUSTOMER_MESSAGE" };
+          // An existing reply attempt (Claude or Madison) for this text: never a second path.
+          // Locking reads: they see rows committed by a simultaneous call that held the conversation lock first.
+          if (rows(await tx.execute(sql`SELECT id FROM madison_sms_drafts WHERE inboundOpenPhoneId = ${identity.sourceMessageId} FOR UPDATE`)).length) return { skipped: "REPLY_ATTEMPT_EXISTS" };
+          const key = taskKeyFor({ account: "openphone", providerMessageId: identity.sourceMessageId, receivingPhoneNumberId: identity.receivingPhoneNumberId } as CustomerSmsBinding);
+          if (rows(await tx.execute(sql`SELECT id FROM ops_chat_messages WHERE activeDedupKey = ${key} FOR UPDATE`)).length) return { skipped: "TASK_EXISTS" };
+          const id = await createTask(tx, { sessionId: identity.sessionId, customerName: identity.customerName, customerPhone: identity.customerPhone,
+            sourceMessageId: identity.sourceMessageId, sourceText: identity.sourceText, receivedAt: identity.receivedAt,
+            receivingPhoneNumberId: identity.receivingPhoneNumberId, receivingPhoneNumber: UNVERIFIED_RECEIVING_LINE,
+          }, { replyText: "No customer reply was submitted.", task: { title: "Review customer message after reply failure",
+            items: [{ title: "Review the unanswered customer message and follow up", evidenceQuote: identity.sourceText }] } }, key);
+          if (id === null) throw new Error("CUSTOMER_REPLY_FAILURE_REVIEW_SAVE_FAILED");
+          const task = parseTask(await taskRow(tx, id));
+          task.reply.status = "suppressed";
+          await saveTask(tx, task);
+          return { taskId: id, notify: true };
+        });
+      } catch (error) {
+        // The unique task key is the backstop against a simultaneous second review for the same text.
+        const value = error as { code?: string; cause?: { code?: string } };
+        if ((value?.code ?? value?.cause?.code) === "ER_DUP_ENTRY") return { skipped: "TASK_EXISTS" };
+        throw error;
+      }
+    },
     async list() {
       return rows(await db.execute(sql`SELECT * FROM ops_chat_messages WHERE quickAction = ${action} AND channel = 'command' ORDER BY id DESC`)).map(parseTask);
     },

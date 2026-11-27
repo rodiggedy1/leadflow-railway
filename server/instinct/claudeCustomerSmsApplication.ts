@@ -6,7 +6,10 @@ import { createClaudeCustomerSmsService, claudeCustomerSmsConfig, isClaudeCustom
  * configuration. Disabled means no DB/provider/model access by this feature. */
 export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
   if (!claudeCustomerSmsConfig()) return { outcome: "disabled" as const };
-  if (!isClaudeCustomerSmsPhoneEligible(input.fromPhone)) return { outcome: "excluded" as const };
+  if (!isClaudeCustomerSmsPhoneEligible(input.fromPhone)) {
+    logClaudeCustomerSmsDiagnostic(input, { stage: "dispatch", outcome: "excluded", reason: "EXCLUDED", exclusion: "PHONE_INELIGIBLE" });
+    return { outcome: "excluded" as const };
+  }
   let db: Awaited<ReturnType<typeof import("../db")["getDb"]>>;
   try {
     const { getDb } = await import("../db");
@@ -47,7 +50,7 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
       if (!Array.isArray(rows) || rows.length !== 1) return null;
       return { ...context, leadSource: rows[0].leadSource, smsOptOut: rows[0].smsOptOut, csQueue: rows[0].csQueue };
     },
-    readReceivingLine: createReceivingLineReader(),
+    readReceivingLine: id => readReceivingLineWithRetry(input, id, createReceivingLineReader),
     generate: (binding, session, signal) => createClaudeCustomerSmsGeneratorWithReply(createSmsBookingQuoteReplyGenerator({
       signal,
       smsBookingQuote: { readState: quoteStore.read },
@@ -74,6 +77,52 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
     },
   });
   return service(input);
+}
+
+// ── Receiving-line lookup: the same single OpenPhone request, bounded ───────
+// Each request is limited to 10 s. A temporary failure (rate limit, server error, timeout, network)
+// is retried once: after Retry-After when OpenPhone sends one that fits the 5 s window (no retry if
+// it asks for longer), otherwise after 1.5 s. The real failure is logged; nothing else changes.
+export const RECEIVING_LINE_TIMEOUT_MS = 10_000;
+export const RECEIVING_LINE_RETRY_DELAY_MS = 1_500;
+export const RECEIVING_LINE_MAX_RETRY_WAIT_MS = 5_000;
+const TEMPORARY_LINE_FAILURE = /^(HTTP_(408|425|429|5\d\d)|TIMEOUT|NETWORK_ERROR)$/;
+/** Retry-After as milliseconds (seconds or HTTP date); null when absent or unreadable. */
+export function retryAfterMs(value: string | null, now = Date.now()): number | null {
+  if (!value?.trim()) return null;
+  if (/^\d+$/.test(value.trim())) return Number(value.trim()) * 1000;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - now) : null;
+}
+type LineReaderFactory = (options: { request: typeof fetch }) => (phoneNumberId: string) => Promise<string>;
+export async function readReceivingLineWithRetry(input: CustomerSmsInput, phoneNumberId: string, createReader: LineReaderFactory,
+  deps: { fetch?: typeof fetch; sleep?: (ms: number) => Promise<void>; apiKeyPresent?: () => boolean } = {}): Promise<string> {
+  const doFetch = deps.fetch ?? globalThis.fetch;
+  const sleep = deps.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
+  for (let attempt = 1; ; attempt++) {
+    let failure = "LOOKUP_REJECTED";   // OpenPhone answered, but not with exactly one valid number for this line
+    let waitMs: number | null = null;
+    const read = createReader({ request: (async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      try {
+        const response = await doFetch(url, { ...init, signal: AbortSignal.timeout(RECEIVING_LINE_TIMEOUT_MS) });
+        if (!response.ok) { failure = `HTTP_${response.status}`; waitMs = retryAfterMs(response.headers.get("retry-after")); }
+        return response;
+      } catch (error) {
+        failure = (error as { name?: string })?.name === "TimeoutError" ? "TIMEOUT" : "NETWORK_ERROR";
+        throw error;
+      }
+    }) as typeof fetch });
+    try { return await read(phoneNumberId); }
+    catch (error) {
+      if (!(deps.apiKeyPresent ?? (() => !!process.env.OPENPHONE_API_KEY?.trim()))()) failure = "NO_API_KEY";
+      const delay = waitMs === null ? RECEIVING_LINE_RETRY_DELAY_MS : waitMs;
+      const retry = attempt === 1 && TEMPORARY_LINE_FAILURE.test(failure) && delay <= RECEIVING_LINE_MAX_RETRY_WAIT_MS;
+      logClaudeCustomerSmsDiagnostic(input, { stage: "receiving_line_read", reason: `RECEIVING_LINE_${failure}${retry ? "_RETRYING" : ""}`,
+        receiptClaimAttempted: false, generationReached: false });
+      if (!retry) throw error;
+      await sleep(delay);
+    }
+  }
 }
 
 async function notifyCustomerSmsFailure(detail: { taskId: number | null; code: string; sessionId: number }): Promise<void> {

@@ -88,7 +88,7 @@ afterEach(() => {
 });
 
 const allowedDiagnosticFields = new Set([
-  "message", "sessionId", "inboundMessageId", "stage", "outcome", "reason",
+  "message", "sessionId", "inboundMessageId", "stage", "outcome", "reason", "exclusion",
   "receiptClaimAttempted", "generationReached", "replyOwned", "errorCode", "errorName",
 ]);
 function diagnostics(): Record<string, unknown>[] {
@@ -192,7 +192,9 @@ describe("offline customer SMS diagnostics preserve the existing service decisio
     f.readReceivingLine.mockRejectedValue(Object.assign(new Error("Private receiving line response body"), { code: "RECEIVING_LINE_UNAVAILABLE" }));
     expect(await f.run(input)).toEqual({ outcome: "failed" });
     expect(f.readSession.mock.calls).toEqual([[71]]); expect(f.readReceivingLine.mock.calls).toEqual([["PN-existing"]]);
-    preClaimFailure(f);
+    // No review-task method on this store: nothing is created, and the existing owner alert names the cause.
+    noReply(f); expect(f.store.claim).not.toHaveBeenCalled(); expect(f.store.reportFailure).not.toHaveBeenCalled();
+    expect(f.onFailure.mock.calls).toEqual([[{ ...ownerFailure, code: "RECEIVING_LINE_UNAVAILABLE" }]]);
     expect(diagnostics()).toEqual([
       ...successfulDiagnostics.slice(0, 2),
       { ...base, stage: "receiving_line_read", reason: "EXCEPTION", ...unclaimed, errorCode: "RECEIVING_LINE_UNAVAILABLE", errorName: "Error" },
@@ -217,7 +219,8 @@ describe("offline customer SMS diagnostics preserve the existing service decisio
     expect(await f.run(input)).toEqual({ outcome: "duplicate" });
     noReply(f); expect(f.store.claim).toHaveBeenCalledTimes(1);
     expect(f.store.reportFailure).not.toHaveBeenCalled(); expect(f.onFailure).not.toHaveBeenCalled();
-    expect(diagnostics()).toEqual(successfulDiagnostics.slice(0, 3));
+    expect(diagnostics()).toEqual([...successfulDiagnostics.slice(0, 3),
+      { ...base, stage: "receipt_claim", outcome: "duplicate", reason: "ALREADY_CLAIMED", ...attemptedUnclaimed }]);
   });
 
   it("uses safe SyntaxError typing after the four boundaries and keeps raw generated body out of logs and durable failure details", async () => {
@@ -291,8 +294,8 @@ describe("offline customer SMS diagnostics preserve the existing service decisio
 
   const loggerOutcomes: { outcome: string; logs: number; setup: (f: Fixture) => void; event?: CustomerSmsInput }[] = [
     { outcome: "disabled", logs: 0, setup: f => { f.config.mockReturnValue(null); } },
-    { outcome: "excluded", logs: 0, setup: () => undefined, event: { ...input, direction: "outgoing" } },
-    { outcome: "duplicate", logs: 3, setup: f => { f.store.claim.mockResolvedValue(null); } },
+    { outcome: "excluded", logs: 1, setup: () => undefined, event: { ...input, direction: "outgoing" } },
+    { outcome: "duplicate", logs: 4, setup: f => { f.store.claim.mockResolvedValue(null); } },
     { outcome: "suppressed", logs: 4, setup: f => { f.store.prepare.mockResolvedValue(false); } },
     { outcome: "uncertain", logs: 4, setup: f => { f.send.mockResolvedValue({ success: false }); } },
     { outcome: "failed", logs: 5, setup: f => { f.generate.mockRejectedValue(new SyntaxError("Private generation response")); } },
@@ -336,23 +339,29 @@ describe("bounded diagnostic helper fields", () => {
   });
 });
 
-const initialGuards: { name: string; patch: Partial<CustomerSmsInput> }[] = [
-  { name: "outgoing event", patch: { direction: "outgoing" } },
-  { name: "invalid session ID", patch: { sessionId: 0 } },
-  { name: "fallback provider message ID", patch: { providerMessageId: "cs-fallback-old" } },
-  { name: "empty receiving line ID", patch: { receivingPhoneNumberId: " " } },
-  { name: "empty inbound text", patch: { inboundText: " " } },
-  { name: "noncanonical customer phone", patch: { fromPhone: "202-555-0123" } },
-  { name: "excluded sender", patch: { fromPhone: "+16505164957" } },
-  { name: "STOP text", patch: { inboundText: " STOP " } },
-  { name: "unsubscribe text", patch: { inboundText: "unsubscribe" } },
-  { name: "invalid created timestamp", patch: { createdAt: "2026-11-16" } },
-  { name: "invalid receipt timestamp", patch: { receivedAt: NaN } },
-  { name: "created before start", patch: { createdAt: "2026-11-15T18:00:00Z" } },
-  { name: "received before start", patch: { receivedAt: at - 2000 } },
-  { name: "created after receipt", patch: { createdAt: "2026-11-16T18:01:00Z" } },
+const initialGuards: { name: string; patch: Partial<CustomerSmsInput>; exclusion: string }[] = [
+  { name: "outgoing event", patch: { direction: "outgoing" }, exclusion: "NOT_INCOMING" },
+  { name: "invalid session ID", patch: { sessionId: 0 }, exclusion: "INVALID_SESSION_ID" },
+  { name: "fallback provider message ID", patch: { providerMessageId: "cs-fallback-old" }, exclusion: "INVALID_MESSAGE_ID" },
+  { name: "empty receiving line ID", patch: { receivingPhoneNumberId: " " }, exclusion: "MISSING_RECEIVING_LINE" },
+  { name: "empty inbound text", patch: { inboundText: " " }, exclusion: "EMPTY_TEXT" },
+  { name: "noncanonical customer phone", patch: { fromPhone: "202-555-0123" }, exclusion: "INVALID_SENDER_PHONE" },
+  { name: "excluded sender", patch: { fromPhone: "+16505164957" }, exclusion: "EXCLUDED_SENDER" },
+  { name: "STOP text", patch: { inboundText: " STOP " }, exclusion: "STOP_REQUEST" },
+  { name: "unsubscribe text", patch: { inboundText: "unsubscribe" }, exclusion: "STOP_REQUEST" },
+  { name: "invalid created timestamp", patch: { createdAt: "2026-11-16" }, exclusion: "INVALID_TIMESTAMP" },
+  { name: "invalid receipt timestamp", patch: { receivedAt: NaN }, exclusion: "INVALID_TIMESTAMP" },
+  { name: "created before start", patch: { createdAt: "2026-11-15T18:00:00Z" }, exclusion: "BEFORE_START" },
+  { name: "received before start", patch: { receivedAt: at - 2000 }, exclusion: "BEFORE_START" },
+  { name: "created after receipt", patch: { createdAt: "2026-11-16T18:01:00Z" }, exclusion: "CREATED_AFTER_RECEIPT" },
 ];
-describe("original guard predicates without reason or outcome logs", () => {
+// The decision logic is unchanged; each exclusion now writes exactly one diagnostic line naming its rule.
+const excludedLine = (event: CustomerSmsInput, stage: string, exclusion: string) => ({
+  message: base.message, sessionId: Number.isSafeInteger(event.sessionId) && event.sessionId > 0 ? event.sessionId : null,
+  inboundMessageId: typeof event.providerMessageId === "string" && /^[A-Za-z0-9:_-]{1,160}$/.test(event.providerMessageId) ? event.providerMessageId : null,
+  stage, outcome: "excluded", reason: "EXCLUDED", exclusion,
+});
+describe("original guard predicates, each with exactly one exclusion reason line", () => {
   it("configuration disabled returns unchanged with zero logs or source, receipt or owner-alert work", async () => {
     const f = fixture(); f.config.mockReturnValue(null);
     expect(await f.run(input)).toEqual({ outcome: "disabled" });
@@ -360,50 +369,50 @@ describe("original guard predicates without reason or outcome logs", () => {
     noReply(f); expect(f.store.claim).not.toHaveBeenCalled(); expect(f.store.reportFailure).not.toHaveBeenCalled(); expect(f.onFailure).not.toHaveBeenCalled();
     expect(logSpy).not.toHaveBeenCalled();
   });
-  it.each(initialGuards)("initial event guard: $name stays excluded with zero logs before reads", async ({ patch }) => {
+  it.each(initialGuards)("initial event guard: $name stays excluded with one reason line before reads", async ({ patch, exclusion }) => {
     const f = fixture(), event = { ...input, ...patch };
     expect(await f.run(event)).toEqual({ outcome: "excluded" });
     expect(f.config.mock.calls).toEqual([[]]); expect(f.readSession).not.toHaveBeenCalled(); expect(f.readReceivingLine).not.toHaveBeenCalled();
     noReply(f); expect(f.store.claim).not.toHaveBeenCalled(); expect(f.store.reportFailure).not.toHaveBeenCalled(); expect(f.onFailure).not.toHaveBeenCalled();
-    expect(logSpy).not.toHaveBeenCalled();
+    expect(diagnostics()).toEqual([excludedLine(event, "dispatch", exclusion)]);
   });
 
-  const sessionGuards: { name: string; session: () => CustomerSmsSession | null }[] = [
-    { name: "session missing", session: () => null },
-    { name: "session ID mismatch", session: () => ({ ...snapshot(), contact: { ...snapshot().contact, sessionId: "99" } }) },
-    { name: "session phone mismatch", session: () => ({ ...snapshot(), contact: { ...snapshot().contact, phone: "+12025550124" } }) },
-    { name: "session raw phone mismatch", session: () => ({ ...snapshot(), contact: { ...snapshot().contact, rawPhone: "+12025550124" } }) },
-    { name: "session line mismatch", session: () => ({ ...snapshot(), lastInboundPhoneNumberId: "wrong" }) },
-    { name: "session opted out", session: () => ({ ...snapshot(), smsOptOut: 1 }) },
+  const sessionGuards: { name: string; session: () => CustomerSmsSession | null; exclusion: string }[] = [
+    { name: "session missing", session: () => null, exclusion: "SESSION_NOT_FOUND" },
+    { name: "session ID mismatch", session: () => ({ ...snapshot(), contact: { ...snapshot().contact, sessionId: "99" } }), exclusion: "SESSION_CONTACT_MISMATCH" },
+    { name: "session phone mismatch", session: () => ({ ...snapshot(), contact: { ...snapshot().contact, phone: "+12025550124" } }), exclusion: "SESSION_CONTACT_MISMATCH" },
+    { name: "session raw phone mismatch", session: () => ({ ...snapshot(), contact: { ...snapshot().contact, rawPhone: "+12025550124" } }), exclusion: "SESSION_CONTACT_MISMATCH" },
+    { name: "session line mismatch", session: () => ({ ...snapshot(), lastInboundPhoneNumberId: "wrong" }), exclusion: "RECEIVING_LINE_CHANGED" },
+    { name: "session opted out", session: () => ({ ...snapshot(), smsOptOut: 1 }), exclusion: "OPTED_OUT" },
   ];
-  it.each(sessionGuards)("session guard: $name stays excluded with only the prior read boundary", async ({ session }) => {
+  it.each(sessionGuards)("session guard: $name stays excluded with the prior read boundary and one reason line", async ({ session, exclusion }) => {
     const f = fixture(); f.readSession.mockResolvedValue(session());
     expect(await f.run(input)).toEqual({ outcome: "excluded" });
     expect(f.config.mock.calls).toEqual([[]]); expect(f.readSession.mock.calls).toEqual([[71]]); expect(f.readReceivingLine).not.toHaveBeenCalled();
     noReply(f); expect(f.store.claim).not.toHaveBeenCalled(); expect(f.store.reportFailure).not.toHaveBeenCalled(); expect(f.onFailure).not.toHaveBeenCalled();
-    expect(diagnostics()).toEqual([successfulDiagnostics[0]]);
+    expect(diagnostics()).toEqual([successfulDiagnostics[0], excludedLine(input, "session_read", exclusion)]);
   });
 
-  const currentTurnGuards: { name: string; history: () => unknown }[] = [
-    { name: "history parse failure", history: () => "invalid private JSON" },
-    { name: "history not array", history: () => JSON.stringify({ private: "not a history" }) },
-    { name: "invalid history turn", history: () => JSON.stringify([null, current()]) },
-    { name: "inbound ID not unique", history: () => JSON.stringify([current(), current()]) },
-    { name: "newer inbound turn", history: () => JSON.stringify([current(), { role: "user", content: "New private question", opMsgId: "newer" }]) },
-    { name: "inbound text mismatch", history: () => JSON.stringify([{ ...current(), content: "Different private text" }]) },
-    { name: "inbound ID conflict", history: () => JSON.stringify([{ ...current(), providerMessageId: "conflicting" }]) },
-    { name: "newer reply turn", history: () => JSON.stringify([current(), { role: "assistant", content: "Staff already answered" }]) },
-    { name: "turn session mismatch", history: () => JSON.stringify([{ ...current(), metadata: { sessionId: 99 } }]) },
-    { name: "turn line mismatch", history: () => JSON.stringify([{ ...current(), metadata: { receivingPhoneNumberId: "wrong" } }]) },
-    { name: "turn phone mismatch", history: () => JSON.stringify([{ ...current(), metadata: { fromPhone: "+12025550124" } }]) },
+  const currentTurnGuards: { name: string; history: () => unknown; exclusion: string }[] = [
+    { name: "history parse failure", history: () => "invalid private JSON", exclusion: "HISTORY_UNREADABLE" },
+    { name: "history not array", history: () => JSON.stringify({ private: "not a history" }), exclusion: "HISTORY_UNREADABLE" },
+    { name: "invalid history turn", history: () => JSON.stringify([null, current()]), exclusion: "HISTORY_UNREADABLE" },
+    { name: "inbound ID not unique", history: () => JSON.stringify([current(), current()]), exclusion: "MESSAGE_ID_REPEATED" },
+    { name: "newer inbound turn", history: () => JSON.stringify([current(), { role: "user", content: "New private question", opMsgId: "newer" }]), exclusion: "LATER_CUSTOMER_MESSAGE" },
+    { name: "inbound text mismatch", history: () => JSON.stringify([{ ...current(), content: "Different private text" }]), exclusion: "TEXT_CHANGED" },
+    { name: "inbound ID conflict", history: () => JSON.stringify([{ ...current(), providerMessageId: "conflicting" }]), exclusion: "MESSAGE_HAS_MULTIPLE_IDS" },
+    { name: "newer reply turn", history: () => JSON.stringify([current(), { role: "assistant", content: "Staff already answered" }]), exclusion: "LATER_REPLY_EXISTS" },
+    { name: "turn session mismatch", history: () => JSON.stringify([{ ...current(), metadata: { sessionId: 99 } }]), exclusion: "MESSAGE_ENVELOPE_MISMATCH" },
+    { name: "turn line mismatch", history: () => JSON.stringify([{ ...current(), metadata: { receivingPhoneNumberId: "wrong" } }]), exclusion: "MESSAGE_ENVELOPE_MISMATCH" },
+    { name: "turn phone mismatch", history: () => JSON.stringify([{ ...current(), metadata: { fromPhone: "+12025550124" } }]), exclusion: "MESSAGE_ENVELOPE_MISMATCH" },
   ];
-  it.each(currentTurnGuards)("current-turn predicate: $name stays excluded without a reason log", async ({ history }) => {
+  it.each(currentTurnGuards)("current-turn predicate: $name stays excluded with one reason line", async ({ history, exclusion }) => {
     const f = fixture(); f.readSession.mockResolvedValue({ ...snapshot(), messageHistory: history() });
     expect(await f.run(input)).toEqual({ outcome: "excluded" });
     expect(f.config.mock.calls).toEqual([[]]); expect(f.readSession.mock.calls).toEqual([[71]]);
     expect(f.readReceivingLine).not.toHaveBeenCalled(); noReply(f);
     expect(f.store.claim).not.toHaveBeenCalled(); expect(f.store.reportFailure).not.toHaveBeenCalled(); expect(f.onFailure).not.toHaveBeenCalled();
-    expect(diagnostics()).toEqual([successfulDiagnostics[0]]);
+    expect(diagnostics()).toEqual([successfulDiagnostics[0], excludedLine(input, "session_read", exclusion)]);
   });
 });
 
@@ -436,11 +445,11 @@ describe("offline application database-acquisition diagnostics", () => {
     expect(application.imported).not.toHaveBeenCalled(); expect(application.getDb).not.toHaveBeenCalled(); expect(application.notifyOwner).not.toHaveBeenCalled();
     expect(logSpy).not.toHaveBeenCalled();
   });
-  it("invalid application phone is excluded with zero logs, no DB acquisition and no owner alert", async () => {
+  it("invalid application phone is excluded with one reason line, no DB acquisition and no owner alert", async () => {
     vi.stubEnv("CLAUDE_CUSTOMER_SMS_ENABLED", "true");
     expect(await dispatchClaudeCustomerSms({ ...input, fromPhone: "Jane +12025550123" })).toEqual({ outcome: "excluded" });
     expect(application.imported).not.toHaveBeenCalled(); expect(application.getDb).not.toHaveBeenCalled(); expect(application.notifyOwner).not.toHaveBeenCalled();
-    expect(logSpy).not.toHaveBeenCalled();
+    expect(diagnostics()).toEqual([excludedLine(input, "dispatch", "PHONE_INELIGIBLE")]);
   });
   it.each([false, true])("a throwing logger preserves DB-null/throw outcome and one owner alert (throw=%s)", async throws => {
     vi.stubEnv("CLAUDE_CUSTOMER_SMS_ENABLED", "true");
