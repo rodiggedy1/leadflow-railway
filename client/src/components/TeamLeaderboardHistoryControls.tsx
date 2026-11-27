@@ -83,8 +83,12 @@ export function TeamLeaderboardAdminReviewControls({ agentId, weekStart, accessR
   const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, throwOnError: false, staleTime: 0 });
   const validWeek = isSundayWeek(weekStart);
   const currentStaff = accessReady && !meQuery.isError && !meQuery.isLoading && meQuery.data?.isAdmin === true && meQuery.data.id === agentId;
-  const runsQuery = trpc.leadflowJobs.leaderboard.history.reviewRuns.useQuery({ weekStart }, { ...queryOptions, enabled: currentStaff && validWeek });
-  const draftQuery = trpc.leadflowJobs.leaderboard.history.reviewDraft.useQuery({ reviewId: reviewId || EMPTY_REVIEW_ID }, { ...queryOptions, enabled: currentStaff && Boolean(reviewId) });
+  // While a run is reading/reviewing, refresh it every few seconds so progress is visible without clicking.
+  const activeRun = (status: string | undefined) => status === "reading" || status === "reviewing";
+  const runsQuery = trpc.leadflowJobs.leaderboard.history.reviewRuns.useQuery({ weekStart }, { ...queryOptions, enabled: currentStaff && validWeek,
+    refetchInterval: query => query.state.data?.runs.some(run => activeRun(run.status)) ? 5000 : false });
+  const draftQuery = trpc.leadflowJobs.leaderboard.history.reviewDraft.useQuery({ reviewId: reviewId || EMPTY_REVIEW_ID }, { ...queryOptions, enabled: currentStaff && Boolean(reviewId),
+    refetchInterval: query => activeRun(query.state.data?.status) ? 4000 : false });
   const startMutation = trpc.leadflowJobs.leaderboard.history.startReview.useMutation({ retry: false });
   const publishMutation = trpc.leadflowJobs.leaderboard.history.publishReview.useMutation({ retry: false });
   const runs = !runsQuery.isError && !runsQuery.isLoading && runsQuery.data?.agentId === agentId && runsQuery.data.runs.every(run => run.weekStart === weekStart) ? runsQuery.data.runs : null;
@@ -131,7 +135,7 @@ export function TeamLeaderboardAdminReviewControls({ agentId, weekStart, accessR
           await confirmStaff();
           const fresh = await draftQuery.refetch();
           if (fresh.isError || !fresh.data || fresh.data.agentId !== agentId || fresh.data.id !== input.reviewId || fresh.data.weekStart !== weekStart || fresh.data.updatedAtMs !== draft.updatedAtMs || fresh.data.expectedPublicationId !== input.expectedPublicationId) throw new Error("The publication or draft changed. Review the refreshed draft and acknowledge limitations again before publishing.");
-          if (!fresh.data.counts?.complete || !fresh.data.progress?.completeReview || !fresh.data.outcome?.validOutput || !["completed", "incomplete"].includes(fresh.data.status)) throw new Error("The refreshed draft is not ready to publish. Previous results are unchanged.");
+          if (!fresh.data.counts?.complete || !fresh.data.progress?.completeReview || !fresh.data.outcome || !["completed", "incomplete"].includes(fresh.data.status)) throw new Error("The refreshed draft is not ready to publish. Previous results are unchanged.");
           const result = await publishMutation.mutateAsync(input);
           if (result.agentId !== agentId || result.id !== input.reviewId || result.weekStart !== weekStart) throw new Error("Publication identity could not be confirmed. Refresh published history.");
           await Promise.all([draftQuery.refetch(), runsQuery.refetch(), onPublished()]);

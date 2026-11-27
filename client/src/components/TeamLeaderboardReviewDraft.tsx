@@ -7,6 +7,28 @@ import "./team-leaderboard-history.css";
 type Draft = inferRouterOutputs<AppRouter>["leadflowJobs"]["leaderboard"]["history"]["reviewDraft"];
 type Decision = ReviewPublish["decisions"][number];
 
+const STAGE_LABELS: Record<string, string> = {
+  reading_communications: "reading this week's messages and calls", counting_jobs: "counting jobs, ETAs and photos",
+  saving: "saving the results", ai_review: "the AI complaint review",
+};
+/** Plain-language explanation for the fixed failure codes (never a provider or database message). */
+export function explainReviewFailure(code: string): string {
+  if (code.includes("MISSING_API_KEY")) return "The AI review key is not set up on this server, so the AI step could not start.";
+  if (code.includes("TIMED_OUT")) return "The AI review reached its 20-minute time limit and was stopped.";
+  if (code.includes("INTERRUPTED")) return "The server restarted while this review was running. It will not resume; run a new review.";
+  if (code.includes("CANCELLED")) return "The AI review was cancelled before it finished.";
+  if (code.includes("PROVIDER_HTTP_ERROR") || code.includes("PROVIDER_TRANSPORT_ERROR") || code.includes("PROVIDER_SESSION_ERROR")) return "The AI service returned an error or could not be reached.";
+  if (code.includes("INCOMPLETE_TURN")) return "The AI review ended before reading everything.";
+  if (code.includes("READ_FAILED")) return "This week's messages and calls could not be read.";
+  if (code.includes("COUNTS_FAILED")) return "The job, ETA and photo counts could not be read.";
+  if (code.includes("SAVE_FAILED")) return "The review results could not be saved.";
+  return "The review stopped before finishing.";
+}
+function elapsed(fromMs: number, toMs: number): string {
+  const seconds = Math.max(0, Math.round((toMs - fromMs) / 1000));
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)} min ${seconds % 60}s`;
+}
+
 export function TeamLeaderboardReviewDraft({ draft, agentId, busy = false, error, onPublish }: {
   draft: Draft;
   agentId: number;
@@ -25,7 +47,7 @@ export function TeamLeaderboardReviewDraft({ draft, agentId, busy = false, error
   const blocks = [
     ...(!draft.counts?.complete ? ["Job/submission counts are incomplete."] : []),
     ...(!draft.progress?.completeReview ? ["The communication review is not complete."] : []),
-    ...(!draft.outcome?.validOutput ? ["The review output is unavailable or invalid."] : []),
+    ...(!draft.outcome ? ["The review output is unavailable or invalid."] : []),
     ...(!["completed", "incomplete"].includes(draft.status) ? ["This saved run is not ready for publication."] : []),
     ...(decisions.length !== groups.length || groups.some(group => !decisions.some(decision => decision.visitId === group.visitId && decision.teamId === group.teamId)) ? ["Decisions do not cover the captured groups. Reload this draft."] : []),
     ...(decisions.some(decision => decision.completedRecovery && !decision.outcomeNote.trim()) ? ["Every completed recovery requires an outcome note."] : []),
@@ -37,7 +59,13 @@ export function TeamLeaderboardReviewDraft({ draft, agentId, busy = false, error
   return <section className="tl-history-draft" aria-label="Saved review draft">
     <div className="tl-history-heading"><div><h3>{published ? "Published review" : "Unpublished review draft"}</h3><p>Sunday {draft.weekStart} · {draft.status}</p></div><span className="tl-history-tag">{published ? "Published" : "Not published"}</span></div>
     <p className="tl-history-id">Saved review: {draft.id}</p>
-    {!published && ["reading", "reviewing"].includes(draft.status) && <p role="status">{draft.runningHere ? "Review is running. Refresh the draft to check progress." : "This saved run is not running on this server. It will not resume automatically. You may intentionally run a new review."}</p>}
+    {!published && ["reading", "reviewing"].includes(draft.status) && <div className="tl-history-progress" role="status">
+      <p><strong>{draft.status === "reading" ? "Step 1 of 2: reading this week's jobs, messages and calls…" : "Step 2 of 2: AI complaint review in progress…"}</strong> Running for {elapsed(draft.createdAtMs, Date.now())} (stops automatically after 20 minutes). This page updates every few seconds.</p>
+      {draft.progress && <p>{draft.progress.coverage ? `${draft.progress.coverage.deliveredEligibleCount} of ${draft.progress.coverage.eligibleTotal} messages/calls read by the AI · ` : ""}{draft.progress.progress?.toolsAcknowledged ?? 0} reading steps done</p>}
+      {!draft.runningHere && <p>This run is not running on this server. If it does not move within a few minutes it will be marked as interrupted.</p>}
+    </div>}
+    {draft.failure && <div className="tl-history-error" role="alert"><strong>Run review stopped during {STAGE_LABELS[draft.failure.stage] ?? draft.failure.stage}.</strong><p>{explainReviewFailure(draft.failure.code)}</p><p>Error code: {draft.failure.code}</p></div>}
+    {draft.readOmitted && <p role="status">The captured messages were too large to keep with this saved run; the counts and review results are saved.</p>}
     <div className="tl-history-warnings">
       <h4>Coverage and limitations</h4>
       <p>{draft.counts?.complete ? "Job/submission count read complete." : "Job/submission counts unavailable or incomplete; partial counts are not proven zeros."} {draft.progress?.completeReview ? "Eligible retained communications reviewed." : "Communication review incomplete."}</p>
@@ -47,7 +75,7 @@ export function TeamLeaderboardReviewDraft({ draft, agentId, busy = false, error
       <h4>Unmatched reports: {unmatched.length}</h4>
       <p>Unmatched reports have no team deduction. Review the unresolved association and coverage warnings before publishing.</p>
       {unmatched.map((match, i) => <article key={`${match.candidate.evidenceId}:${i}`}><strong>{match.candidate.summary}</strong><p>{match.reviewReasons.join("; ") || "Affected service/team needs review."}</p>{match.limitations.length > 0 && <p>{match.limitations.join("; ")}</p>}</article>)}
-      {(draft.outcome?.rejectedCandidateCount ?? 0) > 0 && <p role="alert">Rejected candidates: {draft.outcome!.rejectedCandidateCount}. Invalid output cannot be published.</p>}
+      {(draft.outcome?.rejectedCandidateCount ?? 0) > 0 && <p role="status">{draft.outcome!.rejectedCandidateCount} AI suggestion{draft.outcome!.rejectedCandidateCount === 1 ? "" : "s"} could not be checked against the original message and {draft.outcome!.rejectedCandidateCount === 1 ? "was" : "were"} left out. The rest of the review can still be published.</p>}
     </div>
     {draft.counts && <section className="tl-history-counts" aria-label="Captured job and submission counts">
       <h4>Captured job and submission counts</h4>

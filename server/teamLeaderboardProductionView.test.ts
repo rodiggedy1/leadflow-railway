@@ -64,7 +64,7 @@ describe("approved weekly production view — synthetic SSR only", () => {
     });
     const html = render(p, details);
     expect(html).toContain('<div class="tl-score-line"><strong>90.75</strong>');
-    expect(html).toContain("Sum of category scores · 100 available points");
+    expect(html).toContain("Out of 100 · based on 100 available points");
     expect(html).toMatch(/data-summary="complaints"[\s\S]*?<strong>1<\/strong><small>23\.75 \/ 25 pts<\/small>/);
     expect(html).toMatch(/data-summary="recovery"[\s\S]*?<strong>0<\/strong><small>20 \/ 20 pts<\/small>/);
     expect(html).toMatch(/data-summary="eta"[\s\S]*?<strong>18 \/ 20<\/strong><small>13\.5 \/ 15 pts<\/small>/);
@@ -109,15 +109,16 @@ describe("approved weekly production view — synthetic SSR only", () => {
     }
   });
 
-  it("leaves unavailable ratings N/A and displays a 70-available-point category sum without normalizing", () => {
+  it("leaves unavailable ratings N/A and scores the 70 available points out of 100", () => {
     const team = row();
     team.metrics.ratings = { successful: 0, eligible: 0, complete: true };
     const details = { own: detail() };
     details.own.metricDisplay.ratings = { value: "Not available", unit: "No ratings received", note: "No received ratings" };
-    expect(rankAssessedScores([team], details)[0]).toMatchObject({ score: { points: { ratings: null } }, totalScore: 66.75, availablePoints: 70, rank: 1 });
+    // Same category points (66.75 of the 70 that apply); the total is 66.75 / 70 = 95.36 out of 100.
+    expect(rankAssessedScores([team], details)[0]).toMatchObject({ score: { points: { ratings: null } }, totalScore: 95.36, availablePoints: 70, rank: 1 });
     const html = render(publication([team]), details, "own");
-    expect(html).toContain('<div class="tl-score-line"><strong>66.75</strong>');
-    expect(html).toContain("Sum of category scores · 70 available points");
+    expect(html).toContain('<div class="tl-score-line"><strong>95.36</strong>');
+    expect(html).toContain("Out of 100 · based on 70 available points");
     expect(html).toContain('<div class="tl-category-points tl-points-pending"><strong>N/A</strong>');
     expect(html).toContain('<strong class="tl-metric-value tl-value-missing">Not available</strong>');
   });

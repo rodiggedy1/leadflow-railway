@@ -23,4 +23,14 @@ describe("weekly history runtime remains passive and isolated", () => {
     "SELECT `id` FROM `leadflow_jobs` UNION SELECT `id` FROM `bookings`",
     "SELECT `id` FROM `leadflow_jobs` /* hidden */",
   ])("rejects unrelated, unsafe or non-read access: %s", query => { expect(() => assertTeamHistoryCountSelect(query)).toThrow("WEEK_COUNTS_INVALID_QUERY"); });
+  it("accepts every query the real count reader sends (including the sign-off completion read)", async () => {
+    const { readTeamLeaderboardCounts } = await import("./teamLeaderboardHistoryMetrics");
+    const { resolveTeamEvidenceWindow } = await import("./teamLeaderboardEvidenceWindow");
+    const sent: string[] = [];
+    const port = { select: async (query: string) => { assertTeamHistoryCountSelect(query); sent.push(query); return []; } };
+    const counts = await readTeamLeaderboardCounts(port, resolveTeamEvidenceWindow({ weekStart: "2026-11-15" }, new Date("2026-11-20T17:00:00Z")));
+    expect(counts.complete).toBe(true);
+    expect(sent.some(query => query.includes("FROM `cleaner_portal_job_signoffs`"))).toBe(true);
+    expect(sent).toHaveLength(5);
+  });
 });

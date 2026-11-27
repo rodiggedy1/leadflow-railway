@@ -6,7 +6,8 @@ import { createTeamEvidenceService } from "./teamLeaderboardEvidenceService";
 import { readTeamLeaderboardCounts } from "./teamLeaderboardHistoryMetrics";
 import type { SelectPort, SqlRow, SqlValue } from "./instinct/readDb";
 
-const allowed = new Set(["leadflow_jobs", "cleaner_portal_job_progress", "cleaner_portal_job_photos", "scheduling_teams"]);
+// Sign-offs are read-only completion evidence for jobs dated today (Phase 1).
+const allowed = new Set(["leadflow_jobs", "cleaner_portal_job_progress", "cleaner_portal_job_photos", "cleaner_portal_job_signoffs", "scheduling_teams"]);
 export function assertTeamHistoryCountSelect(query: string): void {
   if (!/^SELECT\s/i.test(query) || /[;'"\\#@]|--|\/\*|\*\/|:=/.test(query)
     || /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE|TRUNCATE|CALL|INTO|FOR|LOCK|UNION|SLEEP|LOAD_FILE)\b/i.test(query)) throw new Error("WEEK_COUNTS_INVALID_QUERY");

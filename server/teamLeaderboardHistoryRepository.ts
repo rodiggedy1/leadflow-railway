@@ -4,6 +4,8 @@ import type { TeamEvidenceAuditRead } from "./teamLeaderboardEvidenceService";
 import type { TeamWeeklyReviewOutcome, TeamWeeklyReviewStatus } from "./teamWeeklyReviewService";
 import type { TeamWeekCounts } from "./teamLeaderboardHistoryMetrics";
 
+/** Where a Run review stopped and a fixed, safe code (never a provider/database message). */
+export type ReviewFailure = { stage: "reading_communications" | "counting_jobs" | "saving" | "ai_review"; code: string; atMs: number };
 export type ReviewRecord = {
   id: string;
   weekStart: string;
@@ -12,7 +14,7 @@ export type ReviewRecord = {
   updatedAtMs: number;
   status: string;
   progress: TeamWeeklyReviewStatus | null;
-  payload: { read?: TeamEvidenceAuditRead; counts?: TeamWeekCounts; outcome?: TeamWeeklyReviewOutcome };
+  payload: { read?: TeamEvidenceAuditRead; counts?: TeamWeekCounts; outcome?: TeamWeeklyReviewOutcome; failure?: ReviewFailure; readOmitted?: true };
   publication: HistorySnapshot | null;
   publishedAtMs: number | null;
   publishedBy: number | null;

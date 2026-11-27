@@ -103,9 +103,11 @@ describe("captured weekly review verifiable completion", () => {
           return result([proposed]);
         }, now,
       });
-      expect(status).toMatchObject({ status: "incomplete", completeReview: false,
+      // Rejected candidates are excluded (never matched or scored) and recorded; they do not block completion.
+      expect(status).toMatchObject({ completeReview: kind !== "undelivered",
         error: { code: "WEEKLY_REVIEW_INVALID_CANDIDATE" },
-        outcome: { candidates: [], rejectedCandidateCount: 1, validOutput: false } });
+        outcome: { candidates: [], matches: [], rejectedCandidateCount: 1, validOutput: false } });
+      if (kind === "undelivered") expect(status.status).toBe("incomplete");
     });
 
   it("validates only actually delivered exact revisions while preserving matcher conflicts over the full snapshot", async () => {

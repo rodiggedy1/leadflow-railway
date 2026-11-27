@@ -23,7 +23,15 @@ Return ONLY strict JSON {"candidates":[{"evidenceId":"exact original source id",
 export type TeamWeeklyReviewStage = "reading" | "reviewing" | "completed" | "incomplete" | "failed";
 export type TeamWeeklyReviewErrorCode = "WEEKLY_REVIEW_INVALID_INPUT" | "WEEKLY_REVIEW_NOT_FOUND_OR_STALE"
   | "WEEKLY_REVIEW_READ_FAILED" | "WEEKLY_REVIEW_RUN_FAILED" | "WEEKLY_REVIEW_INCOMPLETE_TURN"
-  | "WEEKLY_REVIEW_INVALID_OUTPUT" | "WEEKLY_REVIEW_INVALID_CANDIDATE";
+  | "WEEKLY_REVIEW_INVALID_OUTPUT" | "WEEKLY_REVIEW_INVALID_CANDIDATE" | "WEEKLY_REVIEW_TIMED_OUT";
+/** Upper bound for one review session; the session is cancelled when it is reached. */
+export const TEAM_WEEKLY_REVIEW_TIME_LIMIT_MS = 20 * 60 * 1000;
+const SAFE_DETAIL = /^[A-Z][A-Z_]{2,40}$/;
+/** Only the transport's fixed error code (never a message, body or key) is kept, e.g. MISSING_API_KEY. */
+function safeErrorDetail(error: unknown): string | undefined {
+  const code = error !== null && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined;
+  return typeof code === "string" && SAFE_DETAIL.test(code) ? code : undefined;
+}
 export type TeamWeeklyReviewStart = { reviewId: string; status: TeamWeeklyReviewStage; weekStart: string };
 export type TeamWeeklyReviewCoverage = {
   eligibleTotal: number; deliveredEligibleCount: number; completeDelivery: boolean;
@@ -49,7 +57,7 @@ export type TeamWeeklyReviewStatus = TeamWeeklyReviewStart & {
     lastEventId: string | null; lastTrace: Pick<TraceEntry, "stage" | "sessionId" | "providerEventId" | "toolName" | "status"> | null;
   };
   outcome: TeamWeeklyReviewOutcome | null;
-  error: { code: TeamWeeklyReviewErrorCode } | null;
+  error: { code: TeamWeeklyReviewErrorCode; detail?: string } | null;
 };
 export type TeamWeeklyReviewOptions = {
   readWeek: (input: TeamEvidenceWeekInput) => Promise<TeamEvidenceAuditRead>;
@@ -68,6 +76,8 @@ export type TeamWeeklyReviewSnapshotOptions = {
    * event/tool/model text. The final status includes the unpublished outcome. */
   onProgress?: (status: TeamWeeklyReviewStatus) => Promise<void> | void;
   now?: () => Date;
+  /** Bounded execution: the session is cancelled after this many milliseconds (default 20 minutes). */
+  timeLimitMs?: number;
 };
 function initialStatus(weekStart: string, timestamp: string): TeamWeeklyReviewStatus {
   return {
@@ -103,6 +113,11 @@ export async function reviewTeamCommunicationSnapshot(
   };
   let context: ReturnType<typeof createTeamWeeklyReviewContext> | undefined;
   let provenanceWarnings: string[] = [];
+  const reviewWarnings: string[] = [];
+  const timeout = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; timeout.abort(); }, options.timeLimitMs ?? TEAM_WEEKLY_REVIEW_TIME_LIMIT_MS);
+  timer.unref?.();
   function coverage() {
     if (!context) return;
     const observed = context.getCoverage();
@@ -116,6 +131,7 @@ export async function reviewTeamCommunicationSnapshot(
     };
     value.warnings = Array.from(new Set([
       ...provenanceWarnings,
+      ...reviewWarnings,
       "retained_snapshot_only_provider_coverage_unverified",
       ...Object.keys(gapCounts).map(reason => `coverage_gap_${reason}`),
       ...(!observed.completeDelivery ? ["eligible_source_delivery_incomplete"] : []),
@@ -145,7 +161,7 @@ export async function reviewTeamCommunicationSnapshot(
     value.status = "reviewing"; value.updatedAtUtc = clock();
     if (options.onProgress) { const pending = report(); if (pending) await pending; }
     const result: RunResult = await (options.run ?? runWeeklyCommunicationReview)({
-      reviewOnly: true, backend: context.backend, systemPrompt: TEAM_WEEKLY_REVIEW_INSTRUCTIONS,
+      reviewOnly: true, backend: context.backend, systemPrompt: TEAM_WEEKLY_REVIEW_INSTRUCTIONS, signal: timeout.signal,
       reviewPayload: JSON.stringify({ weekStart: week.weekStart, mode: "unpublished_candidates",
         instructions: "Read the manifest and completely paginate all four communication channels before returning strict candidate JSON. This payload contains no evidence; use only the read-only snapshot tools." }),
       onEvent: async event => {
@@ -205,18 +221,24 @@ export async function reviewTeamCommunicationSnapshot(
     value.outcome = { candidates, matches, visitGroups: groupTeamComplaintVisits(matches),
       validOutput: rejectedCandidateCount === 0, rejectedCandidateCount,
       verifiedComplaintCount: null, verifiedRecleanRefundCount: null, publication: null, scoreResults: null };
+    // A rejected AI suggestion (quote or source that does not check out) is left out and shown as a
+    // warning; it no longer blocks the whole week. Accepted candidates are still matched by server code.
+    if (rejectedCandidateCount) {
+      reviewWarnings.push(`rejected_candidates_excluded_${rejectedCandidateCount}`);
+      value.error = { code: "WEEKLY_REVIEW_INVALID_CANDIDATE" }; // informational: recorded, not blocking
+    }
     value.completeReview = value.coverage!.completeDelivery && value.coverage!.manifestRequested
-      && Object.values(value.coverage!.channels).every(channel => channel.checked && channel.exhausted)
-      && value.outcome.validOutput;
+      && Object.values(value.coverage!.channels).every(channel => channel.checked && channel.exhausted);
     value.status = value.completeReview && value.provenanceComplete ? "completed" : "incomplete";
-    if (rejectedCandidateCount) value.error = { code: "WEEKLY_REVIEW_INVALID_CANDIDATE" };
   } catch (error) {
     const earlyEnd = error !== null && typeof error === "object" && "code" in error && error.code === "INCOMPLETE_TURN";
     value.status = earlyEnd ? "incomplete" : "failed";
-    value.error = { code: earlyEnd ? "WEEKLY_REVIEW_INCOMPLETE_TURN"
-      : context ? "WEEKLY_REVIEW_RUN_FAILED" : "WEEKLY_REVIEW_READ_FAILED" };
+    const detail = safeErrorDetail(error);
+    value.error = { code: timedOut ? "WEEKLY_REVIEW_TIMED_OUT" : earlyEnd ? "WEEKLY_REVIEW_INCOMPLETE_TURN"
+      : context ? "WEEKLY_REVIEW_RUN_FAILED" : "WEEKLY_REVIEW_READ_FAILED", ...(detail ? { detail } : {}) };
     value.completeReview = false;
   } finally {
+    clearTimeout(timer);
     finished = true;
     coverage(); value.updatedAtUtc = clock();
     // Persistence failure is not another progress event. Stop and reject safely;
