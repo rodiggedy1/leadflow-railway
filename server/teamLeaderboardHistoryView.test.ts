@@ -298,6 +298,15 @@ describe("explicit draft adjudication — synthetic SSR only", () => {
         expect(emptyHtml).toContain('type="submit" class="tl-history-primary">Publish reviewed results');
         noWrites();
     });
+    it("shows rejected AI suggestions as left out without blocking Publish", () => {
+        const value = draft();
+        value.outcome.validOutput = false;
+        value.outcome.rejectedCandidateCount = 2;
+        const html = render(React.createElement(TeamLeaderboardReviewDraft, { draft: value, agentId: 44, onPublish: publish }), [decisions, true]);
+        expect(html).toContain("2 AI suggestions could not be checked against the original message and were left out.");
+        expect(html).not.toContain("Publish unavailable");
+        noWrites();
+    });
     it.each(["counts", "review", "output", "failed", "recovery note", "missing decisions"])("blocks explicit Publish when %s is incomplete/invalid", kind => {
         const value = draft();
         let chosen = decisions;
@@ -306,7 +315,7 @@ describe("explicit draft adjudication — synthetic SSR only", () => {
         if (kind === "review")
             value.progress.completeReview = false;
         if (kind === "output")
-            value.outcome.validOutput = false;
+            value.outcome = null;
         if (kind === "failed")
             value.status = "failed";
         if (kind === "recovery note")
@@ -333,7 +342,7 @@ describe("explicit draft adjudication — synthetic SSR only", () => {
     });
     it("keeps an interrupted run visible but unpublishable and never automatically resumes it", () => {
         const html = render(React.createElement(TeamLeaderboardReviewDraft, { draft: draft({ status: "reviewing", runningHere: false }), agentId: 44, onPublish: publish }), [decisions, true]);
-        expect(html).toContain("It will not resume automatically");
+        expect(html).toContain("This run is not running on this server.");
         expect(html).toContain("Publish unavailable");
         noWrites();
     });

@@ -102,11 +102,15 @@ describe("durable weekly review lifecycle — no real I/O", () => {
     await expect(env.service.publish(42, publish(another))).rejects.toThrow("PUBLICATION_CONFLICT");
     expect(env.pointers.get("2026-11-15")).toBe(id);
   });
-  it.each(["counts", "delivery", "output"])("blocks publication for incomplete %s and preserves prior results", async reason => {
+  it("publishes with rejected AI suggestions excluded instead of blocking the week", async () => {
+    const env = setup(); env.result.outcome!.validOutput = false; env.result.outcome!.rejectedCandidateCount = 1;
+    await env.service.start(42, { requestId: id, weekStart: "2026-11-15" }); await settled(env);
+    await expect(env.service.publish(42, publish())).resolves.toMatchObject({ id, weekStart: "2026-11-15" });
+  });
+  it.each(["counts", "delivery"])("blocks publication for incomplete %s and preserves prior results", async reason => {
     const env = setup();
     if (reason === "counts") env.counts.complete = false;
     if (reason === "delivery") env.result.completeReview = false;
-    if (reason === "output") env.result.outcome!.validOutput = false;
     await env.service.start(42, { requestId: id, weekStart: "2026-11-15" }); await settled(env);
     await expect(env.service.publish(42, publish())).rejects.toThrow("WEEK_REVIEW_NOT_READY");
     expect(await env.service.published()).toEqual(baseline);

@@ -3,6 +3,7 @@ import { TEAM_SCORE_METRICS, type MetricEvidence, type TeamLeaderboardRow, type 
 import type { TeamLeaderboardDetails, TeamLeaderboardPeriod } from "../shared/teamLeaderboardPublication";
 import type { TeamComplaintMatch, TeamComplaintVisitGroup, TeamEvidenceWindow } from "../shared/teamLeaderboardEvidence";
 import { isValidBookingRescheduleDate, shiftBookingDate } from "../shared/bookingReschedule";
+import { easternDateIso } from "../shared/easternTime";
 import type { SelectPort, SqlRow, SqlValue } from "./instinct/readDb";
 import { safeReadDbError } from "./instinct/readDb";
 import type { TeamLeaderboardSnapshot } from "./teamLeaderboardPublication";
@@ -19,6 +20,8 @@ const BATCH = 100;
 const TEAMS_SQL = "SELECT `id`, `name`, `launch27TeamId` FROM `scheduling_teams` WHERE `id` > ? ORDER BY `id` ASC LIMIT ?";
 const JOBS_SQL = "SELECT `id`, `origin`, `bookingId`, `launch27BookingId`, `jobDate`, `bookingStatus`, `teamId`, `customerRating` FROM `leadflow_jobs` WHERE `id` > ? AND `jobDate` >= ? AND `jobDate` <= ? ORDER BY `id` ASC LIMIT ?";
 const ETA_SQL = "SELECT p.`id`, p.`leadflowJobId`, p.`etaTimestamp` FROM `cleaner_portal_job_progress` p JOIN `leadflow_jobs` j ON j.`id` = p.`leadflowJobId` WHERE p.`id` > ? AND j.`jobDate` >= ? AND j.`jobDate` <= ? ORDER BY p.`id` ASC LIMIT ?";
+// Completion evidence for jobs dated today or later: the cleaner's portal sign-off (one per job).
+const SIGNOFFS_SQL = "SELECT s.`id`, s.`leadflowJobId` FROM `cleaner_portal_job_signoffs` s JOIN `leadflow_jobs` j ON j.`id` = s.`leadflowJobId` WHERE s.`id` > ? AND j.`jobDate` >= ? AND j.`jobDate` <= ? ORDER BY s.`id` ASC LIMIT ?";
 const PHOTOS_SQL = "SELECT p.`id`, p.`leadflowJobId`, p.`photoUrl` FROM `cleaner_portal_job_photos` p JOIN `leadflow_jobs` j ON j.`id` = p.`leadflowJobId` WHERE p.`id` > ? AND j.`jobDate` >= ? AND j.`jobDate` <= ? ORDER BY p.`id` ASC LIMIT ?";
 const tombstones = new Set(["canceled", "cancelled", "missing_from_launch27", "rescheduled"]);
 const count = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -74,12 +77,24 @@ export async function readTeamLeaderboardCounts(port: SelectPort, window: TeamEv
     metrics: Object.fromEntries(TEAM_SCORE_METRICS.map(({ key }) => [key, evidence()])) as TeamLeaderboardRow["metrics"] }));
   const byId = new Map(teams.map(team => [team.id, team]));
   const jobs = new Map<number, TeamLeaderboardRow>();
-  let mappingComplete = true;
+  // Unmapped jobs are flagged for staff and never make the week incomplete; every other team is still ranked.
+  let unmapped = 0, notYetCompleted = 0;
   const dates = [window.weekStart, window.throughDate];
+  // Today in US Eastern at the run's capture instant: jobs dated today or later count only with completion evidence.
+  const today = easternDateIso(new Date(window.capturedAtUtc));
+  const signedOff = new Set<number>();
+  const signoffsComplete = await scan(port, SIGNOFFS_SQL, dates, row => {
+    requireFields(row, ["leadflowJobId"]);
+    signedOff.add(identity(row.leadflowJobId));
+  }, "Owned sign-off records", warnings);
   const jobsComplete = await scan(port, JOBS_SQL, dates, row => {
     requireFields(row, ["origin", "bookingId", "launch27BookingId", "jobDate", "bookingStatus", "teamId", "customerRating"]);
     if (!isValidBookingRescheduleDate(String(row.jobDate)) || String(row.jobDate) < window.weekStart || String(row.jobDate) > window.throughDate || typeof row.bookingStatus !== "string" || typeof row.origin !== "string") throw new Error("INVALID_JOB");
     if (tombstones.has(row.bookingStatus.toLowerCase())) return;
+    if (String(row.jobDate) >= today && row.bookingStatus.trim().toLowerCase() !== "completed" && !signedOff.has(identity(row.id))) {
+      notYetCompleted++;
+      return;
+    }
     if (row.launch27BookingId !== null) identity(row.launch27BookingId);
     if (row.bookingId !== null) identity(row.bookingId);
     // Same namespace distinction as the existing evidence reader: imported recurrence retains its Launch27 team ID.
@@ -87,8 +102,8 @@ export async function readTeamLeaderboardCounts(port: SelectPort, window: TeamEv
     const rawId = row.teamId === null ? null : identity(row.teamId);
     const matches = roster.filter(team => imported ? team.launch27TeamId === rawId && rawId !== null : team.id === rawId);
     if (!rosterComplete || matches.length !== 1) {
-      mappingComplete = false;
-      warnings.push(`Job ${identity(row.id)}: ${imported ? "launch27TeamId" : "roster.id"} assignment ${rawId ?? "unassigned"} has unavailable/missing/ambiguous roster mapping; not attributed.`);
+      unmapped++;
+      warnings.push(`Unmapped job ${identity(row.id)}: ${imported ? "launch27TeamId" : "roster.id"} assignment ${rawId ?? "unassigned"} has unavailable/missing/ambiguous roster mapping; not attributed to any team (staff review).`);
       return;
     }
     const team = byId.get(String(matches[0].id))!;
@@ -114,7 +129,9 @@ export async function readTeamLeaderboardCounts(port: SelectPort, window: TeamEv
     if (row.photoUrl !== null && typeof row.photoUrl !== "string") throw new Error("INVALID_PHOTO");
     if (text(row.photoUrl)) photos.add(jobId);
   }, "Owned photo records", warnings);
-  const cohortComplete = rosterComplete && jobsComplete && mappingComplete;
+  const cohortComplete = rosterComplete && jobsComplete && signoffsComplete;
+  if (unmapped) warnings.push(`${unmapped} job(s) are not mapped to exactly one team; they are flagged for staff review and every other team is still ranked.`);
+  if (notYetCompleted) warnings.push(`${notYetCompleted} job(s) dated today or later have no completion evidence yet (portal sign-off or completed status) and are not counted.`);
   for (const team of teams) {
     team.metrics.ratings.complete = cohortComplete; // denominator 0 is still N/A in the unchanged scorer
     team.metrics.eta = evidence(0, team.eligibleJobs, cohortComplete && etaComplete);
@@ -123,14 +140,13 @@ export async function readTeamLeaderboardCounts(port: SelectPort, window: TeamEv
     team.metrics.recovery = evidence(0, team.eligibleJobs);
   }
   jobs.forEach((team, jobId) => {
-    if (!etas.has(jobId)) {
-      team.metrics.eta.complete = false;
-      warnings.push(`Job ${jobId}: no returned owned progress row; ETA availability remains unknown.`);
-    } else if (etas.get(jobId) !== null) team.metrics.eta.successful++;
+    // A job with no portal progress record counts as a missed ETA; it never blocks the week.
+    if (!etas.has(jobId)) warnings.push(`Job ${jobId}: no portal progress record; counted as a missed ETA.`);
+    else if (etas.get(jobId) !== null) team.metrics.eta.successful++;
     if (photos.has(jobId)) team.metrics.photos.successful++;
   });
   warnings.push("Current roster and persisted assignments are not proof of historical reassignment; SELECT exhaustion is not provider-wide completeness.");
-  return { period, teams, complete: cohortComplete && etaComplete && photoComplete && teams.every(team => team.metrics.eta.complete), warnings };
+  return { period, teams, complete: cohortComplete && etaComplete && photoComplete, warnings };
 }
 
 function detailsFor(team: TeamLeaderboardRow, cases: number, requests: number, recoveries: number, notes?: Partial<Record<TeamScoreMetric, string>>): TeamLeaderboardDetails[string] {
@@ -139,7 +155,7 @@ function detailsFor(team: TeamLeaderboardRow, cases: number, requests: number, r
     ratings: team.metrics.ratings.complete && team.metrics.ratings.eligible === 0 ? "No customer rating received in the returned service records. N/A, not full marks or zero." : "Only actual received numeric customer ratings are used; unavailable counts remain incomplete.",
     complaints: "One count per admin-included affected service/team, in the report week, including earlier service dates; not one per message.",
     recovery: "Explicitly admin-recorded completed recleans/refunds only. No selection means no admin-recorded recovery, not provider-wide outcome completeness. Requests are separate.",
-    eta: "Non-null persisted portal ETA; no punctuality or SMS-success test. Unavailable records remain unknown.",
+    eta: "Non-null persisted portal ETA; no punctuality or SMS-success test. A job with no portal record counts as a missed ETA.",
     photos: "At least one nonempty saved owned-job photo URL; no quality or minimum-count threshold. Unavailable reads remain unknown.",
     ...notes,
   };

@@ -17,13 +17,13 @@ const eta = (id = 1, change: Record<string, unknown> = {}): SqlRow => ({ id, lea
 const photo = (id = 1, change: Record<string, unknown> = {}): SqlRow => ({ id, leadflowJobId: id, photoUrl: "saved-owned-photo", ...change });
 class FakePort implements SelectPort {
   calls: Array<{ sql: string; params: readonly SqlValue[] }> = [];
-  teams: SqlRow[] = [roster()]; jobs: SqlRow[] = [job()]; etas: SqlRow[] = [eta()]; photos: SqlRow[] = [photo()];
-  fail: "teams" | "jobs" | "etas" | "photos" | null = null;
+  teams: SqlRow[] = [roster()]; jobs: SqlRow[] = [job()]; etas: SqlRow[] = [eta()]; photos: SqlRow[] = [photo()]; signoffs: SqlRow[] = [];
+  fail: "teams" | "jobs" | "etas" | "photos" | "signoffs" | null = null;
   failAfterCursor = -1;
   invalidPage: SqlRow[] | null = null;
   async select(sql: string, params: readonly SqlValue[] = []): Promise<SqlRow[]> {
     this.calls.push({ sql, params });
-    const kind = sql.includes("FROM `scheduling_teams`") ? "teams" : sql.includes("FROM `cleaner_portal_job_progress`") ? "etas" : sql.includes("FROM `cleaner_portal_job_photos`") ? "photos" : "jobs";
+    const kind = sql.includes("FROM `scheduling_teams`") ? "teams" : sql.includes("FROM `cleaner_portal_job_progress`") ? "etas" : sql.includes("FROM `cleaner_portal_job_photos`") ? "photos" : sql.includes("FROM `cleaner_portal_job_signoffs`") ? "signoffs" : "jobs";
     if (this.fail === kind && Number(params[0]) >= this.failAfterCursor) throw new Error("synthetic unavailable");
     if (this.invalidPage && kind === "jobs") return this.invalidPage;
     const rows = this[kind];
@@ -139,8 +139,9 @@ describe("owned leaderboard count reads (synthetic, no network)", () => {
     port.teams = [roster(1, 900), roster(900, 900)];
     port.jobs = [job(1, { origin: "leadflow_recurrence", bookingId: null, launch27BookingId: null })];
     const ambiguous = await readTeamLeaderboardCounts(port, window);
-    expect(ambiguous.complete).toBe(false); expect(ambiguous.teams.every(t => t.eligibleJobs === 0)).toBe(true);
-    expect(ambiguous.warnings.join(" ")).toMatch(/launch27TeamId.*ambiguous/);
+    // Owner decision: an unmapped job is flagged for staff, never attributed, and does not block the week.
+    expect(ambiguous.complete).toBe(true); expect(ambiguous.teams.every(t => t.eligibleJobs === 0)).toBe(true);
+    expect(ambiguous.warnings.join(" ")).toMatch(/Unmapped job 1: launch27TeamId.*ambiguous/);
   });
   it.each(["origin", "bookingId"])("keeps missing projected %s namespace evidence incomplete instead of guessing", async field => {
     const port = new FakePort(); delete port.jobs[0][field];
@@ -151,11 +152,11 @@ describe("owned leaderboard count reads (synthetic, no network)", () => {
   it("fails closed rather than using coincident numeric IDs or names for ambiguous/unmapped imports", async () => {
     const port = new FakePort(); port.teams = [roster(1, 900), roster(900, 900)];
     const c = await readTeamLeaderboardCounts(port, window);
-    expect(c.complete).toBe(false); expect(c.teams.every(t => t.eligibleJobs === 0 && !t.metrics.ratings.complete)).toBe(true);
-    expect(c.warnings.join(" ")).toMatch(/ambiguous/);
+    expect(c.complete).toBe(true); expect(c.teams.every(t => t.eligibleJobs === 0)).toBe(true);
+    expect(c.warnings.join(" ")).toMatch(/ambiguous/); expect(c.warnings.join(" ")).toMatch(/1 job\(s\) are not mapped to exactly one team/);
     port.teams = [roster(900, null)];
     const unmatched = await readTeamLeaderboardCounts(port, window);
-    expect(unmatched.teams[0].eligibleJobs).toBe(0); expect(unmatched.complete).toBe(false);
+    expect(unmatched.teams[0].eligibleJobs).toBe(0); expect(unmatched.complete).toBe(true);
   });
   it("retains partial reads visibly without earning points after a later-page failure", async () => {
     const port = new FakePort(); port.jobs = Array.from({ length: 101 }, (_, i) => job(i + 1, { customerRating: 5 }));
@@ -176,10 +177,38 @@ describe("owned leaderboard count reads (synthetic, no network)", () => {
   it("distinguishes a missing progress record from a returned null ETA; successful empty photo reads are known zero", async () => {
     const port = new FakePort(); port.etas = []; port.photos = [];
     const missing = await readTeamLeaderboardCounts(port, window);
-    expect(missing.complete).toBe(false); expect(missing.teams[0].metrics.eta.complete).toBe(false); expect(missing.teams[0].metrics.photos.complete).toBe(true);
+    // Owner decision: no portal record counts as a missed ETA instead of blocking the week.
+    expect(missing.complete).toBe(true); expect(missing.teams[0].metrics.eta).toEqual({ successful: 0, eligible: 1, complete: true });
+    expect(missing.teams[0].metrics.photos.complete).toBe(true); expect(missing.warnings.join(" ")).toMatch(/Job 1: no portal progress record; counted as a missed ETA/);
     port.etas = [eta(1, { etaTimestamp: null })];
     const available = await readTeamLeaderboardCounts(port, window);
     expect(available.complete).toBe(true); expect(available.teams[0].metrics.eta).toEqual({ successful: 0, eligible: 1, complete: true });
+  });
+  it("an unmapped job is flagged separately while every other team is still counted", async () => {
+    const port = new FakePort(); port.teams = [roster(1, 900), roster(2, 901)];
+    port.jobs = [job(1), job(2, { teamId: 901 }), job(3, { teamId: 777 })];
+    port.etas = [eta(1), eta(2)];
+    const c = await readTeamLeaderboardCounts(port, window);
+    expect(c.complete).toBe(true); expect(c.teams.map(t => [t.id, t.eligibleJobs])).toEqual([["1", 1], ["2", 1]]);
+    expect(c.warnings.join(" ")).toMatch(/Unmapped job 3: launch27TeamId assignment 777/);
+  });
+  it("counts a job dated today or later only with completion evidence (portal sign-off or completed status)", async () => {
+    // Captured 2026-11-20 12:00 Eastern: today is 2026-11-20.
+    const port = new FakePort();
+    port.jobs = [job(1, { jobDate: "2026-11-19" }), job(2, { jobDate: "2026-11-20" }), job(3, { jobDate: "2026-11-20" }), job(4, { jobDate: "2026-11-20", bookingStatus: "Completed" })];
+    port.etas = port.jobs.map(j => eta(Number(j.id)));
+    port.signoffs = [{ id: 7, leadflowJobId: 3 }];
+    const c = await readTeamLeaderboardCounts(port, window);
+    expect(c.complete).toBe(true); expect(c.teams[0].eligibleJobs).toBe(3);
+    expect(c.teams[0].metrics.eta).toEqual({ successful: 3, eligible: 3, complete: true });
+    expect(c.warnings.join(" ")).toMatch(/1 job\(s\) dated today or later have no completion evidence yet/);
+    const signoffCall = port.calls.find(call => call.sql.includes("FROM `cleaner_portal_job_signoffs`"));
+    expect(signoffCall?.params).toEqual([0, "2026-11-15", "2026-11-20", 100]);
+  });
+  it("an unavailable sign-off read makes the counts incomplete rather than guessing", async () => {
+    const port = new FakePort(); port.fail = "signoffs";
+    const c = await readTeamLeaderboardCounts(port, window);
+    expect(c.complete).toBe(false); expect(c.warnings.join(" ")).toMatch(/Owned sign-off records: incomplete SELECT traversal/);
   });
   it("keeps zero-job teams and no received ratings legitimately N/A without score fabrication", async () => {
     const port = new FakePort(); port.teams.push(roster(2, 901));

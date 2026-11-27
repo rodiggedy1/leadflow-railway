@@ -87,7 +87,8 @@ describe("process-local single-session weekly communication review", () => {
     expect(service.status(1, started.reviewId).status).toBe("reading");
     readGate.resolve(snapshot()); await Promise.resolve(); await Promise.resolve();
     expect(run).toHaveBeenCalledTimes(1); expect(service.status(1, started.reviewId).status).toBe("reviewing");
-    expect(run.mock.calls[0][0]).not.toHaveProperty("signal");
+    // Bounded execution: the single session receives a time-limit cancellation signal (not yet aborted).
+    expect(run.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal); expect(run.mock.calls[0][0].signal.aborted).toBe(false);
     runGate.resolve(result());
     expect((await settle(service, started.reviewId)).status).toBe("incomplete");
   });
@@ -179,8 +180,10 @@ describe("process-local single-session weekly communication review", () => {
   ])("rejects invalid original quote/reference/source binding %j", async change => {
     const f = fixture(snapshot(), { candidates: [candidate(source(), change as Partial<TeamComplaintCandidate>)] });
     const status = await settle(f.service, f.service.start(1, input).reviewId);
-    expect(status).toMatchObject({ status: "incomplete", completeReview: false, error: { code: "WEEKLY_REVIEW_INVALID_CANDIDATE" },
+    // The rejected suggestion is excluded and recorded; it no longer makes the whole review incomplete.
+    expect(status).toMatchObject({ completeReview: true, error: { code: "WEEKLY_REVIEW_INVALID_CANDIDATE" },
       outcome: { candidates: [], matches: [], validOutput: false, rejectedCandidateCount: 1 } });
+    expect(status.warnings).toContain("rejected_candidates_excluded_1");
   });
 
   it.each([
@@ -189,14 +192,15 @@ describe("process-local single-session weekly communication review", () => {
   ] as Partial<TeamEvidence>[])("rejects staff/translated/snippet/missing evidence even with a literal quote %j", async change => {
     const evidence = source(change), f = fixture(snapshot([evidence]), { candidates: [candidate(evidence)] });
     const status = await settle(f.service, f.service.start(1, input).reviewId);
-    expect(status.outcome?.rejectedCandidateCount).toBe(1); expect(status.completeReview).toBe(false);
+    expect(status.outcome?.rejectedCandidateCount).toBe(1); expect(status.outcome?.candidates).toEqual([]);
+    expect(status.warnings).toContain("rejected_candidates_excluded_1");
   });
 
   it("preserves valid candidates when another candidate is hallucinated", async () => {
     const f = fixture(snapshot(), { candidates: [candidate(), candidate(source(), { evidenceQuotes: ["not in source"] })] });
     const status = await settle(f.service, f.service.start(1, input).reviewId);
-    expect(status.status).toBe("incomplete"); expect(status.outcome?.candidates).toEqual([candidate()]);
-    expect(status.outcome?.rejectedCandidateCount).toBe(1);
+    expect(status.completeReview).toBe(true); expect(status.outcome?.candidates).toEqual([candidate()]);
+    expect(status.outcome?.rejectedCandidateCount).toBe(1); expect(status.warnings).toContain("rejected_candidates_excluded_1");
   });
 
   it("uses exact existing matching/grouping parity over the full snapshot and never publishes scores", async () => {
@@ -290,7 +294,10 @@ describe("process-local single-session weekly communication review", () => {
       expect(fetch).not.toHaveBeenCalled(); expect(readWeek).not.toHaveBeenCalled(); expect(run).not.toHaveBeenCalled(); expect(clock).not.toHaveBeenCalled();
       expect(runWeeklyCommunicationReview).not.toHaveBeenCalled();
       const implementation = readFileSync(new URL("./teamWeeklyReviewService.ts", import.meta.url), "utf8");
-      expect(implementation).not.toMatch(/setTimeout|setInterval|node:fs|cron|createTeamComplaintDetector|process\.env|fetch\(/);
+      expect(implementation).not.toMatch(/setInterval|node:fs|cron|createTeamComplaintDetector|process\.env|fetch\(/);
+      // The only timer is the per-review time limit, created inside an explicitly started review (never at import).
+      expect(implementation.match(/setTimeout/g)).toHaveLength(1);
+      expect(implementation).toMatch(/const timer = setTimeout\(\(\) => \{ timedOut = true; timeout\.abort\(\); \}, options\.timeLimitMs \?\? TEAM_WEEKLY_REVIEW_TIME_LIMIT_MS\);/);
     } finally { vi.unstubAllGlobals(); }
   });
 });

@@ -154,7 +154,9 @@ describe("approved static publication boundary", () => {
     const result = readTeamLeaderboardPublication(canonical(), 9);
     const scored = rankAssessedScores(result.publication.teams, result.details);
     expect(scored).toEqual(rankAssessedScores(snapshot.publication.teams, snapshot.details));
-    expect(scored[0]).toMatchObject({ id: "12", rank: 1, totalScore: 100 });
+    // A 1-job team keeps its score but is unranked (3-job minimum); ranked teams come first.
+    expect(scored.find(row => row.id === "12")).toMatchObject({ rank: null, totalScore: 100, unrankedReason: "Unranked: fewer than 3 completed jobs" });
+    expect(scored[0]).toMatchObject({ rank: 1, totalScore: 97.22, unrankedReason: null });
     expect(scored.find(row => row.id === "4")?.confirmedRecoveryCases).toBe(0);
     expect(scored.find(row => row.id === "2")).toMatchObject({ rank: null, totalScore: null });
   });
