@@ -2,7 +2,8 @@
 # READ-ONLY drill-down: every customer text with no reply attempt, or a failed attempt without a staff task, with
 # what came after it in the conversation (follow-up text, staff reply, automatic reply), plus one message in detail.
 #
-#   bash sms-reply-drilldown.sh <phone, 10 digits> <message ID, e.g. AC7c77...> [days, default 7]
+#   bash sms-reply-drilldown.sh <phone, 10 digits> [days, default 7] [message ID to locate, optional]
+# The output is also saved to a file in your home folder (name printed at the end).
 #
 # It asks for a DATABASE_URL (hidden; never shown, saved or logged). Every query runs inside ONE read-only snapshot
 # transaction (START TRANSACTION READ ONLY AS OF TIMESTAMP): the database itself rejects any write in it. The script
@@ -11,8 +12,8 @@
 # Needs the mysql client (Homebrew: mysql-client@8.4).
 set -euo pipefail
 
-PHONE10="${1:-}"; MID="${2:-}"; DAYS="${3:-7}"
-[[ "$PHONE10" =~ ^[0-9]{10}$ ]] && [[ "$MID" =~ ^[A-Za-z0-9_-]{6,80}$ ]] || { echo "Usage: bash $0 <phone, 10 digits> <message ID> [days]"; exit 2; }
+PHONE10="${1:-}"; DAYS="${2:-7}"; MID="${3:-none}"
+[[ "$PHONE10" =~ ^[0-9]{10}$ ]] && [[ "$MID" =~ ^[A-Za-z0-9_-]{4,80}$ ]] || { echo "Usage: bash $0 <phone, 10 digits> [days] [message ID]"; exit 2; }
 [[ "$DAYS" =~ ^[0-9]{1,2}$ ]] && [ "$DAYS" -ge 1 ] || { echo "days must be 1-99"; exit 2; }
 
 die() { printf '\n\033[31mSTOPPED:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -89,11 +90,13 @@ MIDQ="'$MID'"
 DIG="(SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)"
 # 0..999: positions inside one conversation history.
 NUMS="(SELECT a.d + 10 * b.d + 100 * c.d AS i FROM $DIG a CROSS JOIN $DIG b CROSS JOIN $DIG c)"
+# Position of a message ID inside a history (first match), and one field of the turn at a position.
+POS="CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(s.messageHistory, 'one', m.mid)), ']', 1), '[', -1) AS UNSIGNED)"
 # Texts to explain: customer texts with no reply attempt, and failed attempts without a staff task.
 F="$X,
   focus AS (SELECT x.*, CASE WHEN outcome LIKE '7 %' THEN 'no attempt' ELSE CONCAT('failed, no task: ', COALESCE(failCode, errorCode, '?')) END AS kind
     FROM x WHERE sender = 'customer' AND (outcome LIKE '7 %' OR (outcome LIKE '3 %' AND taskId IS NULL))),
-  sess AS (SELECT f.mid, s.id AS sid, s.leadSource, s.smsOptOut, s.messageHistory AS h,
+  sess AS (SELECT f.mid, s.id AS sid, s.smsOptOut, s.lastInboundPhoneNumberId AS lineNow, s.messageHistory AS h,
       CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(s.messageHistory, 'one', f.mid)), ']', 1), '[', -1) AS UNSIGNED) AS idx,
       JSON_LENGTH(JSON_SEARCH(s.messageHistory, 'all', f.mid)) AS copies
     FROM focus f JOIN conversation_sessions s ON s.leadPhone = CONCAT('+1', f.p10) AND LOCATE(f.mid, s.messageHistory) > 0),
@@ -102,20 +105,16 @@ F="$X,
       JSON_EXTRACT(se.h, CONCAT('\$[', se.idx + n.i, '].ts')) - JSON_EXTRACT(se.h, CONCAT('\$[', se.idx, '].ts')) AS after_ms,
       JSON_UNQUOTE(JSON_EXTRACT(se.h, CONCAT('\$[', se.idx + n.i, '].senderName'))) AS who,
       JSON_UNQUOTE(JSON_EXTRACT(se.h, CONCAT('\$[', se.idx + n.i, '].opMsgId'))) AS tmid,
-      LEFT(REGEXP_REPLACE(JSON_UNQUOTE(JSON_EXTRACT(se.h, CONCAT('\$[', se.idx + n.i, '].content'))), '[\r\n]+', ' '), 110) AS txt
-    FROM sess se JOIN $NUMS n ON n.i BETWEEN 1 AND 49 AND se.idx + n.i < JSON_LENGTH(se.h)),
+      LEFT(REGEXP_REPLACE(JSON_UNQUOTE(JSON_EXTRACT(se.h, CONCAT('\$[', se.idx + n.i, '].content'))), '[\r\n]+', ' '), 320) AS txt
+    FROM sess se JOIN $NUMS n ON n.i BETWEEN 1 AND 60 AND se.idx + n.i < JSON_LENGTH(se.h)),
   firsts AS (SELECT mid, sid,
       MIN(CASE WHEN role IN ('assistant', 'agent', 'office') THEN off END) AS replyOff,
-      MIN(CASE WHEN role IN ('user', 'customer') AND after_ms <= 180000 THEN off END) AS burstOff,
-      MIN(CASE WHEN role IN ('user', 'customer') THEN off END) AS nextInOff
+      MIN(CASE WHEN role IN ('user', 'customer') AND after_ms <= 180000 THEN off END) AS burstOff
     FROM turns GROUP BY mid, sid),
-  detail AS (SELECT f.mid, f.kind, f.receivedAt, f.p10, f.msg, f.failCode, f.failName, se.sid, se.leadSource, se.smsOptOut, se.copies,
-      nt.role AS next_role, ROUND(nt.after_ms / 1000) AS next_after_s, nt.who AS next_who,
-      bt.tmid AS burst_mid, ROUND(bt.after_ms / 1000) AS burst_after_s,
-      rt.who AS reply_who, ROUND(rt.after_ms / 60000) AS reply_after_min, rt.txt AS reply_text
+  detail AS (SELECT f.mid, f.kind, f.receivedAt, f.p10, f.msg, f.failCode, f.draftId, se.sid, se.smsOptOut, se.lineNow, se.copies,
+      fi.replyOff, bt.tmid AS burst_mid, rt.who AS reply_who
     FROM focus f LEFT JOIN sess se ON se.mid = f.mid
     LEFT JOIN firsts fi ON fi.mid = f.mid AND fi.sid = se.sid
-    LEFT JOIN turns nt ON nt.mid = f.mid AND nt.sid = se.sid AND nt.off = 1
     LEFT JOIN turns bt ON bt.mid = f.mid AND bt.sid = se.sid AND bt.off = fi.burstOff
     LEFT JOIN turns rt ON rt.mid = f.mid AND rt.sid = se.sid AND rt.off = fi.replyOff),
   cat AS (SELECT d.*, bx.outcome AS burst_outcome,
@@ -130,67 +129,91 @@ F="$X,
     FROM detail d LEFT JOIN x bx ON bx.mid = CONVERT(d.burst_mid USING utf8mb4) COLLATE utf8mb4_bin)"
 
 SQL="SET SESSION time_zone = 'America/New_York';
+SET SESSION group_concat_max_len = 200000;
 START TRANSACTION READ ONLY AS OF TIMESTAMP NOW() - INTERVAL 5 SECOND;
 SELECT DATABASE() AS database_checked, NOW() AS checked_at_eastern, $DAYS AS days_checked;
 
-SELECT 'T1. The message: texts from this number within 30 minutes of it' AS section;
-SELECT s.id, FROM_UNIXTIME(s.receivedAt / 1000) AS received_eastern, s.openPhoneMessageId AS message_id,
-  ROUND((s.receivedAt - m.receivedAt) / 1000) AS seconds_from_message, LEFT(REGEXP_REPLACE(s.message, '[\r\n]+', ' '), 90) AS text_start
-FROM inbound_sms s JOIN (SELECT MIN(receivedAt) AS receivedAt FROM inbound_sms WHERE openPhoneMessageId = $MIDQ) m
-WHERE RIGHT(REGEXP_REPLACE(s.fromPhone, '[^0-9]', ''), 10) = $P10 AND ABS(s.receivedAt - m.receivedAt) <= 1800000 ORDER BY s.receivedAt;
+SELECT 'T0. Where the given message ID belongs (if one was given)' AS section;
+SELECT 'inbound_sms' AS found_in, RIGHT(REGEXP_REPLACE(fromPhone, '[^0-9]', ''), 4) AS phone_last4,
+  RIGHT(REGEXP_REPLACE(fromPhone, '[^0-9]', ''), 10) = $P10 AS is_this_number, FROM_UNIXTIME(receivedAt / 1000) AS at_eastern, NULL AS conversation
+FROM inbound_sms WHERE openPhoneMessageId = $MIDQ
+UNION ALL SELECT 'reply attempt', RIGHT(REGEXP_REPLACE(fromPhone, '[^0-9]', ''), 4), RIGHT(REGEXP_REPLACE(fromPhone, '[^0-9]', ''), 10) = $P10, createdAt, sessionId
+FROM madison_sms_drafts WHERE inboundOpenPhoneId = $MIDQ
+UNION ALL SELECT 'conversation', RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 4), RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = $P10, updatedAt, id
+FROM conversation_sessions WHERE updatedAt >= NOW() - INTERVAL 60 DAY AND LOCATE($MIDQ, messageHistory) > 0
+UNION ALL SELECT 'not found anywhere', NULL, NULL, NULL, NULL FROM DUAL WHERE $MIDQ <> 'none'
+  AND NOT EXISTS (SELECT 1 FROM inbound_sms WHERE openPhoneMessageId = $MIDQ) AND NOT EXISTS (SELECT 1 FROM madison_sms_drafts WHERE inboundOpenPhoneId = $MIDQ);
 
-SELECT 'T2. Reply-attempt records for the message (any system)' AS section;
-SELECT id, createdAt AS created_server_time, COALESCE(capability, '(Madison)') AS handled_by, status, errorStage, errorCode,
-  LEFT(errorMessage, 300) AS failure_detail, approvedBy, dismissedBy, outboundOpenPhoneId IS NOT NULL AS has_sent_id
-FROM madison_sms_drafts WHERE inboundOpenPhoneId = $MIDQ;
+SELECT 'T1. Every text from this number in the last 30 days, with what happened to it' AS section;
+SELECT FROM_UNIXTIME(m.receivedAt / 1000) AS received_eastern, m.mid AS message_id, LEFT(REGEXP_REPLACE(m.message, '[\r\n]+', ' '), 120) AS text_start,
+  COALESCE(d.capability, IF(d.id IS NULL, '(none)', '(Madison)')) AS handled_by, d.status, d.errorCode,
+  JSON_UNQUOTE(JSON_EXTRACT(d.errorMessage, '\$.failures[0].code')) AS fail_code,
+  (SELECT MIN(o.id) FROM ops_chat_messages o WHERE o.quickAction = 'claude_customer_task' AND o.sessionId = d.sessionId
+     AND JSON_UNQUOTE(JSON_EXTRACT(o.metadata, '\$.task.sourceMessageId')) = m.mid) AS staff_task
+FROM (SELECT openPhoneMessageId AS mid, MIN(receivedAt) AS receivedAt, MIN(message) AS message FROM inbound_sms
+      WHERE RIGHT(REGEXP_REPLACE(fromPhone, '[^0-9]', ''), 10) = $P10 AND receivedAt >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) * 1000)
+      GROUP BY openPhoneMessageId) m
+LEFT JOIN madison_sms_drafts d ON d.inboundOpenPhoneId = m.mid ORDER BY m.receivedAt DESC LIMIT 20;
 
-SELECT 'T3. Conversations holding the message, and where it sits' AS section;
-SELECT id, leadSource, csQueue, smsOptOut, lastInboundPhoneNumberId, JSON_LENGTH(messageHistory) AS turns,
-  JSON_UNQUOTE(JSON_SEARCH(messageHistory, 'all', $MIDQ)) AS found_at
-FROM conversation_sessions WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = $P10 AND LOCATE($MIDQ, messageHistory) > 0;
-
-SELECT 'T4. Turns around the message (offset 0 = the message; seconds relative to it)' AS section;
-SELECT s.id AS conversation, n.i - 4 AS offset,
-  JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx + n.i - 4, '].role'))) AS role,
-  ROUND((JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx + n.i - 4, '].ts')) - JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx, '].ts'))) / 1000) AS seconds,
-  FROM_UNIXTIME(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx + n.i - 4, '].ts')) / 1000) AS at_eastern,
-  JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx + n.i - 4, '].senderName'))) AS sender_name,
-  JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx + n.i - 4, '].opMsgId'))) AS message_id,
-  JSON_KEYS(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx + n.i - 4, ']'))) AS fields,
-  LEFT(REGEXP_REPLACE(JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx + n.i - 4, '].content'))), '[\r\n]+', ' '), 90) AS text_start
-FROM conversation_sessions s
-JOIN (SELECT id, CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(messageHistory, 'one', $MIDQ)), ']', 1), '[', -1) AS UNSIGNED) AS idx
-      FROM conversation_sessions WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = $P10 AND LOCATE($MIDQ, messageHistory) > 0) p ON p.id = s.id
-JOIN $NUMS n ON n.i <= 16 AND p.idx + n.i >= 4 AND p.idx + n.i - 4 < JSON_LENGTH(s.messageHistory)
-ORDER BY s.id, n.i;
-
-SELECT 'T5. Exclusion rules checked against the message (as the conversation is now; turns timestamped up to 3 min after it existed at decision time)' AS section;
-SELECT s.id AS conversation, s.smsOptOut AS rule_opted_out, (SELECT COUNT(*) FROM sms_opt_outs o WHERE RIGHT(REGEXP_REPLACE(o.phone, '[^0-9]', ''), 10) = $P10) AS rule_opt_out_list,
-  JSON_LENGTH(JSON_SEARCH(s.messageHistory, 'all', $MIDQ)) AS rule_id_copies_must_be_1,
-  JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx, '].content'))) = (SELECT MIN(message) FROM inbound_sms WHERE openPhoneMessageId = $MIDQ) AS rule_text_matches_log,
-  (SELECT COUNT(*) FROM $NUMS n WHERE n.i < JSON_LENGTH(s.messageHistory) AND n.i <> p.idx
+SELECT 'T2. Exclusion rules for each of those texts (rules read the conversation as it is now; a turn up to 3 min after a text existed when it was decided)' AS section;
+SELECT FROM_UNIXTIME(m.receivedAt / 1000) AS received_eastern, m.mid AS message_id, s.id AS conversation, s.leadSource,
+  s.smsOptOut AS opted_out, JSON_LENGTH(JSON_SEARCH(s.messageHistory, 'all', m.mid)) AS id_copies_must_be_1,
+  JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS, '].content'))) = m.message AS text_matches,
+  (SELECT COUNT(*) FROM $NUMS n WHERE n.i < JSON_LENGTH(s.messageHistory) AND n.i <> $POS
      AND JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', n.i, '].role'))) IN ('user', 'customer', 'assistant', 'agent', 'office')
-     AND JSON_EXTRACT(s.messageHistory, CONCAT('\$[', n.i, '].ts')) > JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx, '].ts'))
-     AND JSON_EXTRACT(s.messageHistory, CONCAT('\$[', n.i, '].ts')) <= JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx, '].ts')) + 180000) AS rule_turns_within_3_min_after,
-  (SELECT COUNT(*) FROM $NUMS n WHERE n.i < JSON_LENGTH(s.messageHistory) AND n.i > p.idx
-     AND JSON_EXTRACT(s.messageHistory, CONCAT('\$[', n.i, '].ts')) < JSON_EXTRACT(s.messageHistory, CONCAT('\$[', p.idx, '].ts'))) AS later_position_earlier_time,
-  s.lastInboundPhoneNumberId AS line_now
-FROM conversation_sessions s
-JOIN (SELECT id, CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(JSON_UNQUOTE(JSON_SEARCH(messageHistory, 'one', $MIDQ)), ']', 1), '[', -1) AS UNSIGNED) AS idx
-      FROM conversation_sessions WHERE RIGHT(REGEXP_REPLACE(leadPhone, '[^0-9]', ''), 10) = $P10 AND LOCATE($MIDQ, messageHistory) > 0) p ON p.id = s.id;
+     AND JSON_EXTRACT(s.messageHistory, CONCAT('\$[', n.i, '].ts')) > JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS, '].ts'))
+     AND JSON_EXTRACT(s.messageHistory, CONCAT('\$[', n.i, '].ts')) <= JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS, '].ts')) + 180000) AS turns_within_3_min_after,
+  JSON_KEYS(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS, ']'))) AS stored_fields
+FROM (SELECT openPhoneMessageId AS mid, MIN(receivedAt) AS receivedAt, MIN(message) AS message FROM inbound_sms
+      WHERE RIGHT(REGEXP_REPLACE(fromPhone, '[^0-9]', ''), 10) = $P10 AND receivedAt >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) * 1000)
+      GROUP BY openPhoneMessageId) m
+JOIN conversation_sessions s ON RIGHT(REGEXP_REPLACE(s.leadPhone, '[^0-9]', ''), 10) = $P10 AND LOCATE(m.mid, s.messageHistory) > 0
+ORDER BY m.receivedAt DESC LIMIT 20;
+
+SELECT 'T3. Turns around each of the 6 most recent texts (offset 0 = the text; seconds relative to it)' AS section;
+SELECT m.mid AS around_message, s.id AS conversation, n.i - 3 AS offset,
+  JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS + n.i - 3, '].role'))) AS role,
+  ROUND((JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS + n.i - 3, '].ts')) - JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS, '].ts'))) / 1000) AS seconds,
+  JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS + n.i - 3, '].senderName'))) AS sender_name,
+  JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS + n.i - 3, '].opMsgId'))) AS message_id,
+  LEFT(REGEXP_REPLACE(JSON_UNQUOTE(JSON_EXTRACT(s.messageHistory, CONCAT('\$[', $POS + n.i - 3, '].content'))), '[\r\n]+', ' '), 120) AS text_start
+FROM (SELECT openPhoneMessageId AS mid, MIN(receivedAt) AS receivedAt FROM inbound_sms
+      WHERE RIGHT(REGEXP_REPLACE(fromPhone, '[^0-9]', ''), 10) = $P10 AND receivedAt >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) * 1000)
+      GROUP BY openPhoneMessageId ORDER BY MIN(receivedAt) DESC LIMIT 6) m
+JOIN conversation_sessions s ON RIGHT(REGEXP_REPLACE(s.leadPhone, '[^0-9]', ''), 10) = $P10 AND LOCATE(m.mid, s.messageHistory) > 0
+JOIN $NUMS n ON n.i <= 8 AND $POS + n.i >= 3 AND $POS + n.i - 3 < JSON_LENGTH(s.messageHistory)
+ORDER BY m.receivedAt DESC, n.i;
 
 SELECT CONCAT('U1. Customer texts in the last ', $DAYS, ' days with no reply attempt, or a failed attempt without a staff task: by category') AS section;
 $F SELECT kind, category, COUNT(*) AS texts FROM cat GROUP BY kind, category ORDER BY kind, category;
 
-SELECT 'U2. Failure codes of failed attempts without a staff task' AS section;
-$F SELECT failCode, failName, COUNT(*) AS texts, SUM(burst_mid IS NOT NULL) AS customer_texted_again_within_3_min,
-  SUM(next_role IN ('assistant', 'agent', 'office')) AS next_was_a_reply FROM cat WHERE kind LIKE 'failed%' GROUP BY failCode, failName ORDER BY texts DESC;
+SELECT 'U2. Unanswered texts (category C): full failure record and why no staff task was created' AS section;
+$F SELECT c.kind, FROM_UNIXTIME(c.receivedAt / 1000) AS received_eastern, RIGHT(c.p10, 4) AS phone4, c.mid AS message_id,
+  LEFT(c.msg, 55) AS text_start, c.sid AS conversation, c.smsOptOut AS opted_out_now, c.copies,
+  dr.status, dr.errorStage, dr.errorCode, dr.errorMessage AS failure_record,
+  TIMESTAMPDIFF(SECOND, dr.createdAt, dr.updatedAt) AS attempt_seconds,
+  LEFT(dr.capabilityResult, 160) AS attempt_state,
+  JSON_UNQUOTE(JSON_EXTRACT(dr.resolvedContext, '\$.receivingPhoneNumberId')) AS line_at_attempt, c.lineNow AS line_now,
+  (SELECT GROUP_CONCAT(CONCAT(t.off, ':', COALESCE(t.role, '?'), '@', ROUND(t.after_ms / 1000), 's', IF(t.who IS NULL, '', CONCAT('/', t.who))) ORDER BY t.off SEPARATOR ' | ')
+     FROM turns t WHERE t.mid = c.mid AND t.sid = c.sid AND t.off <= 6) AS turns_after,
+  CONCAT('@inboundMessageId:', c.mid) AS railway_log_search
+FROM cat c LEFT JOIN madison_sms_drafts dr ON dr.id = c.draftId
+WHERE c.category LIKE 'C %' ORDER BY c.receivedAt DESC;
 
-SELECT 'U3. Every one of those texts (newest first)' AS section;
-$F SELECT category, kind, FROM_UNIXTIME(receivedAt / 1000) AS received_eastern, RIGHT(p10, 4) AS phone4, msg AS customer_text,
-  sid AS conversation, copies, next_role, next_after_s, next_who, burst_after_s, burst_outcome,
-  reply_who, reply_after_min, reply_text
-FROM cat ORDER BY category, receivedAt DESC;
+SELECT 'U3. Full text of each unanswered customer text (category C)' AS section;
+$F SELECT FROM_UNIXTIME(receivedAt / 1000) AS received_eastern, mid AS message_id, (SELECT LEFT(REGEXP_REPLACE(MIN(message), '[\r\n]+', ' '), 600)
+  FROM inbound_sms WHERE openPhoneMessageId = cat.mid) AS customer_text FROM cat WHERE category LIKE 'C %' ORDER BY receivedAt DESC;
+
+SELECT 'R1. Did the later reply address the request? (categories B; customer text, follow-ups within 10 min, the first two replies after)' AS section;
+$F SELECT c.category, c.kind, FROM_UNIXTIME(c.receivedAt / 1000) AS received_eastern, RIGHT(c.p10, 4) AS phone4, c.mid AS message_id,
+  (SELECT LEFT(REGEXP_REPLACE(MIN(message), '[\r\n]+', ' '), 300) FROM inbound_sms WHERE openPhoneMessageId = c.mid) AS customer_text,
+  c.burst_outcome AS follow_up_outcome,
+  (SELECT GROUP_CONCAT(CONCAT('+', ROUND(t.after_ms / 1000), 's: ', LEFT(t.txt, 200)) ORDER BY t.off SEPARATOR ' || ')
+     FROM turns t WHERE t.mid = c.mid AND t.sid = c.sid AND t.role IN ('user', 'customer') AND t.after_ms <= 600000
+       AND (c.replyOff IS NULL OR t.off < c.replyOff)) AS follow_ups,
+  SUBSTRING_INDEX((SELECT GROUP_CONCAT(CONCAT('+', ROUND(t.after_ms / 60000), 'min ', COALESCE(t.who, t.role), ': ', t.txt) ORDER BY t.off SEPARATOR ' || ')
+     FROM turns t WHERE t.mid = c.mid AND t.sid = c.sid AND t.role IN ('assistant', 'agent', 'office')), ' || ', 2) AS first_replies
+FROM cat c WHERE c.category LIKE 'B %' ORDER BY c.category, c.receivedAt DESC;
 COMMIT;"
 # Refuse to run anything but reads (the read-only snapshot transaction also enforces this in the database).
 if printf '%s' "$SQL" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE|TRUNCATE|GRANT|REVOKE|RENAME|LOAD|CALL|LOCK)\b[^_]'; then
@@ -198,6 +221,7 @@ if printf '%s' "$SQL" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CR
 fi
 
 echo "Checking database \"$DB_NAME\" (read-only snapshot)..."
-printf '%s\n' "$SQL" | "$MYSQL" --defaults-extra-file="$TMP/my.cnf" --table --connect-timeout=20 "$DB_NAME" \
+OUT="$HOME/sms-drilldown-$(date +%Y%m%d-%H%M%S).txt"
+printf '%s\n' "$SQL" | "$MYSQL" --defaults-extra-file="$TMP/my.cnf" --table --connect-timeout=20 "$DB_NAME" | tee "$OUT" \
   || die "The query did not complete (see the message above). Nothing was changed."
-echo; echo "Done. Nothing was changed. Copy everything above and send it back."
+echo; echo "Done. Nothing was changed. The full output is saved in: $OUT  (send me that file)"
