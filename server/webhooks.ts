@@ -82,7 +82,20 @@ async function dispatchPersistedClaudeCustomerSms(input: {
     || !input.inboundText.trim() || /^\s*(stop|unsubscribe|quit|end|remove me|opt.?out)\s*$/i.test(input.inboundText)
     || createdAt === null || !Number.isFinite(input.receivedAt) || createdAt < config.startAt
     || input.receivedAt < config.startAt || createdAt > input.receivedAt) {
-    logClaudeCustomerSmsDiagnostic(input, { stage: "dispatch", reason: "EVENT_GUARD_DECLINED", replyOwned: false, receiptClaimAttempted: false, generationReached: false });
+    // Diagnostics only: names the first rule of the unchanged guard above that declined this event.
+    const exclusion = !config ? "DISABLED"
+      : !isClaudeCustomerSmsPhoneEligible(input.fromPhone) ? "INVALID_SENDER_PHONE"
+      : input.direction !== "incoming" ? "NOT_INCOMING"
+      : !Number.isSafeInteger(input.sessionId) || input.sessionId <= 0 ? "INVALID_SESSION_ID"
+      : typeof input.providerMessageId !== "string" || !input.providerMessageId.trim() || input.providerMessageId.startsWith("cs-fallback-") ? "INVALID_MESSAGE_ID"
+      : typeof input.receivingPhoneNumberId !== "string" || !input.receivingPhoneNumberId.trim() ? "MISSING_RECEIVING_LINE"
+      : !input.inboundText.trim() ? "EMPTY_TEXT"
+      : /^\s*(stop|unsubscribe|quit|end|remove me|opt.?out)\s*$/i.test(input.inboundText) ? "STOP_REQUEST"
+      : createdAt === null || !Number.isFinite(input.receivedAt) ? "INVALID_TIMESTAMP"
+      : createdAt < config.startAt || input.receivedAt < config.startAt ? "BEFORE_START"
+      : createdAt > input.receivedAt ? "CREATED_AFTER_RECEIPT" : "UNKNOWN";
+    logClaudeCustomerSmsDiagnostic(input, { stage: "dispatch", reason: "EVENT_GUARD_DECLINED", exclusion,
+      replyOwned: false, receiptClaimAttempted: false, generationReached: false });
     return false;
   }
   let customerOwnsReply = false;

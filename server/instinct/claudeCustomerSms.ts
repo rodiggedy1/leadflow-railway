@@ -60,6 +60,12 @@ export interface CustomerSmsStore {
   verifyBeforeSubmission?(claim: CustomerSmsClaim): Promise<boolean>;
   reportFailure?(claim: CustomerSmsClaim, code: string, uncertain?: boolean): Promise<{ taskId: number; notify: boolean } | null>;
   suppressBeforeSubmission(claim: CustomerSmsClaim, code: string, failure?: CustomerSmsFailureDetails): Promise<void>;
+  /** Receiving line could not be verified (before any claim): the existing staff review task, or why it was skipped. */
+  reportUnverifiedLineFailure?(identity: UnverifiedLineIdentity, code: string): Promise<{ taskId: number; notify: boolean } | { skipped: string }>;
+}
+export interface UnverifiedLineIdentity {
+  sessionId: number; customerName: string | null; customerPhone: string; sourceMessageId: string; sourceText: string;
+  receivedAt: number; receivingPhoneNumberId: string;
 }
 export interface CustomerSmsOptions {
   config: () => CustomerSmsConfig | null;
@@ -79,7 +85,7 @@ type DiagnosticStage = "dispatch" | "database_acquisition" | "session_read" | "r
   | "receipt_claim" | "generation" | "preparation" | "pre_send";
 interface SmsDiagnostic {
   stage: DiagnosticStage; outcome?: "disabled" | "excluded" | "duplicate" | "suppressed" | "accepted" | "uncertain" | "failed";
-  reason?: string; receiptClaimAttempted?: boolean; generationReached?: boolean; replyOwned?: boolean; error?: unknown;
+  reason?: string; exclusion?: string; receiptClaimAttempted?: boolean; generationReached?: boolean; replyOwned?: boolean; error?: unknown;
 }
 const preClaimDiagnosticCodes = new Set(["INVALID_SESSION", "DATABASE_UNAVAILABLE", "INVALID_SESSION_ROWS",
   "SESSION_CONTACT_CONFLICT", "EXACT_SESSION_CONFLICT", "RECEIVING_LINE_UNAVAILABLE"]);
@@ -94,6 +100,7 @@ export function logClaudeCustomerSmsDiagnostic(input: { sessionId: number; provi
       inboundMessageId: typeof input.providerMessageId === "string" && /^[A-Za-z0-9:_-]{1,160}$/.test(input.providerMessageId) ? input.providerMessageId : null,
       stage: detail.stage, outcome: detail.outcome,
       reason: typeof detail.reason === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(detail.reason) ? detail.reason : undefined,
+      exclusion: typeof detail.exclusion === "string" && /^[A-Z][A-Z0-9_]{1,79}$/.test(detail.exclusion) ? detail.exclusion : undefined,
       receiptClaimAttempted: detail.receiptClaimAttempted, generationReached: detail.generationReached, replyOwned: detail.replyOwned,
       ...(failure ? { errorCode: originalCode ?? failure.code, errorName: failure.name } : {}),
     }));
@@ -124,6 +131,52 @@ function currentTurn(row: CustomerSmsSession, input: CustomerSmsInput): boolean 
     return true;
   });
 }
+// ── Exclusion reasons (diagnostics only) ─────────────────────────────────────
+// Called only after the unchanged checks above/below have already excluded a text: they re-read
+// the same inputs to name the first rule that applies. They never change a reply decision.
+function turnEnvelopes(turn: any): any[] {
+  let meta = turn.metadata;
+  if (typeof meta === "string") { try { meta = JSON.parse(meta); } catch { return []; } }
+  if (meta != null && (typeof meta !== "object" || Array.isArray(meta))) return [];
+  return meta ? [turn, meta] : [turn];
+}
+const turnIds = (turn: any): string[] => Array.from(new Set(turnEnvelopes(turn).flatMap(value =>
+  [value.opMsgId, value.openPhoneId, value.openPhoneMessageId, value.providerMessageId].filter(id => typeof id === "string" && id))));
+export function customerSmsEventExclusion(input: CustomerSmsInput, config: CustomerSmsConfig, phone: string | null, createdAt: number | null): string {
+  if (input.direction !== "incoming") return "NOT_INCOMING";
+  if (!Number.isSafeInteger(input.sessionId) || input.sessionId <= 0) return "INVALID_SESSION_ID";
+  if (typeof input.providerMessageId !== "string" || !input.providerMessageId.trim() || input.providerMessageId.startsWith("cs-fallback-")) return "INVALID_MESSAGE_ID";
+  if (typeof input.receivingPhoneNumberId !== "string" || !input.receivingPhoneNumberId.trim()) return "MISSING_RECEIVING_LINE";
+  if (typeof input.inboundText !== "string" || !input.inboundText.trim()) return "EMPTY_TEXT";
+  if (!phone || phone !== input.fromPhone || !phoneEligible(phone)) return "INVALID_SENDER_PHONE";
+  if (excludedSenders.has(phone)) return "EXCLUDED_SENDER";
+  if (stopped(input.inboundText)) return "STOP_REQUEST";
+  if (createdAt === null || !Number.isFinite(input.receivedAt)) return "INVALID_TIMESTAMP";
+  if (createdAt < config.startAt || input.receivedAt < config.startAt) return "BEFORE_START";
+  if (createdAt > input.receivedAt) return "CREATED_AFTER_RECEIPT";
+  return "UNKNOWN";
+}
+export function customerSmsSessionExclusion(session: CustomerSmsSession | null, input: CustomerSmsInput, phone: string): string {
+  if (!session) return "SESSION_NOT_FOUND";
+  if (session.contact.sessionId !== String(input.sessionId) || session.contact.phone !== phone
+    || normalizePhone(session.contact.rawPhone) !== phone) return "SESSION_CONTACT_MISMATCH";
+  if (session.lastInboundPhoneNumberId !== input.receivingPhoneNumberId) return "RECEIVING_LINE_CHANGED";
+  if (Number(session.smsOptOut) === 1) return "OPTED_OUT";
+  let history: unknown;
+  try { history = typeof session.messageHistory === "string" ? JSON.parse(session.messageHistory) : session.messageHistory; } catch { return "HISTORY_UNREADABLE"; }
+  if (!Array.isArray(history) || history.some(turn => !turn || typeof turn !== "object" || typeof turn.role !== "string" || typeof turn.content !== "string")) return "HISTORY_UNREADABLE";
+  const inbound = history.filter(turn => ["user", "customer"].includes(turn.role));
+  const matching = inbound.filter(turn => turnIds(turn).includes(input.providerMessageId));
+  if (matching.length === 0) return "MESSAGE_NOT_IN_HISTORY";
+  if (matching.length > 1) return "MESSAGE_ID_REPEATED";
+  if (inbound.some(turn => turn !== matching[0] && customerSmsTurnAfter(history as any[], turn, matching[0]))) return "LATER_CUSTOMER_MESSAGE";
+  if (matching[0].content !== input.inboundText) return "TEXT_CHANGED";
+  if (turnIds(matching[0]).length !== 1) return "MESSAGE_HAS_MULTIPLE_IDS";
+  if (history.some(turn => turn !== matching[0] && customerSmsTurnAfter(history as any[], turn, matching[0])
+    && ["assistant", "agent", "office"].includes(turn.role))) return "LATER_REPLY_EXISTS";
+  return "MESSAGE_ENVELOPE_MISMATCH";
+}
+
 /** No import-time work, queues, schedulers or retry authority. One actual saved
  * inbound event can claim one existing-table receipt. An uncertain send stays
  * blocked; human task completion is a separate service and never reaches send. */
@@ -139,7 +192,10 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       || typeof input.inboundText !== "string" || !input.inboundText.trim() || !phone || phone !== input.fromPhone
       || !phoneEligible(phone)
       || excludedSenders.has(phone) || stopped(input.inboundText) || createdAt === null || !Number.isFinite(input.receivedAt)
-      || createdAt < config.startAt || input.receivedAt < config.startAt || createdAt > input.receivedAt) return { outcome: "excluded" };
+      || createdAt < config.startAt || input.receivedAt < config.startAt || createdAt > input.receivedAt) {
+      logClaudeCustomerSmsDiagnostic(input, { stage: "dispatch", outcome: "excluded", reason: "EXCLUDED", exclusion: customerSmsEventExclusion(input, config, phone, createdAt) });
+      return { outcome: "excluded" };
+    }
     let diagnosticStage: DiagnosticStage = "session_read";
     let receiptClaimAttempted = false, generationReached = false;
     let claim: CustomerSmsClaim | null = null;
@@ -173,18 +229,54 @@ export function createClaudeCustomerSmsService(options: CustomerSmsOptions) {
       if (!session || session.contact.sessionId !== String(input.sessionId) || session.contact.phone !== phone
         || normalizePhone(session.contact.rawPhone) !== phone || session.lastInboundPhoneNumberId !== input.receivingPhoneNumberId
         || Number(session.smsOptOut) === 1
-        || !currentTurn(session, input)) return { outcome: "excluded" };
+        || !currentTurn(session, input)) {
+        logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "excluded", reason: "EXCLUDED", exclusion: customerSmsSessionExclusion(session, input, phone) });
+        return { outcome: "excluded" };
+      }
       diagnosticStage = "receiving_line_read";
       logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "RECEIVING_LINE_READ_REACHED", receiptClaimAttempted, generationReached });
-      const receivingPhoneNumber = await options.readReceivingLine(input.receivingPhoneNumberId);
-      if (normalizePhone(receivingPhoneNumber) !== receivingPhoneNumber || !receivingPhoneNumber || receivingPhoneNumber === phone) return { outcome: "excluded" };
+      let receivingPhoneNumber: string;
+      try { receivingPhoneNumber = await options.readReceivingLine(input.receivingPhoneNumberId); }
+      catch (error) {
+        // The receiving line could not be verified: nothing is generated or sent. Staff get the existing
+        // review task (or, if it is not created, the existing owner alert alone).
+        logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "EXCEPTION", receiptClaimAttempted, generationReached, error });
+        const code = "RECEIVING_LINE_UNAVAILABLE";
+        let review: Awaited<ReturnType<NonNullable<CustomerSmsStore["reportUnverifiedLineFailure"]>>> | null = null;
+        try {
+          review = await options.store.reportUnverifiedLineFailure?.({ sessionId: input.sessionId, customerName: session.contact.displayName,
+            customerPhone: phone, sourceMessageId: input.providerMessageId, sourceText: input.inboundText, receivedAt: input.receivedAt,
+            receivingPhoneNumberId: input.receivingPhoneNumberId }, code) ?? null;
+        } catch (taskError) {
+          logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "REVIEW_TASK_FAILED", receiptClaimAttempted, generationReached, error: taskError });
+        }
+        if (review && "taskId" in review) {
+          logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "failed", reason: "REVIEW_TASK_CREATED", receiptClaimAttempted, generationReached });
+          hasTask = true;
+          await refreshTask();
+          try { if (review.notify) await options.onFailure?.({ taskId: review.taskId, code, sessionId: input.sessionId }); }
+          catch { console.warn("[ClaudeCustomerSMS] Independent owner alert unavailable", { sessionId: input.sessionId, code }); }
+        } else {
+          if (review) logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "failed", reason: "REVIEW_TASK_SKIPPED", exclusion: review.skipped, receiptClaimAttempted, generationReached });
+          await reportFailure(code);
+        }
+        return { outcome: "failed" };
+      }
+      if (normalizePhone(receivingPhoneNumber) !== receivingPhoneNumber || !receivingPhoneNumber || receivingPhoneNumber === phone) {
+        logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "excluded", reason: "EXCLUDED",
+          exclusion: receivingPhoneNumber && receivingPhoneNumber === phone ? "RECEIVING_LINE_IS_SENDER" : "RECEIVING_LINE_INVALID" });
+        return { outcome: "excluded" };
+      }
       const binding: CustomerSmsBinding = { sessionId: input.sessionId, providerMessageId: input.providerMessageId, fromPhone: phone,
         receivingPhoneNumberId: input.receivingPhoneNumberId, receivingPhoneNumber, inboundText: input.inboundText,
         createdAt, receivedAt: input.receivedAt, customerName: session.contact.displayName, historyHash: customerHistoryHash(session.messageHistory), historyContextHash: customerSmsContextHash(session.messageHistory) ?? undefined };
       diagnosticStage = "receipt_claim"; receiptClaimAttempted = true;
       logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, reason: "RECEIPT_CLAIM_REACHED", receiptClaimAttempted, generationReached });
       claim = await options.store.claim(binding);
-      if (!claim) return { outcome: "duplicate" };
+      if (!claim) {
+        logClaudeCustomerSmsDiagnostic(input, { stage: diagnosticStage, outcome: "duplicate", reason: "ALREADY_CLAIMED", receiptClaimAttempted, generationReached });
+        return { outcome: "duplicate" };
+      }
       let plan: CustomerReplyPlan;
       failurePhase = "generation";
       {

@@ -54,10 +54,19 @@ describe("one-extra-generation recovery exact local scope", () => {
   const reviewedProtected: Record<string, string> = {
     // History window (2026-11-25): reads saved bookings and unfinished tasks as optional SMS context.
     // Messages API (2026-11-26): automatic SMS replies ask for the 1-hour cache (cacheTtl: "1h"); nothing else changed.
-    "server/instinct/claudeCustomerSmsApplication.ts": "1f2a7582ff1bacd476d6b48d2d59549a9496bc7c799448f78da31609ee4e4d41",
+    // Receiving-line reliability (2026-11-27): the same single line lookup, time-limited, with one bounded retry
+    // for temporary failures (Retry-After respected within 5 s) and the real failure logged; an excluded number logs why.
+    "server/instinct/claudeCustomerSmsApplication.ts": "5f79cf866268db8f0bb9687889fd9f28012264c166f3bbd07f2f5f38be8d9e4b",
     // Phase 1 booking changes (2026-11-26): optional bookingAction on the reply plan (never stored in the task) and
     // attaching a proposal to its own private record when the task is created. Nothing else changed.
-    "server/instinct/claudeCustomerTasksStore.ts": "8e274df8b24adb1a4e69436f71d364ed465ef8b4d1517b25ddc0fb2a73acd6f8",
+    // Receiving-line reliability (2026-11-27): reportUnverifiedLineFailure creates the existing failure-review task when
+    // the line cannot be verified (opt-out, later reply/text, existing attempt or task: skipped). Never sends.
+    "server/instinct/claudeCustomerTasksStore.ts": "2528b6838cdf38c74f596e118d51d2ca2d80048b983923907034efbed4ee00aa",
+    // Receiving-line reliability (2026-11-27): every exclusion logs its rule (decisions unchanged); an unverified line
+    // creates the existing review task or keeps the existing owner alert. No generation or send on that path.
+    "server/instinct/claudeCustomerSms.ts": "4a0915ecc2acd76e0f1efaf16a5b2c19b4cb73ac2cf38d7048ac169155f349b9",
+    // Receiving-line reliability (2026-11-27): the guard-decline log line names the declining rule; the guard is unchanged.
+    "server/webhooks.ts": "84ee309c9c0caceffe422234184f6c7fc1e3db2da5c5f4c9a52dff8473bc5259",
     "shared/claudeCustomerTasks.ts": "57ce1ad7fefe44da89a92986fdb0fd951029263794a705a383c408ff31972e10",
   };
   it.each(protectedSources)("preserves delivery, authority, state, transport and prompts byte-for-byte: %s", path => {
