@@ -60,7 +60,7 @@ function checkGitPush(cmd) {
 
 const NETWORK_TOOL = /\b(curl|wget|http|https|httpie|nc|ncat|telnet|ssh|scp|mysql|mariadb|mysqldump|psql|node|python3?|deno|bun|tsx|npx)\b/;
 const PRODUCTION_HOSTS =
-  /(quote\.maidinblack\.com|maidsinblack\.com|maidinblack\.com|\.up\.railway\.app|railway\.app|railway\.com|backboard\.railway|api\.openphone\.com|api\.quo\.|api\.stripe\.com|api\.twilio\.com|api\.vapi\.ai|launch27|tidbcloud\.com|manus\.space|manus\.im|api\.deepgram\.com|gmail\.googleapis\.com|mybusiness\.googleapis\.com|api\.mailgun|hooks\.zapier\.com|ntfy\.sh|api\.thumbtack)/i;
+  /(quote\.maidinblack\.com|maidsinblack\.com|maidinblack\.com|\.up\.railway\.app|railway\.app|railway\.com|backboard\.railway|api\.openphone\.com|api\.quo\.|api\.stripe\.com|api\.twilio\.com|api\.vapi\.ai|launch27\.com|tidbcloud\.com|manus\.space|manus\.im|api\.deepgram\.com|gmail\.googleapis\.com|mybusiness\.googleapis\.com|api\.mailgun|hooks\.zapier\.com|ntfy\.sh|api\.thumbtack)/i;
 
 function checkBash(cmd) {
   const c = cmd.replace(/\\\n/g, " ");
