@@ -15,6 +15,18 @@ set -euo pipefail
 WEEK="${1:-current}"
 [[ "$WEEK" == current || "$WEEK" =~ ^20[0-9]{2}-[01][0-9]-[0-3][0-9]$ ]] || { echo "Usage: bash $0 [YYYY-MM-DD Sunday]"; exit 2; }
 DAYS=7
+# Week bounds in US Eastern time are computed here (Perl ships with macOS and Linux), never with named time zones
+# in the database, which may not support them. Output: today, Sunday week start, start ms, end ms (next Sunday or now).
+BOUNDS="$(TZ=America/New_York perl -MPOSIX -e '
+  my $arg = shift; my @t = localtime(time); my $today = strftime("%Y-%m-%d", @t); my ($y, $m, $d);
+  if ($arg eq "current") { ($y, $m, $d) = ($t[5], $t[4], $t[3] - $t[6]); } else { ($y, $m, $d) = split /-/, $arg; $y -= 1900; $m -= 1; }
+  my $start = mktime(0, 0, 0, $d, $m, $y); my @s = localtime($start);
+  die "not a Sunday\n" if $s[6] != 0;
+  die "future week\n" if $start > time;
+  my $next = mktime(0, 0, 0, $d + 7, $m, $y); my $end = $next < time ? $next : time;
+  printf "%s %s %d %d\n", $today, strftime("%Y-%m-%d", @s), $start * 1000, int($end) * 1000;' "$WEEK")" || { echo "The week must be a past or current Sunday (YYYY-MM-DD)."; exit 2; }
+read -r TODAY WEEKSTART START_MS END_MS <<< "$BOUNDS"
+[[ "$TODAY" =~ ^20[0-9]{2}-[01][0-9]-[0-3][0-9]$ && "$WEEKSTART" =~ ^20[0-9]{2}-[01][0-9]-[0-3][0-9]$ && "$START_MS" =~ ^[0-9]{13}$ && "$END_MS" =~ ^[0-9]{13}$ ]] || { echo "Could not compute the week window."; exit 2; }
 [[ "$DAYS" =~ ^[0-9]{1,2}$ ]] && [ "$DAYS" -ge 1 ] || { echo "days must be 1-99"; exit 2; }
 
 die() { printf '\n\033[31mSTOPPED:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -90,13 +102,8 @@ DIG="(SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION 
 NUMS="(SELECT a.d + 10 * b.d + 100 * c.d AS i FROM $DIG a CROSS JOIN $DIG b CROSS JOIN $DIG c)"
 # Week window (Sunday-start, America/New_York), like the leaderboard. Comparisons use DATE/number values only, never text
 # variables, so they work whatever collation a table column or the client connection uses.
-WK="SET @today = DATE(CONVERT_TZ(NOW(), '+00:00', 'America/New_York'));
-SET @ws = IF('$WEEK' = 'current', DATE_SUB(@today, INTERVAL DAYOFWEEK(@today) - 1 DAY), DATE('$WEEK'));
-SET @we = DATE_ADD(@ws, INTERVAL 6 DAY), @through = LEAST(DATE_ADD(@ws, INTERVAL 6 DAY), @today);
-SET @wsS = DATE_FORMAT(@ws, '%Y-%m-%d'), @throughS = DATE_FORMAT(@through, '%Y-%m-%d'), @todayS = DATE_FORMAT(@today, '%Y-%m-%d');
-SET @startUtc = CONVERT_TZ(CONCAT(@wsS, ' 00:00:00'), 'America/New_York', '+00:00');
-SET @endUtc = LEAST(CONVERT_TZ(CONCAT(DATE_FORMAT(DATE_ADD(@ws, INTERVAL 7 DAY), '%Y-%m-%d'), ' 00:00:00'), 'America/New_York', '+00:00'), NOW());
-SET @startMs = UNIX_TIMESTAMP(FROM_UNIXTIME(@startMs / 1000)) * 1000, @endMs = UNIX_TIMESTAMP(FROM_UNIXTIME(@endMs / 1000)) * 1000;"
+WK="SET @todayS = '$TODAY', @wsS = '$WEEKSTART', @startMs = $START_MS, @endMs = $END_MS;
+SET @throughS = DATE_FORMAT(LEAST(DATE_ADD(DATE(@wsS), INTERVAL 6 DAY), DATE(@todayS)), '%Y-%m-%d');"
 # The leaderboard's job cohort and team mapping (same rules as teamLeaderboardHistoryMetrics.ts).
 J="WITH jobs AS (
     SELECT j.id, j.jobDate, j.bookingStatus, j.teamId, j.customerRating,
@@ -117,13 +124,13 @@ SET SESSION group_concat_max_len = 100000;
 $WK
 START TRANSACTION READ ONLY AS OF TIMESTAMP NOW() - INTERVAL 5 SECOND;
 SELECT DATABASE() AS database_checked, @wsS AS week_start_sunday, @throughS AS through_date, @todayS AS today_eastern,
-  CONVERT_TZ(@startUtc, '+00:00', 'America/New_York') AS window_start_et, CONVERT_TZ(@endUtc, '+00:00', 'America/New_York') AS window_end_et;
+  FROM_UNIXTIME(@startMs / 1000) AS window_start_utc, FROM_UNIXTIME(@endMs / 1000) AS window_end_utc;
 
 SELECT 'L1. Per team (jobs already done = jobDate before today; a job with no portal record counts as a missed ETA)' AS section;
 $J SELECT t.id AS team_id, t.name AS team, t.isActive AS active,
   COUNT(m.id) AS jobs_in_week, SUM(STR_TO_DATE(m.jobDate, '%Y-%m-%d') < DATE(@todayS)) AS jobs_done, SUM(STR_TO_DATE(m.jobDate, '%Y-%m-%d') >= DATE(@todayS)) AS jobs_today_or_later,
   SUM(m.customerRating BETWEEN 1 AND 5) AS ratings, SUM(m.customerRating = 5) AS five_star,
-  SUM(p.jid IS NOT NULL) AS with_portal_record, SUM(p.jid IS NULL) AS no_portal_record, SUM(COALESCE(p.hasEta, 0)) AS with_eta,
+  SUM(p.jid IS NOT NULL) AS with_portal_record, SUM(m.id IS NOT NULL AND p.jid IS NULL) AS no_portal_record, SUM(COALESCE(p.hasEta, 0)) AS with_eta,
   SUM(COALESCE(ph.hasPhoto, 0)) AS with_photo, GROUP_CONCAT(DISTINCT m.bookingStatus ORDER BY m.bookingStatus) AS statuses
 FROM scheduling_teams t LEFT JOIN mapped m ON m.matches = 1 AND m.sid = t.id
 LEFT JOIN prog p ON p.jid = m.id LEFT JOIN pho ph ON ph.jid = m.id
@@ -146,7 +153,7 @@ SELECT t.id AS team_id, t.name AS team, t.launch27TeamId,
 FROM scheduling_teams t ORDER BY t.name;
 
 SELECT 'L5. Past Run review attempts (status, size of the saved read; TiDB rejects a row over 6 MB by default)' AS section;
-SELECT id AS run_id, weekStart, status, CONVERT_TZ(FROM_UNIXTIME(createdAtMs / 1000), '+00:00', 'America/New_York') AS started_et,
+SELECT id AS run_id, weekStart, status, FROM_UNIXTIME(createdAtMs / 1000) AS started_utc,
   ROUND((updatedAtMs - createdAtMs) / 1000) AS seconds, ROUND(LENGTH(payload) / 1048576, 2) AS payload_mb, ROUND(LENGTH(progress) / 1024) AS progress_kb,
   publishedAtMs IS NOT NULL AS published, JSON_UNQUOTE(JSON_EXTRACT(progress, '\$.status')) AS progress_status
 FROM team_review_runs ORDER BY createdAtMs DESC LIMIT 12;
