@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { customerReplyPlanSchema, type CustomerReplyPlan } from "../../shared/claudeCustomerTasks";
+import { claimsBookingChangeDone, looksLikeBookingChange } from "../../shared/bookingChangeClaims";
 import { reviewJsonSchema, type ReviewJson } from "../../shared/claudeSmsAlternative";
 import { retrieveKnowledge } from "../madisonKnowledgeRetrieval";
 import { buildSystemPrompt } from "../csReplyStream";
@@ -104,6 +105,9 @@ export function validateClaudeCustomerReplyPlan(text: string, { incomingMessage,
   const plan = customerReplyPlanSchema.parse(JSON.parse(text));
   const replyText = validateClaudeReviewReply(JSON.stringify({ replyText: plan.replyText }), protectedIds);
   if (plan.task?.items.some(item => !incomingMessage.includes(item.evidenceQuote))) return fail("TASK_EVIDENCE_NOT_CURRENT_INBOUND");
+  // A reply never says a requested cancellation/reschedule/skip/frequency change is already done: staff make the change
+  // later (by hand in Launch27). Rejected like any invalid reply: one retry, then the existing review task.
+  if (looksLikeBookingChange(incomingMessage) && claimsBookingChangeDone(replyText)) return fail("REPLY_CLAIMS_BOOKING_CHANGE_DONE");
   return { replyText, task: plan.task };
 }
 

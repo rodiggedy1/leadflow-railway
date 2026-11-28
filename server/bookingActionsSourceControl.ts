@@ -46,7 +46,26 @@ const approved: Record<string, Array<[string, string]>> = {
   ]
  ]
 };
+// Approved Launch27 manual-action notice (2026-11-28): exact hunks, removed first so every earlier guard still applies.
+const approvedL27Manual: Record<string, Array<[string, string]>> = {
+  "client/src/components/ClaudeCustomerTasks.tsx": [
+    ["import { ClaudeBookingChangePanel, ManualBookingNotice, bookingChangeHistory, bookingChangeStatus, manualBookingStatus, useBookingChange, useManualBookingChange } from \"./ClaudeBookingChangePanel\";\n",
+      "import { ClaudeBookingChangePanel, bookingChangeHistory, bookingChangeStatus, useBookingChange } from \"./ClaudeBookingChangePanel\";\n"],
+    ["  // Launch27 or unclear booking: always \"Manual action required\", never an automated or verified status.\n  const manual = useManualBookingChange(task, booking.data);\n  const status = manual ? manualBookingStatus(manual) : bookingChangeStatus(booking.data);\n",
+      "  const status = bookingChangeStatus(booking.data);\n"],
+    ["      {manual && <ManualBookingNotice task={task} manual={manual} />}\n      {!call && !(\"email\" in task) && <ClaudeBookingChangePanel task={task} manual={manual} />}\n",
+      "      {!call && !(\"email\" in task) && <ClaudeBookingChangePanel task={task} />}\n"],
+  ],
+  "server/claudeCustomerTasksRouter.ts": [
+    ["    /** Native LeadFlow or Launch27: a Launch27 (or unclear) booking change is always manual. Read-only. */\n    bookingSource: opsChatProcedure.input(idInput)\n      .output(z.object({ source: z.enum([\"native\", \"launch27\", \"unknown\"]), launch27BookingIds: z.array(z.number().int().positive()) }).strict())\n      .query(({ input }) => bookingActions((actions, db) => actions.taskBookingSource(db, input.id), false)),\n", ""],
+  ],
+};
 export function withoutApprovedBookingActions(path: string, source: string): string {
+  for (const [current, original] of approvedL27Manual[path] ?? []) {
+    const count = source.split(current).length - 1;
+    if (count !== 0 && count !== 1) throw new Error(`Unexpected L27 manual-action hunk: ${path}`);
+    if (count === 1) source = source.replace(current, original);
+  }
   if (approvedRedesign[path] && createHash("sha256").update(source).digest("hex") === approvedRedesign[path])
     source = execFileSync("git", ["show", `${RELEASED}:${path}`], { cwd: fileURLToPath(new URL("../", import.meta.url)), encoding: "utf8", maxBuffer: 5_000_000 });
   for (const [current, original] of approved[path] ?? []) {

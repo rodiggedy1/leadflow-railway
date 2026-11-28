@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowDown, CalendarClock, CheckCircle2, Clock3, Loader2, Pencil, RefreshCw, Send } from "lucide-react";
+import { AlertTriangle, ArrowDown, CalendarClock, CheckCircle2, Clock3, ExternalLink, Loader2, Pencil, RefreshCw, Send } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { looksLikeBookingChange } from "@shared/bookingChangeClaims";
 import {
   formatArrivalWindow, formatBookingTime,
   type BookingActionRecord, type BookingActionRequest, type BookingActionView, type BookingActionVisit,
@@ -87,6 +88,47 @@ export function useBookingChange(task: CustomerTask, expanded = false) {
   return { sms, version, hasRecord, versions, view, data: hasRecord ? (view.data ?? null) : null, dismissed: dismissed.data ?? [] };
 }
 
+/** A booking change LeadFlow cannot make: the customer's booking is in Launch27, or which system it is in is not clear.
+ * null = native LeadFlow (or not a booking change), so the existing approve, execute and verify workflow applies. */
+export type ManualBookingChange = { source: "launch27" | "unknown"; launch27BookingIds: number[] } | null;
+const launch27BookingUrl = (id: number) => `https://maidsinblack.launch27.com/admin/bookings/${id}`;
+/** A record for a native visit (executable, or already changed by LeadFlow) keeps the native workflow. */
+const nativeRecord = (view: BookingActionView | null) => Boolean(view && (view.record.status !== "proposed" || (view.assessment?.executable && view.assessment.visit)));
+/** Pure decision, tested on its own. Anything other than a confirmed native booking is manual. */
+export function manualBookingChange(task: CustomerTask, view: BookingActionView | null,
+  source: { source: "native" | "launch27" | "unknown"; launch27BookingIds: number[] } | null | undefined, sourceFailed: boolean): ManualBookingChange {
+  if (nativeRecord(view) || !(view || looksLikeBookingChange(task.title, task.sourceText, ...task.items.map(item => item.title)))) return null;
+  if (sourceFailed) return { source: "unknown", launch27BookingIds: [] };
+  if (!source || source.source === "native") return null;
+  return { source: source.source, launch27BookingIds: source.launch27BookingIds };
+}
+/** Asks the server which booking system this customer's visits are in, only for booking-change cards. */
+export function useManualBookingChange(task: CustomerTask, view: BookingActionView | null): ManualBookingChange {
+  const relevant = !nativeRecord(view) && Boolean(view || looksLikeBookingChange(task.title, task.sourceText, ...task.items.map(item => item.title)));
+  const source = trpc.claudeCustomerTasks.bookingSource.useQuery({ id: task.id }, { enabled: relevant, staleTime: 300_000, refetchOnWindowFocus: false, retry: false, ...background });
+  return relevant ? manualBookingChange(task, view, source.data, source.isError) : null;
+}
+const changeKind = (text: string) => /\bcancel/i.test(text) ? "cancellation" : /\bskip/i.test(text) ? "skipped appointment"
+  : /\bfrequen|\bbi-?weekly\b|\bevery (other|two|three|four|2|3|4) weeks?\b|\bmonthly\b/i.test(text) ? "frequency change"
+  : /\bpause/i.test(text) ? "pause" : /\breschedul|\bpostpone|\bmove\b|\bdifferent (day|date|time)\b/i.test(text) ? "reschedule" : "booking change";
+/** One line for the collapsed card. */
+export const manualBookingStatus = (manual: NonNullable<ManualBookingChange>) => ({ tone: "warning" as const,
+  text: manual.source === "launch27" ? "Manual action required — Launch27" : "Manual action required — booking system not confirmed" });
+/** Shown on every booking-change card that LeadFlow cannot change itself. Never shows a success or verified status. */
+export function ManualBookingNotice({ task, manual }: { task: CustomerTask; manual: NonNullable<ManualBookingChange> }) {
+  const kind = changeKind([task.title, task.sourceText, ...task.items.map(item => item.title)].join(" \n "));
+  const l27 = manual.source === "launch27";
+  return <section className="cbc-manual" role="status" aria-label="Manual action required">
+    <p className="cbc-manual-title"><AlertTriangle aria-hidden="true" />{manualBookingStatus(manual).text}</p>
+    <p className="cbc-manual-text">The {kind} has <strong>NOT</strong> been made automatically. {l27
+      ? "Make the change in Launch27, then close this task."
+      : "LeadFlow could not confirm where this booking is. Check Launch27 and make the change by hand, then close this task."}</p>
+    {manual.launch27BookingIds.map(id => <a key={id} className="cbc-manual-link" href={launch27BookingUrl(id)} target="_blank" rel="noopener noreferrer">
+      <ExternalLink aria-hidden="true" />Open booking {id} in Launch27</a>)}
+    {!manual.launch27BookingIds.length && <p className="cbc-muted">No Launch27 booking link was found. Search for the customer in Launch27.</p>}
+  </section>;
+}
+
 type StatusTone = "pending" | "done" | "warning";
 /** One short line for the collapsed card (null when there is no booking change). */
 export function bookingChangeStatus(view: BookingActionView | null): { tone: StatusTone; text: string } | null {
@@ -132,7 +174,7 @@ function Appointment({ before, after, cancelled, windowKept, label, compact = fa
 }
 
 /** The expanded booking-change section of an SMS task card (null for other tasks). */
-export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
+export function ClaudeBookingChangePanel({ task, manual = null }: { task: CustomerTask; manual?: ManualBookingChange }) {
   const { sms, hasRecord, versions, view, data } = useBookingChange(task);
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState(false);
@@ -169,7 +211,8 @@ export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
 
   if (versions.isLoading || (hasRecord && view.isLoading)) return <p className="cbc-loading"><Loader2 aria-hidden="true" />Loading booking change…</p>;
   if (!data) {
-    if (task.status === "done" || versions.isError || (hasRecord && view.isError)) return null;
+    // Launch27 or unclear booking: the card shows "Manual action required" instead of the native setup.
+    if (manual || task.status === "done" || versions.isError || (hasRecord && view.isError)) return null;
     return editing
       ? <BookingRequestForm task={task} busy={busy} error={error} onCancel={() => { setEditing(false); setError(""); }}
           onSave={(request, itemId) => void run(async () => { await setup.mutateAsync({ id: task.id, request, itemId }); setEditing(false); })} />
@@ -196,9 +239,9 @@ export function ClaudeBookingChangePanel({ task }: { task: CustomerTask }) {
       {(assessment?.manualReasons ?? []).map(reason => <p key={reason} className="cbc-note cbc-warning-text">{reason}</p>)}
       {(assessment?.warnings ?? []).filter(warning => !/team availability/i.test(warning)).map(warning => <p key={warning} className="cbc-note">{warning}</p>)}
       {executable && <p className="cbc-muted">Only this appointment will change.</p>}
-      <button type="button" className="cbc-primary" disabled={busy || !executable} title={!data.enabled ? "Booking changes are switched off" : undefined}
+      {!manual && <button type="button" className="cbc-primary" disabled={busy || !executable} title={!data.enabled ? "Booking changes are switched off" : undefined}
         onClick={() => { if (!executable || !visit) return; void run(() => execute.mutateAsync({ id: task.id, revision: record.revision, jobId: visit.jobId, availabilityConfirmed: true })); }}>
-        {busy ? <><Loader2 aria-hidden="true" />{reschedule ? "Rescheduling…" : "Cancelling…"}</> : reschedule ? "Approve & reschedule" : "Approve & cancel"}</button>
+        {busy ? <><Loader2 aria-hidden="true" />{reschedule ? "Rescheduling…" : "Cancelling…"}</> : reschedule ? "Approve & reschedule" : "Approve & cancel"}</button>}
       <div className="cbc-links">
         <button type="button" className="cbc-link" disabled={busy} onClick={() => { setError(""); setEditing(true); }}><Pencil aria-hidden="true" />Edit change</button>
         <button type="button" className="cbc-link cbc-link-muted" disabled={busy} onClick={() => void run(() => dismiss.mutateAsync({ id: task.id, revision: record.revision }))}>Dismiss proposal</button>

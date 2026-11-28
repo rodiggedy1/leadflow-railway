@@ -27,8 +27,20 @@ const recoveryHashes: Record<string, string> = {
 const tokenTrimHashes: Record<string, string> = {
   "server/instinct/claudeCustomerSmsGeneration.ts": "1c9dd8b5e8f2ebe0cffa7994f9527254ee69b3029e36c53cccc7cb076aed320f",
 };
+// Approved booking-change claim check (2026-11-28): exact hunks, removed before the pinned-hash comparison.
+const approvedBookingClaimCheck: Record<string, Array<[string, string]>> = {
+  "server/instinct/claudeCustomerSmsGeneration.ts": [
+    ["import { claimsBookingChangeDone, looksLikeBookingChange } from \"../../shared/bookingChangeClaims\";\n", ""],
+    ["  // A reply never says a requested cancellation/reschedule/skip/frequency change is already done: staff make the change\n  // later (by hand in Launch27). Rejected like any invalid reply: one retry, then the existing review task.\n  if (looksLikeBookingChange(incomingMessage) && claimsBookingChangeDone(replyText)) return fail(\"REPLY_CLAIMS_BOOKING_CHANGE_DONE\");\n", ""],
+  ],
+};
 function phraseRemovalSource(path: string): string {
-  const source = readFileSync(path, "utf8"), hash = createHash("sha256").update(source).digest("hex");
+  let source = readFileSync(path, "utf8");
+  for (const [hunk, original] of approvedBookingClaimCheck[path] ?? []) {
+    expect(source.split(hunk).length - 1).toBe(1);
+    source = source.replace(hunk, original);
+  }
+  const hash = createHash("sha256").update(source).digest("hex");
   return hash === recoveryHashes[path] || hash === tokenTrimHashes[path]
     ? execFileSync("git", ["show", `d277178315602808dbc1ac141bc344761f6f4468:${path}`], { encoding: "utf8" }) : source;
 }

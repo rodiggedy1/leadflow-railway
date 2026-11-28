@@ -227,6 +227,41 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     expect(await jobOf(only)).toEqual(onlyBefore);
   });
 
+  it("booking source: native, Launch27 (with its booking link id), both, or none = manual; read-only", async () => {
+    const l27Job = async (phone: string, date: string, l27Id: number | null, origin = "launch27_import", bookingStatus = "assigned") => {
+      const [inserted] = await db.insert(leadflowJobs).values({ origin, launch27BookingId: l27Id, jobDate: date, serviceDateTime: iso(date, "09:00"),
+        customerName: "Maya Lane", customerPhone: phone, bookingStatus, jobTotalCents: 1 });
+      return Number((inserted as any).insertId);
+    };
+    const ask = "Please cancel my cleaning next week";
+    // Native only
+    const nativePhone = newPhone(), nativeDate = addDays(today(), 5);
+    const nb = await booking({ phone: nativePhone, date: nativeDate, time: "10:00" }); await visit(nb, nativeDate, "10:00");
+    expect(await actions.taskBookingSource(db, await task(nativePhone, ask, null))).toEqual({ source: "native", launch27BookingIds: [] });
+    // Launch27 only, stored in another phone format; a recent completed visit also counts, a cancelled one does not
+    const l27Phone = newPhone(), digits = l27Phone.slice(2);
+    const upcoming = 800000 + ++seq, recent = 800000 + ++seq, cancelled = 800000 + ++seq;
+    await l27Job(`(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`, addDays(today(), 4), upcoming);
+    await l27Job(l27Phone, addDays(today(), -3), recent, "launch27_import", "completed");
+    await l27Job(l27Phone, addDays(today(), 8), cancelled, "launch27_import", "cancelled");
+    const l27Task = await task(l27Phone, ask, null);
+    const before = await db.select().from(leadflowJobs).where(sql`customerPhone LIKE ${`%${digits.slice(6)}%`}`);
+    const l27Source = await actions.taskBookingSource(db, l27Task);
+    expect(l27Source.source).toBe("launch27");
+    expect([...l27Source.launch27BookingIds].sort()).toEqual([upcoming, recent].sort());
+    expect(await db.select().from(leadflowJobs).where(sql`customerPhone LIKE ${`%${digits.slice(6)}%`}`)).toEqual(before); // read-only
+    // Imported recurrence row without a booking id (no Launch27 id stored) is still Launch27
+    const recPhone = newPhone(); await l27Job(recPhone, addDays(today(), 3), null, "leadflow_recurrence");
+    expect(await actions.taskBookingSource(db, await task(recPhone, ask, null))).toEqual({ source: "launch27", launch27BookingIds: [] });
+    // Both systems: not reliable, so manual (unknown) with the Launch27 link
+    const bothPhone = newPhone(), bothDate = addDays(today(), 6), bothL27 = 800000 + ++seq;
+    const bb = await booking({ phone: bothPhone, date: bothDate, time: "10:00" }); await visit(bb, bothDate, "10:00");
+    await l27Job(bothPhone, addDays(today(), 2), bothL27);
+    expect(await actions.taskBookingSource(db, await task(bothPhone, ask, null))).toEqual({ source: "unknown", launch27BookingIds: [bothL27] });
+    // No bookings anywhere: unknown (manual)
+    expect(await actions.taskBookingSource(db, await task(newPhone(), ask, null))).toEqual({ source: "unknown", launch27BookingIds: [] });
+  });
+
   it("simultaneous approvals execute exactly once", async () => {
     const phone = newPhone(), date = addDays(today(), 11), newDate = addDays(today(), 15);
     const b = await booking({ phone, date, time: "13:00" }); const j = await visit(b, date, "13:00");

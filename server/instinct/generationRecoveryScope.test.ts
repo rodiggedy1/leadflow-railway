@@ -9,7 +9,7 @@ const before = (path: string) => execFileSync("git", ["show", `${baseline}:${pat
 const sha = (source: string) => createHash("sha256").update(source).digest("hex");
 const candidates: Record<string, string> = {
   // Token trim (2026-11-25): knowledge base kept only in the fixed instructions; email payload slimmed.
-  "server/instinct/claudeCustomerSmsGeneration.ts": "1c9dd8b5e8f2ebe0cffa7994f9527254ee69b3029e36c53cccc7cb076aed320f",
+  "server/instinct/claudeCustomerSmsGeneration.ts": "299a72a124ac653d489e70c724f414fbcc3972a79789678ff5e578a84d0ec932",
   // + history window (2026-11-25); + quality complaint label (Phase 2, 2026-11-28): the same runner, wrapped to add one
   // prompt paragraph in front and to read the optional label from the same answer (no extra AI call; reply unchanged).
   "server/instinct/claudeCustomerEmailApplication.ts": "4aaa736f6cbd8eb8de9985e871dde6c49c0ab44ec8000c0e6624e14b468b7076",

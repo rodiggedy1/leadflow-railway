@@ -200,13 +200,21 @@ describe("content-only Claude customer SMS plan", () => {
     expect(h.readKnowledge).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["I've rescheduled your cleaning.", "We updated your notes.", "Your cleaning has been changed.", "I will contact the team.", "We notified staff.",
-    "Notes are in — your crew has been briefed.", "Your request is completed.", "We've taken care of the change.",
-    "Your slot is guaranteed.", "Friday is available.", "We can fit you in.", "I'll send you the quote.", "We've updated your booking.",
-    "Your booking is confirmed", "Tomorrow is available", "You're all set", "We have reserved your slot."])("accepts exact claim wording and preserves every proposed task item: %s", async replyText => {
+  it.each(["We updated your notes.", "I will contact the team.", "We notified staff.",
+    "Notes are in — your crew has been briefed.",
+    "Your slot is guaranteed.", "Friday is available.", "We can fit you in.", "I'll send you the quote.",
+    "Tomorrow is available", "We have reserved your slot."])("accepts exact claim wording and preserves every proposed task item: %s", async replyText => {
     const f = fixture(), plan = { replyText, task }, h = harness(plan);
     expect(await h.generate(f.binding, f.session)).toEqual(plan);
     expect(h.runner).toHaveBeenCalledTimes(1);
+  });
+  // Owner rule (2026-11-28): when the customer asks for a booking change (here "move my cleaning to Friday"), a reply
+  // never says it is already done; staff make the change by hand (Launch27) or approve it. The existing one retry runs.
+  it.each(["I've rescheduled your cleaning.", "Your cleaning has been changed.", "Your request is completed.", "We've taken care of the change.",
+    "We've updated your booking.", "Your booking is confirmed", "You're all set"])("rejects a claim that the requested booking change is done: %s", async replyText => {
+    const f = fixture(), h = harness({ replyText, task });
+    await expect(h.generate(f.binding, f.session)).rejects.toThrow("REPLY_CLAIMS_BOOKING_CHANGE_DONE");
+    expect(h.runner).toHaveBeenCalledTimes(2);
   });
 
   it("accepts the exact Spanish reply previously rejected for EST inside estés", async () => {

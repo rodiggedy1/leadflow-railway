@@ -127,7 +127,7 @@ function harness(api: unknown = {}, initialContext?: unknown, input = source) {
       if (id === "@/components/ui/dialog") return { Dialog, DialogContent, DialogTrigger, DialogDescription: div, DialogTitle: div };
       if (id.endsWith(".css")) return {};
       // Phase 1 booking-change panel: rendered and tested separately (claudeBookingChangePanelUi.test.ts).
-      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null, useBookingChange: () => ({ data: null }), bookingChangeStatus: () => null, bookingChangeHistory: () => [] };
+      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null, useBookingChange: () => ({ data: null }), bookingChangeStatus: () => null, bookingChangeHistory: () => [], useManualBookingChange: () => null, manualBookingStatus: () => null, ManualBookingNotice: () => null };
       throw new Error(`Forbidden offline UI import: ${id}`);
     } }, { timeout: 1500 });
   const ui = module.exports;

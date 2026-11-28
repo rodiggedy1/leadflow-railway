@@ -190,6 +190,28 @@ export async function upcomingVisits(q: Q, phone: string, today = getEasternBusi
     .slice(0, 20).map(job => visitOf(byId.get(job.bookingId!)!, job));
 }
 
+/** Which booking system this customer's visits are in. LeadFlow changes only native bookings; a change to a Launch27
+ * booking is always manual. "unknown" (no visits, both systems, or no phone) is treated as manual too. */
+export type TaskBookingSource = { source: "native" | "launch27" | "unknown"; launch27BookingIds: number[] };
+export async function taskBookingSource(db: Db, taskId: number, today = getEasternBusinessDate()): Promise<TaskBookingSource> {
+  const task = await readTask(db, taskId);
+  const phone = task.customerPhone ? normalizePhone(task.customerPhone) : null;
+  if (!phone) return { source: "unknown", launch27BookingIds: [] };
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  const native = await upcomingVisits(db, phone, today);
+  const since = new Date(Date.parse(`${today}T12:00:00Z`) - 14 * 86_400_000).toISOString().slice(0, 10);
+  // Imported visits keep their Launch27 booking ID (the same rule the rest of LeadFlow uses for imported jobs).
+  const imported = rowsOf(await db.execute(sql`SELECT launch27BookingId, bookingStatus FROM leadflow_jobs
+    WHERE jobDate >= ${since} AND RIGHT(REGEXP_REPLACE(COALESCE(customerPhone, ''), '[^0-9]', ''), 10) = ${digits}
+      AND (launch27BookingId IS NOT NULL OR origin = 'launch27_import' OR (bookingId IS NULL AND origin = 'leadflow_recurrence'))
+    ORDER BY jobDate ASC, id ASC LIMIT 20`))
+    .filter(row => !INACTIVE_JOB.has(String(row.bookingStatus ?? "").trim().toLowerCase()) || String(row.bookingStatus ?? "").trim().toLowerCase() === "completed");
+  const ids = Array.from(new Set(imported.map(row => Number(row.launch27BookingId)).filter(id => Number.isSafeInteger(id) && id > 0))).slice(0, 3);
+  if (imported.length && !native.length) return { source: "launch27", launch27BookingIds: ids };
+  if (native.length && !imported.length) return { source: "native", launch27BookingIds: [] };
+  return { source: "unknown", launch27BookingIds: ids };
+}
+
 /** Upcoming native visits for a task's customer (staff "Set up booking change" choices). */
 export async function taskUpcomingVisits(db: Db, taskId: number): Promise<BookingActionVisit[]> {
   const task = await readTask(db, taskId);

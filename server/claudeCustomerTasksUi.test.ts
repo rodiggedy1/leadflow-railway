@@ -67,7 +67,7 @@ function load(react = React, trpc: unknown = {}): Ui {
       if (id === "@/components/ui/dialog") return { Dialog: dialog, DialogContent: div, DialogDescription: div, DialogTitle: div };
       if (id.endsWith(".css")) return {};
       // Phase 1 booking-change panel: rendered and tested separately (claudeBookingChangePanelUi.test.ts).
-      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null, useBookingChange: () => ({ data: null }), bookingChangeStatus: () => null, bookingChangeHistory: () => [] };
+      if (id === "./ClaudeBookingChangePanel") return { ClaudeBookingChangePanel: () => null, useBookingChange: () => ({ data: null }), bookingChangeStatus: () => null, bookingChangeHistory: () => [], useManualBookingChange: () => null, manualBookingStatus: () => null, ManualBookingNotice: () => null };
       throw new Error(`Unexpected customer task UI import: ${id}`);
     },
   }, { timeout: 1500 });

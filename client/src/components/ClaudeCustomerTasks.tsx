@@ -6,7 +6,7 @@ import { proxyRecordingUrl } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask } from "@shared/claudeCustomerTasks";
 import "./claude-customer-tasks.css";
-import { ClaudeBookingChangePanel, bookingChangeHistory, bookingChangeStatus, useBookingChange } from "./ClaudeBookingChangePanel";
+import { ClaudeBookingChangePanel, ManualBookingNotice, bookingChangeHistory, bookingChangeStatus, manualBookingStatus, useBookingChange, useManualBookingChange } from "./ClaudeBookingChangePanel";
 
 export type CustomerTaskView = "open" | "mine" | "done";
 export type CustomerTaskActions = {
@@ -374,7 +374,9 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
   const name = task.customerName || (call?.provider === "openphone" ? "Caller" : "Customer");
   const contact = "email" in task ? task.email.fromEmail : task.customerPhone;
   const done = task.status === "done";
-  const status = bookingChangeStatus(booking.data);
+  // Launch27 or unclear booking: always "Manual action required", never an automated or verified status.
+  const manual = useManualBookingChange(task, booking.data);
+  const status = manual ? manualBookingStatus(manual) : bookingChangeStatus(booking.data);
   const record = booking.data?.record ?? null;
   // Booking-related cards focus on the appointment once it has changed; others show the request and checklist.
   const showRequest = !call && !("email" in task) && !record;
@@ -418,7 +420,8 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
       onClick={() => { if (canOpenConversation && onOpenConversation) onOpenConversation(task); }}>Open full conversation</button>}
     {expanded && <div className="cct-card-body">
       {showRequest && <section className="cct-block"><h5>Customer request</h5><p className="cct-verbatim cct-request">{task.sourceText}</p></section>}
-      {!call && !("email" in task) && <ClaudeBookingChangePanel task={task} />}
+      {manual && <ManualBookingNotice task={task} manual={manual} />}
+      {!call && !("email" in task) && <ClaudeBookingChangePanel task={task} manual={manual} />}
       {showChecklist && <section className="cct-block"><h5>Checklist</h5><ul className="cct-items">{task.items.map((item) => {
         const confirmed = item.completedBy !== null && item.completedAt !== null;
         return <li key={item.id}>
