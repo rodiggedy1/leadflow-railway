@@ -21,6 +21,7 @@ import {
 import { getPublicBookingArrivalPreference } from "../../shared/publicBookingPricing";
 import { isCustomerPortalRescheduleWithin24Hours } from "../../shared/customerPortalScheduleRequest";
 import { CLAUDE_CUSTOMER_TASK_ACTION, type CustomerTask, type TaskActor } from "../../shared/claudeCustomerTasks";
+import { looksLikeBookingChange } from "../../shared/bookingChangeClaims";
 import { authorizedScopeSchema, type ExtractionAction, type VerifiedIdentity } from "../../shared/instinct";
 import { cancelCanonicalBookingInTransaction } from "../bookingCancellationService";
 import { NATIVE_BOOKING_OPERATIONAL_ORIGIN } from "../bookingLifecycleService";
@@ -197,21 +198,70 @@ export async function taskBookingSource(db: Db, taskId: number, today = getEaste
   const task = await readTask(db, taskId);
   const phone = task.customerPhone ? normalizePhone(task.customerPhone) : null;
   if (!phone) return { source: "unknown", launch27BookingIds: [] };
-  const digits = phone.replace(/\D/g, "").slice(-10);
-  const native = await upcomingVisits(db, phone, today);
+  return phoneBookingSource(db, phone, (await importedVisitsByPhone(db, today)).get(phone.replace(/\D/g, "").slice(-10)) ?? [], today);
+}
+/** The week-window of imported (Launch27) visits, grouped by the last 10 digits of the phone. One query for all
+ * customers, so a screen full of task cards never runs one phone scan per card. */
+async function importedVisitsByPhone(db: Db, today: string): Promise<Map<string, Array<Record<string, unknown>>>> {
   const since = new Date(Date.parse(`${today}T12:00:00Z`) - 14 * 86_400_000).toISOString().slice(0, 10);
   // Imported visits keep their Launch27 booking ID (the same rule the rest of LeadFlow uses for imported jobs).
-  const imported = rowsOf(await db.execute(sql`SELECT launch27BookingId, bookingStatus FROM leadflow_jobs
-    WHERE jobDate >= ${since} AND RIGHT(REGEXP_REPLACE(COALESCE(customerPhone, ''), '[^0-9]', ''), 10) = ${digits}
+  const rows = rowsOf(await db.execute(sql`SELECT launch27BookingId, bookingStatus, customerPhone FROM leadflow_jobs
+    WHERE jobDate >= ${since}
       AND (launch27BookingId IS NOT NULL OR origin = 'launch27_import' OR (bookingId IS NULL AND origin = 'leadflow_recurrence'))
-    ORDER BY jobDate ASC, id ASC LIMIT 20`))
-    .filter(row => !INACTIVE_JOB.has(String(row.bookingStatus ?? "").trim().toLowerCase()) || String(row.bookingStatus ?? "").trim().toLowerCase() === "completed");
+    ORDER BY jobDate ASC, id ASC LIMIT 50000`));
+  const byPhone = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const status = String(row.bookingStatus ?? "").trim().toLowerCase();
+    if (INACTIVE_JOB.has(status) && status !== "completed") continue;
+    const digits = String(row.customerPhone ?? "").replace(/\D/g, "").slice(-10);
+    if (digits.length !== 10) continue;
+    const list = byPhone.get(digits) ?? [];
+    if (list.length < 20) list.push(row);
+    byPhone.set(digits, list);
+  }
+  return byPhone;
+}
+async function phoneBookingSource(db: Db, phone: string, imported: Array<Record<string, unknown>>, today: string): Promise<TaskBookingSource> {
+  const native = await upcomingVisits(db, phone, today);
   const ids = Array.from(new Set(imported.map(row => Number(row.launch27BookingId)).filter(id => Number.isSafeInteger(id) && id > 0))).slice(0, 3);
   if (imported.length && !native.length) return { source: "launch27", launch27BookingIds: ids };
   if (native.length && !imported.length) return { source: "native", launch27BookingIds: [] };
   // Both systems: a native appointment chosen explicitly (or matched by Claude's proposal) still uses the native workflow.
   if (native.length && imported.length) return { source: "both", launch27BookingIds: ids };
   return { source: "unknown", launch27BookingIds: ids };
+}
+/** Most open booking-change tasks looked up in one shared request. */
+export const BOOKING_SOURCES_LIMIT = 300;
+/** One shared answer for every task card on screen: the booking system of each OPEN booking-change task (completed
+ * tasks are never looked up). Runs one step at a time on a single connection: one read of the task rows, one read of
+ * the imported visits, and two indexed reads per distinct customer phone, never one burst per card. Read-only. */
+export async function taskBookingSources(db: Db, today = getEasternBusinessDate()): Promise<Record<string, TaskBookingSource>> {
+  const withRecord = new Set(Object.keys(await bookingActionVersions(db)));
+  const rows = rowsOf(await db.execute(sql`SELECT * FROM ops_chat_messages WHERE quickAction = ${CLAUDE_CUSTOMER_TASK_ACTION} AND channel = 'command' ORDER BY id DESC`));
+  const open: CustomerTask[] = [];
+  for (const row of rows) {
+    let task: CustomerTask;
+    try { task = persistence().parseTask(row); } catch { continue; }
+    if (task.status === "done") continue;
+    if (!withRecord.has(String(task.id)) && !looksLikeBookingChange(task.title, task.sourceText, ...task.items.map(item => item.title))) continue;
+    open.push(task);
+    if (open.length >= BOOKING_SOURCES_LIMIT) break;
+  }
+  const result: Record<string, TaskBookingSource> = {};
+  if (!open.length) return result;
+  const imported = await importedVisitsByPhone(db, today);
+  const byPhone = new Map<string, TaskBookingSource>();
+  for (const task of open) {
+    const phone = task.customerPhone ? normalizePhone(task.customerPhone) : null;
+    if (!phone) { result[String(task.id)] = { source: "unknown", launch27BookingIds: [] }; continue; }
+    let source = byPhone.get(phone);
+    if (!source) {
+      source = await phoneBookingSource(db, phone, imported.get(phone.replace(/\D/g, "").slice(-10)) ?? [], today);
+      byPhone.set(phone, source);
+    }
+    result[String(task.id)] = source;
+  }
+  return result;
 }
 
 /** Upcoming native visits for a task's customer (staff "Set up booking change" choices). */

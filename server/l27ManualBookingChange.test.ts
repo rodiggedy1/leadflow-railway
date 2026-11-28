@@ -21,7 +21,7 @@ vi.mock("@/lib/trpc", () => {
     claudeCustomerTasks: {
       bookingActionVersions: { useQuery: () => withRecords },
       bookingActionVisits: { useQuery: () => ({ data: [], isLoading: false }) },
-      bookingSource: { useQuery: () => ({ data: undefined, isLoading: false, isError: false }) },
+      bookingSources: { useQuery: () => ({ data: undefined, isLoading: false, isError: false, refetch: async () => ({}) }) },
       setupBookingAction: mutation(), editBookingAction: mutation(), dismissBookingAction: mutation(), executeBookingAction: mutation(), verifyBookingAction: mutation(),
       beginBookingConfirmation: mutation(), finishBookingConfirmation: mutation(),
     },
@@ -104,6 +104,10 @@ describe("task card: native keeps its workflow; Launch27 or unclear is manual", 
     expect(panel.manualBookingChange(t, nativeView as any, { source: "unknown", launch27BookingIds: [] }, false)).toBeNull();
     // A Launch27 proposal (not executable) is manual even without booking-change words
     expect(panel.manualBookingChange(task("Hi there"), manualView as any, { source: "launch27", launch27BookingIds: [] }, false)).not.toBeNull();
+    // Completed tasks never look anything up and never show the notice (no request per completed card)
+    expect(panel.needsBookingSource(task("Please cancel my cleaning on Friday", { status: "done" }), null)).toBe(false);
+    expect(panel.manualBookingChange(task("Please cancel my cleaning on Friday", { status: "done" }), null, { source: "launch27", launch27BookingIds: [1] }, false)).toBeNull();
+    expect(panel.needsBookingSource(t, null)).toBe(true);
     // Not a booking change: nothing changes
     expect(panel.manualBookingChange(task("Thanks, great job"), null, { source: "launch27", launch27BookingIds: [] }, false)).toBeNull();
   });
@@ -143,6 +147,19 @@ describe("task card: native keeps its workflow; Launch27 or unclear is manual", 
     expect(manualHtml).toContain("Dismiss proposal");
     expect(manualHtml).not.toMatch(/verified/i);
     expect(render(nativeView, null)).toContain("Approve &amp; cancel");
+  });
+  it("one shared request for every card: no per-card lookup, no input, de-duplicated refetch for a new task", () => {
+    const source = readFileSync("client/src/components/ClaudeBookingChangePanel.tsx", "utf8");
+    expect(source).toContain("trpc.claudeCustomerTasks.bookingSources.useQuery(undefined, { enabled: relevant,");
+    expect(source).toContain("sources.refetch({ cancelRefetch: false })");
+    expect(source).not.toMatch(/bookingSource\.useQuery|bookingSource\b\./);
+    const router = readFileSync("server/claudeCustomerTasksRouter.ts", "utf8");
+    expect(router).toContain("bookingSources: opsChatProcedure.output(");
+    expect(router).not.toContain("bookingSource: opsChatProcedure");
+    const server = readFileSync("server/instinct/claudeBookingActions.ts", "utf8");
+    const fn = server.slice(server.indexOf("export async function taskBookingSources"), server.indexOf("/** Upcoming native visits for a task's customer"));
+    expect(fn).toContain('if (task.status === "done") continue;');
+    expect(fn).not.toMatch(/Promise\.all|UPDATE|INSERT|DELETE/); // one step at a time, read-only
   });
   it("both systems: notice shown, native set-up and native Approve stay available", () => {
     const t = task("Please cancel my cleaning on Friday");

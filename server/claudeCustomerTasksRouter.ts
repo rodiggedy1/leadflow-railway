@@ -65,10 +65,11 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
     /** Shared by every task card: one request and one indexed query, however many cards are on screen. */
     bookingActionVersions: opsChatProcedure.output(z.record(z.string().regex(/^[1-9]\d*$/), z.string()))
       .query(() => bookingActions((actions, db) => actions.bookingActionVersions(db), false)),
-    /** Native LeadFlow or Launch27: a Launch27 (or unclear) booking change is always manual. Read-only. */
-    bookingSource: opsChatProcedure.input(idInput)
-      .output(z.object({ source: z.enum(["native", "launch27", "both", "unknown"]), launch27BookingIds: z.array(z.number().int().positive()) }).strict())
-      .query(({ input }) => bookingActions((actions, db) => actions.taskBookingSource(db, input.id), false)),
+    /** Native LeadFlow or Launch27: a Launch27 (or unclear) booking change is always manual. Read-only. One shared request
+     * for every task card (open booking-change tasks only), looked up one step at a time, never one request per card. */
+    bookingSources: opsChatProcedure.output(z.record(z.string().regex(/^[1-9]\d*$/), z.object({ source: z.enum(["native", "launch27", "both", "unknown"]),
+      launch27BookingIds: z.array(z.number().int().positive()) }).strict()))
+      .query(() => bookingActions((actions, db) => actions.taskBookingSources(db), false)),
     bookingActionVisits: opsChatProcedure.input(idInput).output(z.array(bookingActionVisitSchema))
       .query(({ input }) => bookingActions((actions, db) => actions.taskUpcomingVisits(db, input.id), false)),
     setupBookingAction: bookingsAgentProcedure.input(bookingRequestInput.extend({ itemId: z.string().min(1).nullable() }).strict())
