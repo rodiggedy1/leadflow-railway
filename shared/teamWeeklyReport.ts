@@ -107,4 +107,7 @@ export const sendTeamReportsInputSchema = z.object({
   teamIds: z.array(z.string().regex(/^[1-9]\d*$/)).min(1).max(100),
   /** Intentional resend of a report that was already sent (or may have been sent). Never set by "Send all". */
   resend: z.boolean(),
-}).strict();
+  /** With resend: how many attempts the person saw for that one team. If someone else resent it meanwhile, nothing is sent. */
+  seenAttempts: z.number().int().min(0).max(1000).optional(),
+}).strict().refine(input => !input.resend || (input.teamIds.length === 1 && input.seenAttempts !== undefined),
+  { message: "A resend is for one team and must say which attempt was seen." });
