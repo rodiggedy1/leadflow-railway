@@ -58,6 +58,9 @@ if (!LOCAL_TEST) {
   if (process.env.CRON_DISABLED !== "true") refuse("CRON_DISABLED must be true on staging (scheduled jobs off).");
 }
 const STRIPE_TEST = /^(sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY || "");
+// Owner opt-in for the leaderboard's complaint-analysis test: Claude's API only, and only when this is set to "true"
+// (the owner also adds a spending-limited ANTHROPIC_API_KEY). Every other outside host stays blocked or simulated.
+const ANTHROPIC_ALLOWED = process.env.STAGING_ALLOW_ANTHROPIC === "true";
 
 // ---------- which hosts are simulated / allowed ----------
 const SIMULATED = [
@@ -82,6 +85,7 @@ function allowed(host, port) {
   if (isLocal(h)) return true;
   if (DB && h === DB.host && Number(port) === DB.port) return true;
   if (STRIPE_TEST && h === "api.stripe.com") return true;
+  if (ANTHROPIC_ALLOWED && h === "api.anthropic.com" && Number(port) === 443) return true;
   return false;
 }
 
@@ -302,7 +306,7 @@ async function selfTest() {
     process.exit(1);
   }
   if (MAIN_THREAD) console.log(`${TAG} ACTIVE: self-test passed (${checks.length}/${checks.length}). Outside connections blocked; allowed: ` +
-    `${DB ? "database " + DB.host : "no database"}, this machine${STRIPE_TEST ? ", Stripe TEST mode" : ""}. ` +
+    `${DB ? "database " + DB.host : "no database"}, this machine${STRIPE_TEST ? ", Stripe TEST mode" : ""}${ANTHROPIC_ALLOWED ? ", Claude API (owner opt-in for the complaint analysis)" : ""}. ` +
     `Simulated: OpenPhone/Quo, Twilio, Vapi, Gmail, Google Business reviews, ntfy.`);
 }
 if (MAIN_THREAD) console.log(`${TAG} loading firewall + simulator (environment: ${LOCAL_TEST ? "local test" : ENV_NAME})`);
