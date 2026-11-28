@@ -17,6 +17,7 @@ vi.mock("@/lib/trpc", () => ({ trpc: {
     estimateAnalysis: { useQuery: () => ({ data: undefined, isError: false }) },
     qualityAction: { useMutation: () => ({ mutateAsync: vi.fn() }) }, qualityRetry: { useMutation: () => ({ mutateAsync: vi.fn() }) },
     publishFromRecords: { useMutation: () => ({ mutateAsync: vi.fn() }) }, importReviewToRecords: { useMutation: () => ({ mutateAsync: vi.fn() }) },
+    teamPortalCheck: { useQuery: () => ({ data: undefined, isError: false, refetch: vi.fn() }) }, // team-pages check (loading)
   } } },
 } }));
 // Open a team row for the detail test (React's useState is SSR-only here).

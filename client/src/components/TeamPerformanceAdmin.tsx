@@ -8,6 +8,7 @@ import { shiftBookingDate } from "@shared/bookingReschedule";
 import { TeamLeaderboardAdminLink } from "./TeamLeaderboardAdminLink";
 import { TeamQualityRecords } from "./TeamQualityRecords";
 import { TeamReportsPanel } from "./TeamReportsPanel";
+import { TeamPortalStatus } from "./TeamPortalStatus";
 import { currentSundayWeek } from "./TeamLeaderboardHistoryControls";
 import "./team-performance.css";
 
@@ -169,6 +170,7 @@ export function TeamPerformanceAdmin({ agentId }: { agentId: number }) {
         {!final && <p className="tp-note">Scores and complaints are provisional until the week's analysis is complete.</p>}
       </>}
     </div>
+    <TeamPortalStatus agentId={agentId} weekStart={weekStart} expectedPublicationId={live?.expectedPublicationId} onPublished={() => { void liveQuery.refetch(); }} />
     {reports ? <TeamReportsPanel agentId={agentId} weekStart={weekStart} weekText={weekLabel(weekStart)} onClose={() => setReports(false)} />
       : <div className="tp-actions"><button type="button" className="tp-btn" onClick={() => setReports(true)}>Send team reports</button></div>}
 

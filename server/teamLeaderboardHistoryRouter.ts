@@ -203,6 +203,29 @@ export function createTeamLeaderboardHistoryRouter(options: { resolveService?: (
       const notes = ((live.snapshot as { reviewMetadata?: { warnings?: string[] } }).reviewMetadata?.warnings ?? []).slice(0, 200);
       return { agentId: ctx.agent.agentId, ...result, teamAccounts, countsComplete: live.countsComplete, expectedPublicationId: live.expectedPublicationId, notes };
     })),
+    // Read-only: do the team pages (published results, each team's own login) and the last texts agree with this page?
+    teamPortalCheck: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => reportCall(async () => {
+      const db = await getDb();
+      const { getPool } = await import("./db");
+      const pool = db ? getPool() : null;
+      if (!db || !pool) throw new Error("REPORTS_DB_UNAVAILABLE");
+      const { checkTeamPortals } = await import("./teamPortalCheck");
+      const check = await checkTeamPortals({
+        live: week => service().live(week) as never,
+        async published(week) {
+          const entry = (await service().weeks()).find(item => item.weekStart === week);
+          return entry ? { snapshot: await service().published({ weekStart: week }) as never, publishedAtMs: entry.publishedAtMs } : null;
+        },
+        teamAccounts: ids => readTeamLeaderboardAdminAccounts(db, ids),
+        portalTeam: id => findCleanerPortalTeam(db, id),
+        async lastSentReports(week) {
+          const [rows] = await pool.query(`SELECT r.teamId, r.messageText, r.sentAtMs FROM team_weekly_reports r INNER JOIN (SELECT teamId, MAX(attempt) AS attempt
+            FROM team_weekly_reports WHERE weekStart = ? AND status = 'sent' GROUP BY teamId) l ON l.teamId = r.teamId AND l.attempt = r.attempt WHERE r.weekStart = ?`, [week, week]);
+          return (rows as Array<Record<string, unknown>>).map(row => ({ teamId: Number(row.teamId), messageText: String(row.messageText), sentAtMs: Number(row.sentAtMs) }));
+        },
+      }, input.weekStart);
+      return { agentId: ctx.agent.agentId, ...check };
+    })),
     publishFromRecords: admin.input(z.object({ requestId: z.string().uuid(), weekStart: z.string(), expectedPublicationId: z.string().min(1).nullable() }).strict())
       .mutation(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().publishFromRecords(ctx.agent.agentId, input) }))),
     // The week's day-by-day complaint analysis: one status, one start (never a duplicate run).
