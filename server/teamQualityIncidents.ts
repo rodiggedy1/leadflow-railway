@@ -35,6 +35,8 @@ const COLUMNS = "id, primaryId, sourceKey, channel, detector, reportedAtMs, week
 const TOMBSTONES = ["canceled", "cancelled", "missing_from_launch27", "rescheduled"];
 /** Days before the message in which the visit being complained about is looked for when no date is given. */
 export const ATTRIBUTION_LOOKBACK_DAYS = 7;
+/** With no completed visit in those days, a complaint about an older visit is still matched (owner requirement). */
+export const ATTRIBUTION_FALLBACK_DAYS = 45;
 /** A new message about the same visit and team joins an open incident only within this many days of its last message. */
 export const SAME_INCIDENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const SEVERITY_ORDER: Record<string, number> = { low: 0, medium: 1, high: 2 };
@@ -178,14 +180,19 @@ export async function resolveAttribution(db: SqlClient, incident: Pick<QualityIn
   let visits = hint ? completed(await customerVisits(db, contact, hint, hint)) : [];
   const named = visits.length > 0;
   if (!named) visits = completed(await customerVisits(db, contact, shiftBookingDate(today, -ATTRIBUTION_LOOKBACK_DAYS), today));
+  // A legitimate complaint is not discarded because the visit was longer ago: look back further for the latest visit.
+  const older = !named && !visits.length;
+  if (older) visits = completed(await customerVisits(db, contact, shiftBookingDate(today, -ATTRIBUTION_FALLBACK_DAYS), today));
   if (!visits.length) return { leadflowJobId: null, teamId: null, attribution: "unattributed",
-    note: `No completed visit found for this customer in the ${ATTRIBUTION_LOOKBACK_DAYS} days before the message${hint ? ` or on ${hint}` : ""}.` };
+    note: `No completed visit found for this customer in the ${ATTRIBUTION_FALLBACK_DAYS} days before the message${hint ? ` or on ${hint}` : ""}; retried automatically.` };
   // The most recent completed visit. Two visits on that same date by different teams cannot be told apart → unattributed.
   const latest = visits.filter(visit => visit.jobDate === visits[0].jobDate);
   const teams = await Promise.all(latest.map(visit => teamFor(db, visit)));
   if (new Set(teams).size > 1) return { leadflowJobId: null, teamId: null, attribution: "unattributed", note: `${latest.length} visits on ${visits[0].jobDate} by different teams.` };
   const teamId = teams[0];
-  const how = named ? `the visit the customer named, ${visits[0].jobDate}` : `the most recent completed visit, ${visits[0].jobDate}${visits.length > 1 ? ` (of ${visits.length} in the last ${ATTRIBUTION_LOOKBACK_DAYS} days)` : ""}`;
+  const how = named ? `the visit the customer named, ${visits[0].jobDate}`
+    : older ? `the most recent completed visit, ${visits[0].jobDate} (none in the last ${ATTRIBUTION_LOOKBACK_DAYS} days; looked back ${ATTRIBUTION_FALLBACK_DAYS})`
+    : `the most recent completed visit, ${visits[0].jobDate}${visits.length > 1 ? ` (of ${visits.length} in the last ${ATTRIBUTION_LOOKBACK_DAYS} days)` : ""}`;
   return teamId === null ? { leadflowJobId: visits[0].id, teamId: null, attribution: "unattributed", note: `Visit ${visits[0].id} (${visits[0].jobDate}) is not assigned to exactly one team.` }
     : { leadflowJobId: visits[0].id, teamId, attribution: "auto", note: `Matched ${how}.` };
 }
