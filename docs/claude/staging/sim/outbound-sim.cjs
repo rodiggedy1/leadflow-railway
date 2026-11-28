@@ -107,6 +107,8 @@ function emailSummary(raw) {
   } catch { return "EMAIL"; }
 }
 
+const FAIL_ONCE_NUMBER = "+12025550199"; // fictional; see the OpenPhone case below
+const failedOnce = new Set();
 function simulate(service, method, host, fullPath, body, contentType) {
   const p = String(fullPath || "/").split("?")[0];
   const b = parseBody(body, contentType);
@@ -117,7 +119,16 @@ function simulate(service, method, host, fullPath, body, contentType) {
   switch (service) {
     case "OpenPhone":
       if (write && /\/messages$/.test(p)) {
-        summary = `SMS to ${one([].concat(b.to || []).join(","))} from ${one(b.from)}: "${one(b.content ?? b.text)}"`;
+        const to = [].concat(b.to || []).join(",");
+        // Failure test: the FIRST text to the fictional test number +1 202-555-0199 after each start is refused, so a
+        // failed send and its recovery can be tested on staging. Every later text to it is simulated as usual.
+        if (to.includes(FAIL_ONCE_NUMBER) && !failedOnce.has(FAIL_ONCE_NUMBER)) {
+          failedOnce.add(FAIL_ONCE_NUMBER);
+          summary = `SMS to ${one(to)} REFUSED (failure test number, first text only)`;
+          reply = [500, { message: "Simulated OpenPhone failure (staging failure test number, first text only)" }];
+          break;
+        }
+        summary = `SMS to ${one(to)} from ${one(b.from)}: "${one(b.content ?? b.text)}"`;
         reply = [202, { data: { id: rid("AC"), object: "message", from: b.from, to: b.to, text: b.content ?? b.text, direction: "outgoing", status: "queued", createdAt: now } }];
       }
       break;
