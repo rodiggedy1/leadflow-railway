@@ -121,6 +121,11 @@ export const customerPortalReviewRouter = router({
       } catch (error) {
         console.error("[CustomerPortalReview] Failed to post low rating to Command Chat:", error);
       }
+      // Phase 2: list the low rating for staff in the quality records (background; never changes the rating).
+      try {
+        const { recordLowRatingInBackground } = await import("./teamQualitySignals");
+        recordLowRatingInBackground({ leadflowJobId: job.id, rating: input.rating, phone: null, atMs: Date.now() });
+      } catch { /* quality records never change the rating */ }
     }
 
     return { rating: input.rating };

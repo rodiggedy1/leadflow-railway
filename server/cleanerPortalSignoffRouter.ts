@@ -115,6 +115,11 @@ export const cleanerPortalSignoffRouter = router({
       signedOffAt: now,
       updatedAt: now,
     } });
+    // Phase 2: an "issue"/"touchup" response is listed for staff in the quality records (background only).
+    try {
+      const { recordSignoffIssueInBackground } = await import("./teamQualitySignals");
+      recordSignoffIssueInBackground({ leadflowJobId: job.id, customerResponse: input.customerResponse, customerNotes: input.customerNotes || null, atMs: now.getTime() });
+    } catch { /* quality records never change the sign-off */ }
     return { signatureUrl, customerResponse: input.customerResponse, customerNotes: input.customerNotes || null, customerNotHome: false, signedOffAt: now };
   }),
 

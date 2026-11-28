@@ -4,6 +4,7 @@ import type { TeamLeaderboardDetails, TeamLeaderboardPeriod } from "../shared/te
 import type { TeamComplaintMatch, TeamComplaintVisitGroup, TeamEvidenceWindow } from "../shared/teamLeaderboardEvidence";
 import { isValidBookingRescheduleDate, shiftBookingDate } from "../shared/bookingReschedule";
 import { easternDateIso } from "../shared/easternTime";
+import { countsAgainstTeam, isCompletedRecovery, type IncidentForScoring } from "../shared/teamQualityIncidents";
 import type { SelectPort, SqlRow, SqlValue } from "./instinct/readDb";
 import { safeReadDbError } from "./instinct/readDb";
 import type { TeamLeaderboardSnapshot } from "./teamLeaderboardPublication";
@@ -349,5 +350,48 @@ export function aggregateTeamPublications(records: Array<{ id: string; published
   const result: ReviewedSnapshot = { publication: { weekLabel: "Summary", nextWeekLabel: "", publishedLabel: `${selected.length} published Sunday-start week${selected.length === 1 ? "" : "s"} · latest revisions`, teams, ownIncidents: Array.from(incidents.values()) }, details,
     reviewMetadata: { countsComplete: teams.every(team => TEAM_SCORE_METRICS.every(({ key }) => team.metrics[key].complete)), warnings: Array.from(new Set(warnings)), unmatchedWarnings: [], incidents: Array.from(recorded.values()) } };
   if (selected.length) result.period = { weekStart: selected[0].snapshot.period!.weekStart, weekEnd: selected[selected.length - 1].snapshot.period!.weekEnd, weekConvention: "Sunday-start publications (Summary)", coverageStart: selected[0].snapshot.period!.coverageStart, coverageEnd: selected[selected.length - 1].snapshot.period!.coverageEnd };
+  return result;
+}
+
+export type StoredIncident = IncidentForScoring & { reportedAtMs: number; severity: string; jobDate?: string | null };
+const CATEGORY_LABELS: Record<string, string> = { cleaning_quality: "Cleaning quality complaint", team_service: "Team service complaint" };
+/** Phase 2: the week's scores from saved quality records, without any AI review. Same metrics and details as the
+ * reviewed publication: one count per incident (several messages about one problem are already one incident),
+ * completed recleans/refunds count once per incident, and only team-attributable incidents count. */
+export function buildTeamWeekPublicationFromIncidents(counts: TeamWeekCounts, incidents: StoredIncident[]): TeamLeaderboardSnapshot {
+  const teams = structuredClone(counts.teams);
+  if (new Set(teams.map(team => team.id)).size !== teams.length) throw new Error("Ambiguous publication team identity");
+  const stats = new Map(teams.map(team => [team.id, { cases: 0, requests: 0, recoveries: 0 }]));
+  const details: TeamLeaderboardDetails = {}, ownIncidents: TeamLeaderboardSnapshot["publication"]["ownIncidents"] = [];
+  const incidentRecords: IncidentRecord[] = [], warnings = [...counts.warnings];
+  let listedForStaff = 0;
+  for (const incident of incidents) {
+    if (!countsAgainstTeam(incident)) { if (incident.status !== "dismissed") listedForStaff++; continue; }
+    const tid = String(incident.teamId), totals = stats.get(tid);
+    if (!totals) { warnings.push(`Quality record ${incident.id}: team ${tid} is not in the current roster; not counted.`); continue; }
+    const recovered = isCompletedRecovery(incident), refundRequest = incident.refundStatus !== "none";
+    totals.cases++;
+    if (refundRequest) totals.requests++;
+    if (recovered) totals.recoveries++;
+    // Stable per-incident identity: separate complaints about one job stay separate; repeats across weeks count once.
+    const id = `week-${incident.id}:${tid}`;
+    incidentRecords.push({ id, teamId: tid, includeComplaint: true, completedRecovery: recovered, refundRequest });
+    ownIncidents.push({ id, teamId: tid, date: `Reported ${new Date(incident.reportedAtMs).toISOString().slice(0, 10)} · Service ${incident.jobDate ?? `job ${incident.leadflowJobId}`}`,
+      sourceLabel: "Quality record", summary: `${CATEGORY_LABELS[incident.category] ?? "Complaint"} (${incident.severity}).`,
+      outcome: recovered ? "Completed recovery recorded by staff." : incident.recleanStatus === "requested" || refundRequest ? "Recovery requested; not yet recorded as completed." : "No completed recovery recorded." });
+  }
+  if (listedForStaff) warnings.push(`${listedForStaff} quality record(s) are listed for staff review (unclassified, not attributable to a team, or needing a visit choice) and do not count yet.`);
+  for (const team of teams) {
+    const totals = stats.get(team.id)!;
+    team.metrics.complaints = evidence(Math.max(0, team.eligibleJobs - totals.cases), team.eligibleJobs, counts.complete && totals.cases <= team.eligibleJobs);
+    team.metrics.recovery = evidence(Math.max(0, team.eligibleJobs - totals.recoveries), team.eligibleJobs, counts.complete && totals.recoveries <= team.eligibleJobs);
+    if (counts.complete) details[team.id] = detailsFor(team, totals.cases, totals.requests, totals.recoveries, {
+      complaints: "One count per quality incident attributed to this team in the report week (several messages about one problem count once).",
+      recovery: "Completed recleans/refunds recorded by staff on counted incidents; one per incident.",
+    });
+  }
+  const result: ReviewedSnapshot = { period: { ...counts.period }, publication: {
+    weekLabel: `${counts.period.weekStart} – ${counts.period.weekEnd}`, nextWeekLabel: "", publishedLabel: "Calculated from saved quality records", teams, ownIncidents,
+  }, details, reviewMetadata: { countsComplete: counts.complete, warnings, unmatchedWarnings: [], incidents: incidentRecords } };
   return result;
 }

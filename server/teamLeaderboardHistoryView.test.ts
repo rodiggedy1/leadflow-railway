@@ -35,6 +35,8 @@ vi.mock("@/lib/trpc", () => {
                         reviewRuns: query("runs", () => state.runs), reviewDraft: query("draft", () => state.draft),
                         startReview: { useMutation: () => ({ mutateAsync: state.started }) },
                         publishReview: { useMutation: () => ({ mutateAsync: state.published }) },
+                        liveFromRecords: { useQuery: () => ({ data: undefined, isError: false, isLoading: false, refetch: state.refetched }) },
+                        publishFromRecords: { useMutation: () => ({ mutateAsync: state.published }) },
                     } } },
         } };
 });

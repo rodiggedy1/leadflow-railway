@@ -699,7 +699,7 @@ export async function handleComplaintRequest(args: {
       args.bookingDate ? `Booking date: ${args.bookingDate}` : "",
       `Issue: ${args.issue}`,
     ].filter(Boolean).join("\n");
-    await db.insert(callbackTasks).values({
+    const inserted = await db.insert(callbackTasks).values({
       voiceCallId: null,
       sessionId: null,
       callerPhone: normalizedPhone,
@@ -708,6 +708,14 @@ export async function handleComplaintRequest(args: {
       notes: notesText,
       completed: 0,
     });
+    // Phase 2: also keep a quality record (background, never affects the call or the callback task).
+    try {
+      const callbackTaskId = Number((inserted as unknown as Array<{ insertId?: number }>)[0]?.insertId);
+      if (Number.isSafeInteger(callbackTaskId) && callbackTaskId > 0) {
+        const { recordVoiceComplaintInBackground } = await import("./teamQualitySignals");
+        recordVoiceComplaintInBackground({ callbackTaskId, phone: normalizedPhone, callerName: args.callerName ?? null, issue: args.issue ?? null, bookingDate: args.bookingDate ?? null, atMs: Date.now() });
+      }
+    } catch { /* quality records never change the complaint call */ }
     await notifyOwner({
       title: `⚠️ Complaint: ${args.callerName ?? normalizedPhone}`,
       content: [

@@ -221,6 +221,9 @@ describe("forMe actual cleaner cookie authorization with mocked database only", 
     expect(Object.keys(procedures)).toEqual([
       "history.weeksForAdmin", "history.forAdmin", "history.weeksForMe", "history.forMe",
       "history.startReview", "history.reviewRuns", "history.reviewDraft", "history.publishReview",
+      // Phase 2 (owner-approved): saved quality records, admin only.
+      "history.qualityRecords", "history.qualityChoices", "history.qualityAction", "history.qualityRetry",
+      "history.liveFromRecords", "history.publishFromRecords", "history.importReviewToRecords",
       "forMe", "forAdmin",
     ]);
     expect(Object.keys(procedures).filter(name => !name.startsWith("history."))).toEqual(["forMe", "forAdmin"]);
@@ -233,6 +236,8 @@ describe("forMe actual cleaner cookie authorization with mocked database only", 
       "history.weeksForMe": "query", "history.forMe": "query",
       "history.startReview": "mutation", "history.reviewRuns": "query",
       "history.reviewDraft": "query", "history.publishReview": "mutation",
+      "history.qualityRecords": "query", "history.qualityChoices": "query", "history.qualityAction": "mutation", "history.qualityRetry": "mutation",
+      "history.liveFromRecords": "query", "history.publishFromRecords": "mutation", "history.importReviewToRecords": "mutation",
     } as const;
     for (const [name, type] of Object.entries(historyMethods)) {
       expect(procedures[name as keyof typeof historyMethods]._def.type).toBe(type);

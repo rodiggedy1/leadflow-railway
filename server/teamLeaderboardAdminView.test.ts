@@ -19,6 +19,8 @@ vi.mock("@/lib/trpc", () => ({ trpc: {
     reviewDraft: { useQuery: () => ({ ...state.draft, refetch: vi.fn() }) },
     startReview: { useMutation: () => ({ mutateAsync: state.started }) },
     publishReview: { useMutation: () => ({ mutateAsync: state.published }) },
+    liveFromRecords: { useQuery: () => ({ data: undefined, isError: false, isLoading: false, refetch: vi.fn() }) },
+    publishFromRecords: { useMutation: () => ({ mutateAsync: vi.fn() }) },
   } } },
 } }));
 vi.mock("wouter", () => ({ useLocation: () => ["/admin/team-leaderboard", vi.fn()] }));

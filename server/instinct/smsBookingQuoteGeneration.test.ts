@@ -18,7 +18,7 @@ import {
   type ClaudeCustomerSmsGenerationBinding,
 } from "./claudeCustomerSmsGeneration";
 import { advanceSmsBookingQuote, SMS_BOOKING_QUOTE_INSTRUCTIONS, type SmsBookingQuoteFields, type SmsBookingQuoteState, type SmsBookingQuoteUpdate } from "./smsBookingQuote";
-import { createSmsBookingQuoteReplyGenerator, SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS, SMS_HISTORY_AND_RECORDS_INSTRUCTIONS } from "./smsBookingQuoteGeneration";
+import { createSmsBookingQuoteReplyGenerator, SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS, SMS_HISTORY_AND_RECORDS_INSTRUCTIONS, SMS_QUALITY_COMPLAINT_INSTRUCTIONS } from "./smsBookingQuoteGeneration";
 
 const NOW = Date.parse("2026-11-17T17:00:00.000Z");
 const FUTURE_DATE = new Date(NOW + 86400000).toISOString().split("T")[0];
@@ -95,7 +95,7 @@ describe("SMS-only additive quote generation", () => {
     const baseRunner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText: "Hello Maya!", task: null }) }));
     await createClaudeCustomerReplyGenerator({ readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE, runner: baseRunner })(input);
     const prompts = h.runner.mock.calls[0][0];
-    expect(prompts.systemPrompt).toBe(`=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${SMS_HISTORY_AND_RECORDS_INSTRUCTIONS}\n\n${baseRunner.mock.calls[0][0].systemPrompt}`);
+    expect(prompts.systemPrompt).toBe(`=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${SMS_HISTORY_AND_RECORDS_INSTRUCTIONS}\n\n${SMS_QUALITY_COMPLAINT_INSTRUCTIONS}\n\n${baseRunner.mock.calls[0][0].systemPrompt}`);
     expect(prompts.systemPrompt).toContain(SMS_BOOKING_QUOTE_INSTRUCTIONS);
     expect(prompts.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
     expect(prompts.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);

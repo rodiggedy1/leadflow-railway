@@ -528,6 +528,16 @@ Return ONLY valid JSON. No markdown, no explanation.`,
         })
         .where(eq(gmailThreadMeta.threadId, threadId));
 
+      // Phase 2: reuse the existing label as a quality record (background; never changes the inbox).
+      if (historyChanged && (aiCategory === "upset_customer" || aiCategory === "refund_request")) {
+        try {
+          const { recordEmailGlanceInBackground } = await import("./teamQualitySignals");
+          let summary: string[] | null = null;
+          try { summary = JSON.parse(aiSummary ?? "[]"); } catch { summary = null; }
+          recordEmailGlanceInBackground({ threadId, category: aiCategory, senderEmail: senderEmail || null, senderName: senderName || null, summary, atMs: lastMessageAt || Date.now() });
+        } catch { /* quality records never change the inbox */ }
+      }
+
       console.log(`[Worker] processThread AI_DONE threadId=${threadId} category=${aiCategory ?? "(no change)"} isActionable=${isActionable}`);
       if (historyChanged) {
         console.log(`[GlanceWorker] Processed ${threadId} → ${aiCategory} (${aiUrgency})`);

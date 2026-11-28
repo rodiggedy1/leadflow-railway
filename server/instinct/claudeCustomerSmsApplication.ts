@@ -36,6 +36,7 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
   const { readVoiceCustomerBookingContext } = await import("./voiceCustomerBookingLookup");
   const readCustomerRecords = createSmsCustomerRecordsReader(db, readVoiceCustomerBookingContext);
   const { sendSms } = await import("../openphone");
+  const { recordSmsQualityComplaintInBackground } = await import("../teamQualitySignals");
   const quoteStore = createSmsBookingQuoteStore(db);
   let linkPrepared = false;
   const taskStore = createClaudeCustomerTasksStore(db, {
@@ -56,6 +57,8 @@ export async function dispatchClaudeCustomerSms(input: CustomerSmsInput) {
       smsBookingQuote: { readState: quoteStore.read },
       readCustomerRecords: readCustomerRecords,
       runner: options => runInitialLeadDraft({ ...options, cacheTtl: "1h", signal }),
+      // Phase 2: save the optional complaint label in the background; never awaited by the reply.
+      onQualityComplaint: (complaint, generated) => recordSmsQualityComplaintInBackground(complaint, generated),
     }))(binding, session),
     store: { ...taskStore, prepare: async (claim, plan, failure) => {
       linkPrepared = false;

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { customerReplyPlanSchema, type CustomerReplyPlan } from "../../shared/claudeCustomerTasks";
+import { validateSmsQualityComplaint, type SmsQualityComplaint } from "../../shared/teamQualityIncidents";
 import {
   createClaudeCustomerReplyGenerator,
   validateClaudeCustomerReplyPlan,
@@ -39,6 +40,9 @@ export type SmsBookingQuoteGenerationOptions = ClaudeCustomerSmsGenerationOption
   };
   /** Optional saved bookings and unfinished staff tasks (context only). A failure never blocks the reply. */
   readCustomerRecords?: (binding: ClaudeCustomerSmsGenerationBinding) => Promise<SmsCustomerRecords>;
+  /** Optional quality-complaint label (Phase 2). Called once, after the reply plan is final, with an independently
+   * validated label. Never awaited; an error here never changes the reply, task or booking action. */
+  onQualityComplaint?: (complaint: SmsQualityComplaint, binding: ClaudeCustomerSmsGenerationBinding) => void;
 };
 
 const extendedReplySchema = customerReplyPlanSchema.extend({
@@ -46,6 +50,8 @@ const extendedReplySchema = customerReplyPlanSchema.extend({
   bookingQuote: smsBookingQuoteUpdateSchema.nullable().optional().default(null),
   quoteTextTemplate: z.string().min(1).nullable().optional().default(null),
   quotePresentationLanguage: z.enum(["en", "es"]).nullable().optional().default(null),
+  // Optional label, accepted in any shape here and validated separately, so it can never fail the reply.
+  qualityComplaint: z.unknown().optional(),
 }).strict();
 type ExtendedReply = z.infer<typeof extendedReplySchema>;
 const fail = (code: string): never => { throw new Error(code); };
@@ -65,6 +71,10 @@ openStaffTasks lists staff tasks already saved for this conversation that are NO
 bookingContext is this phone number's stored bookings, already checked by the application. upcomingBooking is the next CONFIRMED, scheduled visit; use its stored date and time as current. mostRecentPastBooking is the latest earlier visit; read its status exactly: completed = it happened; cancelled = it did not happen and is not scheduled; rescheduled = that date was moved and is no longer the appointment; past = earlier visit, history only. A booking that is not upcomingBooking is never a confirmed upcoming visit. No upcomingBooking does not prove a cancellation or that the customer never booked. Never invent a booking change, date, time, team, arrival time or price.
 unavailableRecords names saved records that could not be read for this message. If bookings are unavailable, or bookingContext is null, you have NO booking information: do not state, confirm or deny any booking date, time, status or detail; reply naturally without it. If openStaffTasks are unavailable, do not say whether earlier requests are pending or done.
 BOOKING ACTION (optional, inside task): when the CURRENT incomingMessage clearly asks to move or cancel ONE specific existing cleaning visit, you may add "bookingAction":{"type":"reschedule_visit"|"cancel_visit","visitDate":"YYYY-MM-DD","newDate":"YYYY-MM-DD"|null,"newTime":"HH:MM"|null,"evidenceQuote":"literal quote from CURRENT incomingMessage"} to the task. visitDate must be the date the customer states or the date shown in bookingContext; newDate and newTime only as the customer states them (24-hour time), otherwise null. Omit bookingAction for new bookings, several visits, all future visits, or anything unclear. It is a proposal for staff approval, not a completed change: the reply must still never say the change has been made.`;
+
+/** Phase 2 (owner-approved): one optional label field added to the same response. No other instruction changes. */
+export const SMS_QUALITY_COMPLAINT_INSTRUCTIONS = `OPTIONAL QUALITY COMPLAINT LABEL (internal data only, never shown to the customer):
+The strict JSON object above may include ONE more optional field, "qualityComplaint". Include it only when the CURRENT incomingMessage itself reports dissatisfaction or a problem with a cleaning or with our service: {"category":"cleaning_quality"|"team_service"|"office_service"|"pricing_billing"|"scheduling"|"other","severity":"low"|"medium"|"high","evidenceQuotes":["exact literal quote from CURRENT incomingMessage"],"serviceDate":"YYYY-MM-DD"|null,"recleanRequested":true|false,"refundRequested":true|false}. cleaning_quality = the cleaning itself (missed areas, dirty, not done properly, damage). team_service = the cleaners' conduct, lateness, no-show or rushing. office_service = office or communication. pricing_billing = prices, charges, payments or refunds about billing. scheduling = booking or rescheduling problems. severity: high for damage, safety, no-show or a demand for a refund; medium for a clear problem; low for a minor remark. serviceDate only when the customer states the date of the visit, otherwise null. Never infer a team, visit or customer identity. Omit the field (or use null) for ordinary questions, praise, booking requests and anything else. The label never changes replyText, task, bookingAction or bookingQuote: write those exactly as you would without it.`;
 
 /** Exposed for prompt-contract tests; the existing email/shared prompts are not changed. */
 export const SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS = `${SMS_BOOKING_QUOTE_INSTRUCTIONS}\n\n${TEMPLATE_INSTRUCTIONS}`;
@@ -105,7 +115,9 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
     let request: InitialLeadDraftOptions | undefined;
     // Read once per message. Bookings/tasks are optional context: a failed read continues without them.
     let records: SmsCustomerRecords | undefined, recordsLoaded = false;
-    return recovery.run(async () => {
+    // The label from the attempt that produced the final reply plan (set just before each successful return).
+    let qualityLabel: unknown;
+    const result = await recovery.run(async () => {
     if (!recordsLoaded && options.readCustomerRecords) {
       recordsLoaded = true;
       try { records = await options.readCustomerRecords(binding); }
@@ -151,7 +163,7 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
           ...(records ? { bookingContext: records.bookingContext, openStaffTasks: records.openStaffTasks, unavailableRecords: records.unavailableRecords } : {}),
         } };
         request = { ...runnerOptions,
-          systemPrompt: `=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${SMS_HISTORY_AND_RECORDS_INSTRUCTIONS}\n\n${runnerOptions.systemPrompt}`,
+          systemPrompt: `=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${SMS_HISTORY_AND_RECORDS_INSTRUCTIONS}\n\n${SMS_QUALITY_COMPLAINT_INSTRUCTIONS}\n\n${runnerOptions.systemPrompt}`,
           userPrompt: JSON.stringify(indexedPayload),
         };
         }
@@ -169,6 +181,7 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
     if (output === null) return fail("SMS_QUOTE_GENERATION_OUTPUT");
     if (output.bookingQuote === null) {
       if (output.quoteTextTemplate !== null) return fail("SMS_QUOTE_TEMPLATE_WITHOUT_UPDATE");
+      qualityLabel = output.qualityComplaint;
       return plan;
     }
     const update = output.bookingQuote;
@@ -198,9 +211,22 @@ export function createSmsBookingQuoteReplyGenerator(options: SmsBookingQuoteGene
     const presentation = complete && advanced.preview?.success
       ? createSmsBookingQuotePresentation(advanced.preview.priceSnapshot, true, language) : null;
     const missingQuestion = createSmsBookingQuoteMissingQuestion(advanced, update.action, language);
+    qualityLabel = output.qualityComplaint;
     return { ...plan, replyText: missingQuestion ?? plan.replyText,
       smsBookingQuote: { previous, update, originalConversation, quoteTextTemplate: presentation,
         ...(missingQuestion !== null ? { missingQuestionLanguage: language } : {}) } };
     });
+    reportQualityComplaint(qualityLabel, binding, options.onQualityComplaint);
+    return result;
   };
+}
+
+/** Independent validation of the optional label. Never throws and never alters the returned reply plan. */
+function reportQualityComplaint(label: unknown, binding: ClaudeCustomerSmsGenerationBinding,
+  onQualityComplaint: SmsBookingQuoteGenerationOptions["onQualityComplaint"]): void {
+  try {
+    const { complaint, dropped } = validateSmsQualityComplaint(label, binding.inboundText);
+    if (dropped) console.warn(`[quality-incident] SMS complaint label ignored (${dropped}); reply unaffected`);
+    if (complaint && onQualityComplaint) onQualityComplaint(complaint, binding);
+  } catch { /* the reply plan is already final and is returned unchanged */ }
 }
