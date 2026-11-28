@@ -57,7 +57,7 @@ const approvedL27Manual: Record<string, Array<[string, string]>> = {
       "      {!call && !(\"email\" in task) && <ClaudeBookingChangePanel task={task} />}\n"],
   ],
   "server/claudeCustomerTasksRouter.ts": [
-    ["    /** Native LeadFlow or Launch27: a Launch27 (or unclear) booking change is always manual. Read-only. */\n    bookingSource: opsChatProcedure.input(idInput)\n      .output(z.object({ source: z.enum([\"native\", \"launch27\", \"both\", \"unknown\"]), launch27BookingIds: z.array(z.number().int().positive()) }).strict())\n      .query(({ input }) => bookingActions((actions, db) => actions.taskBookingSource(db, input.id), false)),\n", ""],
+    ["    /** Native LeadFlow or Launch27: a Launch27 (or unclear) booking change is always manual. Read-only. One shared request\n     * for every task card (open booking-change tasks only), looked up one step at a time, never one request per card. */\n    bookingSources: opsChatProcedure.output(z.record(z.string().regex(/^[1-9]\\d*$/), z.object({ source: z.enum([\"native\", \"launch27\", \"both\", \"unknown\"]),\n      launch27BookingIds: z.array(z.number().int().positive()) }).strict()))\n      .query(() => bookingActions((actions, db) => actions.taskBookingSources(db), false)),\n", ""],
   ],
 };
 export function withoutApprovedBookingActions(path: string, source: string): string {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowDown, CalendarClock, CheckCircle2, Clock3, ExternalLink, Loader2, Pencil, RefreshCw, Send } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -98,16 +98,27 @@ const nativeRecord = (view: BookingActionView | null) => Boolean(view && (view.r
 /** Pure decision, tested on its own. Anything other than a confirmed native booking is manual. */
 export function manualBookingChange(task: CustomerTask, view: BookingActionView | null,
   source: { source: "native" | "launch27" | "both" | "unknown"; launch27BookingIds: number[] } | null | undefined, sourceFailed: boolean): ManualBookingChange {
-  if (nativeRecord(view) || !(view || looksLikeBookingChange(task.title, task.sourceText, ...task.items.map(item => item.title)))) return null;
+  if (!needsBookingSource(task, view)) return null;
   if (sourceFailed) return { source: "unknown", launch27BookingIds: [] };
   if (!source || source.source === "native") return null;
   return { source: source.source, launch27BookingIds: source.launch27BookingIds };
 }
-/** Asks the server which booking system this customer's visits are in, only for booking-change cards. */
+/** Only OPEN booking-change cards without a native record need to know the booking system; completed tasks never ask. */
+export const needsBookingSource = (task: CustomerTask, view: BookingActionView | null) => task.status !== "done" && !nativeRecord(view)
+  && Boolean(view || looksLikeBookingChange(task.title, task.sourceText, ...task.items.map(item => item.title)));
+/** Which booking system this customer's visits are in. One shared request (one cache entry) answers every card on screen,
+ * like the shared booking-change list; a card never makes its own lookup. A new task missing from the answer asks the
+ * shared request again once. */
 export function useManualBookingChange(task: CustomerTask, view: BookingActionView | null): ManualBookingChange {
-  const relevant = !nativeRecord(view) && Boolean(view || looksLikeBookingChange(task.title, task.sourceText, ...task.items.map(item => item.title)));
-  const source = trpc.claudeCustomerTasks.bookingSource.useQuery({ id: task.id }, { enabled: relevant, staleTime: 300_000, refetchOnWindowFocus: false, retry: false, ...background });
-  return relevant ? manualBookingChange(task, view, source.data, source.isError) : null;
+  const relevant = needsBookingSource(task, view);
+  const sources = trpc.claudeCustomerTasks.bookingSources.useQuery(undefined, { enabled: relevant, staleTime: 120_000, refetchOnWindowFocus: false, retry: false, ...background });
+  const entry = sources.data?.[String(task.id)];
+  const answered = sources.data !== undefined, missing = relevant && answered && !entry;
+  useEffect(() => {
+    if (missing) void sources.refetch({ cancelRefetch: false }); // shared and de-duplicated: one request however many cards ask
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missing, task.id]);
+  return relevant ? manualBookingChange(task, view, entry, sources.isError) : null;
 }
 const changeKind = (text: string) => /\bcancel/i.test(text) ? "cancellation" : /\bskip/i.test(text) ? "skipped appointment"
   : /\bfrequen|\bbi-?weekly\b|\bevery (other|two|three|four|2|3|4) weeks?\b|\bmonthly\b/i.test(text) ? "frequency change"
