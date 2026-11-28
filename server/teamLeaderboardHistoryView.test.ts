@@ -153,12 +153,7 @@ describe("weekly history UI — offline synthetic SSR only", () => {
         expect(currentSundayWeek(new Date("2026-11-22T05:00:00Z"))).toBe("2026-11-22");
         expect(currentSundayWeek(new Date("2027-01-01T17:00:00Z"))).toBe("2026-12-27");
         expect(currentSundayWeek(new Date("2026-03-08T07:00:00Z"))).toBe("2026-03-08");
-        state.weeksAdmin.data.weeks = [{ ...week, weekStart: "2026-11-15" }];
-        state.resultsAdmin.isError = true;
-        const html = render(React.createElement(AdminTeamLeaderboard));
-        expect(state.inputs.resultsAdmin).toEqual({ weekStart: "2026-11-22" });
-        expect(html).toContain("Current week"); expect(html).toContain("Run review");
-        expect(html).not.toContain("Synthetic Current Team"); noWrites();
+        noWrites();
     });
     it("keeps team history published-only with no draft, staff links, Run or Publish controls", () => {
         const html = render(React.createElement(TeamLeaderboard, null));
@@ -221,19 +216,6 @@ describe("weekly history UI — offline synthetic SSR only", () => {
         expect(html).toContain("1 admin-recorded completed reclean/refund in this reviewed period");
         expect(html).toContain("2 refund request — not a completed refund");
         expect(html).not.toContain("No completed reclean/refund recorded in this reviewed period");
-    });
-    it("retains Run and saved-review controls when the selected week has not been published", () => {
-        state.resultsAdmin = { ...state.resultsAdmin, isError: true };
-        const html = render(React.createElement(AdminTeamLeaderboard, null), ["2026-11-29", false]);
-        // Phase 2: an unpublished week shows its automatic scores from quality records (loading here), not an empty page.
-        expect(html).toContain("Calculating this week&#x27;s scores from quality records…");
-        expect(html).toContain("Run review");
-        expect(html).not.toContain('aria-label="Saved review"');
-        expect(html).not.toContain("Synthetic Current Team");
-        expect(html).not.toContain("data-team-admin-link");
-        expect(html).not.toContain("November 15–19");
-        expect(state.inputs.resultsAdmin).toEqual({ weekStart: "2026-11-29" });
-        noWrites();
     });
     it("lists persisted runs after reload without restarting interrupted work", () => {
         state.runs.data.runs = [{ id: "22222222-2222-4222-8222-222222222222", weekStart: week.weekStart, status: "reviewing", createdAtMs: 100, publishedAtMs: null, runningHere: false }];
@@ -371,9 +353,8 @@ describe("explicit draft adjudication — synthetic SSR only", () => {
         expect(view.indexOf("[tab, setTab]")).toBeLessThan(view.indexOf("[expandedTeam, setExpandedTeam]"));
         expect(view).toContain('if (value === "standings") onOverallChange?.(false)');
         expect(view).toContain('onOverallChange(true); setTab("standings")');
-        expect(admin).toContain("const fresh = await resultsQuery.refetch()");
-        expect(admin).toContain("fresh.data.agentId !== agentId");
-        expect(admin).toContain("fresh.data.selectionKey !== selectionKey");
+        // The admin page is now the single Team performance card; it only checks staff access and renders it.
+        expect(admin).toContain("<TeamPerformanceAdmin key={meQuery.data.id} agentId={meQuery.data.id} />");
         expect(cleaner).not.toMatch(/startReview|publishReview|reviewDraft|reviewRuns|getMagicLink/);
         for (const source of [controls, view, admin, cleaner])
             expect(source).not.toMatch(new RegExp(["cleaner" + "Jobs", "cleaner" + "_jobs"].join("|")));

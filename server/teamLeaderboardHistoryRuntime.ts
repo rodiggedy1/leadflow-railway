@@ -4,6 +4,7 @@ import { MysqlTeamHistoryRepository } from "./teamLeaderboardHistoryRepository";
 import { createTeamLeaderboardHistoryService, type TeamLeaderboardHistoryService } from "./teamLeaderboardHistoryService";
 import { createTeamEvidenceService } from "./teamLeaderboardEvidenceService";
 import { readTeamLeaderboardCounts } from "./teamLeaderboardHistoryMetrics";
+import { createTeamWeekAnalysis, type TeamWeekAnalysis } from "./teamWeekAnalysis";
 import type { SelectPort, SqlRow, SqlValue } from "./instinct/readDb";
 
 // Sign-offs are read-only completion evidence for jobs dated today (Phase 1).
@@ -43,4 +44,14 @@ export function teamLeaderboardHistoryService(): TeamLeaderboardHistoryService {
       } });
   }
   return current;
+}
+let analysis: TeamWeekAnalysis | undefined;
+/** The week's day-by-day complaint analysis. Lazy: nothing runs until an admin starts or views it. */
+export function teamWeekAnalysisService(): TeamWeekAnalysis {
+  if (!analysis) {
+    const evidence = createTeamEvidenceService();
+    analysis = createTeamWeekAnalysis({ repository: new MysqlTeamHistoryRepository(pool), readWeek: input => evidence.readWeek(input),
+      record: async signal => (await import("./teamQualityIncidents")).recordQualitySignal(await pool(), signal) });
+  }
+  return analysis;
 }

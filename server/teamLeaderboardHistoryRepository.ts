@@ -3,6 +3,7 @@ import type { HistorySnapshot } from "../shared/teamLeaderboardHistory";
 import type { TeamEvidenceAuditRead } from "./teamLeaderboardEvidenceService";
 import type { TeamWeeklyReviewOutcome, TeamWeeklyReviewStatus } from "./teamWeeklyReviewService";
 import type { TeamWeekCounts } from "./teamLeaderboardHistoryMetrics";
+import type { AnalysisState } from "./teamWeekAnalysis";
 
 /** Where a Run review stopped and a fixed, safe code (never a provider/database message). */
 export type ReviewFailure = { stage: "reading_communications" | "counting_jobs" | "saving" | "ai_review"; code: string; atMs: number };
@@ -14,7 +15,7 @@ export type ReviewRecord = {
   updatedAtMs: number;
   status: string;
   progress: TeamWeeklyReviewStatus | null;
-  payload: { read?: TeamEvidenceAuditRead; counts?: TeamWeekCounts; outcome?: TeamWeeklyReviewOutcome; failure?: ReviewFailure; readOmitted?: true; source?: "quality_records" };
+  payload: { read?: TeamEvidenceAuditRead; counts?: TeamWeekCounts; outcome?: TeamWeeklyReviewOutcome; failure?: ReviewFailure; readOmitted?: true; source?: "quality_records"; analysis?: AnalysisState };
   publication: HistorySnapshot | null;
   publishedAtMs: number | null;
   publishedBy: number | null;
@@ -26,6 +27,10 @@ export interface TeamHistoryRepository {
   get(id: string): Promise<ReviewRecord | null>;
   listRuns(weekStart: string): Promise<ReviewRecord[]>;
   update(id: string, patch: ReviewPatch): Promise<void>;
+  /** Apply the patch only if the run is still exactly as read (updatedAtMs unchanged). True when applied. */
+  claim?(id: string, expectedUpdatedAtMs: number, patch: ReviewPatch): Promise<boolean>;
+  /** Only the day-by-day analysis runs of a week (small rows; older review runs carry large saved reads). */
+  listAnalysisRuns?(weekStart: string): Promise<ReviewRecord[]>;
   latestPublications(): Promise<ReviewRecord[]>;
   publish(id: string, snapshot: HistorySnapshot, expectedPublicationId: string | null, actorId: number, nowMs: number, baselineId?: string): Promise<ReviewRecord>;
 }
@@ -136,6 +141,11 @@ export class MysqlTeamHistoryRepository implements TeamHistoryRepository {
     return (await rows(await this.pool(), `SELECT ${RUN_COLUMNS} FROM team_review_runs WHERE weekStart = ? ORDER BY createdAtMs DESC, id DESC`, [weekStart])).map(fromRow);
   }
 
+  async listAnalysisRuns(weekStart: string): Promise<ReviewRecord[]> {
+    return (await rows(await this.pool(), `SELECT ${RUN_COLUMNS} FROM team_review_runs WHERE weekStart = ? AND JSON_EXTRACT(payload, '$.analysis.version') = 2
+      ORDER BY createdAtMs DESC, id DESC`, [weekStart])).map(fromRow);
+  }
+
   async update(id: string, patch: ReviewPatch): Promise<void> {
     await this.transaction(async tx => {
       const record = await readRun(tx, id, true);
@@ -149,6 +159,18 @@ export class MysqlTeamHistoryRepository implements TeamHistoryRepository {
       });
       await change(tx, `UPDATE team_review_runs SET ${keys.map(key => `${key} = ?`).join(", ")} WHERE id = ?`, [...values, id]);
     });
+  }
+
+  async claim(id: string, expectedUpdatedAtMs: number, patch: ReviewPatch): Promise<boolean> {
+    const keys = PATCH_COLUMNS.filter(key => patch[key] !== undefined);
+    if (!keys.length) return false;
+    const values = keys.map(key => {
+      const value = patch[key];
+      return key === "progress" || key === "payload" ? value === null ? null : JSON.stringify(value) : value as string | number;
+    });
+    const result = await change(await this.pool(), `UPDATE team_review_runs SET ${keys.map(key => `${key} = ?`).join(", ")}
+      WHERE id = ? AND updatedAtMs = ? AND publishedAtMs IS NULL`, [...values, id, expectedUpdatedAtMs]);
+    return result.affectedRows === 1;
   }
 
   async latestPublications(): Promise<ReviewRecord[]> {
@@ -210,6 +232,14 @@ export function createMemoryTeamHistoryRepository(): TeamHistoryRepository {
         if (patch[key] !== undefined) Object.assign(next, { [key]: clone(patch[key]) });
       }
       records.set(id, next);
+    },
+    async claim(id, expectedUpdatedAtMs, patch) {
+      const record = records.get(id);
+      if (!record || record.updatedAtMs !== expectedUpdatedAtMs || record.publishedAtMs !== null) return false;
+      const next = clone(record);
+      for (const key of PATCH_COLUMNS) if (patch[key] !== undefined) Object.assign(next, { [key]: clone(patch[key]) });
+      records.set(id, next);
+      return true;
     },
     async latestPublications() {
       return Array.from(weeks.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([, id]) => clone(records.get(id)!));
