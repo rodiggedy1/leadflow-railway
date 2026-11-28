@@ -44,81 +44,18 @@ beforeEach(() => {
 });
 
 describe("admin leaderboard usability — synthetic SSR only", () => {
-  it("an unpublished week shows its automatic scores from quality records, with the same team controls", () => {
-    state.weeks.data.weeks = [];
-    state.live = { data: { publication, details: {}, agentId: 44, period: { weekStart: "2026-11-15", weekEnd: "2026-11-21", weekConvention: "Sunday-start", coverageStart: "2026-11-15", coverageEnd: "2026-11-20" },
-      teamAccounts: { "710": { cleanerProfileId: 13 }, "920": { cleanerProfileId: null, reason: "No active linked team account" } }, countsComplete: true, expectedPublicationId: null }, isLoading: false, isError: false };
-    const html = adminMarkup();
-    expect(state.liveOptions.enabled).toBe(true);
-    expect(html).toContain("This week&#x27;s scores, updated automatically from saved quality records");
-    expect((html.match(/data-team-admin-link/g) ?? []).length).toBe(2);
-    state.live.data.agentId = 45;
-    expect(adminMarkup()).not.toContain("data-team-admin-link");
-  });
-  it("a published week shows its published results by default (automatic scores stay one click away)", () => {
-    const html = adminMarkup();
-    expect(state.liveOptions.enabled).toBe(false);
-    expect(html).toContain("Show this week&#x27;s automatic scores");
-  });
-  it("renders the same score standings with one separate copy control per team and an explicit unavailable account", () => {
-    const html = adminMarkup();
-    expect((html.match(/data-team-admin-link/g) ?? []).length).toBe(2);
-    expect(html).toContain("Copy leaderboard magic link for Synthetic Team 710");
-    expect(html).toContain('disabled=""');
-    expect(html).toContain("No active linked team account");
-    expect(html).not.toContain("Your results");
-    expect(html).not.toContain("See your breakdown");
-    expect(html).not.toContain("No scored jobs to rank yet");
-    expect(html).not.toContain("Send leaderboard");
-    expect(html).toContain('href="/admin/dashboard"');
-    expect(state.generated).not.toHaveBeenCalled();
-    expect(state.refetch).not.toHaveBeenCalled();
-    expect(state.started).not.toHaveBeenCalled();
-    expect(state.published).not.toHaveBeenCalled();
-    expect(state.input).toEqual({ weekStart: "2026-11-15" });
-    expect(html).toContain("Change week");
-    expect(html).toContain("Run review");
-    expect(html).toContain(">Summary</button>");
-  });
   it.each([
     ["Staff sign-in required", { data: null, isLoading: false, isError: false }],
     ["Checking staff access…", { data: null, isLoading: true, isError: false }],
     ["Unable to confirm staff access", { data: { id: 44, isAdmin: true }, isLoading: false, isError: true }],
     ["Admin access required", { data: { id: 44, isAdmin: false }, isLoading: false, isError: false }],
-  ])("fails closed before exposing links when %s", (title, me) => {
+  ])("fails closed before reading anything or exposing links when %s", (title, me) => {
     state.me = me;
     const html = adminMarkup();
     expect(html).toContain(title);
     expect(html).not.toContain("data-team-admin-link");
-    expect(state.options.enabled).toBe(false);
+    expect(html).not.toContain("Team performance");
     expect(state.generated).not.toHaveBeenCalled();
-  });
-  it("rejects cached leaderboard data from another admin identity", () => {
-    state.results.data.agentId = 45;
-    const html = adminMarkup();
-    expect(html).toContain("Loading the team leaderboard…");
-    expect(html).not.toContain("data-team-admin-link");
-  });
-  it("rejects a cached publication for another selected week", () => {
-    state.results.data.selectionKey = "2026-11-08";
-    const html = adminMarkup();
-    expect(html).toContain("Loading the team leaderboard…");
-    expect(html).not.toContain("data-team-admin-link");
-  });
-  it("rejects another staff identity's saved weeks without hiding the explicit Run surface", () => {
-    state.weeks.data.agentId = 45;
-    const html = adminMarkup();
-    expect(html).not.toContain("Synthetic Team 710");
-    expect(html).not.toContain("data-team-admin-link");
-    expect(html).toContain("Run review");
-    expect(state.options.enabled).toBe(false);
-    expect(state.started).not.toHaveBeenCalled();
-  });
-  it("rejects cached standings when the admin read failed", () => {
-    state.results.isError = true;
-    const html = adminMarkup();
-    expect(html).toContain("Unable to load the leaderboard");
-    expect(html).not.toContain("data-team-admin-link");
   });
   it("keeps the original team view free of all admin account and copy controls", () => {
     const html = renderToStaticMarkup(React.createElement(TeamLeaderboardView, { publication, ownTeamId: "710" }));

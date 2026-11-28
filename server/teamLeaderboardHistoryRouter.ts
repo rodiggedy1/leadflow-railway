@@ -10,7 +10,8 @@ import { readTeamLeaderboardAdminAccounts } from "./teamLeaderboardAdminAccounts
 import { historySelectionSchema, reviewPublishSchema, reviewStartSchema } from "../shared/teamLeaderboardHistory";
 import { teamEvidenceWeekInputSchema } from "../shared/teamLeaderboardEvidence";
 import { qualityIncidentActionSchema } from "../shared/teamQualityIncidents";
-import { teamLeaderboardHistoryService } from "./teamLeaderboardHistoryRuntime";
+import { teamLeaderboardHistoryService, teamWeekAnalysisService } from "./teamLeaderboardHistoryRuntime";
+import type { TeamWeekAnalysis } from "./teamWeekAnalysis";
 import type { TeamLeaderboardHistoryService } from "./teamLeaderboardHistoryService";
 import type { TrpcContext } from "./_core/context";
 
@@ -64,8 +65,24 @@ async function quality<T>(work: (pool: import("mysql2/promise").Pool) => Promise
       message: QUALITY_MESSAGES[code] ?? "Quality records are temporarily unavailable. Nothing was changed; try again." });
   }
 }
-export function createTeamLeaderboardHistoryRouter(options: { resolveService?: () => TeamLeaderboardHistoryService } = {}) {
+const ANALYSIS_MESSAGES: Record<string, string> = {
+  ANALYSIS_ALREADY_COMPLETE: "This week has already been fully analyzed. New messages are added automatically; no new analysis is needed.",
+  ANALYSIS_FUTURE_WEEK: "That week has not started yet.",
+  ANALYSIS_INVALID_DAY: "Choose a day from this week, up to today.",
+  ANALYSIS_INVALID_WEEK: "Choose a week starting on a Sunday.",
+  ANALYSIS_CHANGED: "Someone else just started or changed this analysis. The status has been refreshed.",
+};
+const analysisCall = async <T>(fn: () => Promise<T>): Promise<T> => {
+  try { return await fn(); }
+  catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    throw new TRPCError({ code: ANALYSIS_MESSAGES[code] ? "BAD_REQUEST" : "INTERNAL_SERVER_ERROR",
+      message: ANALYSIS_MESSAGES[code] ?? "The analysis status could not be loaded. Nothing was started; try again." });
+  }
+};
+export function createTeamLeaderboardHistoryRouter(options: { resolveService?: () => TeamLeaderboardHistoryService; resolveAnalysis?: () => TeamWeekAnalysis } = {}) {
   const service = () => options.resolveService?.() ?? teamLeaderboardHistoryService();
+  const weekAnalysis = () => options.resolveAnalysis?.() ?? teamWeekAnalysisService();
   return router({
     weeksForAdmin: admin.query(({ ctx }) => safe(async () => ({ agentId: ctx.agent.agentId, weeks: await service().weeks() }))),
     forAdmin: admin.input(historySelectionSchema).query(({ ctx, input }) => safe(async () => {
@@ -114,10 +131,16 @@ export function createTeamLeaderboardHistoryRouter(options: { resolveService?: (
       const live = await service().live(input.weekStart);
       const result = restrictTeamLeaderboardAdminPublication(live.snapshot);
       const teamAccounts = await readTeamLeaderboardAdminAccounts(db, result.publication.teams.map(team => team.id));
-      return { agentId: ctx.agent.agentId, ...result, teamAccounts, countsComplete: live.countsComplete, expectedPublicationId: live.expectedPublicationId };
+      const notes = ((live.snapshot as { reviewMetadata?: { warnings?: string[] } }).reviewMetadata?.warnings ?? []).slice(0, 200);
+      return { agentId: ctx.agent.agentId, ...result, teamAccounts, countsComplete: live.countsComplete, expectedPublicationId: live.expectedPublicationId, notes };
     })),
     publishFromRecords: admin.input(z.object({ requestId: z.string().uuid(), weekStart: z.string(), expectedPublicationId: z.string().min(1).nullable() }).strict())
       .mutation(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().publishFromRecords(ctx.agent.agentId, input) }))),
+    // The week's day-by-day complaint analysis: one status, one start (never a duplicate run).
+    analysisStatus: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => analysisCall(async () => ({ agentId: ctx.agent.agentId, ...await weekAnalysis().status(input.weekStart) }))),
+    estimateAnalysis: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => analysisCall(async () => ({ agentId: ctx.agent.agentId, days: await weekAnalysis().estimate(input.weekStart) }))),
+    startAnalysis: admin.input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict())
+      .mutation(({ ctx, input }) => analysisCall(async () => ({ agentId: ctx.agent.agentId, ...await weekAnalysis().start(ctx.agent.agentId, input) }))),
     importReviewToRecords: admin.input(z.object({ reviewId: z.string().uuid() }).strict())
       .mutation(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().importReview(input.reviewId) }))),
   });
