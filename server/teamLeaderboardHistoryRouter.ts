@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerProfiles } from "../drizzle/schema";
+import { cleanerMagicLinkTokens, cleanerProfiles } from "../drizzle/schema";
+import { ENV } from "./_core/env";
 import { agentPageProcedure, cleanerProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { findCleanerPortalTeam } from "./cleanerPortalOwnership";
@@ -85,9 +86,16 @@ const reportCall = async <T>(fn: () => Promise<T>): Promise<T> => {
   try { return await fn(); }
   catch (error) {
     if (error instanceof TRPCError) throw error;
+    if (error instanceof Error && error.message === "REPORTS_PUBLISH_FAILED")
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Publishing this week's results failed, so no reports were sent. Check the week's job counts, then try again." });
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Team reports could not be loaded or sent. Check each team's status before trying again." });
   }
 };
+/** Where the team links point: this app's own public address (the staging/preview domain there, production otherwise). */
+function teamReportOrigin(): string {
+  const domain = ENV.isPreviewMode ? process.env.RAILWAY_PUBLIC_DOMAIN : undefined;
+  return domain ? `https://${domain}` : "https://quote.maidinblack.com";
+}
 export function createTeamLeaderboardHistoryRouter(options: { resolveService?: () => TeamLeaderboardHistoryService; resolveAnalysis?: () => TeamWeekAnalysis;
   resolveReportDeps?: (weekStart: string) => import("./teamWeeklyReports").ReportDeps } = {}) {
   const service = () => options.resolveService?.() ?? teamLeaderboardHistoryService();
@@ -105,7 +113,37 @@ export function createTeamLeaderboardHistoryRouter(options: { resolveService?: (
         const live = await service().live(week);
         const restricted = restrictTeamLeaderboardAdminPublication(live.snapshot);
         const teamAccounts = await readTeamLeaderboardAdminAccounts(db, restricted.publication.teams.map(team => team.id));
-        return reports.readReportWeek(pool, live, restricted as never, teamAccounts, await weekAnalysis().status(week), week);
+        return reports.readReportWeek(live, restricted as never, teamAccounts, await weekAnalysis().status(week), week);
+      },
+      // The existing 30-day cleaner magic links: an unused token with at least 7 days left is reused, otherwise a new
+      // 30-day one is created (same table and login as "Copy portal link"). The link opens the team's leaderboard.
+      async links(profileIds) {
+        const { randomBytes } = await import("node:crypto");
+        const { withTeamLeaderboardDestination } = await import("../shared/teamLeaderboardAccess");
+        const origin = teamReportOrigin(), result = new Map<number, string | null>();
+        for (const id of profileIds) {
+          const now = Date.now();
+          const [existing] = await db.select({ token: cleanerMagicLinkTokens.token }).from(cleanerMagicLinkTokens)
+            .where(and(eq(cleanerMagicLinkTokens.cleanerProfileId, id), eq(cleanerMagicLinkTokens.used, 0), gte(cleanerMagicLinkTokens.expiresAt, new Date(now + 7 * 86_400_000))))
+            .orderBy(desc(cleanerMagicLinkTokens.expiresAt)).limit(1);
+          let token = existing?.token;
+          if (!token) {
+            token = randomBytes(32).toString("hex");
+            await db.insert(cleanerMagicLinkTokens).values({ cleanerProfileId: id, token, expiresAt: new Date(now + 30 * 86_400_000), used: 0 });
+          }
+          result.set(id, withTeamLeaderboardDestination(`${origin}/auth/cleaner-callback?token=${token}`, origin));
+        }
+        return result;
+      },
+      async publish(week, expectedPublicationId, agentId) {
+        const { randomUUID } = await import("node:crypto");
+        await service().publishFromRecords(agentId, { requestId: randomUUID(), weekStart: week, expectedPublicationId });
+      },
+      async readPublished(week) {
+        const snapshot = await service().published({ weekStart: week });
+        if (snapshot.period?.weekStart !== week) throw new Error("REPORTS_PUBLISHED_WEEK_MISMATCH");
+        const restricted = restrictTeamLeaderboardAdminPublication(snapshot);
+        return { weekEnd: snapshot.period.weekEnd, teams: restricted.publication.teams, details: restricted.details as never };
       },
       readProfiles: ids => db.select({ id: cleanerProfiles.id, phone: cleanerProfiles.phone, language: cleanerProfiles.language, isActive: cleanerProfiles.isActive })
         .from(cleanerProfiles).where(inArray(cleanerProfiles.id, ids)),

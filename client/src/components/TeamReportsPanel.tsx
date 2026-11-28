@@ -19,6 +19,13 @@ export function reportStatus(team: Team): { tone: "none" | "pending" | "sent" | 
   if (last.status === "uncertain") return { tone: "pending", text: `May have been sent ${time(last.atMs)}: check with the team before resending` };
   return { tone: "pending", text: `Pending since ${time(last.atMs)}` };
 }
+/** The confirmation shown before anything is published or sent (pure, exported for tests). */
+export function confirmationText(view: { provisional: boolean; provisionalReason: string | null }, names: string[], resend: boolean, weekText: string): string {
+  const warning = view.provisional ? `WARNING: this week's analysis is not complete (${view.provisionalReason ?? "results may change"}). The published results and the texts will be marked PRELIMINARY.\n\n` : "";
+  const what = resend ? `${names[0]} will receive this week's report again (a second text).`
+    : `${names.length} team${names.length === 1 ? "" : "s"} will receive ${names.length === 1 ? "its report" : "their reports"} by text: ${names.join(", ")}.`;
+  return `${warning}The latest results for ${weekText} will be published first, so every team sees the same numbers on its team page. Then ${what}\n\nIf publishing fails, nothing is sent. Continue?`;
+}
 /** Teams "Send to all" would send to: a valid phone and nothing sent, pending or possibly sent yet. */
 export const sendable = (team: Team) => !team.issue && (!team.latest || team.latest.status === "failed");
 const OUTCOME: Record<Outcome["result"], string> = {
@@ -43,9 +50,7 @@ export function TeamReportsPanel({ agentId, weekStart, weekText, onClose }: { ag
   const run = async (teamIds: string[], resend: boolean, seenAttempts?: number) => {
     if (busyRef.current || !view || !teamIds.length) return;
     const names = view.teams.filter(t => teamIds.includes(t.teamId)).map(t => t.teamName);
-    const question = resend
-      ? `Send ${names[0]}'s report again? They will get a second text for this week.`
-      : `Send ${teamIds.length} real text message${teamIds.length === 1 ? "" : "s"} now (${names.join(", ")})?${view.provisional ? "\n\nThese reports are PRELIMINARY: the week's analysis is not finished." : ""}`;
+    const question = confirmationText(view, names, resend, weekText);
     if (!window.confirm(question)) return;
     busyRef.current = true; setBusy(true); setError(null); setResult(null);
     try { setResult(outcomeSummary((await send.mutateAsync({ weekStart, teamIds, resend, ...(resend ? { seenAttempts } : {}) })).outcomes)); setSelected(new Set()); }
@@ -56,7 +61,7 @@ export function TeamReportsPanel({ agentId, weekStart, weekText, onClose }: { ag
   return <section className="tp-reports" aria-label="Team reports">
     <div className="tp-reports-head"><h2>Team reports · {weekText}</h2><button type="button" className="tp-btn" onClick={onClose}>Close</button></div>
     {query.isError ? <p className="tp-error">{query.error.message}</p> : !view ? <p className="tp-note">Loading reports…</p> : <>
-      {view.provisional && <p className="tp-reports-provisional" role="status"><strong>Preliminary.</strong> {view.provisionalReason} Reports sent now say "PRELIMINARY" at the top.</p>}
+      {view.provisional && <p className="tp-reports-provisional" role="status"><strong>Preliminary.</strong> {view.provisionalReason} Publishing and sending now will mark the results and texts PRELIMINARY.</p>}
       {!view.teams.length && <p className="tp-note">No team had jobs this week.</p>}
       <ul className="tp-reports-list">{view.teams.map(team => {
         const status = reportStatus(team), canResend = !team.issue && (team.latest?.status === "sent" || team.latest?.status === "uncertain");
@@ -80,7 +85,7 @@ export function TeamReportsPanel({ agentId, weekStart, weekText, onClose }: { ag
         <button type="button" className="tp-btn" disabled={busy || !view.teams.some(sendable)} onClick={() => void run(view.teams.filter(sendable).map(t => t.teamId), false)}>
           Send to all not yet sent ({view.teams.filter(sendable).length})</button>
       </div>
-      <p className="tp-note">Teams already sent are never texted again unless you press Resend. Teams without a valid phone are skipped.</p>
+      <p className="tp-note">Sending publishes this week's latest results first, then texts the selected teams. Teams already sent are never texted again unless you press Resend. Teams without a valid phone are skipped.</p>
       {result && <p className="tp-reports-result" role="status">{result}</p>}
       {error && <p className="tp-error" role="alert">{error}</p>}
     </>}

@@ -1,26 +1,29 @@
 /** Phase 3 (2026-11-28): weekly team reports by SMS, sent only when an admin presses Send (no scheduled sending).
- * Built from the leaderboard's existing calculated standings and saved quality records: no AI, no new analysis.
- * Each attempt is one row in team_weekly_reports; (weekStart, teamId, attempt) is unique, so the same report is never
- * sent twice by accident. A deliberate resend is a new attempt. A team without a valid phone is skipped on its own. */
+ * Owner-approved templates. Send first publishes the week's latest standings (the existing "publish from quality
+ * records"), then builds every text from that published result, so the team's page shows exactly the same numbers.
+ * If publishing fails, nothing is sent. No AI, no new analysis. Each attempt is one row in team_weekly_reports;
+ * (weekStart, teamId, attempt) is unique, so the same report is never sent twice by accident. */
 import type { Pool } from "mysql2/promise";
 import { rankAssessedScores } from "../shared/teamLeaderboardReviewScores";
-import { countsAgainstTeam, type IncidentForScoring } from "../shared/teamQualityIncidents";
-import { buildTeamReportMessage, complaintAreas, reportLanguage, type ReportLanguage, type TeamReportFacts, type TeamReportStatus } from "../shared/teamWeeklyReport";
+import { buildTeamReportMessage, reportLanguage, type ReportLanguage, type TeamReportFacts, type TeamReportStatus } from "../shared/teamWeeklyReport";
 import { shiftBookingDate } from "../shared/bookingReschedule";
 import type { TeamLeaderboardRow } from "../shared/teamLeaderboard";
 
 /** A "pending" attempt older than this was interrupted: it may or may not have been sent. */
 export const PENDING_UNCERTAIN_MS = 2 * 60_000;
 
-export type ReportIncident = IncidentForScoring & { jobDate: string | null; reportedAtMs: number };
-export type ReportWeek = {
+/** Standings for a week: the live ones (preview) or the published ones (what is sent). */
+export type ReportStandings = {
   weekEnd: string;
   teams: TeamLeaderboardRow[];
   details: Record<string, { complaintCases?: number; confirmedRecoveryCases?: number } | undefined>;
+};
+export type ReportWeek = ReportStandings & {
   teamAccounts: Record<string, { cleanerProfileId: number | null; reason?: string }>;
   /** null when final; otherwise the reason the week's numbers are provisional. */
   provisionalReason: string | null;
-  incidents: ReportIncident[];
+  /** The week's current publication (for the publish step's change check). */
+  expectedPublicationId: string | null;
 };
 export type ReportProfile = { id: number; phone: string | null; language: string | null; isActive: number };
 export type ReportRow = {
@@ -37,6 +40,12 @@ export type ReportStore = {
 export type ReportDeps = {
   readWeek(weekStart: string): Promise<ReportWeek>;
   readProfiles(ids: number[]): Promise<ReportProfile[]>;
+  /** Each team account's personal link (the existing 30-day cleaner magic link, opening its team leaderboard). */
+  links(profileIds: number[]): Promise<Map<number, string | null>>;
+  /** Publishes the week's latest standings (existing "publish from quality records"). Throws if it cannot. */
+  publish(weekStart: string, expectedPublicationId: string | null, agentId: number): Promise<void>;
+  /** The week's published standings, as the teams see them. */
+  readPublished(weekStart: string): Promise<ReportStandings>;
   store: ReportStore;
   sendSms(input: { to: string; content: string }): Promise<{ success: boolean; messageId?: string; error?: string }>;
   normalizePhone(phone: string): string | null;
@@ -65,35 +74,29 @@ export type TeamReportPreview = {
 };
 export type TeamReportsView = { weekStart: string; weekEnd: string; provisional: boolean; provisionalReason: string | null; teams: TeamReportPreview[] };
 
-/** Every team with jobs this week: its report text, contact and latest send status. Read-only. */
-export async function previewTeamReports(deps: ReportDeps, weekStart: string): Promise<TeamReportsView> {
-  const week = await deps.readWeek(weekStart);
-  const ranked = rankAssessedScores(week.teams, week.details as never).filter(team => team.eligibleJobs > 0);
+type Context = { week: ReportWeek; profiles: Map<number, ReportProfile>; links: Map<number, string | null>; rows: ReportRow[] };
+/** Builds every team's report from one set of standings (live for the preview, published for the send). */
+function buildReports(deps: ReportDeps, weekStart: string, standings: ReportStandings, ctx: Context): TeamReportsView {
+  const ranked = rankAssessedScores(standings.teams, standings.details as never).filter(team => team.eligibleJobs > 0);
   const rankedTeams = ranked.filter(team => team.rank !== null).length;
-  const profileIds = Array.from(new Set(ranked.map(team => week.teamAccounts[team.id]?.cleanerProfileId).filter((id): id is number => typeof id === "number")));
-  const profiles = new Map((profileIds.length ? await deps.readProfiles(profileIds) : []).map(profile => [profile.id, profile]));
-  const rows = await deps.store.list(weekStart);
   const now = deps.now();
-  const provisional = week.provisionalReason !== null;
+  const provisional = ctx.week.provisionalReason !== null;
   const teams = ranked.map((team): TeamReportPreview => {
-    const account = week.teamAccounts[team.id];
-    const profile = account?.cleanerProfileId ? profiles.get(account.cleanerProfileId) : undefined;
+    const account = ctx.week.teamAccounts[team.id];
+    const profile = account?.cleanerProfileId ? ctx.profiles.get(account.cleanerProfileId) : undefined;
     const phone = profile && profile.isActive === 1 ? validPhone(deps, profile.phone) : null;
+    const link = profile ? ctx.links.get(profile.id) ?? null : null;
     const issue = !account?.cleanerProfileId ? ISSUES[account?.reason ?? "unmapped_team"] ?? "This team is not linked to a team account."
       : !profile || profile.isActive !== 1 ? "The team account is inactive."
-      : !phone ? (profile.phone?.trim() ? "The team account's phone number is not a valid US mobile number." : "The team account has no phone number.") : null;
+      : !phone ? (profile.phone?.trim() ? "The team account's phone number is not a valid US mobile number." : "The team account has no phone number.")
+      : !link ? "The team's personal link could not be prepared." : null;
     const language = reportLanguage(profile?.language);
-    const counted = week.incidents.filter(incident => String(incident.teamId) === team.id && countsAgainstTeam(incident))
-      .sort((a, b) => (a.jobDate ?? "").localeCompare(b.jobDate ?? "") || a.reportedAtMs - b.reportedAtMs);
     const facts: TeamReportFacts = {
-      teamName: team.name, weekStart, weekEnd: week.weekEnd, rank: team.rank, rankedTeams, unranked: team.rank === null,
-      score: team.totalScore, completedJobs: team.eligibleJobs,
-      ratings: team.metrics.ratings, eta: team.metrics.eta, photos: team.metrics.photos,
-      complaintCount: week.details[team.id]?.complaintCases ?? counted.length,
-      complaints: counted.map(incident => ({ date: incident.jobDate, areas: complaintAreas([incident.evidenceQuote, incident.evidenceText].filter(Boolean).join(" \n ")) })),
-      provisional,
+      teamName: team.name, weekStart, weekEnd: standings.weekEnd, rank: team.rank, rankedTeams, score: team.totalScore,
+      completedJobs: team.eligibleJobs, ratings: team.metrics.ratings, eta: team.metrics.eta, photos: team.metrics.photos,
+      complaintCount: standings.details[team.id]?.complaintCases ?? 0, link: link ?? "", provisional,
     };
-    const mine = rows.filter(row => String(row.teamId) === team.id).sort((a, b) => b.attempt - a.attempt);
+    const mine = ctx.rows.filter(row => String(row.teamId) === team.id).sort((a, b) => b.attempt - a.attempt);
     const last = mine[0];
     return {
       teamId: team.id, teamName: team.name, rank: team.rank, score: team.totalScore, completedJobs: team.eligibleJobs, complaintCount: facts.complaintCount,
@@ -104,46 +107,73 @@ export async function previewTeamReports(deps: ReportDeps, weekStart: string): P
       attempts: mine.length,
     };
   });
-  return { weekStart, weekEnd: week.weekEnd, provisional, provisionalReason: week.provisionalReason, teams };
+  return { weekStart, weekEnd: standings.weekEnd, provisional, provisionalReason: ctx.week.provisionalReason, teams };
+}
+async function loadContext(deps: ReportDeps, weekStart: string): Promise<Context> {
+  const week = await deps.readWeek(weekStart);
+  const withJobs = week.teams.filter(team => team.eligibleJobs > 0);
+  const profileIds = Array.from(new Set(withJobs.map(team => week.teamAccounts[team.id]?.cleanerProfileId).filter((id): id is number => typeof id === "number")));
+  const profiles = new Map((profileIds.length ? await deps.readProfiles(profileIds) : []).map(profile => [profile.id, profile]));
+  const active = Array.from(profiles.values()).filter(profile => profile.isActive === 1).map(profile => profile.id);
+  const links = active.length ? await deps.links(active) : new Map<number, string | null>();
+  return { week, profiles, links, rows: await deps.store.list(weekStart) };
+}
+
+/** Every team with jobs this week: its report exactly as it would be sent now (live standings), contact and status. */
+export async function previewTeamReports(deps: ReportDeps, weekStart: string): Promise<TeamReportsView> {
+  const ctx = await loadContext(deps, weekStart);
+  return buildReports(deps, weekStart, ctx.week, ctx);
 }
 
 export type SendOutcome = { teamId: string; teamName: string;
   result: "sent" | "failed" | "skipped_no_phone" | "skipped_already_sent" | "skipped_pending" | "skipped_in_progress" | "skipped_no_jobs"; detail: string | null };
+export class ReportPublishError extends Error { constructor() { super("REPORTS_PUBLISH_FAILED"); } }
 
-/** Sends the selected teams' reports, one at a time; one team's problem never stops the others.
- * Without `resend`, a team whose report was already sent (or may have been sent) is skipped. */
+/** Publishes the week's latest standings, then sends the selected teams' reports built from that publication, one at a
+ * time; one team's problem never stops the others. Nothing is published or sent when no selected team can be sent.
+ * If publishing fails, nothing is sent (ReportPublishError). Without `resend`, a team already sent is skipped. */
 export async function sendTeamReports(deps: ReportDeps, input: { weekStart: string; teamIds: string[]; resend: boolean; seenAttempts?: number }, agentId: number): Promise<SendOutcome[]> {
-  const view = await previewTeamReports(deps, input.weekStart);
-  const outcomes: SendOutcome[] = [];
-  for (const teamId of Array.from(new Set(input.teamIds))) {
+  const ctx = await loadContext(deps, input.weekStart);
+  const view = buildReports(deps, input.weekStart, ctx.week, ctx);
+  const outcomes = new Map<string, SendOutcome>(), toSend: string[] = [];
+  const ids = Array.from(new Set(input.teamIds));
+  for (const teamId of ids) {
     const team = view.teams.find(candidate => candidate.teamId === teamId);
-    if (!team) { outcomes.push({ teamId, teamName: "", result: "skipped_no_jobs", detail: "This team has no jobs this week." }); continue; }
-    if (team.issue || !team.phone || !team.cleanerProfileId) { outcomes.push({ teamId, teamName: team.teamName, result: "skipped_no_phone", detail: team.issue }); continue; }
+    const skip = (result: SendOutcome["result"], detail: string | null) => outcomes.set(teamId, { teamId, teamName: team?.teamName ?? "", result, detail });
+    if (!team) { skip("skipped_no_jobs", "This team has no jobs this week."); continue; }
+    if (team.issue || !team.phone || !team.cleanerProfileId) { skip("skipped_no_phone", team.issue); continue; }
     // A resend goes out only if nobody resent this report since the person looked (two clicks or two staff = one text).
-    if (input.resend && input.seenAttempts !== undefined && team.attempts !== input.seenAttempts) {
-      outcomes.push({ teamId, teamName: team.teamName, result: "skipped_in_progress", detail: "This report was just sent again by someone else. Check its status first." });
-      continue;
-    }
-    if (team.latest?.status === "pending") { outcomes.push({ teamId, teamName: team.teamName, result: "skipped_in_progress", detail: "A send for this team is in progress." }); continue; }
-    if (!input.resend && team.latest?.status === "sent") { outcomes.push({ teamId, teamName: team.teamName, result: "skipped_already_sent", detail: null }); continue; }
-    if (!input.resend && team.latest?.status === "uncertain") {
-      outcomes.push({ teamId, teamName: team.teamName, result: "skipped_pending", detail: "The last attempt may have been sent. Check with the team, then use Resend." });
-      continue;
-    }
-    const at = deps.now();
-    const reserved = await deps.store.reserve({ weekStart: input.weekStart, teamId: Number(teamId), attempt: team.attempts + 1, teamName: team.teamName,
-      cleanerProfileId: team.cleanerProfileId, phone: team.phone, language: team.language, provisional: view.provisional, messageText: team.message,
-      status: "pending", error: null, providerMessageId: null, requestedBy: agentId, createdAtMs: at, updatedAtMs: at, sentAtMs: null });
-    if (reserved === "duplicate") { outcomes.push({ teamId, teamName: team.teamName, result: "skipped_in_progress", detail: "Another send for this team just started." }); continue; }
-    let sent: { success: boolean; messageId?: string; error?: string };
-    try { sent = await deps.sendSms({ to: team.phone, content: team.message }); }
-    catch (error) { sent = { success: false, error: error instanceof Error ? error.message : "SMS send failed" }; }
-    const error = sent.success ? null : String(sent.error ?? "SMS send failed").slice(0, 250);
-    try { await deps.store.finish(reserved, { status: sent.success ? "sent" : "failed", error, providerMessageId: sent.messageId ?? null, atMs: deps.now() }); }
-    catch { /* stays "pending": shown as "may have been sent" and never resent without Resend */ }
-    outcomes.push({ teamId, teamName: team.teamName, result: sent.success ? "sent" : "failed", detail: error });
+    if (input.resend && input.seenAttempts !== undefined && team.attempts !== input.seenAttempts) { skip("skipped_in_progress", "This report was just sent again by someone else. Check its status first."); continue; }
+    if (team.latest?.status === "pending") { skip("skipped_in_progress", "A send for this team is in progress."); continue; }
+    if (!input.resend && team.latest?.status === "sent") { skip("skipped_already_sent", null); continue; }
+    if (!input.resend && team.latest?.status === "uncertain") { skip("skipped_pending", "The last attempt may have been sent. Check with the team, then use Resend."); continue; }
+    toSend.push(teamId);
   }
-  return outcomes;
+  if (toSend.length) {
+    // Publish first; the texts are then built from exactly what the teams will see on their page.
+    try { await deps.publish(input.weekStart, ctx.week.expectedPublicationId, agentId); } catch { throw new ReportPublishError(); }
+    const published = buildReports(deps, input.weekStart, await deps.readPublished(input.weekStart), ctx);
+    for (const teamId of toSend) {
+      const team = published.teams.find(candidate => candidate.teamId === teamId);
+      if (!team || team.issue || !team.phone || !team.cleanerProfileId) {
+        outcomes.set(teamId, { teamId, teamName: team?.teamName ?? "", result: team ? "skipped_no_phone" : "skipped_no_jobs", detail: team?.issue ?? "This team has no jobs in the published results." });
+        continue;
+      }
+      const at = deps.now();
+      const reserved = await deps.store.reserve({ weekStart: input.weekStart, teamId: Number(teamId), attempt: team.attempts + 1, teamName: team.teamName,
+        cleanerProfileId: team.cleanerProfileId, phone: team.phone, language: team.language, provisional: published.provisional, messageText: team.message,
+        status: "pending", error: null, providerMessageId: null, requestedBy: agentId, createdAtMs: at, updatedAtMs: at, sentAtMs: null });
+      if (reserved === "duplicate") { outcomes.set(teamId, { teamId, teamName: team.teamName, result: "skipped_in_progress", detail: "Another send for this team just started." }); continue; }
+      let sent: { success: boolean; messageId?: string; error?: string };
+      try { sent = await deps.sendSms({ to: team.phone, content: team.message }); }
+      catch (error) { sent = { success: false, error: error instanceof Error ? error.message : "SMS send failed" }; }
+      const error = sent.success ? null : String(sent.error ?? "SMS send failed").slice(0, 250);
+      try { await deps.store.finish(reserved, { status: sent.success ? "sent" : "failed", error, providerMessageId: sent.messageId ?? null, atMs: deps.now() }); }
+      catch { /* stays "pending": shown as "may have been sent" and never resent without Resend */ }
+      outcomes.set(teamId, { teamId, teamName: team.teamName, result: sent.success ? "sent" : "failed", detail: error });
+    }
+  }
+  return ids.map(id => outcomes.get(id)!);
 }
 
 /** MySQL/TiDB store for team_weekly_reports. */
@@ -180,16 +210,14 @@ export function createReportStore(pool: Pool): ReportStore {
   };
 }
 
-/** Reads the week exactly as the leaderboard page does (same live standings, team links and saved quality records). */
-export async function readReportWeek(pool: Pool, live: { snapshot: { period?: { weekEnd?: string } | null }; countsComplete: boolean },
+/** Reads the week exactly as the leaderboard page does (same live standings and team links). */
+export function readReportWeek(live: { snapshot: { period?: { weekEnd?: string } | null }; countsComplete: boolean; expectedPublicationId: string | null },
   restricted: { publication: { teams: TeamLeaderboardRow[] }; details: ReportWeek["details"] }, teamAccounts: ReportWeek["teamAccounts"],
-  analysis: { state: string; scope: string | null }, weekStart: string): Promise<ReportWeek> {
-  const { readWeekIncidents } = await import("./teamQualityIncidents");
-  const incidents = (await readWeekIncidents(pool, weekStart)) as unknown as ReportIncident[];
+  analysis: { state: string; scope: string | null }, weekStart: string): ReportWeek {
   const final = analysis.state === "complete" && analysis.scope === "week";
   return {
     weekEnd: live.snapshot.period?.weekEnd ?? shiftBookingDate(weekStart, 6), teams: restricted.publication.teams, details: restricted.details, teamAccounts,
     provisionalReason: !final ? "The week's complaint analysis is not complete." : !live.countsComplete ? "Some of the week's job counts are incomplete." : null,
-    incidents,
+    expectedPublicationId: live.expectedPublicationId,
   };
 }
