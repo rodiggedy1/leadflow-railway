@@ -270,6 +270,17 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     expect(await actions.taskBookingSource(db, await task(bothPhone, ask, null))).toEqual({ source: "both", launch27BookingIds: [bothL27] });
     // No bookings anywhere: unknown (manual)
     expect(await actions.taskBookingSource(db, await task(newPhone(), ask, null))).toEqual({ source: "unknown", launch27BookingIds: [] });
+    // One shared answer for every card: same results as one-by-one; completed and non-booking tasks are never looked up.
+    const l27Again = await task(l27Phone, ask, null), notBooking = await task(l27Phone, "Thanks, great job!", null, [{ title: "Say thanks", evidenceQuote: "Thanks, great job!" }]);
+    const doneTask = await task(l27Phone, ask, null);
+    await db.execute(sql`UPDATE ops_chat_messages SET metadata = JSON_SET(metadata, '$.task.status', 'done', '$.task.owner', JSON_OBJECT('id', '11', 'name', 'Ana'),
+      '$.task.claimedAt', 1, '$.task.completedBy', JSON_OBJECT('id', '11', 'name', 'Ana'), '$.task.completedAt', 2,
+      '$.task.items[0].completedBy', JSON_OBJECT('id', '11', 'name', 'Ana'), '$.task.items[0].completedAt', 2) WHERE id = ${doneTask}`);
+    const shared = await actions.taskBookingSources(db);
+    expect(shared[String(l27Again)]).toEqual(await actions.taskBookingSource(db, l27Again));
+    expect(shared[String(l27Task)].source).toBe("launch27");
+    expect(shared[String(doneTask)]).toBeUndefined();
+    expect(shared[String(notBooking)]).toBeUndefined();
   });
 
   it("simultaneous approvals execute exactly once", async () => {
