@@ -78,7 +78,10 @@ export function createClaudeCustomerEmailApplication(options: CustomerEmailAppli
       const store = await getStore(db);
       const generate = options.generate ?? (async (source: CustomerEmailBinding) => {
         const { createClaudeCustomerReplyGenerator } = await import("./claudeCustomerSmsGeneration");
-        return createClaudeCustomerReplyGenerator(options.replyGeneration)({ incomingMessage: source.inboundText,
+        // Phase 2: the optional quality-complaint label is read from the same answer (no extra AI call, same runner).
+        const { createQualityLabelRunner } = await import("./qualityComplaintLabelRunner");
+        const label = createQualityLabelRunner(options.replyGeneration?.runner);
+        const plan = await createClaudeCustomerReplyGenerator({ ...options.replyGeneration, runner: label.runner })({ incomingMessage: source.inboundText,
           protectedIds: [source.threadId, source.inboundMessageId, source.rfcMessageId],
           context: {
             source: "email", contact: { displayName: source.senderName, email: source.fromEmail },
@@ -98,6 +101,14 @@ export function createClaudeCustomerEmailApplication(options: CustomerEmailAppli
             })), bookingContext: null,
           },
         });
+        try {
+          const complaint = label.take(source.inboundText);
+          if (complaint) (await import("../teamQualitySignals")).recordAiQualityComplaintInBackground(complaint, {
+            sourceKey: `email:msg:${source.inboundMessageId}`, channel: "email", detector: "claude_email", reportedAtMs: source.receivedAt,
+            customerEmail: source.fromEmail, customerName: source.senderName, evidenceText: source.inboundText,
+            sourceRef: { threadId: source.threadId, inboundMessageId: source.inboundMessageId } });
+        } catch { /* the email reply is unaffected */ }
+        return plan;
       });
       const send = options.send ?? (async (source: CustomerEmailBinding, text: string) => {
         return (await import("../gmailService")).sendGmailReply({

@@ -119,6 +119,22 @@ export function createStaffCallSourceReader(options: {
   };
 }
 
+/** Phase 2: the same staff-call task generation, with the optional quality-complaint label read from the same answer
+ * (no extra AI call). The label is saved in the background and never changes the task. */
+async function labelledStaffCallTask(source: StaffCallSource) {
+  const { createQualityLabelRunner } = await import("./qualityComplaintLabelRunner");
+  const label = createQualityLabelRunner();
+  const task = await createClaudeStaffCallTaskGenerator({ runner: label.runner })(source);
+  try {
+    const complaint = label.take(source.transcript);
+    if (complaint) (await import("../teamQualitySignals")).recordAiQualityComplaintInBackground(complaint, {
+      sourceKey: `call:openphone:${source.providerCallId}`, channel: "call", detector: "claude_staff_call", reportedAtMs: source.receivedAt,
+      customerPhone: source.callerPhone, customerName: source.callerName, evidenceText: source.transcript,
+      sourceRef: { recordingId: source.recordingId, providerCallId: source.providerCallId } });
+  } catch { /* the call task is unaffected */ }
+  return task;
+}
+
 /** Event-only integration. No startup scan, historical replay, model retry, call or message send. */
 export async function handleClaudeStaffCall(callId: string): Promise<void> {
   if (process.env.PREVIEW_MODE === "true" || !/^AC.+$/.test(callId)) return;
@@ -133,7 +149,7 @@ export async function handleClaudeStaffCall(callId: string): Promise<void> {
     if (!response.ok) throw new Error("STAFF_CALL_SOURCE_UNAVAILABLE");
     return response.json();
   } });
-  const result = await createClaudeStaffCallTaskHandler({ readSource, store: createClaudeStaffCallsStore(db), generate: createClaudeStaffCallTaskGenerator() })(callId);
+  const result = await createClaudeStaffCallTaskHandler({ readSource, store: createClaudeStaffCallsStore(db), generate: labelledStaffCallTask })(callId);
   if (result.status === "created") {
     const { broadcastOpsUpdate } = await import("../sseBroadcast");
     broadcastOpsUpdate("task_update", { channel: "command" });

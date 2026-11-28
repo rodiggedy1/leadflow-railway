@@ -39,6 +39,7 @@ export function teamLeaderboardHistoryService(): TeamLeaderboardHistoryService {
       quality: {
         readIncidents: async weekStart => (await import("./teamQualityIncidents")).readWeekIncidents(await pool(), weekStart),
         record: async signal => (await import("./teamQualityIncidents")).recordQualitySignal(await pool(), signal),
+        refresh: async weekStart => (await import("./teamQualityIncidents")).refreshQualityWeek(await pool(), weekStart),
       } });
   }
   return current;

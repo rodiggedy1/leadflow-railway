@@ -47,6 +47,8 @@ export function createTeamLeaderboardHistoryService(options: {
   quality?: {
     readIncidents(weekStart: string): Promise<StoredIncident[]>;
     record(signal: QualitySignal): Promise<{ duplicate: boolean; processed: boolean }>;
+    /** Automatic upkeep before scoring: retry failures, re-attribute, detect recleans. Errors never block scoring. */
+    refresh?(weekStart: string): Promise<unknown>;
   };
 }) {
   const repo = options.repository;
@@ -174,6 +176,7 @@ export function createTeamLeaderboardHistoryService(options: {
     async live(weekStart: string) {
       const quality = options.quality ?? fail("QUALITY_RECORDS_UNAVAILABLE");
       const window = resolveTeamEvidenceWindow({ weekStart }, new Date(clock()));
+      await quality.refresh?.(weekStart).catch(() => undefined);
       const counts = await options.readCounts(window);
       const incidents = await quality.readIncidents(weekStart);
       return { snapshot: buildTeamWeekPublicationFromIncidents(counts, incidents), countsComplete: counts.complete, expectedPublicationId: await expectedId(weekStart) };
@@ -184,6 +187,7 @@ export function createTeamLeaderboardHistoryService(options: {
       const parsed = reviewStartSchema.parse({ requestId: input.requestId, weekStart: input.weekStart });
       const quality = options.quality ?? fail("QUALITY_RECORDS_UNAVAILABLE");
       const window = resolveTeamEvidenceWindow({ weekStart: parsed.weekStart }, new Date(clock()));
+      await quality.refresh?.(parsed.weekStart).catch(() => undefined);
       const counts = await options.readCounts(window);
       if (!counts.complete) return fail("WEEK_REVIEW_NOT_READY");
       const snapshot = buildTeamWeekPublicationFromIncidents(counts, await quality.readIncidents(parsed.weekStart));

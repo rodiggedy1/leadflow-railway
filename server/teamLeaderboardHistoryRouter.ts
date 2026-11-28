@@ -109,8 +109,12 @@ export function createTeamLeaderboardHistoryRouter(options: { resolveService?: (
       return { agentId: ctx.agent.agentId, incident: await processQualityIncident(pool, input.id) };
     })),
     liveFromRecords: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => safe(async () => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Team results are temporarily unavailable." });
       const live = await service().live(input.weekStart);
-      return { agentId: ctx.agent.agentId, ...restrictTeamLeaderboardAdminPublication(live.snapshot), countsComplete: live.countsComplete, expectedPublicationId: live.expectedPublicationId };
+      const result = restrictTeamLeaderboardAdminPublication(live.snapshot);
+      const teamAccounts = await readTeamLeaderboardAdminAccounts(db, result.publication.teams.map(team => team.id));
+      return { agentId: ctx.agent.agentId, ...result, teamAccounts, countsComplete: live.countsComplete, expectedPublicationId: live.expectedPublicationId };
     })),
     publishFromRecords: admin.input(z.object({ requestId: z.string().uuid(), weekStart: z.string(), expectedPublicationId: z.string().min(1).nullable() }).strict())
       .mutation(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().publishFromRecords(ctx.agent.agentId, input) }))),

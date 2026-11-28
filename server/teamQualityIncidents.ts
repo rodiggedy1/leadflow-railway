@@ -4,8 +4,9 @@
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { easternDateIso } from "../shared/easternTime";
 import { shiftBookingDate } from "../shared/bookingReschedule";
+import { isRecleanJob } from "./teamQualityRules";
 import {
-  categoryGroup, type IncidentForScoring, type QualityCategory, type QualityChannel, type QualityDetector,
+  categoryGroup, STRONG_DETECTORS, type IncidentForScoring, type QualityCategory, type QualityChannel, type QualityDetector,
   type QualityIncidentAction, type QualitySeverity,
 } from "../shared/teamQualityIncidents";
 
@@ -104,7 +105,7 @@ export async function recordQualitySignal(pool: Pool, signal: QualitySignal, now
     result = await change(pool, `INSERT INTO team_quality_incidents (primaryId, sourceKey, channel, detector, reportedAtMs, weekStart, customerPhone, customerEmail, customerName,
       evidenceQuote, evidenceText, sourceRef, category, severity, serviceDateHint, leadflowJobId, teamId, attribution, attributionNote, status, statusNote,
       recleanStatus, refundStatus, processingStatus, processingError, processingAttempts, updatedBy, createdAtMs, updatedAtMs)
-    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'needs_review', NULL, 'open', NULL, ?, ?, 'pending', NULL, 0, NULL, ?, ?)`, [
+    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'unattributed', NULL, 'open', NULL, ?, ?, 'pending', NULL, 0, NULL, ?, ?)`, [
     signal.sourceKey, signal.channel, signal.detector, Math.round(signal.reportedAtMs), reportWeekStart(signal.reportedAtMs),
     clip(signal.customerPhone ?? null, 32), clip(signal.customerEmail?.toLowerCase() ?? null, 320), clip(signal.customerName ?? null, 255),
     clip(signal.evidenceQuote ?? null, 4000), clip(signal.evidenceText ?? null, 8000), signal.sourceRef ? JSON.stringify(signal.sourceRef) : null,
@@ -155,33 +156,42 @@ export async function customerVisits(db: SqlClient, contact: { phone: string | n
     ORDER BY j.jobDate DESC, j.id DESC LIMIT 50`, [from, through, phone, phone, phone, email, email, email]);
   return found.map(row => ({ ...candidate(row), bookingStatus: String(row.bookingStatus ?? ""), signedOff: Number(row.signoffs) > 0 }));
 }
-/** Which visit and team a complaint is about. Uncertain → needs_review with a plain reason, never a guess. */
+/** Which visit and team a complaint is about, decided automatically: the visit the customer named, otherwise the most
+ * recent completed visit in the days before the message. No matching visit or no single team → "unattributed"
+ * (it does not count, and is retried automatically when the week is recalculated). Never a staff step. */
 export async function resolveAttribution(db: SqlClient, incident: Pick<QualityIncidentRow, "reportedAtMs" | "customerPhone" | "customerEmail" | "serviceDateHint" | "leadflowJobId">):
-  Promise<{ leadflowJobId: number | null; teamId: number | null; attribution: "auto" | "needs_review"; note: string }> {
+  Promise<{ leadflowJobId: number | null; teamId: number | null; attribution: "auto" | "unattributed"; note: string }> {
   if (incident.leadflowJobId !== null) {
     const job = await readJob(db, incident.leadflowJobId);
-    if (!job) return { leadflowJobId: null, teamId: null, attribution: "needs_review", note: "The job this came from no longer exists." };
+    if (!job) return { leadflowJobId: null, teamId: null, attribution: "unattributed", note: "The job this came from no longer exists." };
     const teamId = await teamFor(db, job);
-    return teamId === null ? { leadflowJobId: job.id, teamId: null, attribution: "needs_review", note: `Job ${job.id} is not assigned to exactly one team.` }
+    return teamId === null ? { leadflowJobId: job.id, teamId: null, attribution: "unattributed", note: `Job ${job.id} is not assigned to exactly one team.` }
       : { leadflowJobId: job.id, teamId, attribution: "auto", note: `From job ${job.id} (${job.jobDate}).` };
   }
   const today = easternDateIso(new Date(incident.reportedAtMs));
-  const hint = incident.serviceDateHint && incident.serviceDateHint <= today && incident.serviceDateHint >= shiftBookingDate(today, -45) ? incident.serviceDateHint : null;
-  const from = hint ?? shiftBookingDate(today, -ATTRIBUTION_LOOKBACK_DAYS), through = hint ?? today;
-  const visits = (await customerVisits(db, { phone: incident.customerPhone, email: incident.customerEmail }, from, through))
+  const completed = (visits: Awaited<ReturnType<typeof customerVisits>>) => visits
     .filter(visit => !TOMBSTONES.includes(visit.bookingStatus.trim().toLowerCase()))
     // A visit dated today counts only once it has happened (sign-off or completed), like the leaderboard counts.
     .filter(visit => visit.jobDate < today || visit.signedOff || visit.bookingStatus.trim().toLowerCase() === "completed");
-  if (!visits.length) return { leadflowJobId: null, teamId: null, attribution: "needs_review",
-    note: hint ? `No completed visit found for this customer on ${hint}.` : `No completed visit found for this customer in the ${ATTRIBUTION_LOOKBACK_DAYS} days before the message.` };
-  if (visits.length > 1) return { leadflowJobId: null, teamId: null, attribution: "needs_review",
-    note: `${visits.length} possible visits (${visits.slice(0, 4).map(v => v.jobDate).join(", ")}); staff should choose the right one.` };
-  const teamId = await teamFor(db, visits[0]);
-  return teamId === null ? { leadflowJobId: visits[0].id, teamId: null, attribution: "needs_review", note: `Visit ${visits[0].id} (${visits[0].jobDate}) is not assigned to exactly one team.` }
-    : { leadflowJobId: visits[0].id, teamId, attribution: "auto", note: `Matched the only completed visit, ${visits[0].jobDate}.` };
+  const contact = { phone: incident.customerPhone, email: incident.customerEmail };
+  const hint = incident.serviceDateHint && incident.serviceDateHint <= today && incident.serviceDateHint >= shiftBookingDate(today, -45) ? incident.serviceDateHint : null;
+  let visits = hint ? completed(await customerVisits(db, contact, hint, hint)) : [];
+  const named = visits.length > 0;
+  if (!named) visits = completed(await customerVisits(db, contact, shiftBookingDate(today, -ATTRIBUTION_LOOKBACK_DAYS), today));
+  if (!visits.length) return { leadflowJobId: null, teamId: null, attribution: "unattributed",
+    note: `No completed visit found for this customer in the ${ATTRIBUTION_LOOKBACK_DAYS} days before the message${hint ? ` or on ${hint}` : ""}.` };
+  // The most recent completed visit. Two visits on that same date by different teams cannot be told apart → unattributed.
+  const latest = visits.filter(visit => visit.jobDate === visits[0].jobDate);
+  const teams = await Promise.all(latest.map(visit => teamFor(db, visit)));
+  if (new Set(teams).size > 1) return { leadflowJobId: null, teamId: null, attribution: "unattributed", note: `${latest.length} visits on ${visits[0].jobDate} by different teams.` };
+  const teamId = teams[0];
+  const how = named ? `the visit the customer named, ${visits[0].jobDate}` : `the most recent completed visit, ${visits[0].jobDate}${visits.length > 1 ? ` (of ${visits.length} in the last ${ATTRIBUTION_LOOKBACK_DAYS} days)` : ""}`;
+  return teamId === null ? { leadflowJobId: visits[0].id, teamId: null, attribution: "unattributed", note: `Visit ${visits[0].id} (${visits[0].jobDate}) is not assigned to exactly one team.` }
+    : { leadflowJobId: visits[0].id, teamId, attribution: "auto", note: `Matched ${how}.` };
 }
 
-/** Match the saved signal to a visit/team and to an incident. Safe to re-run (Retry). */
+const strong = (detector: string) => STRONG_DETECTORS.includes(detector);
+/** Match the saved signal to a visit/team and to an incident. Safe to re-run (automatic retry, or a staff Retry). */
 export async function processQualityIncident(pool: Pool, id: number, nowMs = Date.now()): Promise<QualityIncidentRow> {
   try {
     return await transaction(pool, async tx => {
@@ -191,39 +201,102 @@ export async function processQualityIncident(pool: Pool, id: number, nowMs = Dat
       const resolved = await resolveAttribution(tx, row);
       let primaryId: number | null = null;
       if (resolved.attribution === "auto" && resolved.leadflowJobId !== null && resolved.teamId !== null) {
-        // Same visit + team + kind of issue, still open and recent → the same incident (counts once).
-        // Resolved/dismissed incidents, a different kind of issue, or a long gap → a separate complaint.
-        const open = await rows(tx, `SELECT p.id, p.category, GREATEST(p.reportedAtMs, COALESCE((SELECT MAX(c.reportedAtMs) FROM team_quality_incidents c WHERE c.primaryId = p.id), 0)) AS lastAt
+        // Same visit + team, still open and recent → the same incident (counts once) when it is the same kind of issue,
+        // or when either side is only a supporting/rule-based signal (it joins the AI-labelled complaint).
+        // Resolved or dismissed incidents, or a different kind of issue reported by the AI, stay separate complaints.
+        const open = await rows(tx, `SELECT p.id, p.category, p.detector,
+            (SELECT COUNT(*) FROM team_quality_incidents c WHERE c.primaryId = p.id AND c.detector IN (${STRONG_DETECTORS.map(() => "?").join(", ")})) AS strongChildren,
+            GREATEST(p.reportedAtMs, COALESCE((SELECT MAX(c.reportedAtMs) FROM team_quality_incidents c WHERE c.primaryId = p.id), 0)) AS lastAt
           FROM team_quality_incidents p WHERE p.primaryId IS NULL AND p.id <> ? AND p.leadflowJobId = ? AND p.teamId = ? AND p.status = 'open' AND p.processingStatus = 'ok'
-          ORDER BY p.id DESC FOR UPDATE`, [id, resolved.leadflowJobId, resolved.teamId]);
-        const match = open.find(p => categoryGroup(String(p.category)) === categoryGroup(row.category) && Math.abs(row.reportedAtMs - Number(p.lastAt)) <= SAME_INCIDENT_WINDOW_MS);
+          ORDER BY p.id DESC FOR UPDATE`, [...STRONG_DETECTORS, id, resolved.leadflowJobId, resolved.teamId]);
+        const rowWeak = !strong(row.detector) || row.category === "unclassified";
+        const match = open.find(p => {
+          if (Math.abs(row.reportedAtMs - Number(p.lastAt)) > SAME_INCIDENT_WINDOW_MS) return false;
+          const primaryWeak = (!strong(String(p.detector)) && Number(p.strongChildren) === 0) || String(p.category) === "unclassified";
+          return rowWeak || primaryWeak || categoryGroup(String(p.category)) === categoryGroup(row.category);
+        });
         if (match) primaryId = Number(match.id);
       }
       await change(tx, `UPDATE team_quality_incidents SET primaryId = ?, leadflowJobId = ?, teamId = ?, attribution = ?, attributionNote = ?,
           processingStatus = 'ok', processingError = NULL, processingAttempts = processingAttempts + 1, updatedAtMs = ? WHERE id = ?`,
         [primaryId, resolved.leadflowJobId, resolved.teamId, resolved.attribution, clip(resolved.note, 500), nowMs, id]);
-      if (primaryId !== null) await absorb(tx, primaryId, row, nowMs);
+      if (primaryId !== null) {
+        // Any messages already grouped under this row follow it into the incident.
+        await change(tx, "UPDATE team_quality_incidents SET primaryId = ?, leadflowJobId = ?, teamId = ?, updatedAtMs = ? WHERE primaryId = ?", [primaryId, resolved.leadflowJobId, resolved.teamId, nowMs, id]);
+        await absorb(tx, primaryId, row, nowMs);
+      }
       return (await readIncident(tx, id))!;
     });
   } catch (error) {
     const code = error instanceof Error && /^QUALITY_[A-Z_]+$/.test(error.message) ? error.message : "QUALITY_PROCESSING_FAILED";
     console.warn(`[quality-incident] processing failed id=${id} code=${code}`);
     try { await change(pool, "UPDATE team_quality_incidents SET processingStatus = 'failed', processingError = ?, processingAttempts = processingAttempts + 1, updatedAtMs = ? WHERE id = ? AND processingStatus <> 'ok'", [code, nowMs, id]); }
-    catch { /* the row stays "pending" and is still listed for retry */ }
+    catch { /* the row stays "pending" and is retried automatically */ }
     throw error;
   }
 }
-/** A further message raises the incident's severity and requests, never its count. */
-async function absorb(tx: PoolConnection, primaryId: number, row: Pick<QualityIncidentRow, "severity" | "recleanStatus" | "refundStatus">, nowMs: number): Promise<void> {
+/** A further message raises the incident's severity and requests, never its count. The AI's category replaces a
+ * rule-based or supporting-signal category (the AI read the full message); a staff override is never replaced. */
+async function absorb(tx: PoolConnection, primaryId: number, row: Pick<QualityIncidentRow, "severity" | "recleanStatus" | "refundStatus" | "category" | "detector">, nowMs: number): Promise<void> {
   const primary = await readIncident(tx, primaryId, true);
   if (!primary) return;
   const severity = (SEVERITY_ORDER[row.severity] ?? 0) > (SEVERITY_ORDER[primary.severity] ?? 0) ? row.severity : primary.severity;
   const reclean = primary.recleanStatus === "none" && row.recleanStatus !== "none" ? "requested" : primary.recleanStatus;
   const refund = primary.refundStatus === "none" && row.refundStatus !== "none" ? "requested" : primary.refundStatus;
-  await change(tx, "UPDATE team_quality_incidents SET severity = ?, recleanStatus = ?, refundStatus = ?, updatedAtMs = ? WHERE id = ?", [severity, reclean, refund, nowMs, primaryId]);
+  const strongChildren = await rows(tx, `SELECT COUNT(*) AS n FROM team_quality_incidents WHERE primaryId = ? AND detector IN (${STRONG_DETECTORS.map(() => "?").join(", ")})`, [primaryId, ...STRONG_DETECTORS]);
+  // This row is already attached when absorb runs, so do not count it as an earlier AI message.
+  const primaryAi = strong(primary.detector) || Number(strongChildren[0]?.n ?? 0) > (strong(row.detector) ? 1 : 0);
+  const upgrade = primary.updatedBy === null && row.category !== "unclassified"
+    && (primary.category === "unclassified" || (strong(row.detector) && !primaryAi));
+  await change(tx, "UPDATE team_quality_incidents SET severity = ?, recleanStatus = ?, refundStatus = ?, category = ?, updatedAtMs = ? WHERE id = ?",
+    [severity, reclean, refund, upgrade ? row.category : primary.category, nowMs, primaryId]);
 }
 
-/** Staff corrections. Every action applies to an incident (primary) except "separate", which acts on one message. */
+/** Automatic upkeep for a week, run whenever its scores are calculated: retries failed/pending records, re-tries
+ * attribution for unattributed complaints (for example a visit marked completed later), and records completed
+ * recleans found in the job records. Staff overrides (updatedBy set) are left alone. */
+export async function refreshQualityWeek(pool: Pool, weekStart: string, nowMs = Date.now()): Promise<{ retried: number; reattributed: number; recleans: number }> {
+  let retried = 0, reattributed = 0, recleans = 0;
+  for (const row of await rows(pool, "SELECT id FROM team_quality_incidents WHERE weekStart = ? AND processingStatus <> 'ok' AND processingAttempts < 10 ORDER BY id LIMIT 200", [weekStart])) {
+    try { await processQualityIncident(pool, Number(row.id), nowMs); retried++; } catch { /* stays listed with its code; retried next time */ }
+  }
+  for (const row of await rows(pool, `SELECT id FROM team_quality_incidents WHERE weekStart = ? AND primaryId IS NULL AND attribution = 'unattributed'
+      AND status <> 'dismissed' AND updatedBy IS NULL AND processingStatus = 'ok' ORDER BY id LIMIT 200`, [weekStart])) {
+    try {
+      await change(pool, "UPDATE team_quality_incidents SET processingStatus = 'pending' WHERE id = ? AND attribution = 'unattributed' AND processingStatus = 'ok'", [Number(row.id)]);
+      if ((await processQualityIncident(pool, Number(row.id), nowMs)).attribution !== "unattributed") reattributed++;
+    } catch { /* retried next time */ }
+  }
+  const counted = await rows(pool, `SELECT t.id, t.leadflowJobId, j.jobDate, j.customerPhone, j.customerEmail FROM team_quality_incidents t JOIN leadflow_jobs j ON j.id = t.leadflowJobId
+    WHERE t.weekStart = ? AND t.primaryId IS NULL AND t.status <> 'dismissed' AND t.updatedBy IS NULL AND t.recleanStatus <> 'completed'
+      AND t.category IN ('cleaning_quality', 'team_service') AND t.attribution <> 'unattributed' AND t.processingStatus = 'ok' ORDER BY t.id LIMIT 200`, [weekStart]);
+  for (const incident of counted) {
+    const reclean = await findCompletedReclean(pool, { jobId: Number(incident.leadflowJobId), jobDate: String(incident.jobDate),
+      phone: (incident.customerPhone as string | null) ?? null, email: (incident.customerEmail as string | null) ?? null }, nowMs);
+    if (!reclean) continue;
+    await change(pool, "UPDATE team_quality_incidents SET recleanStatus = 'completed', statusNote = ?, updatedAtMs = ? WHERE id = ? AND updatedBy IS NULL",
+      [clip(`Reclean visit detected automatically: job ${reclean.id} on ${reclean.jobDate}.`, 500), nowMs, Number(incident.id)]);
+    recleans++;
+  }
+  return { retried, reattributed, recleans };
+}
+/** A completed reclean visit for the same customer within 21 days after the complained-about visit. */
+async function findCompletedReclean(db: SqlClient, visit: { jobId: number; jobDate: string; phone: string | null; email: string | null }, nowMs: number): Promise<{ id: number; jobDate: string } | null> {
+  const phone = digits10(visit.phone), email = visit.email?.trim().toLowerCase() || null;
+  if (!phone && !email) return null;
+  const today = easternDateIso(new Date(nowMs));
+  const found = await rows(db, `SELECT j.id, j.jobDate, j.bookingStatus, j.serviceName, j.customerNotes, j.extras, j.jobTotalCents,
+      (SELECT COUNT(*) FROM cleaner_portal_job_signoffs s WHERE s.leadflowJobId = j.id) AS signoffs
+    FROM leadflow_jobs j WHERE j.id <> ? AND j.jobDate > ? AND j.jobDate <= ? AND (
+      (? IS NOT NULL AND RIGHT(REGEXP_REPLACE(COALESCE(j.customerPhone, ''), '[^0-9]', ''), 10) = ?) OR (? IS NOT NULL AND LOWER(j.customerEmail) = ?))
+    ORDER BY j.jobDate ASC, j.id ASC LIMIT 20`, [visit.jobId, visit.jobDate, shiftBookingDate(visit.jobDate, 21), phone, phone, email, email]);
+  const match = found.find(job => !TOMBSTONES.includes(String(job.bookingStatus ?? "").trim().toLowerCase())
+    && isRecleanJob({ serviceName: job.serviceName as string | null, customerNotes: job.customerNotes as string | null, extras: job.extras as string | null, jobTotalCents: num(job.jobTotalCents) })
+    && (String(job.jobDate) < today || Number(job.signoffs) > 0 || String(job.bookingStatus ?? "").trim().toLowerCase() === "completed"));
+  return match ? { id: Number(match.id), jobDate: String(match.jobDate) } : null;
+}
+
+/** Optional staff overrides (never required). Every action applies to an incident (primary) except "separate". */
 export async function applyQualityIncidentAction(pool: Pool, action: QualityIncidentAction, actorId: number, nowMs = Date.now()): Promise<QualityIncidentRow> {
   return transaction(pool, async tx => {
     const row = await readIncident(tx, action.id, true);
@@ -246,7 +319,7 @@ export async function applyQualityIncidentAction(pool: Pool, action: QualityInci
       }
       case "unattribute":
         primaryOnly();
-        await set("leadflowJobId = NULL, teamId = NULL, attribution = 'needs_review', attributionNote = ?", [clip(action.note?.trim() || "Staff removed the team attribution.", 500)]);
+        await set("leadflowJobId = NULL, teamId = NULL, attribution = 'unattributed', attributionNote = ?", [clip(action.note?.trim() || "Staff override: team attribution removed.", 500)]);
         await syncChildren(null, null);
         break;
       case "classify": primaryOnly(); await set("category = ?, severity = ?", [action.category, action.severity]); break;

@@ -8,7 +8,7 @@ import ReviewWorkspaceNav from "../client/src/components/ReviewWorkspaceNav";
 import OriginalDashboardWorkspaceNav from "../client/src/components/OriginalDashboardWorkspaceNav";
 import type { TeamLeaderboardPublication } from "../shared/teamLeaderboard";
 
-const state = vi.hoisted(() => ({ me: {} as any, results: {} as any, generated: vi.fn(), refetch: vi.fn(), options: {} as any, input: {} as any, weeks: {} as any, runs: {} as any, draft: {} as any, started: vi.fn(), published: vi.fn() }));
+const state = vi.hoisted(() => ({ live: {} as any, liveOptions: {} as any, me: {} as any, results: {} as any, generated: vi.fn(), refetch: vi.fn(), options: {} as any, input: {} as any, weeks: {} as any, runs: {} as any, draft: {} as any, started: vi.fn(), published: vi.fn() }));
 vi.mock("@/lib/trpc", () => ({ trpc: {
   agents: { me: { useQuery: () => ({ ...state.me, refetch: vi.fn() }) } },
   cleaner: { getMagicLink: { useMutation: () => ({ mutateAsync: state.generated }) } },
@@ -19,7 +19,7 @@ vi.mock("@/lib/trpc", () => ({ trpc: {
     reviewDraft: { useQuery: () => ({ ...state.draft, refetch: vi.fn() }) },
     startReview: { useMutation: () => ({ mutateAsync: state.started }) },
     publishReview: { useMutation: () => ({ mutateAsync: state.published }) },
-    liveFromRecords: { useQuery: () => ({ data: undefined, isError: false, isLoading: false, refetch: vi.fn() }) },
+    liveFromRecords: { useQuery: (_input: unknown, options: any) => { state.liveOptions = options; return { ...state.live, refetch: vi.fn() }; } },
     publishFromRecords: { useMutation: () => ({ mutateAsync: vi.fn() }) },
   } } },
 } }));
@@ -44,6 +44,22 @@ beforeEach(() => {
 });
 
 describe("admin leaderboard usability — synthetic SSR only", () => {
+  it("an unpublished week shows its automatic scores from quality records, with the same team controls", () => {
+    state.weeks.data.weeks = [];
+    state.live = { data: { publication, details: {}, agentId: 44, period: { weekStart: "2026-11-15", weekEnd: "2026-11-21", weekConvention: "Sunday-start", coverageStart: "2026-11-15", coverageEnd: "2026-11-20" },
+      teamAccounts: { "710": { cleanerProfileId: 13 }, "920": { cleanerProfileId: null, reason: "No active linked team account" } }, countsComplete: true, expectedPublicationId: null }, isLoading: false, isError: false };
+    const html = adminMarkup();
+    expect(state.liveOptions.enabled).toBe(true);
+    expect(html).toContain("This week&#x27;s scores, updated automatically from saved quality records");
+    expect((html.match(/data-team-admin-link/g) ?? []).length).toBe(2);
+    state.live.data.agentId = 45;
+    expect(adminMarkup()).not.toContain("data-team-admin-link");
+  });
+  it("a published week shows its published results by default (automatic scores stay one click away)", () => {
+    const html = adminMarkup();
+    expect(state.liveOptions.enabled).toBe(false);
+    expect(html).toContain("Show this week&#x27;s automatic scores");
+  });
   it("renders the same score standings with one separate copy control per team and an explicit unavailable account", () => {
     const html = adminMarkup();
     expect((html.match(/data-team-admin-link/g) ?? []).length).toBe(2);
