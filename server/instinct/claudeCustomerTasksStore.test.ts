@@ -433,7 +433,6 @@ describe("customer task store — offline transactional SQL port", () => {
     await expect(h.store.completeItem(id, "item-1", owner)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(h.store.completeItem(id, "item-2", owner)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(h.store.completeTask(id, "Old owner confirmation", owner)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(h.store.completeTask(id, " \t\n ", other)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(h.state()).toEqual(before); expect(h.queries.slice(queriesBefore).some(q => /^UPDATE/.test(q.sql))).toBe(false);
   });
   it.each(["completion-first", "takeover-first"] as const)("completion versus takeover respects the locked %s outcome", async order => {
@@ -506,11 +505,14 @@ describe("customer task store — offline transactional SQL port", () => {
     expect(done).toMatchObject({ id, status: "done", completionNote: "Both requested changes were completed manually." });
     expect(await h.store.list()).toEqual([done]); expect(h.state().cards).toHaveLength(1);
   });
-  it.each([undefined, "", " \t\n "])("requires a nonempty completion note without changing the claimed task: %s", async note => {
+  // Owner change (2026-11-28): the completion note is optional; a blank one is saved as no note, with the staff
+  // member and time still recorded in the completion history.
+  it.each([undefined, "", " \t\n "])("an optional completion note: blank is saved as no note, staff and time still recorded: %s", async note => {
     const h = port(); await h.prepared(); const id = h.task().id; await h.store.claimTask(id, owner);
-    const before = structuredClone(h.state());
-    await expect(h.store.completeTask(id, note, owner)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(h.state()).toEqual(before); expect((await h.store.get(id))?.status).toBe("claimed");
+    const done = await h.store.completeTask(id, note, owner);
+    expect(done).toMatchObject({ status: "done", completionNote: null, completedBy: owner });
+    expect(typeof done.completedAt).toBe("number");
+    expect(done.activity.at(-1)).toMatchObject({ action: "completed", actor: owner, note: null });
   });
   it("only authenticated owner confirms items/task; final confirmation marks remaining items and is idempotent, no send or business writes", async () => {
     const h = port(); await h.prepared(); const id = h.task().id;

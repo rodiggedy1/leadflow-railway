@@ -327,22 +327,30 @@ export function CustomerTaskCallEvidence({ task }: { task: Extract<CustomerTask,
   </Dialog>;
 }
 
-export function TaskCompletionConfirm({ task, note, pending, error, allowed, onNote, onCancel, onConfirm }: {
+export function TaskCompletionConfirm({ task, note, pending, error, allowed, onNote, onCancel, onConfirm, initiallyConfirmed = false }: {
   task: CustomerTask; note: string; pending: boolean; error: string; allowed: boolean;
-  onNote: (note: string) => void; onCancel: () => void; onConfirm: () => void;
+  onNote: (note: string) => void; onCancel: () => void; onConfirm: () => void; initiallyConfirmed?: boolean;
 }) {
+  // The Mark done popup body, the same for SMS, email and call tasks (owner, 2026-11-28). Closing needs the confirmation
+  // box ticked; the note is optional. Closing still performs no booking change, customer message or conversation closure.
+  // The box lives here, so it starts unticked every time the popup opens (the popup's content is removed when it closes).
+  const [confirmed, onConfirmed] = useState(initiallyConfirmed);
   return <div className="cct-confirm-body">
     <p className="cct-confirm-task">{task.title}<small>{task.customerName || ("email" in task ? task.email.fromEmail : task.customerPhone)}</small></p>
-    <p>I completed all the actions in this task.</p>
-    <p>This records your human confirmation of the entire request and checklist, not system verification.</p>
-    <p className="cct-confirm-boundary">{"call" in task ? "No booking change, customer call, customer text, or conversation closure is performed." : "email" in task ? "No booking change, customer email, or conversation closure is performed." : "No booking change, customer text, or conversation closure is performed."}</p>
-    <label>Completion note <span>(required)</span><textarea value={note} onChange={(event) => onNote(event.target.value)} placeholder="What did you complete?" rows={2} required /></label>
+    <p>Closing this task means the entire issue has been resolved, all necessary actions have been completed, and the customer has been responded to where applicable.</p>
+    <div className="cct-confirm-warning" role="note"><strong>Closing a task while an issue remains unresolved is strictly prohibited.</strong>
+      <span>If further action is required, leave the task open until the issue is fully resolved.</span></div>
+    <label className="cct-confirm-check"><input type="checkbox" checked={confirmed} disabled={pending} onChange={(event) => onConfirmed(event.target.checked)} />
+      <span>{TASK_COMPLETION_CONFIRMATION}</span></label>
+    <label>Completion note <span>(optional)</span><textarea value={note} onChange={(event) => onNote(event.target.value)} placeholder="Add any relevant details about how this issue was resolved..." rows={3} maxLength={2000} /></label>
     {!allowed && <p className="cct-feedback" role="alert">Only the current task owner can mark this done.</p>}
     {error && <p className="cct-feedback" role="alert">{error}</p>}
-    <footer><button type="button" disabled={pending} onClick={onCancel}>Cancel</button><button type="button" className="cct-primary"
-      disabled={pending || !allowed || !note.trim()} onClick={onConfirm}>{pending ? <Loader2 /> : <Check />}{pending ? "Saving…" : "Confirm done"}</button></footer>
+    <footer><button type="button" disabled={pending} onClick={onCancel}>Keep task open</button><button type="button" className="cct-primary"
+      disabled={pending || !allowed || !confirmed} onClick={() => { if (confirmed) onConfirm(); }}>{pending ? <Loader2 /> : <Check />}{pending ? "Saving…" : "Confirm & close task"}</button></footer>
   </div>;
 }
+
+export const TASK_COMPLETION_CONFIRMATION = "I confirm that this issue is fully resolved, all required actions are complete, and the customer has been responded to where applicable.";
 
 /** Same compact card in the queue and stream, always supplied a canonical backend record. */
 export function TaskCard({ task, callerId, pending = false, actions, onOpenConversation, placement = "queue", now = Date.now(), defaultExpanded = false }: {
@@ -448,11 +456,11 @@ export function TaskCard({ task, callerId, pending = false, actions, onOpenConve
     </div>}
     {error && !confirmOpen && <p className="cct-feedback" role="alert">{error}</p>}
     <Dialog open={confirmOpen} onOpenChange={(open) => { if (!busy) setConfirmOpen(open); }}>
-      <DialogContent className="cct-confirm-dialog"><DialogTitle>Mark task done?</DialogTitle>
-        <DialogDescription>Staff confirmation only</DialogDescription>
+      <DialogContent className="cct-confirm-dialog"><DialogTitle><AlertTriangle aria-hidden="true" className="cct-confirm-icon" />Confirm task completion</DialogTitle>
+        <DialogDescription className="sr-only">Staff confirmation only</DialogDescription>
         <TaskCompletionConfirm task={task} note={note} pending={busy} error={error} allowed={canComplete}
           onNote={setNote} onCancel={() => setConfirmOpen(false)} onConfirm={() => {
-            if (!canComplete || busy || !note.trim()) return;
+            if (!canComplete || busy) return; // the popup only calls this once its confirmation box is ticked
             void update(async () => { await actions.complete(task.id, note.trim()); setConfirmOpen(false); });
           }} />
       </DialogContent>

@@ -65,7 +65,7 @@ describe("one-extra-generation recovery exact local scope", () => {
     // the line cannot be verified (opt-out, later reply/text, existing attempt or task: skipped). Never sends.
     // Failure visibility (2026-11-28): a failed attempt's review task is skipped only for an opt-out or a conversation
     // now owned by another phone (no longer for a newer text, a later reply or a changed line); skips return their reason.
-    "server/instinct/claudeCustomerTasksStore.ts": "68c26cbb3bdc0fd3817c7cc67731a445da6af177ca44a7c56219e5199a06821c",
+    "server/instinct/claudeCustomerTasksStore.ts": "eb5d9e3f2eda86d28adcddb1f65f977078993ea3cd6ce5c86fa97ebe632b9ab0", // optional completion note (owner, 2026-11-28)
     // Receiving-line reliability (2026-11-27): every exclusion logs its rule (decisions unchanged); an unverified line
     // creates the existing review task or keeps the existing owner alert. No generation or send on that path.
     // Failure visibility (2026-11-28): every failure-review outcome is logged (created / skipped with reason / failed, owner

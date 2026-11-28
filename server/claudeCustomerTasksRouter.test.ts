@@ -111,9 +111,15 @@ describe("customer task authenticated router — offline", () => {
     await expect((h.caller as any)[route](input)).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(h.getStore).not.toHaveBeenCalled(); expect(h.broadcast).not.toHaveBeenCalled();
   });
-  it.each([undefined, "", " \t\n "])("rejects a missing or blank completion note before any task write: %s", async note => {
+  // Owner change (2026-11-28): the completion note is optional; the Mark done popup requires the confirmation box.
+  it.each([undefined, "", " \t\n "])("accepts a missing or blank completion note (optional) and passes no note text: %s", async note => {
     const h = harness();
-    await expect((h.caller.complete as any)({ id: 77, ...(note === undefined ? {} : { note }) })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(await (h.caller.complete as any)({ id: 77, ...(note === undefined ? {} : { note }) })).toEqual(task);
+    expect(h.store.completeTask).toHaveBeenCalledWith(77, note === undefined ? undefined : "", expect.anything());
+  });
+  it("rejects an overlong completion note before any task write", async () => {
+    const h = harness();
+    await expect(h.caller.complete({ id: 77, note: "x".repeat(2001) })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(h.getStore).not.toHaveBeenCalled(); expect(h.broadcast).not.toHaveBeenCalled();
   });
   it("trims and persists the required completion note without inventing staff identity", async () => {

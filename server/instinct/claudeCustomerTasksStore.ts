@@ -483,8 +483,8 @@ export function createClaudeCustomerTasksStore(db: Db, options: {
     }),
     completeTask: (id, note, actor) => mutateTask(id, actor, (task, staff) => {
       requireOwner(task, staff);
-      const completionNote = typeof note === "string" ? note.trim() : "";
-      if (!completionNote) return fail("PRECONDITION_FAILED", "Add a completion note before marking this task done.");
+      // The note is optional (owner, 2026-11-28); an empty one is saved as no note.
+      const completionNote = typeof note === "string" && note.trim() ? note.trim() : null;
       if (task.status === "done") return false;
       if (task.status !== "claimed") return fail("PRECONDITION_FAILED", "Claim the task before confirming it done.");
       const now = Date.now();

@@ -224,7 +224,8 @@ describe("Customer task compact queue and exact canonical identity", () => {
     expect(hash(segment(released))).toBe("7804809679708c1360153b78dddaf31f418ac8edc0d81d96b33d55ea3d00614f");
     const added = segment(componentSource).split("\n"); let at = 0;
     for (const line of segment(released).split("\n")) { const found = added.indexOf(line, at); expect(found, line).toBeGreaterThanOrEqual(at); at = found + 1; }
-    expect(hash(componentSource.slice(componentSource.indexOf('{error && !confirmOpen')))).toBe("2693e4f9f82fe9fb3659260f70de3baf74eb24e224b8bff31dda9237f5a78587");
+    // Approved Mark done popup (2026-11-28): "Confirm task completion" title; everything after it is unchanged.
+    expect(hash(componentSource.slice(componentSource.indexOf("{error && !confirmOpen")))).toBe("e8fa97437009293a982d8d380362439081a0b2642d79a1d4ddb98652ee0608ee");
   });
 
   it.each(["queue", "stream"] as const)("shows the canonical phone in the closed %s task header for every status", placement => {
@@ -309,8 +310,7 @@ describe("Customer task human completion and authoritative updates", () => {
     expect(text(stateHarness().render("TaskCard", { ...nextProps, defaultExpanded: true }))).toMatch(/Confirmed ".+" · Original staff/); // kept in Activity history
     button(tree, "Mark done").props.onClick(); tree = harness.render("TaskCard", nextProps);
     const confirm = elements(tree).find(node => node.type === harness.ui.TaskCompletionConfirm)!;
-    expect(confirm.props.allowed).toBe(true);
-    confirm.props.onConfirm(); await flush(); expect(a.complete).not.toHaveBeenCalled();
+    expect(confirm.props.allowed).toBe(true); expect(a.complete).not.toHaveBeenCalled();
     confirm.props.onNote("  Finished the remaining action.  "); tree = harness.render("TaskCard", nextProps);
     elements(tree).find(node => node.type === harness.ui.TaskCompletionConfirm)!.props.onConfirm(); await flush();
     expect(a.complete).toHaveBeenCalledWith(101, "Finished the remaining action.");
@@ -348,12 +348,18 @@ describe("Customer task human completion and authoritative updates", () => {
     expect(elements(tree).find((node) => node.type === dialog)?.props.open).toBe(true);
     const confirm = elements(tree).find((node) => node.type === harness.ui.TaskCompletionConfirm)!;
     expect(confirm.props.allowed).toBe(true); expect(a.complete).not.toHaveBeenCalled();
+    // Approved Mark done popup (2026-11-28): message, warning, mandatory unticked box, optional note, two buttons.
     const prompt = html(ui.TaskCompletionConfirm, { ...confirm.props, note: "" });
-    expect(prompt).toContain("I completed all the actions in this task.");
-    expect(prompt).toContain("human confirmation"); expect(prompt).toContain("not system verification");
-    expect(prompt).toContain("No booking change, customer text, or conversation closure");
-    expect(prompt).toContain("(required)");
-    confirm.props.onConfirm(); await flush(); expect(a.complete).not.toHaveBeenCalled();
+    expect(prompt).toContain("Closing this task means the entire issue has been resolved, all necessary actions have been completed, and the customer has been responded to where applicable.");
+    expect(prompt).toContain("Closing a task while an issue remains unresolved is strictly prohibited.");
+    expect(prompt).toContain("If further action is required, leave the task open until the issue is fully resolved.");
+    expect(prompt).toContain(`<input type="checkbox"/><span>${ui.TASK_COMPLETION_CONFIRMATION}</span>`); // unticked
+    expect(prompt).toContain("Completion note <span>(optional)</span>");
+    expect(prompt).toMatch(/<button type="button">Keep task open<\/button><button type="button" class="cct-primary" disabled="">.*Confirm &amp; close task<\/button>/);
+    expect(prompt).not.toContain("(required)");
+    const ticked = html(ui.TaskCompletionConfirm, { ...confirm.props, note: "", initiallyConfirmed: true });
+    expect(ticked).toMatch(/<button type="button" class="cct-primary">.*Confirm &amp; close task<\/button>/); // enabled once ticked
+    expect(html(ui.TaskCompletionConfirm, { ...confirm.props, note: "", initiallyConfirmed: true, allowed: false })).toMatch(/class="cct-primary" disabled=""/);
     confirm.props.onNote("  Synthetic staff completion note  "); tree = harness.render("TaskCard", props);
     elements(tree).find((node) => node.type === harness.ui.TaskCompletionConfirm)!.props.onConfirm(); await flush();
     expect(a.complete).toHaveBeenCalledWith(101, "Synthetic staff completion note"); expect(a.completeItem).not.toHaveBeenCalled();

@@ -368,15 +368,18 @@ describe("Staff Quo calls reuse the unchanged task card and human controls", () 
     const ai = call(); expect(contract.customerCallTaskSchema.parse(ai)).toEqual(ai);
     expect(contract.customerCallTaskSchema.safeParse({ ...ai, call: { ...ai.call, staffUserId: null, transcriptSource: "saved" } }).success).toBe(false);
   });
-  it.each(["queue", "stream"] as const)("retains identical Claim/Done ownership, required note and completion controls for %s staff calls", async placement => {
+  // Approved Mark done popup (2026-11-28): the confirmation box is mandatory, the note optional.
+  it.each(["queue", "stream"] as const)("retains identical Claim/Done ownership, confirmation box, note and completion controls for %s staff calls", async placement => {
     const task = staffCall(), unclaimed = rig(task);
     button(unclaimed.render(placement), "Claim").props.onClick(); await flush(); expect(unclaimed.a.claim).toHaveBeenCalledWith(task.id);
     expect(task.status).toBe("unclaimed");
     const work = rig({ ...task, status: "claimed", owner: actor, claimedAt: NOW });
     button(work.render(placement), "Mark done").props.onClick(); let tree = work.render(placement);
-    expect(button(tree, "Confirm done").props.disabled).toBe(true);
+    expect(button(tree, "Confirm & close task").props.disabled).toBe(true);
     nodes(tree).find(node => node.type === "textarea")!.props.onChange({ target: { value: "  Arranged oven cleaning  " } });
-    tree = work.render(placement); button(tree, "Confirm done").props.onClick(); await flush();
+    tree = work.render(placement); expect(button(tree, "Confirm & close task").props.disabled).toBe(true); // a note alone is not enough
+    nodes(tree).find(node => node.type === "input" && node.props.type === "checkbox")!.props.onChange({ target: { checked: true } });
+    tree = work.render(placement); button(tree, "Confirm & close task").props.onClick(); await flush();
     expect(work.a.complete).toHaveBeenCalledWith(task.id, "Arranged oven cleaning");
     const other = rig({ ...task, status: "claimed", owner: { id: "someone-else", name: actor.name }, claimedAt: NOW });
     expect(button(other.render(placement), "Mark done")).toBeUndefined();
@@ -392,13 +395,14 @@ describe("AI call task human confirmation and canonical state remain unchanged (
     let tree = work.render(placement); expect(text(tree)).toContain(`Claimed by ${actor.name}`);
     nodes(tree).find(node => String(node.props["aria-label"]).startsWith("Confirm completed item"))!.props.onClick(); await flush(); expect(work.a.completeItem).toHaveBeenCalledWith(903, "oven");
     button(work.render(placement), "Mark done").props.onClick(); tree = work.render(placement);
-    expect(text(tree)).toContain("human confirmation"); expect(text(tree)).toContain("not system verification");
-    expect(text(tree)).toContain("No booking change, customer call, customer text, or conversation closure is performed.");
+    // Approved Mark done popup (2026-11-28): the same popup as SMS and email tasks.
+    expect(text(tree)).toContain("Confirm task completion"); expect(text(tree)).toContain("strictly prohibited");
     expect(text(nodes(tree).find(node => node.props.className === "cct-confirm-task"))).toContain(task.customerPhone);
-    expect(button(tree, "Confirm done").props.disabled).toBe(true); button(tree, "Confirm done").props.onClick(); await flush(); expect(work.a.complete).not.toHaveBeenCalled();
+    expect(button(tree, "Confirm & close task").props.disabled).toBe(true); button(tree, "Confirm & close task").props.onClick(); await flush(); expect(work.a.complete).not.toHaveBeenCalled();
     nodes(tree).find(node => node.type === "textarea")!.props.onChange({ target: { value: "  Staff reviewed the caller request  " } });
-    tree = work.render(placement); expect(button(tree, "Confirm done").props.disabled).toBe(false);
-    button(tree, "Confirm done").props.onClick(); await flush(); expect(work.a.complete).toHaveBeenCalledWith(903, "Staff reviewed the caller request"); expect(task.status).toBe("claimed");
+    nodes(work.render(placement)).find(node => node.type === "input" && node.props.type === "checkbox")!.props.onChange({ target: { checked: true } });
+    tree = work.render(placement); expect(button(tree, "Confirm & close task").props.disabled).toBe(false);
+    button(tree, "Confirm & close task").props.onClick(); await flush(); expect(work.a.complete).toHaveBeenCalledWith(903, "Staff reviewed the caller request"); expect(task.status).toBe("claimed");
     const other = rig(call({ status: "claimed", owner: { id: "different-owner", name: actor.name } }));
     expect(button(other.render(placement), "Mark done")).toBeUndefined(); expect(nodes(other.render(placement)).find(node => String(node.props["aria-label"]).startsWith("Confirm completed item"))).toBeUndefined();
     const done = rig(call({ status: "done", owner: actor, completedBy: confirmer, completedAt: NOW, completionNote: "Actual staff confirmation note" }));

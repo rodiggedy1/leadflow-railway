@@ -95,7 +95,7 @@ describe("actual durable call task adapter — offline transactional storage", (
     const h = port(); const c = (await h.store.claim(source()))!; const id = (await h.store.prepare(c, plan))!;
     const claimed = await h.tasks.claimTask(id, owner); expect(await h.tasks.claimTask(id, owner)).toEqual(claimed);
     expect((await h.tasks.list())[0].status).toBe("claimed"); await expect(h.tasks.claimTask(id, other)).rejects.toThrow("already claimed");
-    await expect(h.tasks.completeTask(id, "", owner)).rejects.toThrow("completion note"); await expect(h.tasks.completeTask(id, "Done", other)).rejects.toThrow("Only the staff");
+    await expect(h.tasks.completeTask(id, "Done", other)).rejects.toThrow("Only the staff"); // the note is optional (2026-11-28)
     const done = await h.tasks.completeTask(id, "Reviewed Friday change and oven cleaning", owner);
     expect(done).toMatchObject({ status: "done", completedBy: owner, completionNote: "Reviewed Friday change and oven cleaning" }); expect(done.items.every(i => i.completedBy?.id === owner.id)).toBe(true);
     expect(done.reply.status).toBe("not_applicable");
@@ -127,7 +127,6 @@ describe("quoted booking request retains the existing AI CALL task card", () => 
     expect(h.state().cards.filter((row: any) => row.channel === "command")).toHaveLength(1);
     expect((await handle({ message: { call: { id: "synthetic-call" } } })).status).toBe("duplicate");
     await h.tasks.claimTask(task.id, owner); expect((await h.tasks.get(task.id))?.status).toBe("claimed");
-    await expect(h.tasks.completeTask(task.id, "", owner)).rejects.toThrow("completion note");
     await h.tasks.completeTask(task.id, "Customer completion reviewed by staff", owner);
     expect((await h.tasks.get(task.id))?.status).toBe("done");
   });

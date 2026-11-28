@@ -127,3 +127,16 @@
 
 /* Cards use the full sidebar width; the sidebar keeps its own padding. */
 .ccc-live #ccc-tasks-panel .cct-queue { margin: 0; padding: 0 0 12px; }
+/* Mark done confirmation (2026-11-28): warning, mandatory confirmation box, optional note. */
+.cct-confirm-dialog { width: min(460px, calc(100vw - 32px)); max-width: 460px; }
+.cct-confirm-dialog [data-slot="dialog-title"] { display: flex; align-items: center; gap: 7px; font-size: 15px; }
+.cct-confirm-dialog .cct-confirm-icon { width: 17px; height: 17px; flex-shrink: 0; color: #f0b35e; }
+.cct-confirm-body { font-size: 12px; }
+.cct-confirm-warning { margin: 10px 0; padding: 9px 11px; border-radius: 8px; background: #2f2226; color: #d8d8e2; }
+.cct-confirm-warning strong { display: block; margin-bottom: 3px; color: #ff8a80; font-weight: 600; }
+.cct-confirm-body label.cct-confirm-check { display: flex; align-items: flex-start; gap: 9px; margin: 12px 0; color: #ededf3; font-size: 12px; line-height: 1.5; cursor: pointer; }
+.cct-confirm-check input { width: 16px; height: 16px; margin: 2px 0 0; flex-shrink: 0; accent-color: #6fae88; cursor: pointer; }
+.cct-confirm-body textarea { font-size: 12px; }
+.cct-confirm-body footer { border-top: 1px solid #3a3a44; padding-top: 12px; }
+@media (max-width: 640px) { .cct-confirm-dialog { width: calc(100vw - 24px); max-width: calc(100vw - 24px); } }
+.cct-confirm-body label.cct-confirm-check span { color: #ededf3; }

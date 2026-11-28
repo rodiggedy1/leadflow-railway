@@ -411,7 +411,6 @@ describe("staff call store — offline transactional canonical persistence", () 
     expect(await h.tasks.list()).toEqual([claimed]);
     await expect(h.tasks.completeItem(id, "item-1", other)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(h.tasks.completeTask(id, "Not my task", other)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    for (const note of [undefined, "", " \t\n "]) await expect(h.tasks.completeTask(id, note, owner)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     await h.tasks.completeItem(id, "item-1", owner); await h.tasks.completeItem(id, "item-2", owner);
     expect((await h.tasks.get(id))?.status).toBe("claimed"); expect(await h.tasks.list()).toHaveLength(1);
     const done = await h.tasks.completeTask(id, "Both changes reviewed and completed manually", owner);

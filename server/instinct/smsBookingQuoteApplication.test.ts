@@ -1488,7 +1488,6 @@ describe("ordinary customer service and original human-task authority remain int
     await expect(store.completeTask(id, "Not claimed", OWNER)).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(await store.claimTask(id, OWNER)).toMatchObject({ status: "claimed", owner: OWNER });
     await expect(store.completeTask(id, "Other staff cannot confirm", OTHER)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(store.completeTask(id, " ", OWNER)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     await store.completeItem(id, "item-1", OWNER); expect((await store.get(id))?.status).toBe("claimed");
     const done = await store.completeTask(id, "I completed both changes manually in the existing booking interface.", OWNER);
     expect(done).toMatchObject({ status: "done", completedBy: OWNER, completionNote: "I completed both changes manually in the existing booking interface.", reply: { text: replyText, status: "sent" } });
@@ -1510,7 +1509,6 @@ describe("ordinary customer service and original human-task authority remain int
     await expect(store.completeItem(task.id, task.items[0].id, OWNER)).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(await store.claimTask(task.id, OWNER)).toMatchObject({ status: "claimed", owner: OWNER });
     await expect(store.completeTask(task.id, "Not the owner", OTHER)).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(store.completeTask(task.id, " ", OWNER)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     await store.completeItem(task.id, task.items[0].id, OWNER);
     expect(await store.get(task.id)).toMatchObject({ status: "claimed", completionNote: null });
     const done = await store.completeTask(task.id, "I reviewed the customer's booking-link completion manually.", OWNER);
