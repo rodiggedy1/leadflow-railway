@@ -14,7 +14,7 @@ export type ReviewRecord = {
   updatedAtMs: number;
   status: string;
   progress: TeamWeeklyReviewStatus | null;
-  payload: { read?: TeamEvidenceAuditRead; counts?: TeamWeekCounts; outcome?: TeamWeeklyReviewOutcome; failure?: ReviewFailure; readOmitted?: true };
+  payload: { read?: TeamEvidenceAuditRead; counts?: TeamWeekCounts; outcome?: TeamWeeklyReviewOutcome; failure?: ReviewFailure; readOmitted?: true; source?: "quality_records" };
   publication: HistorySnapshot | null;
   publishedAtMs: number | null;
   publishedBy: number | null;

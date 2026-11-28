@@ -1,0 +1,42 @@
+-- Owner-approved Phase 2 table: one row per customer communication that reports a quality issue.
+-- Rows with primaryId NULL are incidents; rows with primaryId set are further messages about that incident
+-- (so several messages about one problem count once, and separate complaints stay separate).
+-- sourceKey is unique, so the same message, email thread or call is never recorded twice.
+CREATE TABLE IF NOT EXISTS `team_quality_incidents` (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  primaryId BIGINT UNSIGNED NULL,
+  sourceKey VARCHAR(191) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  channel VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  detector VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  reportedAtMs BIGINT UNSIGNED NOT NULL,
+  weekStart CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  customerPhone VARCHAR(32) NULL,
+  customerEmail VARCHAR(320) NULL,
+  customerName VARCHAR(255) NULL,
+  evidenceQuote TEXT NULL,
+  evidenceText TEXT NULL,
+  sourceRef JSON NULL,
+  category VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  severity VARCHAR(8) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  serviceDateHint CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  leadflowJobId INT NULL,
+  teamId INT NULL,
+  attribution VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  attributionNote VARCHAR(500) NULL,
+  status VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  statusNote VARCHAR(500) NULL,
+  recleanStatus VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  refundStatus VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  processingStatus VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  processingError VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  processingAttempts INT UNSIGNED NOT NULL,
+  updatedBy INT NULL,
+  createdAtMs BIGINT UNSIGNED NOT NULL,
+  updatedAtMs BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY team_quality_incidents_source (sourceKey),
+  KEY team_quality_incidents_week (weekStart),
+  KEY team_quality_incidents_job (leadflowJobId),
+  KEY team_quality_incidents_primary (primaryId),
+  KEY team_quality_incidents_processing (processingStatus)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

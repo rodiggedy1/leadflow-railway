@@ -34,7 +34,12 @@ export function teamLeaderboardHistoryService(): TeamLeaderboardHistoryService {
   if (!current) {
     const evidence = createTeamEvidenceService();
     current = createTeamLeaderboardHistoryService({ repository: new MysqlTeamHistoryRepository(pool),
-      readWeek: input => evidence.readWeek(input), readCounts: window => readTeamLeaderboardCounts(countPort, window) });
+      readWeek: input => evidence.readWeek(input), readCounts: window => readTeamLeaderboardCounts(countPort, window),
+      // Phase 2 saved quality records (pool acquired only when an admin action uses them).
+      quality: {
+        readIncidents: async weekStart => (await import("./teamQualityIncidents")).readWeekIncidents(await pool(), weekStart),
+        record: async signal => (await import("./teamQualityIncidents")).recordQualitySignal(await pool(), signal),
+      } });
   }
   return current;
 }

@@ -74,6 +74,9 @@ describe("one-extra-generation recovery exact local scope", () => {
     // Receiving-line reliability (2026-11-27): the guard-decline log line names the declining rule; the guard is unchanged.
     "server/webhooks.ts": "84ee309c9c0caceffe422234184f6c7fc1e3db2da5c5f4c9a52dff8473bc5259",
     "shared/claudeCustomerTasks.ts": "57ce1ad7fefe44da89a92986fdb0fd951029263794a705a383c408ff31972e10",
+    // Quality complaint label (Phase 2, 2026-11-28): the SMS generator is given onQualityComplaint, which saves an
+    // independently validated label in the background (never awaited, never changes the reply/task/booking/send).
+    "server/instinct/claudeCustomerSmsApplication.ts": "00f89bc88e0c7d365ab2e09e311a0cc40c3e417cc6c48c1268b315002b6298e9",
   };
   it.each(protectedSources)("preserves delivery, authority, state, transport and prompts byte-for-byte: %s", path => {
     const source = readFileSync(path, "utf8");

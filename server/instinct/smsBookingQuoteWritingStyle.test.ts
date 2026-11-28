@@ -24,7 +24,7 @@ import {
   type SmsBookingQuoteState,
   type SmsBookingQuoteUpdate,
 } from "./smsBookingQuote";
-import { createSmsBookingQuoteReplyGenerator, SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS, SMS_HISTORY_AND_RECORDS_INSTRUCTIONS } from "./smsBookingQuoteGeneration";
+import { createSmsBookingQuoteReplyGenerator, SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS, SMS_HISTORY_AND_RECORDS_INSTRUCTIONS, SMS_QUALITY_COMPLAINT_INSTRUCTIONS } from "./smsBookingQuoteGeneration";
 import { createSmsBookingQuoteMissingQuestion } from "./smsBookingQuoteMissingQuestion";
 import { withoutApprovedStaffCallFeature } from "../staffCallSourceControl";
 
@@ -264,7 +264,7 @@ describe("ordinary SMS uses the same additive writing rules without changing sha
     const baseRunner = vi.fn(async (_options: InitialLeadDraftOptions) => ({ finalSmsText: JSON.stringify({ replyText: faq, task: null }) }));
     await createClaudeCustomerReplyGenerator({ readKnowledge: async () => MAIDS_IN_BLACK_KNOWLEDGE_BASE, runner: baseRunner })(input);
     const sent = h.runner.mock.calls[0][0];
-    expect(sent.systemPrompt).toBe(`=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${SMS_HISTORY_AND_RECORDS_INSTRUCTIONS}\n\n${baseRunner.mock.calls[0][0].systemPrompt}`);
+    expect(sent.systemPrompt).toBe(`=== SMS BOOKING QUOTE — HIGHEST PRIORITY ===\n${SMS_BOOKING_QUOTE_GENERATION_INSTRUCTIONS}\n\n${SMS_HISTORY_AND_RECORDS_INSTRUCTIONS}\n\n${SMS_QUALITY_COMPLAINT_INSTRUCTIONS}\n\n${baseRunner.mock.calls[0][0].systemPrompt}`);
     expect(sent.systemPrompt).toContain("replyText for quotes AND ordinary customer-service SMS");
     expect(sent.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_PLAN_INSTRUCTIONS);
     expect(sent.systemPrompt).toContain(CLAUDE_CUSTOMER_SMS_STYLE_INSTRUCTIONS);

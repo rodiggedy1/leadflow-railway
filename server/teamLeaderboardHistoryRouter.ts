@@ -9,6 +9,7 @@ import { restrictTeamLeaderboardAdminPublication, restrictTeamLeaderboardPublica
 import { readTeamLeaderboardAdminAccounts } from "./teamLeaderboardAdminAccounts";
 import { historySelectionSchema, reviewPublishSchema, reviewStartSchema } from "../shared/teamLeaderboardHistory";
 import { teamEvidenceWeekInputSchema } from "../shared/teamLeaderboardEvidence";
+import { qualityIncidentActionSchema } from "../shared/teamQualityIncidents";
 import { teamLeaderboardHistoryService } from "./teamLeaderboardHistoryRuntime";
 import type { TeamLeaderboardHistoryService } from "./teamLeaderboardHistoryService";
 import type { TrpcContext } from "./_core/context";
@@ -40,6 +41,29 @@ const safe = async <T>(fn: () => Promise<T>): Promise<T> => {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "The weekly review could not be completed. Previous published results are unchanged." });
   }
 };
+/** Quality-record actions: a clear message for each fixed code, never a database message. */
+const QUALITY_MESSAGES: Record<string, string> = {
+  QUALITY_INCIDENT_NOT_FOUND: "That quality record no longer exists. Refresh the list.",
+  QUALITY_INCIDENT_NOT_PRIMARY: "This message is part of another incident. Change the incident instead, or separate this message first.",
+  QUALITY_INCIDENT_ALREADY_SEPARATE: "This message is already its own incident.",
+  QUALITY_JOB_NOT_FOUND: "That job no longer exists.",
+  QUALITY_JOB_TEAM_UNMAPPED: "That job is not assigned to exactly one team, so it cannot be attributed. Fix the job's team first.",
+  QUALITY_MERGE_TARGET_INVALID: "Choose a different incident to merge into.",
+};
+async function quality<T>(work: (pool: import("mysql2/promise").Pool) => Promise<T>): Promise<T> {
+  try {
+    const { getPool } = await import("./db");
+    if (!await getDb()) throw new Error("QUALITY_DB_UNAVAILABLE");
+    const pool = getPool();
+    if (!pool) throw new Error("QUALITY_DB_UNAVAILABLE");
+    return await work(pool);
+  } catch (error) {
+    if (error instanceof TRPCError) throw error;
+    const code = error instanceof Error ? error.message : "";
+    throw new TRPCError({ code: QUALITY_MESSAGES[code] ? "BAD_REQUEST" : "INTERNAL_SERVER_ERROR",
+      message: QUALITY_MESSAGES[code] ?? "Quality records are temporarily unavailable. Nothing was changed; try again." });
+  }
+}
 export function createTeamLeaderboardHistoryRouter(options: { resolveService?: () => TeamLeaderboardHistoryService } = {}) {
   const service = () => options.resolveService?.() ?? teamLeaderboardHistoryService();
   return router({
@@ -65,6 +89,33 @@ export function createTeamLeaderboardHistoryRouter(options: { resolveService?: (
     reviewRuns: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, runs: await service().runs(input.weekStart) }))),
     reviewDraft: admin.input(z.object({ reviewId: z.string().uuid() }).strict()).query(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().draft(input.reviewId) }))),
     publishReview: admin.input(reviewPublishSchema).mutation(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().publish(ctx.agent.agentId, input) }))),
+    // Phase 2: saved quality records (admin only). Customer evidence is visible to admins, never to team endpoints.
+    qualityRecords: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => quality(async pool => {
+      const { listQualityIncidents } = await import("./teamQualityIncidents");
+      const listed = await listQualityIncidents(pool, input.weekStart);
+      const [teams] = await pool.query("SELECT id, name FROM scheduling_teams") as unknown as [Array<{ id: number; name: string }>];
+      return { agentId: ctx.agent.agentId, ...listed, teamNames: Object.fromEntries(teams.map(team => [String(team.id), team.name])) };
+    })),
+    qualityChoices: admin.input(z.object({ id: z.number().int().positive() }).strict()).query(({ ctx, input }) => quality(async pool => {
+      const { attributionChoices } = await import("./teamQualityIncidents");
+      return { agentId: ctx.agent.agentId, choices: await attributionChoices(pool, input.id) };
+    })),
+    qualityAction: admin.input(qualityIncidentActionSchema).mutation(({ ctx, input }) => quality(async pool => {
+      const { applyQualityIncidentAction } = await import("./teamQualityIncidents");
+      return { agentId: ctx.agent.agentId, incident: await applyQualityIncidentAction(pool, input, ctx.agent.agentId) };
+    })),
+    qualityRetry: admin.input(z.object({ id: z.number().int().positive() }).strict()).mutation(({ ctx, input }) => quality(async pool => {
+      const { processQualityIncident } = await import("./teamQualityIncidents");
+      return { agentId: ctx.agent.agentId, incident: await processQualityIncident(pool, input.id) };
+    })),
+    liveFromRecords: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => safe(async () => {
+      const live = await service().live(input.weekStart);
+      return { agentId: ctx.agent.agentId, ...restrictTeamLeaderboardAdminPublication(live.snapshot), countsComplete: live.countsComplete, expectedPublicationId: live.expectedPublicationId };
+    })),
+    publishFromRecords: admin.input(z.object({ requestId: z.string().uuid(), weekStart: z.string(), expectedPublicationId: z.string().min(1).nullable() }).strict())
+      .mutation(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().publishFromRecords(ctx.agent.agentId, input) }))),
+    importReviewToRecords: admin.input(z.object({ reviewId: z.string().uuid() }).strict())
+      .mutation(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().importReview(input.reviewId) }))),
   });
 }
 export const teamLeaderboardHistoryRouter = createTeamLeaderboardHistoryRouter();

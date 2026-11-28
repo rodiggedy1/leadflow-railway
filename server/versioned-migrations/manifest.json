@@ -631,6 +631,14 @@
       "sha256": "cb0eba447b465e5cdbec41b3240d155496dc9bafd30db444b7f300c5c70f60ed",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0082_create_leadflow_launch27_visit_notes.postconditions.json"
+    },
+    {
+      "id": "0083_create_team_quality_incidents",
+      "mode": "create-table",
+      "sqlFile": "0083_create_team_quality_incidents.sql",
+      "sha256": "11abe5360efa017483fe9ee0cb0caf7eb546b9de949ba2de8f47bcd8ee6c7ef2",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0083_create_team_quality_incidents.postconditions.json"
     }
   ]
 }

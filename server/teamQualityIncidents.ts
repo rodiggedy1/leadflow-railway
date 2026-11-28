@@ -1,0 +1,302 @@
+// Phase 2 quality records (owner-approved table team_quality_incidents).
+// Every function here is a side record: callers never wait on it for a customer reply, and a failure here never
+// changes an SMS, email, call, booking or task. No AI calls, no messages, no provider calls.
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { easternDateIso } from "../shared/easternTime";
+import { shiftBookingDate } from "../shared/bookingReschedule";
+import {
+  categoryGroup, type IncidentForScoring, type QualityCategory, type QualityChannel, type QualityDetector,
+  type QualityIncidentAction, type QualitySeverity,
+} from "../shared/teamQualityIncidents";
+
+type SqlClient = Pool | PoolConnection;
+type Row = RowDataPacket & Record<string, unknown>;
+type Value = string | number | null;
+
+export type QualitySignal = {
+  sourceKey: string; channel: QualityChannel; detector: QualityDetector; reportedAtMs: number;
+  customerPhone?: string | null; customerEmail?: string | null; customerName?: string | null;
+  evidenceQuote?: string | null; evidenceText?: string | null; sourceRef?: Record<string, unknown> | null;
+  category: QualityCategory; severity: QualitySeverity; serviceDateHint?: string | null;
+  /** Known only when the signal is already about one job (a portal rating, a cleaner sign-off, a review match). */
+  leadflowJobId?: number | null;
+  recleanRequested?: boolean; refundRequested?: boolean;
+};
+export type QualityIncidentRow = IncidentForScoring & {
+  primaryId: number | null; sourceKey: string; channel: string; detector: string; reportedAtMs: number; weekStart: string;
+  customerPhone: string | null; customerEmail: string | null; customerName: string | null;
+  evidenceQuote: string | null; evidenceText: string | null; sourceRef: Record<string, unknown> | null;
+  severity: string; serviceDateHint: string | null; attributionNote: string | null; statusNote: string | null;
+  processingError: string | null; processingAttempts: number; updatedBy: number | null; createdAtMs: number; updatedAtMs: number;
+};
+
+const COLUMNS = "id, primaryId, sourceKey, channel, detector, reportedAtMs, weekStart, customerPhone, customerEmail, customerName, evidenceQuote, evidenceText, sourceRef, category, severity, serviceDateHint, leadflowJobId, teamId, attribution, attributionNote, status, statusNote, recleanStatus, refundStatus, processingStatus, processingError, processingAttempts, updatedBy, createdAtMs, updatedAtMs";
+const TOMBSTONES = ["canceled", "cancelled", "missing_from_launch27", "rescheduled"];
+/** Days before the message in which the visit being complained about is looked for when no date is given. */
+export const ATTRIBUTION_LOOKBACK_DAYS = 7;
+/** A new message about the same visit and team joins an open incident only within this many days of its last message. */
+export const SAME_INCIDENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const SEVERITY_ORDER: Record<string, number> = { low: 0, medium: 1, high: 2 };
+const fail = (code: string): never => { throw new Error(code); };
+
+async function rows(db: SqlClient, sql: string, values: Value[] = []): Promise<Row[]> {
+  const [result] = await db.execute<RowDataPacket[]>(sql, values);
+  return result as Row[];
+}
+async function change(db: SqlClient, sql: string, values: Value[]): Promise<ResultSetHeader> {
+  const [result] = await db.execute<ResultSetHeader>(sql, values);
+  return result;
+}
+async function transaction<T>(pool: Pool, work: (tx: PoolConnection) => Promise<T>): Promise<T> {
+  const tx = await pool.getConnection();
+  let started = false;
+  try {
+    await tx.beginTransaction(); started = true;
+    const result = await work(tx);
+    await tx.commit();
+    return result;
+  } catch (error) {
+    if (started) { try { await tx.rollback(); } catch { /* connection is released below */ } }
+    throw error;
+  } finally { tx.release(); }
+}
+const num = (value: unknown): number | null => value === null || value === undefined ? null : Number(value);
+function parseJson(value: unknown): Record<string, unknown> | null {
+  if (value === null || value === undefined) return null;
+  try { return (typeof value === "string" ? JSON.parse(value) : Buffer.isBuffer(value) ? JSON.parse(value.toString("utf8")) : value) as Record<string, unknown>; }
+  catch { return null; }
+}
+function fromRow(row: Row): QualityIncidentRow {
+  return {
+    id: Number(row.id), primaryId: num(row.primaryId), sourceKey: String(row.sourceKey), channel: String(row.channel), detector: String(row.detector),
+    reportedAtMs: Number(row.reportedAtMs), weekStart: String(row.weekStart), customerPhone: (row.customerPhone as string | null) ?? null,
+    customerEmail: (row.customerEmail as string | null) ?? null, customerName: (row.customerName as string | null) ?? null,
+    evidenceQuote: (row.evidenceQuote as string | null) ?? null, evidenceText: (row.evidenceText as string | null) ?? null, sourceRef: parseJson(row.sourceRef),
+    category: String(row.category), severity: String(row.severity), serviceDateHint: (row.serviceDateHint as string | null) ?? null,
+    leadflowJobId: num(row.leadflowJobId), teamId: num(row.teamId), attribution: String(row.attribution), attributionNote: (row.attributionNote as string | null) ?? null,
+    status: String(row.status), statusNote: (row.statusNote as string | null) ?? null, recleanStatus: String(row.recleanStatus), refundStatus: String(row.refundStatus),
+    processingStatus: String(row.processingStatus), processingError: (row.processingError as string | null) ?? null, processingAttempts: Number(row.processingAttempts),
+    updatedBy: num(row.updatedBy), createdAtMs: Number(row.createdAtMs), updatedAtMs: Number(row.updatedAtMs),
+  };
+}
+async function readIncident(db: SqlClient, id: number, lock = false): Promise<QualityIncidentRow | null> {
+  const found = await rows(db, `SELECT ${COLUMNS} FROM team_quality_incidents WHERE id = ?${lock ? " FOR UPDATE" : ""}`, [id]);
+  return found.length ? fromRow(found[0]) : null;
+}
+
+/** Sunday-start week (America/New_York) of an instant, the same convention as the leaderboard. */
+export function reportWeekStart(ms: number): string {
+  const day = easternDateIso(new Date(ms));
+  return shiftBookingDate(day, -new Date(`${day}T12:00:00Z`).getUTCDay());
+}
+const digits10 = (phone: string | null | undefined): string | null => {
+  const d = (phone ?? "").replace(/\D/g, "");
+  return d.length >= 10 ? d.slice(-10) : null;
+};
+const clip = (value: string | null | undefined, max: number): string | null => value == null ? null : value.length > max ? value.slice(0, max) : value;
+
+/** 1. Save the signal first (durable, idempotent by sourceKey). 2. Match it to a job/team and incident.
+ * A matching failure leaves a visible "failed" record that staff can retry; nothing is re-sent. */
+export async function recordQualitySignal(pool: Pool, signal: QualitySignal, nowMs = Date.now()): Promise<{ id: number; duplicate: boolean; processed: boolean }> {
+  if (!signal.sourceKey || signal.sourceKey.length > 191 || !Number.isFinite(signal.reportedAtMs)) return fail("QUALITY_SIGNAL_INVALID");
+  let result: ResultSetHeader;
+  try {
+    result = await change(pool, `INSERT INTO team_quality_incidents (primaryId, sourceKey, channel, detector, reportedAtMs, weekStart, customerPhone, customerEmail, customerName,
+      evidenceQuote, evidenceText, sourceRef, category, severity, serviceDateHint, leadflowJobId, teamId, attribution, attributionNote, status, statusNote,
+      recleanStatus, refundStatus, processingStatus, processingError, processingAttempts, updatedBy, createdAtMs, updatedAtMs)
+    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'needs_review', NULL, 'open', NULL, ?, ?, 'pending', NULL, 0, NULL, ?, ?)`, [
+    signal.sourceKey, signal.channel, signal.detector, Math.round(signal.reportedAtMs), reportWeekStart(signal.reportedAtMs),
+    clip(signal.customerPhone ?? null, 32), clip(signal.customerEmail?.toLowerCase() ?? null, 320), clip(signal.customerName ?? null, 255),
+    clip(signal.evidenceQuote ?? null, 4000), clip(signal.evidenceText ?? null, 8000), signal.sourceRef ? JSON.stringify(signal.sourceRef) : null,
+    signal.category, signal.severity, signal.serviceDateHint ?? null, signal.leadflowJobId ?? null,
+    signal.recleanRequested ? "requested" : "none", signal.refundRequested ? "requested" : "none", nowMs, nowMs,
+    ]);
+  } catch (error) {
+    // The same message/email thread/call is already recorded: keep the first record, never a second one.
+    // Drizzle/mysql2 may wrap the driver error, so check the cause too. Any other error is not hidden.
+    const code = (error as { code?: string })?.code ?? (error as { cause?: { code?: string } })?.cause?.code;
+    if (code !== "ER_DUP_ENTRY") throw error;
+    const existing = await rows(pool, "SELECT id FROM team_quality_incidents WHERE sourceKey = ?", [signal.sourceKey]);
+    if (!existing.length) throw error;
+    return { id: Number(existing[0].id), duplicate: true, processed: false };
+  }
+  if (result.affectedRows !== 1 || !result.insertId) return fail("QUALITY_SIGNAL_SAVE_FAILED");
+  const id = Number(result.insertId);
+  const processed = await processQualityIncident(pool, id, nowMs).then(() => true, () => false);
+  return { id, duplicate: false, processed };
+}
+
+type Candidate = { id: number; jobDate: string; teamId: number | null; imported: boolean };
+async function teamFor(db: SqlClient, job: Candidate): Promise<number | null> {
+  if (job.teamId === null) return null;
+  const teams = await rows(db, job.imported ? "SELECT id FROM scheduling_teams WHERE launch27TeamId = ?" : "SELECT id FROM scheduling_teams WHERE id = ?", [job.teamId]);
+  return teams.length === 1 ? Number(teams[0].id) : null;
+}
+function candidate(row: Row): Candidate {
+  const origin = String(row.origin ?? "");
+  // Same namespace rule as the leaderboard counts: imported (Launch27) jobs keep their Launch27 team ID; native jobs use the roster ID.
+  const imported = row.launch27BookingId !== null || origin === "launch27_import" || (row.bookingId === null && origin === "leadflow_recurrence");
+  return { id: Number(row.id), jobDate: String(row.jobDate), teamId: num(row.teamId), imported };
+}
+const JOB_FIELDS = "j.id, j.jobDate, j.bookingStatus, j.teamId, j.origin, j.bookingId, j.launch27BookingId";
+async function readJob(db: SqlClient, id: number): Promise<Candidate | null> {
+  const found = await rows(db, `SELECT ${JOB_FIELDS} FROM leadflow_jobs j WHERE j.id = ?`, [id]);
+  return found.length ? candidate(found[0]) : null;
+}
+/** The customer's visits (Launch27 and native) by phone or email, newest first. */
+export async function customerVisits(db: SqlClient, contact: { phone: string | null; email: string | null }, from: string, through: string): Promise<Array<Candidate & { bookingStatus: string; signedOff: boolean }>> {
+  const phone = digits10(contact.phone), email = contact.email?.trim().toLowerCase() || null;
+  if (!phone && !email) return [];
+  const found = await rows(db, `SELECT ${JOB_FIELDS}, (SELECT COUNT(*) FROM cleaner_portal_job_signoffs s WHERE s.leadflowJobId = j.id) AS signoffs
+    FROM leadflow_jobs j LEFT JOIN bookings b ON b.id = j.bookingId
+    WHERE j.jobDate >= ? AND j.jobDate <= ? AND (
+      (? IS NOT NULL AND (RIGHT(REGEXP_REPLACE(COALESCE(j.customerPhone, ''), '[^0-9]', ''), 10) = ? OR RIGHT(REGEXP_REPLACE(COALESCE(b.customerPhone, ''), '[^0-9]', ''), 10) = ?))
+      OR (? IS NOT NULL AND (LOWER(j.customerEmail) = ? OR LOWER(b.customerEmail) = ?)))
+    ORDER BY j.jobDate DESC, j.id DESC LIMIT 50`, [from, through, phone, phone, phone, email, email, email]);
+  return found.map(row => ({ ...candidate(row), bookingStatus: String(row.bookingStatus ?? ""), signedOff: Number(row.signoffs) > 0 }));
+}
+/** Which visit and team a complaint is about. Uncertain → needs_review with a plain reason, never a guess. */
+export async function resolveAttribution(db: SqlClient, incident: Pick<QualityIncidentRow, "reportedAtMs" | "customerPhone" | "customerEmail" | "serviceDateHint" | "leadflowJobId">):
+  Promise<{ leadflowJobId: number | null; teamId: number | null; attribution: "auto" | "needs_review"; note: string }> {
+  if (incident.leadflowJobId !== null) {
+    const job = await readJob(db, incident.leadflowJobId);
+    if (!job) return { leadflowJobId: null, teamId: null, attribution: "needs_review", note: "The job this came from no longer exists." };
+    const teamId = await teamFor(db, job);
+    return teamId === null ? { leadflowJobId: job.id, teamId: null, attribution: "needs_review", note: `Job ${job.id} is not assigned to exactly one team.` }
+      : { leadflowJobId: job.id, teamId, attribution: "auto", note: `From job ${job.id} (${job.jobDate}).` };
+  }
+  const today = easternDateIso(new Date(incident.reportedAtMs));
+  const hint = incident.serviceDateHint && incident.serviceDateHint <= today && incident.serviceDateHint >= shiftBookingDate(today, -45) ? incident.serviceDateHint : null;
+  const from = hint ?? shiftBookingDate(today, -ATTRIBUTION_LOOKBACK_DAYS), through = hint ?? today;
+  const visits = (await customerVisits(db, { phone: incident.customerPhone, email: incident.customerEmail }, from, through))
+    .filter(visit => !TOMBSTONES.includes(visit.bookingStatus.trim().toLowerCase()))
+    // A visit dated today counts only once it has happened (sign-off or completed), like the leaderboard counts.
+    .filter(visit => visit.jobDate < today || visit.signedOff || visit.bookingStatus.trim().toLowerCase() === "completed");
+  if (!visits.length) return { leadflowJobId: null, teamId: null, attribution: "needs_review",
+    note: hint ? `No completed visit found for this customer on ${hint}.` : `No completed visit found for this customer in the ${ATTRIBUTION_LOOKBACK_DAYS} days before the message.` };
+  if (visits.length > 1) return { leadflowJobId: null, teamId: null, attribution: "needs_review",
+    note: `${visits.length} possible visits (${visits.slice(0, 4).map(v => v.jobDate).join(", ")}); staff should choose the right one.` };
+  const teamId = await teamFor(db, visits[0]);
+  return teamId === null ? { leadflowJobId: visits[0].id, teamId: null, attribution: "needs_review", note: `Visit ${visits[0].id} (${visits[0].jobDate}) is not assigned to exactly one team.` }
+    : { leadflowJobId: visits[0].id, teamId, attribution: "auto", note: `Matched the only completed visit, ${visits[0].jobDate}.` };
+}
+
+/** Match the saved signal to a visit/team and to an incident. Safe to re-run (Retry). */
+export async function processQualityIncident(pool: Pool, id: number, nowMs = Date.now()): Promise<QualityIncidentRow> {
+  try {
+    return await transaction(pool, async tx => {
+      const row = await readIncident(tx, id, true);
+      if (!row) return fail("QUALITY_INCIDENT_NOT_FOUND");
+      if (row.processingStatus === "ok") return row;
+      const resolved = await resolveAttribution(tx, row);
+      let primaryId: number | null = null;
+      if (resolved.attribution === "auto" && resolved.leadflowJobId !== null && resolved.teamId !== null) {
+        // Same visit + team + kind of issue, still open and recent → the same incident (counts once).
+        // Resolved/dismissed incidents, a different kind of issue, or a long gap → a separate complaint.
+        const open = await rows(tx, `SELECT p.id, p.category, GREATEST(p.reportedAtMs, COALESCE((SELECT MAX(c.reportedAtMs) FROM team_quality_incidents c WHERE c.primaryId = p.id), 0)) AS lastAt
+          FROM team_quality_incidents p WHERE p.primaryId IS NULL AND p.id <> ? AND p.leadflowJobId = ? AND p.teamId = ? AND p.status = 'open' AND p.processingStatus = 'ok'
+          ORDER BY p.id DESC FOR UPDATE`, [id, resolved.leadflowJobId, resolved.teamId]);
+        const match = open.find(p => categoryGroup(String(p.category)) === categoryGroup(row.category) && Math.abs(row.reportedAtMs - Number(p.lastAt)) <= SAME_INCIDENT_WINDOW_MS);
+        if (match) primaryId = Number(match.id);
+      }
+      await change(tx, `UPDATE team_quality_incidents SET primaryId = ?, leadflowJobId = ?, teamId = ?, attribution = ?, attributionNote = ?,
+          processingStatus = 'ok', processingError = NULL, processingAttempts = processingAttempts + 1, updatedAtMs = ? WHERE id = ?`,
+        [primaryId, resolved.leadflowJobId, resolved.teamId, resolved.attribution, clip(resolved.note, 500), nowMs, id]);
+      if (primaryId !== null) await absorb(tx, primaryId, row, nowMs);
+      return (await readIncident(tx, id))!;
+    });
+  } catch (error) {
+    const code = error instanceof Error && /^QUALITY_[A-Z_]+$/.test(error.message) ? error.message : "QUALITY_PROCESSING_FAILED";
+    console.warn(`[quality-incident] processing failed id=${id} code=${code}`);
+    try { await change(pool, "UPDATE team_quality_incidents SET processingStatus = 'failed', processingError = ?, processingAttempts = processingAttempts + 1, updatedAtMs = ? WHERE id = ? AND processingStatus <> 'ok'", [code, nowMs, id]); }
+    catch { /* the row stays "pending" and is still listed for retry */ }
+    throw error;
+  }
+}
+/** A further message raises the incident's severity and requests, never its count. */
+async function absorb(tx: PoolConnection, primaryId: number, row: Pick<QualityIncidentRow, "severity" | "recleanStatus" | "refundStatus">, nowMs: number): Promise<void> {
+  const primary = await readIncident(tx, primaryId, true);
+  if (!primary) return;
+  const severity = (SEVERITY_ORDER[row.severity] ?? 0) > (SEVERITY_ORDER[primary.severity] ?? 0) ? row.severity : primary.severity;
+  const reclean = primary.recleanStatus === "none" && row.recleanStatus !== "none" ? "requested" : primary.recleanStatus;
+  const refund = primary.refundStatus === "none" && row.refundStatus !== "none" ? "requested" : primary.refundStatus;
+  await change(tx, "UPDATE team_quality_incidents SET severity = ?, recleanStatus = ?, refundStatus = ?, updatedAtMs = ? WHERE id = ?", [severity, reclean, refund, nowMs, primaryId]);
+}
+
+/** Staff corrections. Every action applies to an incident (primary) except "separate", which acts on one message. */
+export async function applyQualityIncidentAction(pool: Pool, action: QualityIncidentAction, actorId: number, nowMs = Date.now()): Promise<QualityIncidentRow> {
+  return transaction(pool, async tx => {
+    const row = await readIncident(tx, action.id, true);
+    if (!row) return fail("QUALITY_INCIDENT_NOT_FOUND");
+    const primaryOnly = () => { if (row.primaryId !== null) fail("QUALITY_INCIDENT_NOT_PRIMARY"); };
+    const set = async (sql: string, values: Value[]) => change(tx, `UPDATE team_quality_incidents SET ${sql}, updatedBy = ?, updatedAtMs = ? WHERE id = ?`, [...values, actorId, nowMs, row.id]);
+    const syncChildren = async (jobId: number | null, teamId: number | null) =>
+      change(tx, "UPDATE team_quality_incidents SET leadflowJobId = ?, teamId = ?, updatedAtMs = ? WHERE primaryId = ?", [jobId, teamId, nowMs, row.id]);
+    switch (action.action) {
+      case "attribute": {
+        primaryOnly();
+        const job = await readJob(tx, action.leadflowJobId);
+        if (!job) return fail("QUALITY_JOB_NOT_FOUND");
+        const teamId = await teamFor(tx, job);
+        if (teamId === null) return fail("QUALITY_JOB_TEAM_UNMAPPED");
+        await set("leadflowJobId = ?, teamId = ?, attribution = 'staff', attributionNote = ?, processingStatus = 'ok', processingError = NULL",
+          [job.id, teamId, clip(action.note?.trim() || `Staff chose job ${job.id} (${job.jobDate}).`, 500)]);
+        await syncChildren(job.id, teamId);
+        break;
+      }
+      case "unattribute":
+        primaryOnly();
+        await set("leadflowJobId = NULL, teamId = NULL, attribution = 'needs_review', attributionNote = ?", [clip(action.note?.trim() || "Staff removed the team attribution.", 500)]);
+        await syncChildren(null, null);
+        break;
+      case "classify": primaryOnly(); await set("category = ?, severity = ?", [action.category, action.severity]); break;
+      case "dismiss": primaryOnly(); await set("status = 'dismissed', statusNote = ?", [clip(action.note, 500)]); break;
+      case "restore": primaryOnly(); await set("status = 'open', statusNote = NULL", []); break;
+      case "resolve": primaryOnly(); await set("status = 'resolved', statusNote = ?", [clip(action.note?.trim() || null, 500)]); break;
+      case "recovery": primaryOnly(); await set("recleanStatus = ?, refundStatus = ?", [action.recleanStatus, action.refundStatus]); break;
+      case "separate":
+        if (row.primaryId === null) return fail("QUALITY_INCIDENT_ALREADY_SEPARATE");
+        await set("primaryId = NULL, status = 'open', statusNote = 'Separated by staff as its own complaint.'", []);
+        break;
+      case "merge": {
+        primaryOnly();
+        const into = await readIncident(tx, action.intoId, true);
+        if (!into || into.primaryId !== null || into.id === row.id) return fail("QUALITY_MERGE_TARGET_INVALID");
+        await change(tx, "UPDATE team_quality_incidents SET primaryId = ?, leadflowJobId = ?, teamId = ?, updatedAtMs = ? WHERE primaryId = ?", [into.id, into.leadflowJobId, into.teamId, nowMs, row.id]);
+        await set("primaryId = ?, leadflowJobId = ?, teamId = ?", [into.id, into.leadflowJobId, into.teamId]);
+        await absorb(tx, into.id, row, nowMs);
+        break;
+      }
+    }
+    return (await readIncident(tx, row.id))!;
+  });
+}
+
+export type QualityIncidentView = QualityIncidentRow & { messages: QualityIncidentRow[] };
+/** Incidents reported in a Sunday week, each with its further messages; plus every failed/pending record (any week). */
+export async function listQualityIncidents(pool: Pool, weekStart: string): Promise<{ incidents: QualityIncidentView[]; unprocessed: QualityIncidentRow[] }> {
+  const primaries = (await rows(pool, `SELECT ${COLUMNS} FROM team_quality_incidents WHERE primaryId IS NULL AND weekStart = ? AND processingStatus = 'ok' ORDER BY reportedAtMs DESC, id DESC LIMIT 500`, [weekStart])).map(fromRow);
+  const children = primaries.length ? (await rows(pool, `SELECT ${COLUMNS} FROM team_quality_incidents WHERE primaryId IN (${primaries.map(() => "?").join(", ")}) ORDER BY reportedAtMs ASC, id ASC`, primaries.map(p => p.id))).map(fromRow) : [];
+  const unprocessed = (await rows(pool, `SELECT ${COLUMNS} FROM team_quality_incidents WHERE processingStatus <> 'ok' ORDER BY id DESC LIMIT 200`)).map(fromRow);
+  return { incidents: primaries.map(p => ({ ...p, messages: children.filter(c => c.primaryId === p.id) })), unprocessed };
+}
+/** Incidents (primaries) used for the week's scores. */
+export async function readWeekIncidents(pool: Pool, weekStart: string): Promise<Array<QualityIncidentRow & { jobDate: string | null }>> {
+  const prefixed = COLUMNS.split(", ").map(column => `t.${column}`).join(", ");
+  return (await rows(pool, `SELECT ${prefixed}, j.jobDate AS jobDate FROM team_quality_incidents t LEFT JOIN leadflow_jobs j ON j.id = t.leadflowJobId
+    WHERE t.primaryId IS NULL AND t.weekStart = ? ORDER BY t.id ASC`, [weekStart])).map(row => ({ ...fromRow(row), jobDate: row.jobDate == null ? null : String(row.jobDate) }));
+}
+/** Visits staff can choose from when correcting attribution (30 days either side of the report). */
+export async function attributionChoices(pool: Pool, id: number): Promise<Array<{ leadflowJobId: number; jobDate: string; bookingStatus: string; teamId: number | null; teamName: string | null }>> {
+  const row = await readIncident(pool, id);
+  if (!row) return fail("QUALITY_INCIDENT_NOT_FOUND");
+  const day = easternDateIso(new Date(row.reportedAtMs));
+  const visits = await customerVisits(pool, { phone: row.customerPhone, email: row.customerEmail }, shiftBookingDate(day, -30), shiftBookingDate(day, 30));
+  const result = [];
+  for (const visit of visits) {
+    const teamId = await teamFor(pool, visit);
+    const names = teamId === null ? [] : await rows(pool, "SELECT name FROM scheduling_teams WHERE id = ?", [teamId]);
+    result.push({ leadflowJobId: visit.id, jobDate: visit.jobDate, bookingStatus: visit.bookingStatus, teamId, teamName: names[0]?.name == null ? null : String(names[0].name) });
+  }
+  return result;
+}

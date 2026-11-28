@@ -3,7 +3,9 @@ import { historySelectionSchema, reviewPublishSchema, reviewStartSchema } from "
 import type { TeamEvidenceWeekInput, TeamEvidenceWindow } from "../shared/teamLeaderboardEvidence";
 import type { TeamEvidenceAuditRead } from "./teamLeaderboardEvidenceService";
 import type { ReviewFailure, ReviewRecord, TeamHistoryRepository } from "./teamLeaderboardHistoryRepository";
-import { aggregateTeamPublications, buildTeamWeekPublication, type TeamWeekCounts } from "./teamLeaderboardHistoryMetrics";
+import { aggregateTeamPublications, buildTeamWeekPublication, buildTeamWeekPublicationFromIncidents, type StoredIncident, type TeamWeekCounts } from "./teamLeaderboardHistoryMetrics";
+import type { QualitySignal } from "./teamQualityIncidents";
+import type { QualityCategory } from "../shared/teamQualityIncidents";
 import { reviewTeamCommunicationSnapshot, TEAM_WEEKLY_REVIEW_TIME_LIMIT_MS, type TeamWeeklyReviewStatus } from "./teamWeeklyReviewService";
 import { resolveTeamEvidenceWindow } from "./teamLeaderboardEvidenceWindow";
 import baseline from "./teamLeaderboardWeeklySnapshot.json";
@@ -41,6 +43,11 @@ export function createTeamLeaderboardHistoryService(options: {
   readCounts: (window: TeamEvidenceWindow) => Promise<TeamWeekCounts>;
   review?: typeof reviewTeamCommunicationSnapshot;
   now?: () => number;
+  /** Phase 2 saved quality records. */
+  quality?: {
+    readIncidents(weekStart: string): Promise<StoredIncident[]>;
+    record(signal: QualitySignal): Promise<{ duplicate: boolean; processed: boolean }>;
+  };
 }) {
   const repo = options.repository;
   const clock = options.now ?? Date.now;
@@ -162,6 +169,68 @@ export function createTeamLeaderboardHistoryService(options: {
       const published = await repo.publish(record.id, snapshot, parsed.expectedPublicationId, actorId, clock(),
         record.weekStart === seed.weekStart ? seed.id : undefined);
       return { id: published.id, weekStart: published.weekStart, publishedAtMs: published.publishedAtMs };
+    },
+    /** Phase 2: this week's scores from saved quality records (no AI). Read-only. */
+    async live(weekStart: string) {
+      const quality = options.quality ?? fail("QUALITY_RECORDS_UNAVAILABLE");
+      const window = resolveTeamEvidenceWindow({ weekStart }, new Date(clock()));
+      const counts = await options.readCounts(window);
+      const incidents = await quality.readIncidents(weekStart);
+      return { snapshot: buildTeamWeekPublicationFromIncidents(counts, incidents), countsComplete: counts.complete, expectedPublicationId: await expectedId(weekStart) };
+    },
+    /** Phase 2: publish the week from saved quality records (explicit staff action; Phase 3 schedules it). */
+    async publishFromRecords(actorId: number, input: { requestId: string; weekStart: string; expectedPublicationId: string | null }) {
+      if (!Number.isSafeInteger(actorId) || actorId <= 0) return fail("WEEK_REVIEW_INVALID_OWNER");
+      const parsed = reviewStartSchema.parse({ requestId: input.requestId, weekStart: input.weekStart });
+      const quality = options.quality ?? fail("QUALITY_RECORDS_UNAVAILABLE");
+      const window = resolveTeamEvidenceWindow({ weekStart: parsed.weekStart }, new Date(clock()));
+      const counts = await options.readCounts(window);
+      if (!counts.complete) return fail("WEEK_REVIEW_NOT_READY");
+      const snapshot = buildTeamWeekPublicationFromIncidents(counts, await quality.readIncidents(parsed.weekStart));
+      const timestamp = clock();
+      const record: ReviewRecord = { id: parsed.requestId, weekStart: parsed.weekStart, ownerId: actorId, createdAtMs: timestamp, updatedAtMs: timestamp,
+        status: "completed", progress: null, payload: { counts, outcome: { candidates: [], matches: [], visitGroups: [], validOutput: true, rejectedCandidateCount: 0,
+          verifiedComplaintCount: null, verifiedRecleanRefundCount: null, publication: null, scoreResults: null }, source: "quality_records" },
+        publication: null, publishedAtMs: null, publishedBy: null };
+      if (!await repo.insert(record)) {
+        const existing = await repo.get(parsed.requestId);
+        if (existing?.publishedAtMs != null && existing.weekStart === parsed.weekStart) return { id: existing.id, weekStart: existing.weekStart, publishedAtMs: existing.publishedAtMs };
+        return fail("WEEK_REVIEW_REQUEST_CONFLICT");
+      }
+      const published = await repo.publish(record.id, snapshot, input.expectedPublicationId, actorId, clock(),
+        record.weekStart === seed.weekStart ? seed.id : undefined);
+      return { id: published.id, weekStart: published.weekStart, publishedAtMs: published.publishedAtMs };
+    },
+    /** Phase 2 one-time fill: copy a finished Run review's complaint findings into the quality records.
+     * Idempotent (unique source keys); a message already labelled live is not added twice. */
+    async importReview(reviewId: string) {
+      const quality = options.quality ?? fail("QUALITY_RECORDS_UNAVAILABLE");
+      const record = await repo.get(reviewId);
+      if (!record) return fail("WEEK_REVIEW_NOT_FOUND");
+      const outcome = record.payload.outcome;
+      if (!outcome || !["completed", "incomplete"].includes(record.status)) return fail("WEEK_REVIEW_NOT_READY");
+      const evidence = new Map((record.payload.read?.sources.evidence ?? []).map(item => [item.id, item]));
+      let added = 0, duplicates = 0, failed = 0;
+      for (const match of outcome.matches) {
+        const candidate = match.candidate, source = evidence.get(candidate.evidenceId);
+        const sourceKey = source?.sourceKind === "sms" && source.providerId ? `sms:${source.providerId}`
+          : source?.sourceKind === "email" && source.threadId ? `email:thread:${source.threadId}` : `review:${candidate.evidenceId}`;
+        const category: QualityCategory = candidate.category === "team_service" ? "team_service"
+          : candidate.category === "refund_request" ? "unclassified" : "cleaning_quality";
+        const reportedAtMs = Date.parse(match.reportAtUtc ?? "") || Date.parse(`${record.weekStart}T12:00:00Z`);
+        try {
+          const saved = await quality.record({
+            sourceKey, channel: "review", detector: "weekly_review", reportedAtMs,
+            customerPhone: source?.customerPhone ?? null, customerEmail: source?.customerEmail ?? null, customerName: source?.customerName ?? null,
+            evidenceQuote: candidate.evidenceQuotes.join(" … "), evidenceText: candidate.summary,
+            sourceRef: { reviewId, evidenceId: candidate.evidenceId, matchStatus: match.status }, category, severity: "medium",
+            leadflowJobId: match.status === "matched" && match.visit ? match.visit.id : null,
+            recleanRequested: candidate.category === "reclean_request", refundRequested: candidate.category === "refund_request",
+          });
+          if (saved.duplicate) duplicates++; else added++;
+        } catch { failed++; }
+      }
+      return { reviewId, added, duplicates, failed };
     },
   });
 }
