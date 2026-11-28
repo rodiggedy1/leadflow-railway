@@ -40,7 +40,7 @@ export function TeamReportsPanel({ agentId, weekStart, weekText, onClose }: { ag
   const busyRef = useRef(false);
   const view = query.data?.agentId === agentId && query.data.weekStart === weekStart ? query.data : null;
 
-  const run = async (teamIds: string[], resend: boolean) => {
+  const run = async (teamIds: string[], resend: boolean, seenAttempts?: number) => {
     if (busyRef.current || !view || !teamIds.length) return;
     const names = view.teams.filter(t => teamIds.includes(t.teamId)).map(t => t.teamName);
     const question = resend
@@ -48,7 +48,7 @@ export function TeamReportsPanel({ agentId, weekStart, weekText, onClose }: { ag
       : `Send ${teamIds.length} real text message${teamIds.length === 1 ? "" : "s"} now (${names.join(", ")})?${view.provisional ? "\n\nThese reports are PRELIMINARY: the week's analysis is not finished." : ""}`;
     if (!window.confirm(question)) return;
     busyRef.current = true; setBusy(true); setError(null); setResult(null);
-    try { setResult(outcomeSummary((await send.mutateAsync({ weekStart, teamIds, resend })).outcomes)); setSelected(new Set()); }
+    try { setResult(outcomeSummary((await send.mutateAsync({ weekStart, teamIds, resend, ...(resend ? { seenAttempts } : {}) })).outcomes)); setSelected(new Set()); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "The reports could not be sent. Check each team's status before trying again."); }
     finally { busyRef.current = false; setBusy(false); await query.refetch(); }
   };
@@ -69,7 +69,7 @@ export function TeamReportsPanel({ agentId, weekStart, weekText, onClose }: { ag
           <p className={`tp-reports-status tp-reports-${status.tone}`}>{status.text}</p>
           <div className="tp-reports-actions">
             <button type="button" className="tp-btn" aria-expanded={open === team.teamId} onClick={() => setOpen(open === team.teamId ? null : team.teamId)}>{open === team.teamId ? "Hide message" : "Preview"}</button>
-            {canResend && <button type="button" className="tp-btn" disabled={busy} onClick={() => void run([team.teamId], true)}>Resend</button>}
+            {canResend && <button type="button" className="tp-btn" disabled={busy} onClick={() => void run([team.teamId], true, team.attempts)}>Resend</button>}
           </div>
           {open === team.teamId && <pre className="tp-reports-message">{team.message}</pre>}
         </li>;

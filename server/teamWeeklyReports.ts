@@ -112,13 +112,18 @@ export type SendOutcome = { teamId: string; teamName: string;
 
 /** Sends the selected teams' reports, one at a time; one team's problem never stops the others.
  * Without `resend`, a team whose report was already sent (or may have been sent) is skipped. */
-export async function sendTeamReports(deps: ReportDeps, input: { weekStart: string; teamIds: string[]; resend: boolean }, agentId: number): Promise<SendOutcome[]> {
+export async function sendTeamReports(deps: ReportDeps, input: { weekStart: string; teamIds: string[]; resend: boolean; seenAttempts?: number }, agentId: number): Promise<SendOutcome[]> {
   const view = await previewTeamReports(deps, input.weekStart);
   const outcomes: SendOutcome[] = [];
   for (const teamId of Array.from(new Set(input.teamIds))) {
     const team = view.teams.find(candidate => candidate.teamId === teamId);
     if (!team) { outcomes.push({ teamId, teamName: "", result: "skipped_no_jobs", detail: "This team has no jobs this week." }); continue; }
     if (team.issue || !team.phone || !team.cleanerProfileId) { outcomes.push({ teamId, teamName: team.teamName, result: "skipped_no_phone", detail: team.issue }); continue; }
+    // A resend goes out only if nobody resent this report since the person looked (two clicks or two staff = one text).
+    if (input.resend && input.seenAttempts !== undefined && team.attempts !== input.seenAttempts) {
+      outcomes.push({ teamId, teamName: team.teamName, result: "skipped_in_progress", detail: "This report was just sent again by someone else. Check its status first." });
+      continue;
+    }
     if (team.latest?.status === "pending") { outcomes.push({ teamId, teamName: team.teamName, result: "skipped_in_progress", detail: "A send for this team is in progress." }); continue; }
     if (!input.resend && team.latest?.status === "sent") { outcomes.push({ teamId, teamName: team.teamName, result: "skipped_already_sent", detail: null }); continue; }
     if (!input.resend && team.latest?.status === "uncertain") {

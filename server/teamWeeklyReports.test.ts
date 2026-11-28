@@ -143,8 +143,24 @@ describe("sending", () => {
   it("intentional resend is a new attempt", async () => {
     const { d, rows, sent } = deps();
     await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: false }, 7);
-    expect((await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: true }, 7))[0].result).toBe("sent");
+    expect((await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: true, seenAttempts: 1 }, 7))[0].result).toBe("sent");
     expect(rows.map(r => r.attempt)).toEqual([1, 2]); expect(sent).toHaveLength(2);
+  });
+  it("two Resend clicks (or two staff) for the same report: one text only, even when the first finished before the second started", async () => {
+    const { d, rows, sent } = deps();
+    await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: false }, 7);
+    const [a, b] = await Promise.all([1, 2].map(agent => sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: true, seenAttempts: 1 }, agent)));
+    expect([a[0].result, b[0].result].sort()).toEqual(["sent", "skipped_in_progress"]);
+    const later = await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: true, seenAttempts: 1 }, 3); // stale screen
+    expect(later[0]).toMatchObject({ result: "skipped_in_progress", detail: "This report was just sent again by someone else. Check its status first." });
+    expect(sent).toHaveLength(2); expect(rows.map(r => r.attempt)).toEqual([1, 2]);
+  });
+  it("a resend must name one team and the attempt that was seen", async () => {
+    const { sendTeamReportsInputSchema } = await import("../shared/teamWeeklyReport");
+    expect(sendTeamReportsInputSchema.safeParse({ weekStart: "2026-11-22", teamIds: ["1"], resend: true }).success).toBe(false);
+    expect(sendTeamReportsInputSchema.safeParse({ weekStart: "2026-11-22", teamIds: ["1", "2"], resend: true, seenAttempts: 1 }).success).toBe(false);
+    expect(sendTeamReportsInputSchema.safeParse({ weekStart: "2026-11-22", teamIds: ["1"], resend: true, seenAttempts: 1 }).success).toBe(true);
+    expect(sendTeamReportsInputSchema.safeParse({ weekStart: "2026-11-22", teamIds: ["1", "2"], resend: false }).success).toBe(true);
   });
   it("a failed send is recorded with its reason, does not stop the next team, and can simply be sent again", async () => {
     const { d, rows, sent } = deps({ sendSms: vi.fn(async ({ to }) => to.endsWith("0111") ? { success: false, error: "OpenPhone API returned 500" } : { success: true, messageId: "SIM" }) });
@@ -163,7 +179,7 @@ describe("sending", () => {
     expect((await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: false }, 7))[0].result).toBe("sent");
     expect(rows[0].status).toBe("pending");
     expect((await previewTeamReports(d, "2026-11-22")).teams.find(t => t.teamId === "1")!.latest!.status).toBe("pending");
-    expect((await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: true }, 7))[0].result).toBe("skipped_in_progress"); // still fresh
+    expect((await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: true, seenAttempts: 1 }, 7))[0].result).toBe("skipped_in_progress"); // still fresh
     advance(PENDING_UNCERTAIN_MS + 1000);
     expect((await previewTeamReports(d, "2026-11-22")).teams.find(t => t.teamId === "1")!.latest!.status).toBe("uncertain");
     expect((await sendTeamReports(d, { weekStart: "2026-11-22", teamIds: ["1"], resend: false }, 7))[0].result).toBe("skipped_pending");
