@@ -156,7 +156,7 @@ describe("approved static publication boundary", () => {
     expect(scored).toEqual(rankAssessedScores(snapshot.publication.teams, snapshot.details));
     // A 1-job team keeps its score but is unranked (3-job minimum); ranked teams come first.
     expect(scored.find(row => row.id === "12")).toMatchObject({ rank: null, totalScore: 100, unrankedReason: "Unranked: fewer than 3 completed jobs" });
-    expect(scored[0]).toMatchObject({ rank: 1, totalScore: 97.22, unrankedReason: null });
+    expect(scored[0]).toMatchObject({ rank: 1, totalScore: 98.33, unrankedReason: null }); // new formula (55/30/10/5)
     expect(scored.find(row => row.id === "4")?.confirmedRecoveryCases).toBe(0);
     expect(scored.find(row => row.id === "2")).toMatchObject({ rank: null, totalScore: null });
   });

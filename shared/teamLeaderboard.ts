@@ -1,9 +1,13 @@
 export const TEAM_SCORE_METRICS = [
+  // Owner formula (2026-11-28): quality incidents 55, five-star ratings 30, ETA 10, photos 5.
+  // "complaints" is the single quality-incident category: a complaint, its reclean and a quality-related refund are one
+  // incident, counted once against the completed jobs. Only incidents that are the team's responsibility count.
   { key: "ratings", label: "5-star ratings", weight: 30, color: "#d49b37", rule: "The share of received customer ratings that are five stars." },
-  { key: "complaints", label: "Customer complaints", weight: 25, color: "#cb7163", rule: "The share of eligible jobs without a verified, team-related complaint." },
-  { key: "recovery", label: "Recleans & refunds", weight: 20, color: "#9a88b5", rule: "The share of eligible jobs without a team-related reclean or refund. Both on one job count once." },
-  { key: "eta", label: "ETA submitted", weight: 15, color: "#648fb0", rule: "The share of jobs requiring an ETA for which the team submitted one." },
-  { key: "photos", label: "Job photos", weight: 10, color: "#589b85", rule: "The share of jobs requiring photos with all required photos uploaded." },
+  { key: "complaints", label: "Quality incidents", weight: 55, color: "#cb7163", rule: "The share of completed jobs without a quality incident that is the team's responsibility. A complaint, its reclean and a quality refund count as one incident." },
+  // Kept only so stored results keep their shape; recleans and refunds are part of the quality incident and score 0 here.
+  { key: "recovery", label: "Recleans & refunds", weight: 0, color: "#9a88b5", rule: "Included in quality incidents; not scored separately." },
+  { key: "eta", label: "ETA submitted", weight: 10, color: "#648fb0", rule: "The share of jobs requiring an ETA for which the team submitted one." },
+  { key: "photos", label: "Job photos", weight: 5, color: "#589b85", rule: "The share of jobs requiring photos with all required photos uploaded." },
 ] as const;
 
 export type TeamScoreMetric = typeof TEAM_SCORE_METRICS[number]["key"];
@@ -28,6 +32,8 @@ export type TeamLeaderboardPublication = {
 export function calculateTeamScore(team: TeamLeaderboardRow): TeamScore {
   const points = {} as Record<TeamScoreMetric, number | null>;
   for (const metric of TEAM_SCORE_METRICS) {
+    // A category with no weight is not scored (never a deduction, never makes a score incomplete).
+    if (metric.weight === 0) { points[metric.key] = 0; continue; }
     const evidence = team.metrics[metric.key];
     const valid = evidence.complete && Number.isInteger(evidence.eligible) && Number.isInteger(evidence.successful) &&
       evidence.eligible > 0 && evidence.successful >= 0 && evidence.successful <= evidence.eligible;

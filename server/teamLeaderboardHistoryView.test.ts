@@ -213,8 +213,9 @@ describe("weekly history UI — offline synthetic SSR only", () => {
     });
     it("labels nonzero confirmed recoveries instead of claiming no completed recovery", () => {
         const html = render(React.createElement(TeamLeaderboardView, { publication: publication, ownTeamId: "710", details: details, period: period }), ["standings", "710"]);
-        expect(html).toContain("1 admin-recorded completed reclean/refund in this reviewed period");
-        expect(html).toContain("2 refund request — not a completed refund");
+        // Recleans/refunds are part of the single quality-incident category, not a separate scored card.
+        expect(html).not.toContain("admin-recorded completed reclean/refund in this reviewed period");
+        expect(html).toContain("2 refund request · not a completed refund");
         expect(html).not.toContain("No completed reclean/refund recorded in this reviewed period");
     });
     it("lists persisted runs after reload without restarting interrupted work", () => {

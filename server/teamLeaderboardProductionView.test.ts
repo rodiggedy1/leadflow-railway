@@ -57,29 +57,29 @@ describe("approved weekly production view — synthetic SSR only", () => {
   it("shows supplied complaint/recovery/ETA/photo counts, category points and the un-reweighted category sum", () => {
     const p = publication();
     const details = { own: detail() };
-    expect(TEAM_SCORE_METRICS.map(metric => metric.weight)).toEqual([30, 25, 20, 15, 10]);
+    // Owner formula (2026-11-28): quality incidents 55, ratings 30, ETA 10, photos 5.
+    expect(TEAM_SCORE_METRICS.map(metric => metric.weight)).toEqual([30, 55, 0, 10, 5]);
     expect(rankAssessedScores(p.teams, details)[0]).toMatchObject({
-      score: { points: { ratings: 24, complaints: 23.75, recovery: 20, eta: 13.5, photos: 9.5 } },
-      totalScore: 90.75, availablePoints: 100, confirmedRecoveryCases: 0, rank: 1,
+      score: { points: { ratings: 24, complaints: 52.25, recovery: 0, eta: 9, photos: 4.75 } },
+      totalScore: 90, availablePoints: 100, confirmedRecoveryCases: 0, rank: 1,
     });
     const html = render(p, details);
-    expect(html).toContain('<div class="tl-score-line"><strong>90.75</strong>');
+    expect(html).toContain('<div class="tl-score-line"><strong>90</strong>');
     expect(html).toContain("Out of 100 · based on 100 available points");
-    expect(html).toMatch(/data-summary="complaints"[\s\S]*?<strong>1<\/strong><small>23\.75 \/ 25 pts<\/small>/);
-    expect(html).toMatch(/data-summary="recovery"[\s\S]*?<strong>0<\/strong><small>20 \/ 20 pts<\/small>/);
-    expect(html).toMatch(/data-summary="eta"[\s\S]*?<strong>18 \/ 20<\/strong><small>13\.5 \/ 15 pts<\/small>/);
-    expect(html).toMatch(/data-summary="photos"[\s\S]*?<strong>19 \/ 20<\/strong><small>9\.5 \/ 10 pts<\/small>/);
+    expect(html).toMatch(/data-summary="complaints"[\s\S]*?Quality incidents[\s\S]*?<strong>1<\/strong><small>52\.25 \/ 55 pts<\/small>/);
+    expect(html).not.toContain('data-summary="recovery"');
+    expect(html).toMatch(/data-summary="eta"[\s\S]*?<strong>18 \/ 20<\/strong><small>9 \/ 10 pts<\/small>/);
+    expect(html).toMatch(/data-summary="photos"[\s\S]*?<strong>19 \/ 20<\/strong><small>4\.75 \/ 5 pts<\/small>/);
     expect(html).toContain("2 refund request · not a completed refund");
     expect(html).toContain("20 recorded jobs · 1 reviewed complaints");
   });
 
-  it("shows all five approved category breakdowns on the own-results tab", () => {
+  it("shows the four scored category breakdowns on the own-results tab", () => {
     const html = render(publication(), { own: detail() }, "own");
-    expect((html.match(/class="tl-metric"/g) ?? []).length).toBe(5);
-    expect(Array.from(html.matchAll(/class="tl-category-points "><strong>([^<]*)<\/strong>/g)).map(match => match[1])).toEqual(["24", "23.75", "20", "13.5", "9.5"]);
-    expect(Array.from(html.matchAll(/class="tl-metric-value ">([^<]*)<\/strong>/g)).map(match => match[1])).toEqual(["8 / 10", "1", "0", "18 / 20", "19 / 20"]);
-    expect(html).toContain("25 × (20 jobs − 1 affected jobs) ÷ 20.");
-    expect(html).toContain("2 refund request — not a completed refund.");
+    expect((html.match(/class="tl-metric"/g) ?? []).length).toBe(4);
+    expect(Array.from(html.matchAll(/class="tl-category-points "><strong>([^<]*)<\/strong>/g)).map(match => match[1])).toEqual(["24", "52.25", "9", "4.75"]);
+    expect(Array.from(html.matchAll(/class="tl-metric-value ">([^<]*)<\/strong>/g)).map(match => match[1])).toEqual(["8 / 10", "1", "18 / 20", "19 / 20"]);
+    expect(html).toContain("55 × (20 jobs − 1 quality incidents) ÷ 20.");
   });
 
   it("keeps another team's public category and submission breakdown visible without their customer incident", () => {
@@ -96,7 +96,7 @@ describe("approved weekly production view — synthetic SSR only", () => {
     expect(otherExpanded).toContain("20 recorded jobs · 1 reviewed complaints");
     expect(otherExpanded).toContain('<strong class="tl-metric-value ">18 / 20</strong>');
     expect(otherExpanded).toContain('<strong class="tl-metric-value ">19 / 20</strong>');
-    expect(otherExpanded).toContain('<div class="tl-category-points "><strong>23.75</strong>');
+    expect(otherExpanded).toContain('<div class="tl-category-points "><strong>52.25</strong>');
     expect(otherExpanded).toContain('<div class="tl-inline-feedback"></div>');
     const ownExpanded = render(p, details, "standings", "own");
     expect(ownExpanded).toContain("OWN REVIEWED OUTCOME");
@@ -114,10 +114,10 @@ describe("approved weekly production view — synthetic SSR only", () => {
     team.metrics.ratings = { successful: 0, eligible: 0, complete: true };
     const details = { own: detail() };
     details.own.metricDisplay.ratings = { value: "Not available", unit: "No ratings received", note: "No received ratings" };
-    // Same category points (66.75 of the 70 that apply); the total is 66.75 / 70 = 95.36 out of 100.
-    expect(rankAssessedScores([team], details)[0]).toMatchObject({ score: { points: { ratings: null } }, totalScore: 95.36, availablePoints: 70, rank: 1 });
+    // 66 of the 70 points that apply (55 + 10 + 5): 66 / 70 = 94.29 out of 100.
+    expect(rankAssessedScores([team], details)[0]).toMatchObject({ score: { points: { ratings: null } }, totalScore: 94.29, availablePoints: 70, rank: 1 });
     const html = render(publication([team]), details, "own");
-    expect(html).toContain('<div class="tl-score-line"><strong>95.36</strong>');
+    expect(html).toContain('<div class="tl-score-line"><strong>94.29</strong>');
     expect(html).toContain("Out of 100 · based on 70 available points");
     expect(html).toContain('<div class="tl-category-points tl-points-pending"><strong>N/A</strong>');
     expect(html).toContain('<strong class="tl-metric-value tl-value-missing">Not available</strong>');
