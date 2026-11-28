@@ -7,6 +7,7 @@ import { countsAgainstTeam, qualityExclusionReason } from "@shared/teamQualityIn
 import { shiftBookingDate } from "@shared/bookingReschedule";
 import { TeamLeaderboardAdminLink } from "./TeamLeaderboardAdminLink";
 import { TeamQualityRecords } from "./TeamQualityRecords";
+import { TeamReportsPanel } from "./TeamReportsPanel";
 import { currentSundayWeek } from "./TeamLeaderboardHistoryControls";
 import "./team-performance.css";
 
@@ -80,6 +81,7 @@ export function TeamPerformanceAdmin({ agentId }: { agentId: number }) {
   const [busy, setBusy] = useState(false);
   const [testDay, setTestDay] = useState("");
   const [sizing, setSizing] = useState(false);
+  const [reports, setReports] = useState(false);
   const statusQuery = trpc.leadflowJobs.leaderboard.history.analysisStatus.useQuery({ weekStart }, { ...opts,
     refetchInterval: query => query.state.data?.state === "running" ? 4000 : 60000 });
   const status = statusQuery.data?.agentId === agentId ? statusQuery.data : null;
@@ -167,6 +169,8 @@ export function TeamPerformanceAdmin({ agentId }: { agentId: number }) {
         {!final && <p className="tp-note">Scores and complaints are provisional until the week's analysis is complete.</p>}
       </>}
     </div>
+    {reports ? <TeamReportsPanel agentId={agentId} weekStart={weekStart} weekText={weekLabel(weekStart)} onClose={() => setReports(false)} />
+      : <div className="tp-actions"><button type="button" className="tp-btn" onClick={() => setReports(true)}>Send team reports</button></div>}
 
     <details className="tp-advanced">
       <summary>Advanced</summary>

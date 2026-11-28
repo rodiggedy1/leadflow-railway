@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { cleanerProfiles } from "../drizzle/schema";
 import { agentPageProcedure, cleanerProcedure, router } from "./_core/trpc";
@@ -10,6 +10,7 @@ import { readTeamLeaderboardAdminAccounts } from "./teamLeaderboardAdminAccounts
 import { historySelectionSchema, reviewPublishSchema, reviewStartSchema } from "../shared/teamLeaderboardHistory";
 import { teamEvidenceWeekInputSchema } from "../shared/teamLeaderboardEvidence";
 import { qualityIncidentActionSchema } from "../shared/teamQualityIncidents";
+import { sendTeamReportsInputSchema } from "../shared/teamWeeklyReport";
 import { teamLeaderboardHistoryService, teamWeekAnalysisService } from "./teamLeaderboardHistoryRuntime";
 import type { TeamWeekAnalysis } from "./teamWeekAnalysis";
 import type { TeamLeaderboardHistoryService } from "./teamLeaderboardHistoryService";
@@ -80,9 +81,39 @@ const analysisCall = async <T>(fn: () => Promise<T>): Promise<T> => {
       message: ANALYSIS_MESSAGES[code] ?? "The analysis status could not be loaded. Nothing was started; try again." });
   }
 };
-export function createTeamLeaderboardHistoryRouter(options: { resolveService?: () => TeamLeaderboardHistoryService; resolveAnalysis?: () => TeamWeekAnalysis } = {}) {
+const reportCall = async <T>(fn: () => Promise<T>): Promise<T> => {
+  try { return await fn(); }
+  catch (error) {
+    if (error instanceof TRPCError) throw error;
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Team reports could not be loaded or sent. Check each team's status before trying again." });
+  }
+};
+export function createTeamLeaderboardHistoryRouter(options: { resolveService?: () => TeamLeaderboardHistoryService; resolveAnalysis?: () => TeamWeekAnalysis;
+  resolveReportDeps?: (weekStart: string) => import("./teamWeeklyReports").ReportDeps } = {}) {
   const service = () => options.resolveService?.() ?? teamLeaderboardHistoryService();
   const weekAnalysis = () => options.resolveAnalysis?.() ?? teamWeekAnalysisService();
+  const reportDeps = async (weekStart: string): Promise<import("./teamWeeklyReports").ReportDeps> => {
+    if (options.resolveReportDeps) return options.resolveReportDeps(weekStart);
+    const db = await getDb();
+    const { getPool } = await import("./db");
+    const pool = db ? getPool() : null;
+    if (!db || !pool) throw new Error("REPORTS_DB_UNAVAILABLE");
+    const reports = await import("./teamWeeklyReports");
+    const [{ sendSms }, { normalizePhone }] = await Promise.all([import("./openphone"), import("./utils/phone")]);
+    return {
+      async readWeek(week) {
+        const live = await service().live(week);
+        const restricted = restrictTeamLeaderboardAdminPublication(live.snapshot);
+        const teamAccounts = await readTeamLeaderboardAdminAccounts(db, restricted.publication.teams.map(team => team.id));
+        return reports.readReportWeek(pool, live, restricted as never, teamAccounts, await weekAnalysis().status(week), week);
+      },
+      readProfiles: ids => db.select({ id: cleanerProfiles.id, phone: cleanerProfiles.phone, language: cleanerProfiles.language, isActive: cleanerProfiles.isActive })
+        .from(cleanerProfiles).where(inArray(cleanerProfiles.id, ids)),
+      store: reports.createReportStore(pool),
+      sendSms: ({ to, content }) => sendSms({ to, content }), // the existing team SMS path and default line, like the portal login text
+      normalizePhone, now: () => Date.now(),
+    };
+  };
   return router({
     weeksForAdmin: admin.query(({ ctx }) => safe(async () => ({ agentId: ctx.agent.agentId, weeks: await service().weeks() }))),
     forAdmin: admin.input(historySelectionSchema).query(({ ctx, input }) => safe(async () => {
@@ -141,6 +172,12 @@ export function createTeamLeaderboardHistoryRouter(options: { resolveService?: (
     estimateAnalysis: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => analysisCall(async () => ({ agentId: ctx.agent.agentId, days: await weekAnalysis().estimate(input.weekStart) }))),
     startAnalysis: admin.input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict())
       .mutation(({ ctx, input }) => analysisCall(async () => ({ agentId: ctx.agent.agentId, ...await weekAnalysis().start(ctx.agent.agentId, input) }))),
+    // Phase 3 weekly team reports: preview (read-only) and a manual send. Built from the same live standings and
+    // saved quality records as this page; no AI. Sends only when an admin presses Send.
+    teamReports: admin.input(teamEvidenceWeekInputSchema).query(({ ctx, input }) => reportCall(async () =>
+      ({ agentId: ctx.agent.agentId, ...await (await import("./teamWeeklyReports")).previewTeamReports(await reportDeps(input.weekStart), input.weekStart) }))),
+    sendTeamReports: admin.input(sendTeamReportsInputSchema).mutation(({ ctx, input }) => reportCall(async () =>
+      ({ agentId: ctx.agent.agentId, outcomes: await (await import("./teamWeeklyReports")).sendTeamReports(await reportDeps(input.weekStart), input, ctx.agent.agentId) }))),
     importReviewToRecords: admin.input(z.object({ reviewId: z.string().uuid() }).strict())
       .mutation(({ ctx, input }) => safe(async () => ({ agentId: ctx.agent.agentId, ...await service().importReview(input.reviewId) }))),
   });

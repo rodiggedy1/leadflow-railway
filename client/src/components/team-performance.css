@@ -59,3 +59,22 @@
   .tp-row { grid-template-columns: minmax(0, 1fr) 40px 76px 56px 14px; font-size: 14px; }
   .tp-detail-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Phase 3 team reports panel */
+.tp-reports { margin-top: 20px; border-top: 1px solid var(--tp-line); padding-top: 16px; }
+.tp-reports-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.tp-reports-head h2 { margin: 0; font-size: 18px; }
+.tp-reports-provisional { margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: #fbefe2; color: var(--tp-accent-ink); font-size: 14px; }
+.tp-reports-list { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.tp-reports-list li { border: 1px solid var(--tp-line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; min-width: 0; }
+.tp-reports-row { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
+.tp-reports-row input { width: 18px; height: 18px; flex-shrink: 0; }
+.tp-reports-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.tp-reports-name small { display: block; font-weight: 400; color: var(--tp-muted); font-size: 13px; }
+.tp-reports-status { margin: 0; font-size: 13.5px; overflow-wrap: anywhere; }
+.tp-reports-none { color: var(--tp-muted); }
+.tp-reports-pending { color: var(--tp-accent-ink); }
+.tp-reports-sent { color: var(--tp-good); }
+.tp-reports-failed, .tp-reports-skipped { color: var(--tp-bad); }
+.tp-reports-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tp-reports-message { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 13.5px; background: var(--tp-bg); border-radius: 10px; padding: 10px; }
+.tp-reports-result { font-size: 14px; overflow-wrap: anywhere; }

@@ -87,7 +87,9 @@ describe("migration 0083 (owner-approved table)", () => {
     const entry = manifest.migrations.find((m: { id: string }) => m.id === "0083_create_team_quality_incidents");
     const sql = readFileSync(new URL(`./versioned-migrations/${entry.sqlFile}`, import.meta.url));
     expect(entry).toMatchObject({ mode: "create-table", replayMode: "verified-idempotent", sha256: createHash("sha256").update(sql).digest("hex") });
-    expect(manifest.migrations.at(-1).id).toBe("0083_create_team_quality_incidents");
+    // Appended right after 0082 (later migrations, such as 0084 team reports, follow it).
+    const ids = manifest.migrations.map((m: { id: string }) => m.id);
+    expect(ids.indexOf("0083_create_team_quality_incidents")).toBe(ids.indexOf("0082_create_leadflow_launch27_visit_notes") + 1);
     const post = JSON.parse(readFileSync(new URL(`./versioned-migrations/${entry.postconditionsFile}`, import.meta.url), "utf8"));
     expect(post.columns.find((c: { name: string }) => c.name === "id")).toMatchObject({ autoIncrement: true });
     expect(post.indexes.find((i: { name: string }) => i.name === "team_quality_incidents_source")).toEqual({ name: "team_quality_incidents_source", columns: ["sourceKey"], unique: true });

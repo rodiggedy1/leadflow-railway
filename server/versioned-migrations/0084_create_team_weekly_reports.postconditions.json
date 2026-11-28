@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "table": "team_weekly_reports",
+  "columns": [
+    { "name": "id", "columnType": "bigint unsigned", "nullable": false, "autoIncrement": true },
+    { "name": "weekStart", "columnType": "char(10)", "nullable": false },
+    { "name": "teamId", "columnType": "int", "nullable": false },
+    { "name": "attempt", "columnType": "int unsigned", "nullable": false },
+    { "name": "teamName", "columnType": "varchar(255)", "nullable": false },
+    { "name": "cleanerProfileId", "columnType": "int", "nullable": false },
+    { "name": "phone", "columnType": "varchar(32)", "nullable": false },
+    { "name": "language", "columnType": "char(2)", "nullable": false },
+    { "name": "provisional", "columnType": "tinyint unsigned", "nullable": false },
+    { "name": "messageText", "columnType": "text", "nullable": false },
+    { "name": "status", "columnType": "varchar(16)", "nullable": false },
+    { "name": "error", "columnType": "varchar(255)", "nullable": true },
+    { "name": "providerMessageId", "columnType": "varchar(128)", "nullable": true },
+    { "name": "requestedBy", "columnType": "int", "nullable": false },
+    { "name": "createdAtMs", "columnType": "bigint unsigned", "nullable": false },
+    { "name": "updatedAtMs", "columnType": "bigint unsigned", "nullable": false },
+    { "name": "sentAtMs", "columnType": "bigint unsigned", "nullable": true }
+  ],
+  "indexes": [
+    { "name": "PRIMARY", "columns": ["id"], "unique": true },
+    { "name": "team_weekly_reports_attempt", "columns": ["weekStart", "teamId", "attempt"], "unique": true },
+    { "name": "team_weekly_reports_week", "columns": ["weekStart"], "unique": false }
+  ]
+}

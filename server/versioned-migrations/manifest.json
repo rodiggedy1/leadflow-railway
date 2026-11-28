@@ -639,6 +639,14 @@
       "sha256": "11abe5360efa017483fe9ee0cb0caf7eb546b9de949ba2de8f47bcd8ee6c7ef2",
       "replayMode": "verified-idempotent",
       "postconditionsFile": "0083_create_team_quality_incidents.postconditions.json"
+    },
+    {
+      "id": "0084_create_team_weekly_reports",
+      "mode": "create-table",
+      "sqlFile": "0084_create_team_weekly_reports.sql",
+      "sha256": "974d48e3106c738044c5f362c4ea7ce7d38b993a5bc37f5b7078ee3927635f49",
+      "replayMode": "verified-idempotent",
+      "postconditionsFile": "0084_create_team_weekly_reports.postconditions.json"
     }
   ]
 }
