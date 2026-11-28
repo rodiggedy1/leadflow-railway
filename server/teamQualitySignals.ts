@@ -6,13 +6,16 @@ import type { SmsQualityComplaint, QualitySeverity } from "../shared/teamQuality
 import { recordQualitySignal, type QualitySignal } from "./teamQualityIncidents";
 import { classifyComplaintText } from "./teamQualityRules";
 
-export const QUALITY_SAVE_ATTEMPTS = 3;
+/** Spaced attempts when the save itself fails (about 6 minutes in total). Once saved, a record is durable: any later
+ * processing failure is retried automatically, also after a server restart. */
+export const QUALITY_SAVE_ATTEMPTS = 5;
+const RETRY_FACTORS = [1, 5, 30, 150];
 let poolOverride: (() => Promise<Pool | null>) | null = null;
 /** Tests only. */
 export function setQualitySignalPoolForTests(resolve: (() => Promise<Pool | null>) | null, delayMs?: number): void {
-  poolOverride = resolve; retryDelayMs = delayMs ?? 5000;
+  poolOverride = resolve; retryDelayMs = delayMs ?? 2000;
 }
-let retryDelayMs = 5000;
+let retryDelayMs = 2000;
 async function qualityPool(): Promise<Pool> {
   if (poolOverride) { const pool = await poolOverride(); if (!pool) throw new Error("QUALITY_DB_UNAVAILABLE"); return pool; }
   const { getDb, getPool } = await import("./db");
@@ -36,7 +39,7 @@ export function saveQualitySignalInBackground(signal: QualitySignal): Promise<"s
           console.error(`[quality-incident] could not save ${signal.channel} signal ${signal.sourceKey} after ${attempt} attempts (${code}); customer communication unaffected`);
           return "failed" as const;
         }
-        await new Promise(resolve => setTimeout(resolve, retryDelayMs * attempt));
+        await new Promise(resolve => { const timer = setTimeout(resolve, retryDelayMs * RETRY_FACTORS[Math.min(attempt, RETRY_FACTORS.length) - 1]); timer.unref?.(); });
       }
     }
   })().catch(() => "failed" as const);

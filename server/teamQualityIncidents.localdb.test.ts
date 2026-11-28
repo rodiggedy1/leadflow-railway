@@ -17,6 +17,8 @@ let pool: mysql.Pool;
 const sms = (key: string, phone: string, change: Partial<QualitySignal> = {}): QualitySignal => ({ sourceKey: `sms:${key}`, channel: "sms", detector: "claude_sms",
   reportedAtMs: AT, customerPhone: phone, evidenceQuote: "The bathroom was not cleaned", evidenceText: "The bathroom was not cleaned at all.",
   category: "cleaning_quality", severity: "medium", ...change });
+const readIncidentForTest = async (id: number) => { const row = (await pool.query("SELECT * FROM team_quality_incidents WHERE id = ?", [id]) as any)[0][0];
+  return { ...row, id: Number(row.id), teamId: row.teamId === null ? null : Number(row.teamId), leadflowJobId: row.leadflowJobId === null ? null : Number(row.leadflowJobId) }; };
 const get = async (id: number) => (await pool.query("SELECT * FROM team_quality_incidents WHERE id = ?", [id]) as any)[0][0];
 
 describe.skipIf(!local)("quality records against a local database (fictional rows)", () => {
@@ -144,7 +146,11 @@ describe.skipIf(!local)("quality records against a local database (fictional row
         (2002, 'native_booking', 91, NULL, '2026-11-30', 'assigned', 2, 'Test H', '+12025550222', 'Standard Cleaning', 16000),
         (2003, 'native_booking', 92, NULL, '2026-12-01', 'assigned', 1, 'Test I', '+12025550233', 'Standard Cleaning', 16000),
         (2004, 'native_booking', 93, NULL, '2026-12-03', 'completed', 1, 'Test G', '+12025550211', 'Re-clean', 0),
-        (2005, 'native_booking', 94, NULL, '2026-11-30', 'assigned', 2, 'Test J', '+12025550255', 'Standard Cleaning', 16000)`);
+        (2005, 'native_booking', 94, NULL, '2026-11-30', 'assigned', 2, 'Test J', '+12025550255', 'Standard Cleaning', 16000),
+        (2006, 'launch27_import', NULL, 9106, '2026-11-10', 'completed', 101, 'Test K', '+12025550266', 'Deep Cleaning', 30000),
+        (2007, 'native_booking', 95, NULL, '2026-11-30', 'assigned', 2, 'Test L', '+12025550277', 'Standard Cleaning', 16000),
+        (2008, 'native_booking', 96, NULL, '2026-11-30', 'assigned', 2, 'Test M', '+12025550288', 'Standard Cleaning', 16000),
+        (2009, 'native_booking', 97, NULL, '2026-11-30', 'assigned', 2, 'Test N', '+12025550299', 'Standard Cleaning', 16000)`);
     });
     it("the AI's category replaces a rule-based one for the same visit, and they count once", async () => {
       const voice = await recordQualitySignal(pool, signal("v1", "+12025550222", { sourceKey: "call:callback:501", channel: "call", detector: "vapi_complaint_tool", category: "cleaning_quality" }), AT2);
@@ -181,16 +187,52 @@ describe.skipIf(!local)("quality records against a local database (fictional row
       // Running it again changes nothing.
       expect(await refreshQualityWeek(pool, WEEK, Date.parse("2026-12-04T15:00:00Z"))).toEqual({ retried: 0, reattributed: 0, recleans: 0 });
     });
+    it("a complaint about a visit more than 7 days ago is still matched (latest visit within 45 days)", async () => {
+      const old = await recordQualitySignal(pool, signal("a5", "+12025550266"), AT2);
+      expect(await get(old.id)).toMatchObject({ attribution: "auto", leadflowJobId: 2006, teamId: 1 });
+      expect((await get(old.id)).attributionNote).toBe("Matched the most recent completed visit, 2026-11-10 (none in the last 7 days; looked back 45).");
+    });
+    it("billing, pricing, office and scheduling complaints never count, even when a rule-based cleaning signal joins them", async () => {
+      const billing = await recordQualitySignal(pool, signal("a6", "+12025550277", { category: "pricing_billing", refundRequested: true }), AT2);
+      const rule = await recordQualitySignal(pool, signal("v2", "+12025550277", { sourceKey: "call:callback:502", channel: "call", detector: "vapi_complaint_tool", category: "cleaning_quality", reportedAtMs: AT2 + HOUR }), AT2 + HOUR);
+      expect((await get(rule.id)).primaryId).toBe(billing.id);
+      expect(await get(billing.id)).toMatchObject({ category: "pricing_billing", teamId: 2 });
+      const office = await recordQualitySignal(pool, signal("a7", "+12025550288", { category: "office_service" }), AT2);
+      const scheduling = await recordQualitySignal(pool, signal("a8", "+12025550288", { category: "scheduling", reportedAtMs: AT2 + HOUR }), AT2 + HOUR);
+      expect((await get(scheduling.id)).primaryId).toBe(office.id); // both non-team: one incident
+      const glance = await recordQualitySignal(pool, signal("g1", "+12025550288", { sourceKey: "email:thread:g1", channel: "email", detector: "gmail_glance", category: "unclassified", refundRequested: true }), AT2);
+      for (const id of [billing.id, office.id, glance.id]) expect(countsAgainstTeam(await readIncidentForTest(id))).toBe(false);
+    });
+    it("records saved before a server restart are processed by the new server automatically", async () => {
+      // A record whose save succeeded but whose processing never ran (the process stopped), and one whose processing failed.
+      const now = AT2;
+      for (const [key, status, attempts] of [["sms:restart-pending", "pending", 0], ["sms:restart-failed", "failed", 1]] as const)
+        await pool.query(`INSERT INTO team_quality_incidents (primaryId, sourceKey, channel, detector, reportedAtMs, weekStart, customerPhone, category, severity, attribution, status,
+          recleanStatus, refundStatus, processingStatus, processingError, processingAttempts, createdAtMs, updatedAtMs)
+          VALUES (NULL, ?, 'sms', 'claude_sms', ?, ?, '+12025550299', 'cleaning_quality', 'medium', 'unattributed', 'open', 'none', 'none', ?, ?, ?, ?, ?)`,
+          [key, now + (attempts ? HOUR : 0), WEEK, status, status === "failed" ? "QUALITY_PROCESSING_FAILED" : null, attempts, now, now]);
+      const restarted = mysql.createPool({ uri: url, connectionLimit: 2 }); // a fresh server: no in-memory state
+      try {
+        const summary = await refreshQualityWeek(restarted, WEEK, Date.parse("2026-12-04T15:00:00Z"));
+        expect(summary.retried).toBe(2);
+      } finally { await restarted.end(); }
+      const [pending] = (await pool.query("SELECT * FROM team_quality_incidents WHERE sourceKey = 'sms:restart-pending'") as any)[0];
+      const [failed] = (await pool.query("SELECT * FROM team_quality_incidents WHERE sourceKey = 'sms:restart-failed'") as any)[0];
+      expect(pending).toMatchObject({ processingStatus: "ok", leadflowJobId: 2009, teamId: 2, attribution: "auto", primaryId: null });
+      expect(failed).toMatchObject({ processingStatus: "ok", primaryId: pending.id, processingError: null });
+    });
     it("the week's scores follow automatically from the records", async () => {
       const incidents = await readWeekIncidents(pool, WEEK);
       const team = (id: string, jobs: number) => ({ id, name: `Team ${id}`, eligibleJobs: jobs,
         metrics: Object.fromEntries(TEAM_SCORE_METRICS.map(({ key }) => [key, { successful: jobs, eligible: jobs, complete: true }])) as any });
       const snapshot = buildTeamWeekPublicationFromIncidents({ period: { weekStart: WEEK, weekEnd: "2026-12-05", weekConvention: "Sunday-start", coverageStart: WEEK, coverageEnd: "2026-12-04" },
         teams: [team("1", 5), team("2", 5)], complete: true, warnings: [] }, incidents);
-      // Alba: the AI complaint (+ rating + retried message, counted once, reclean completed) and the re-matched one.
-      expect(snapshot.details["1"]).toMatchObject({ complaintCases: 2, confirmedRecoveryCases: 1 });
-      // Bravo: the sign-off issue; the billing complaint is not the team's responsibility.
-      expect(snapshot.details["2"]).toMatchObject({ complaintCases: 1, confirmedRecoveryCases: 0 });
+      // Alba: the AI complaint (+ rating + retried message, counted once, reclean completed), the re-matched one and the
+      // older-visit complaint.
+      expect(snapshot.details["1"]).toMatchObject({ complaintCases: 3, confirmedRecoveryCases: 1 });
+      // Bravo: the sign-off issue and the restart-recovered complaint (its two messages count once). The billing, office,
+      // scheduling and refund-only records do not count.
+      expect(snapshot.details["2"]).toMatchObject({ complaintCases: 2, confirmedRecoveryCases: 0 });
     });
   });
   it("background saving retries a temporary failure and never throws", async () => {
@@ -201,6 +243,6 @@ describe.skipIf(!local)("quality records against a local database (fictional row
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     setQualitySignalPoolForTests(async () => null, 5);
     await expect(saveQualitySignalInBackground(sms("bg2", "+12025550111"))).resolves.toBe("failed");
-    expect(error.mock.calls.flat().join(" ")).toMatch(/could not save sms signal sms:bg2 after 3 attempts \(QUALITY_DB_UNAVAILABLE\); customer communication unaffected/);
+    expect(error.mock.calls.flat().join(" ")).toMatch(/could not save sms signal sms:bg2 after 5 attempts \(QUALITY_DB_UNAVAILABLE\); customer communication unaffected/);
   });
 });
