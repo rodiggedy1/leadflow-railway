@@ -364,9 +364,9 @@ export function buildTeamWeekPublicationFromIncidents(counts: TeamWeekCounts, in
   const stats = new Map(teams.map(team => [team.id, { cases: 0, requests: 0, recoveries: 0 }]));
   const details: TeamLeaderboardDetails = {}, ownIncidents: TeamLeaderboardSnapshot["publication"]["ownIncidents"] = [];
   const incidentRecords: IncidentRecord[] = [], warnings = [...counts.warnings];
-  let listedForStaff = 0;
+  let notCounted = 0;
   for (const incident of incidents) {
-    if (!countsAgainstTeam(incident)) { if (incident.status !== "dismissed") listedForStaff++; continue; }
+    if (!countsAgainstTeam(incident)) { if (incident.status !== "dismissed") notCounted++; continue; }
     const tid = String(incident.teamId), totals = stats.get(tid);
     if (!totals) { warnings.push(`Quality record ${incident.id}: team ${tid} is not in the current roster; not counted.`); continue; }
     const recovered = isCompletedRecovery(incident), refundRequest = incident.refundStatus !== "none";
@@ -380,7 +380,7 @@ export function buildTeamWeekPublicationFromIncidents(counts: TeamWeekCounts, in
       sourceLabel: "Quality record", summary: `${CATEGORY_LABELS[incident.category] ?? "Complaint"} (${incident.severity}).`,
       outcome: recovered ? "Completed recovery recorded by staff." : incident.recleanStatus === "requested" || refundRequest ? "Recovery requested; not yet recorded as completed." : "No completed recovery recorded." });
   }
-  if (listedForStaff) warnings.push(`${listedForStaff} quality record(s) are listed for staff review (unclassified, not attributable to a team, or needing a visit choice) and do not count yet.`);
+  if (notCounted) warnings.push(`${notCounted} quality record(s) were not counted against a team automatically (office, billing or scheduling issues, supporting signals such as ratings, or no matching visit).`);
   for (const team of teams) {
     const totals = stats.get(team.id)!;
     team.metrics.complaints = evidence(Math.max(0, team.eligibleJobs - totals.cases), team.eligibleJobs, counts.complete && totals.cases <= team.eligibleJobs);

@@ -66,6 +66,22 @@ export function createCustomerCallSourceReader({ db, fetchCall, assistantId }: C
   };
 }
 
+/** Phase 2: the same call task generation, with the optional quality-complaint label read from the same answer
+ * (no extra AI call). The label is saved in the background and never changes the task. */
+async function labelledCustomerCallTask(source: CustomerCallSource) {
+  const { createQualityLabelRunner } = await import("./qualityComplaintLabelRunner");
+  const label = createQualityLabelRunner();
+  const task = await createClaudeCustomerCallTaskGenerator({ runner: label.runner })(source);
+  try {
+    const complaint = label.take(source.transcript);
+    if (complaint) (await import("../teamQualitySignals")).recordAiQualityComplaintInBackground(complaint, {
+      sourceKey: `call:vapi:${source.providerCallId}`, channel: "call", detector: "claude_call", reportedAtMs: source.receivedAt,
+      customerPhone: source.callerPhone, customerName: source.callerName, evidenceText: source.transcript,
+      sourceRef: { voiceCallId: source.voiceCallId, providerCallId: source.providerCallId } });
+  } catch { /* the call task is unaffected */ }
+  return task;
+}
+
 /** Called only by the existing completed-call webhook flow. Preview cannot
  * invoke this live model path. Factory/unit seams never execute the app. */
 export async function handleClaudeCustomerCallReport(report: unknown): Promise<void> {
@@ -80,7 +96,7 @@ export async function handleClaudeCustomerCallReport(report: unknown): Promise<v
     return response.json();
   } });
   const result = await createClaudeCustomerCallTaskHandler({ readSource, store: createClaudeCustomerCallsStore(db),
-    generate: withCallBookingQuoteTask({ generate: createClaudeCustomerCallTaskGenerator(), hasSavedQuote: callId => hasSavedCallBookingQuote(db, callId) }) })(report);
+    generate: withCallBookingQuoteTask({ generate: labelledCustomerCallTask, hasSavedQuote: callId => hasSavedCallBookingQuote(db, callId) }) })(report);
   if (result.status === "created") {
     const { broadcastOpsUpdate } = await import("../sseBroadcast");
     broadcastOpsUpdate("task_update", { channel: "command" });

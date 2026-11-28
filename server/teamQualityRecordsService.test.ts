@@ -42,7 +42,7 @@ describe("scores from saved quality records (no AI review)", () => {
   it("counts each team-attributable incident once and ignores refund-only, office, unclassified, dismissed and unattributed records", async () => {
     const env = setup([incident(1), incident(2, { recleanStatus: "completed", refundStatus: "issued" }), incident(3, { teamId: 2, category: "team_service" }),
       incident(4, { category: "pricing_billing", refundStatus: "requested" }), incident(5, { category: "unclassified", refundStatus: "requested" }),
-      incident(6, { status: "dismissed" }), incident(7, { attribution: "needs_review", teamId: null, leadflowJobId: null }), incident(8, { processingStatus: "failed" })]);
+      incident(6, { status: "dismissed" }), incident(7, { attribution: "unattributed", teamId: null, leadflowJobId: null }), incident(8, { processingStatus: "failed" })]);
     const { snapshot, countsComplete } = await env.service.live("2026-11-22");
     expect(countsComplete).toBe(true);
     expect(snapshot.details["1"]).toMatchObject({ complaintCases: 2, confirmedRecoveryCases: 1, refundRequests: 1 });
@@ -71,7 +71,7 @@ describe("scores from saved quality records (no AI review)", () => {
     env.records.set(reviewId, { id: reviewId, weekStart: "2026-11-22", ownerId: 42, createdAtMs: 1, updatedAtMs: 1, status: "completed", progress: null, publication: null, publishedAtMs: null, publishedBy: null,
       payload: { counts: counts(), read: { sources: { evidence: [{ id: "ev-sms", sourceKind: "sms", providerId: "OP-123", customerPhone: "+12025550111" }, { id: "ev-call", sourceKind: "ai_call" }] } } as any,
         outcome: { candidates: [], visitGroups: [], validOutput: true, rejectedCandidateCount: 0, verifiedComplaintCount: null, verifiedRecleanRefundCount: null, publication: null, scoreResults: null,
-          matches: [match("ev-sms", "matched", "cleaning_quality"), match("ev-call", "needs_review", "refund_request")] } as any } });
+          matches: [match("ev-sms", "matched", "cleaning_quality"), match("ev-call", "unattributed", "refund_request")] } as any } });
     const result = await env.service.importReview(reviewId);
     expect(result).toEqual({ reviewId, added: 2, duplicates: 0, failed: 0 });
     expect(env.record.mock.calls[0][0]).toMatchObject({ sourceKey: "sms:OP-123", leadflowJobId: 501, category: "cleaning_quality", channel: "review" });

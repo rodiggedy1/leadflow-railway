@@ -4,6 +4,7 @@
 import type { Pool } from "mysql2/promise";
 import type { SmsQualityComplaint, QualitySeverity } from "../shared/teamQualityIncidents";
 import { recordQualitySignal, type QualitySignal } from "./teamQualityIncidents";
+import { classifyComplaintText } from "./teamQualityRules";
 
 export const QUALITY_SAVE_ATTEMPTS = 3;
 let poolOverride: (() => Promise<Pool | null>) | null = null;
@@ -59,33 +60,39 @@ export function recordSmsQualityComplaintInBackground(complaint: SmsQualityCompl
   } catch { /* never affects the SMS flow */ }
 }
 
-/** The voice assistant's existing complaint tool. Uncategorised: staff classify it before it can count. */
+/** The voice assistant's existing complaint tool, classified automatically from the stated issue (no AI call).
+ * If Claude's call processing labels the same call, its category replaces this one when they merge. */
 export function recordVoiceComplaintInBackground(input: { callbackTaskId: number; phone: string | null; callerName: string | null; issue: string | null; bookingDate: string | null; atMs: number }): void {
   try {
+    const { category, severity } = classifyComplaintText(input.issue);
     background({
       sourceKey: `call:callback:${input.callbackTaskId}`, channel: "call", detector: "vapi_complaint_tool", reportedAtMs: input.atMs,
       customerPhone: input.phone, customerName: input.callerName, evidenceQuote: null,
       evidenceText: [input.issue ? `Issue: ${input.issue}` : null, input.bookingDate ? `Booking date (as said): ${input.bookingDate}` : null].filter(Boolean).join("\n") || null,
-      sourceRef: { callbackTaskId: input.callbackTaskId }, category: "unclassified", severity: "medium",
+      sourceRef: { callbackTaskId: input.callbackTaskId }, category, severity,
+      recleanRequested: /\b(re-?clean|redo|come back)\b/i.test(input.issue ?? ""), refundRequested: /\brefund\b/i.test(input.issue ?? ""),
     });
   } catch { /* never affects the call */ }
 }
 
-/** The Gmail glance classifier's existing labels. An upset-customer or refund label alone never penalises a team. */
+/** The Gmail glance classifier's existing labels, classified automatically from its summary (no AI call). An
+ * upset-customer or refund label with no cleaning/team cause stays a supporting signal and never penalises a team. */
 export function recordEmailGlanceInBackground(input: { threadId: string; category: string; senderEmail: string | null; senderName: string | null; summary: string[] | string | null; atMs: number }): void {
   try {
     if (input.category !== "upset_customer" && input.category !== "refund_request") return;
     const summary = Array.isArray(input.summary) ? input.summary.join("\n") : input.summary;
+    const { category, severity } = classifyComplaintText(summary);
     background({
       sourceKey: `email:thread:${input.threadId}`, channel: "email", detector: "gmail_glance", reportedAtMs: input.atMs,
       customerEmail: input.senderEmail, customerName: input.senderName, evidenceQuote: null, evidenceText: summary || null,
-      sourceRef: { threadId: input.threadId, label: input.category }, category: "unclassified", severity: "medium",
+      sourceRef: { threadId: input.threadId, label: input.category }, category, severity,
       refundRequested: input.category === "refund_request",
     });
   } catch { /* never affects the inbox */ }
 }
 
-/** A customer portal rating of 3 or lower (already part of the ratings score, so it is listed for staff, not counted twice). */
+/** A customer portal rating of 3 or lower. Ratings already score automatically in the ratings metric, so this is a
+ * supporting signal: it never counts as a complaint by itself, and joins a complaint about the same visit. */
 export function recordLowRatingInBackground(input: { leadflowJobId: number; rating: number; phone: string | null; atMs: number }): void {
   try {
     if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 3) return;
@@ -98,7 +105,8 @@ export function recordLowRatingInBackground(input: { leadflowJobId: number; rati
   } catch { /* never affects the rating */ }
 }
 
-/** A cleaner's portal sign-off where the customer response was "issue" or "touchup". */
+/** A cleaner's portal sign-off. "issue" = the customer raised a problem with this visit → a cleaning-quality complaint
+ * for that job and team, automatically. "touchup" (fixed on the spot) is a supporting signal only. */
 export function recordSignoffIssueInBackground(input: { leadflowJobId: number; customerResponse: string | null; customerNotes: string | null; atMs: number }): void {
   try {
     if (input.customerResponse !== "issue" && input.customerResponse !== "touchup") return;
@@ -106,7 +114,19 @@ export function recordSignoffIssueInBackground(input: { leadflowJobId: number; c
       sourceKey: `signoff:job:${input.leadflowJobId}`, channel: "signoff", detector: "cleaner_signoff", reportedAtMs: input.atMs,
       evidenceText: [`Sign-off customer response: ${input.customerResponse}`, input.customerNotes ? `Notes: ${input.customerNotes}` : null].filter(Boolean).join("\n"),
       leadflowJobId: input.leadflowJobId, sourceRef: { leadflowJobId: input.leadflowJobId, customerResponse: input.customerResponse },
-      category: "unclassified", severity: input.customerResponse === "issue" ? "medium" : "low",
+      category: input.customerResponse === "issue" ? "cleaning_quality" : "unclassified", severity: input.customerResponse === "issue" ? "medium" : "low",
     });
   } catch { /* never affects the sign-off */ }
+}
+
+/** Claude's optional label on its existing email/call processing (validated against that email or transcript). */
+export function recordAiQualityComplaintInBackground(complaint: SmsQualityComplaint, source: {
+  sourceKey: string; channel: "email" | "call"; detector: "claude_email" | "claude_call" | "claude_staff_call"; reportedAtMs: number;
+  customerPhone?: string | null; customerEmail?: string | null; customerName?: string | null; evidenceText: string; sourceRef: Record<string, unknown>;
+}): void {
+  try {
+    background({ ...source, evidenceQuote: complaint.evidenceQuotes.join(" … "), evidenceText: source.evidenceText.slice(0, 8000),
+      category: complaint.category, severity: complaint.severity, serviceDateHint: complaint.serviceDate,
+      recleanRequested: complaint.recleanRequested, refundRequested: complaint.refundRequested });
+  } catch { /* never affects the email or call */ }
 }

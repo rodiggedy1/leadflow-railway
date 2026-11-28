@@ -11,16 +11,16 @@ type Message = Incident["messages"][number];
 const queryOptions = { retry: false as const, throwOnError: false as const, refetchOnWindowFocus: false, staleTime: 0 };
 export const CATEGORY_LABELS: Record<string, string> = {
   cleaning_quality: "Cleaning quality", team_service: "Team service", office_service: "Office / communication",
-  pricing_billing: "Pricing / billing", scheduling: "Scheduling", other: "Other", unclassified: "Needs a category",
+  pricing_billing: "Pricing / billing", scheduling: "Scheduling", other: "Other", unclassified: "Supporting signal",
 };
 const CHANNEL_LABELS: Record<string, string> = { sms: "Text", email: "Email", call: "Call", rating: "Low rating", signoff: "Cleaner sign-off", review: "Weekly review", staff: "Staff" };
-export type QualityFilter = "review" | "counted" | "other" | "dismissed";
-/** Which list an incident belongs in (pure, exported for tests). */
+export type QualityFilter = "counted" | "not_team" | "signals" | "dismissed";
+/** Which list an incident belongs in, from the automatic decisions (pure, exported for tests). */
 export function qualityFilterFor(incident: Incident): QualityFilter {
   if (incident.status === "dismissed") return "dismissed";
   if (countsAgainstTeam(incident)) return "counted";
-  if (incident.category === "unclassified" || incident.attribution === "needs_review") return "review";
-  return "other";
+  if (incident.category === "unclassified" || incident.attribution === "unattributed") return "signals";
+  return "not_team";
 }
 
 function MessageLine({ message, onSeparate, busy }: { message: Message | Incident; onSeparate?: () => void; busy: boolean }) {
@@ -48,10 +48,10 @@ export function TeamQualityRecords({ agentId, weekStart, fromRecords, onToggleRe
     finally { setBusy(false); }
   };
   return <section className="tl-history-admin" aria-label="Quality records">
-    <div className="tl-history-heading"><div><h3>Quality records</h3><p>Complaints saved as messages arrive. Scores can be calculated from these records without another AI review.</p></div>
+    <div className="tl-history-heading"><div><h3>Quality records</h3><p>Complaints from texts, emails, calls, ratings and sign-offs are detected, categorised, matched to the visit and team, de-duplicated and scored automatically. No staff action is needed; overrides are optional.</p></div>
       <button type="button" onClick={() => setOpen(!open)}>{open ? "Hide records" : "Show records"}</button></div>
     <div className="tl-history-buttons">
-      <button type="button" onClick={() => onToggleRecords(!fromRecords)}>{fromRecords ? "Show published results" : "Show live scores from quality records"}</button>
+      <button type="button" onClick={() => onToggleRecords(!fromRecords)}>{fromRecords ? "Show published results" : "Show this week's automatic scores"}</button>
       {fromRecords && <button type="button" className="tl-history-primary" disabled={busy} onClick={() => {
         if (!window.confirm("Publish this week's scores from the saved quality records? Teams will see the new results. No texts are sent.")) return;
         void run(() => publish.mutateAsync({ requestId: crypto.randomUUID(), weekStart, expectedPublicationId: expectedPublicationId ?? null }), "Published from quality records.");
@@ -64,7 +64,7 @@ export function TeamQualityRecords({ agentId, weekStart, fromRecords, onToggleRe
 
 /** Mounted only when staff open the records, so nothing is read before then. */
 export function QualityRecordsList({ agentId, weekStart, onChanged }: { agentId: number; weekStart: string; onChanged: () => Promise<void> | void }) {
-  const [filter, setFilter] = useState<QualityFilter>("review");
+  const [filter, setFilter] = useState<QualityFilter>("counted");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [choicesFor, setChoicesFor] = useState<number | null>(null);
@@ -93,20 +93,21 @@ export function QualityRecordsList({ agentId, weekStart, onChanged }: { agentId:
       {message && <p role="status">{message}</p>}
       {list.isError ? <p className="tl-history-error" role="alert">{list.error.message}</p> : !data ? <p role="status">Loading quality records…</p> : <>
         <div className="tl-history-buttons" role="tablist" aria-label="Quality record lists">
-          {([["review", "Needs staff review"], ["counted", "Counted against a team"], ["other", "Not a team issue"], ["dismissed", "Dismissed"]] as const).map(([value, label]) =>
+          {([["counted", "Counted against a team"], ["not_team", "Not the team's responsibility"], ["signals", "Supporting signals / no matching visit"], ["dismissed", "Dismissed by override"]] as const).map(([value, label]) =>
             <button type="button" key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label} ({count(value)})</button>)}
         </div>
         {shown.length === 0 && <p>No records in this list for this week.</p>}
         {shown.map(incident => <article key={incident.id} className="tl-history-group">
           <strong>{CATEGORY_LABELS[incident.category] ?? incident.category} · {incident.severity} · {team(incident.teamId)}{incident.leadflowJobId ? ` · job ${incident.leadflowJobId}` : ""}</strong>
-          <p><small>{incident.attribution === "needs_review" ? "Needs a visit/team choice: " : incident.attribution === "staff" ? "Set by staff: " : "Matched automatically: "}{incident.attributionNote}</small></p>
+          <p><small>{incident.attribution === "unattributed" ? "Not matched to a visit (retried automatically): " : incident.attribution === "staff" ? "Staff override: " : "Matched automatically: "}{incident.attributionNote}</small></p>
           {(incident.recleanStatus !== "none" || incident.refundStatus !== "none") && <p><small>Reclean: {incident.recleanStatus} · Refund: {incident.refundStatus}</small></p>}
           {incident.statusNote && <p><small>{incident.status}: {incident.statusNote}</small></p>}
           <MessageLine message={incident} busy={busy} />
           {incident.messages.map(item => <MessageLine key={item.id} message={item} busy={busy} onSeparate={() => void action({ action: "separate", id: item.id }, "Separated into its own incident.")} />)}
+          <details className="tl-quality-override"><summary>Staff override (optional)</summary>
           <div className="tl-history-buttons">
             <button type="button" disabled={busy} onClick={() => setChoicesFor(choicesFor === incident.id ? null : incident.id)}>{choicesFor === incident.id ? "Close visit choice" : "Choose the visit/team"}</button>
-            {incident.teamId !== null && <button type="button" disabled={busy} onClick={() => void action({ action: "unattribute", id: incident.id }, "Team removed; listed for review.")}>Remove team</button>}
+            {incident.teamId !== null && <button type="button" disabled={busy} onClick={() => void action({ action: "unattribute", id: incident.id }, "Team removed; it no longer counts.")}>Remove team</button>}
             {incident.status === "dismissed"
               ? <button type="button" disabled={busy} onClick={() => void action({ action: "restore", id: incident.id }, "Restored.")}>Restore</button>
               : <button type="button" disabled={busy} onClick={() => { const note = window.prompt("Why is this not a valid complaint?"); if (note?.trim()) void action({ action: "dismiss", id: incident.id, note: note.trim() }, "Dismissed; it no longer counts."); }}>Dismiss</button>}
@@ -128,11 +129,12 @@ export function QualityRecordsList({ agentId, weekStart, onChanged }: { agentId:
             {incidents.length > 1 && <label>Same problem as<select value="" disabled={busy} onChange={event => { if (event.target.value) void action({ action: "merge", id: incident.id, intoId: Number(event.target.value) }, "Merged; it now counts once."); }}>
               <option value="">Merge into…</option>{incidents.filter(other => other.id !== incident.id).map(other => <option key={other.id} value={other.id}>#{other.id} {CATEGORY_LABELS[other.category]} · {team(other.teamId)}</option>)}</select></label>}
           </div>
+          </details>
         </article>)}
-        {data.unprocessed.length > 0 && <div className="tl-history-error" role="alert"><strong>Records that could not be processed ({data.unprocessed.length})</strong>
-          <p>The customer message was saved, but matching it to a visit failed. Retry processes it again; no reply is re-sent.</p>
+        {data.unprocessed.length > 0 && <div className="tl-history-error" role="alert"><strong>Records waiting to be processed ({data.unprocessed.length})</strong>
+          <p>The customer message was saved, but matching it to a visit failed. It is retried automatically each time the scores are recalculated; Retry now does it immediately. No reply is re-sent.</p>
           {data.unprocessed.map(item => <div key={item.id}><MessageLine message={item} busy={busy} /><small>Code: {item.processingError ?? item.processingStatus} · attempts {item.processingAttempts}</small>
-            <button type="button" disabled={busy} onClick={() => void run(() => retry.mutateAsync({ id: item.id }), "Processed.")}>Retry</button></div>)}
+            <button type="button" disabled={busy} onClick={() => void run(() => retry.mutateAsync({ id: item.id }), "Processed.")}>Retry now</button></div>)}
         </div>}
       </>}
       <div className="tl-history-buttons">

@@ -225,7 +225,8 @@ describe("weekly history UI — offline synthetic SSR only", () => {
     it("retains Run and saved-review controls when the selected week has not been published", () => {
         state.resultsAdmin = { ...state.resultsAdmin, isError: true };
         const html = render(React.createElement(AdminTeamLeaderboard, null), ["2026-11-29", false]);
-        expect(html).toContain("No published results for this week yet");
+        // Phase 2: an unpublished week shows its automatic scores from quality records (loading here), not an empty page.
+        expect(html).toContain("Calculating this week&#x27;s scores from quality records…");
         expect(html).toContain("Run review");
         expect(html).not.toContain('aria-label="Saved review"');
         expect(html).not.toContain("Synthetic Current Team");

@@ -99,7 +99,7 @@ describe("label validation and counting rules (pure)", () => {
   it("only team-attributable, attributed, processed, non-dismissed incidents count", () => {
     expect(countsAgainstTeam(incident)).toBe(true);
     expect(countsAgainstTeam({ ...incident, status: "resolved" })).toBe(true); // a resolved complaint still happened
-    for (const change of [{ status: "dismissed" }, { attribution: "needs_review" }, { teamId: null }, { processingStatus: "failed" },
+    for (const change of [{ status: "dismissed" }, { attribution: "unattributed" }, { teamId: null }, { processingStatus: "failed" },
       { category: "pricing_billing" }, { category: "scheduling" }, { category: "office_service" }, { category: "unclassified" }])
       expect(countsAgainstTeam({ ...incident, ...change })).toBe(false);
   });

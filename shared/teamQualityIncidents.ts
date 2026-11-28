@@ -4,17 +4,22 @@ import { z } from "zod";
 export const TEAM_QUALITY_CATEGORIES = ["cleaning_quality", "team_service"] as const;
 /** Office, pricing/billing and scheduling issues are tracked but never penalise a team. */
 export const NON_TEAM_CATEGORIES = ["office_service", "pricing_billing", "scheduling", "other"] as const;
-/** Signals from channels without a category (an email "upset customer" label, a voice complaint, a low rating,
- * a cleaner sign-off issue) wait for staff to classify them; they never count automatically. */
+/** "unclassified" = a supporting signal with no complaint of its own (for example a low rating, already scored in the
+ * ratings metric, or an upset-customer email label with no stated cause). It never counts by itself; it is merged
+ * automatically into a complaint about the same visit. */
 export const QUALITY_CATEGORIES = [...TEAM_QUALITY_CATEGORIES, ...NON_TEAM_CATEGORIES, "unclassified"] as const;
 export type QualityCategory = typeof QUALITY_CATEGORIES[number];
 export const QUALITY_SEVERITIES = ["low", "medium", "high"] as const;
 export type QualitySeverity = typeof QUALITY_SEVERITIES[number];
 export const QUALITY_CHANNELS = ["sms", "email", "call", "rating", "signoff", "review", "staff"] as const;
 export type QualityChannel = typeof QUALITY_CHANNELS[number];
-export const QUALITY_DETECTORS = ["claude_sms", "vapi_complaint_tool", "gmail_glance", "portal_rating", "cleaner_signoff", "weekly_review", "staff"] as const;
+export const QUALITY_DETECTORS = ["claude_sms", "claude_email", "claude_call", "claude_staff_call", "vapi_complaint_tool", "gmail_glance", "portal_rating", "cleaner_signoff", "weekly_review", "staff"] as const;
+/** The AI that already reads the full message/transcript. Its category wins over rule-based signals for the same visit. */
+export const STRONG_DETECTORS: readonly string[] = ["claude_sms", "claude_email", "claude_call", "claude_staff_call", "weekly_review", "staff"];
 export type QualityDetector = typeof QUALITY_DETECTORS[number];
-export const ATTRIBUTIONS = ["auto", "needs_review", "staff"] as const;
+/** auto = matched automatically; unattributed = no matching visit/team (does not count; retried automatically);
+ * staff = an optional staff override. */
+export const ATTRIBUTIONS = ["auto", "unattributed", "staff"] as const;
 export const INCIDENT_STATUSES = ["open", "resolved", "dismissed"] as const;
 export const RECLEAN_STATUSES = ["none", "requested", "completed"] as const;
 export const REFUND_STATUSES = ["none", "requested", "issued"] as const;
@@ -64,19 +69,19 @@ export type IncidentForScoring = {
   id: number; teamId: number | null; leadflowJobId: number | null; category: string; attribution: string;
   status: string; recleanStatus: string; refundStatus: string; processingStatus: string;
 };
-/** One incident counts once against one team, only when it is about the team's service, attributed (automatically
- * with exactly one visit, or by staff), processed, and not dismissed. Refund requests or upset-customer labels on
- * their own never count: the category must be cleaning_quality or team_service. */
+/** One incident counts once against one team, automatically, when it is about the team's service, matched to a
+ * visit and team, processed, and not dismissed by a staff override. Refund requests or upset-customer labels on their
+ * own never count: the category must be cleaning_quality or team_service. */
 export function countsAgainstTeam(incident: IncidentForScoring): boolean {
   return incident.status !== "dismissed" && incident.processingStatus === "ok" && isTeamCategory(incident.category)
-    && incident.attribution !== "needs_review" && incident.teamId !== null && incident.leadflowJobId !== null;
+    && incident.attribution !== "unattributed" && incident.teamId !== null && incident.leadflowJobId !== null;
 }
 /** A completed reclean or issued refund for a counted incident is one recovery event, never two. */
 export function isCompletedRecovery(incident: IncidentForScoring): boolean {
   return countsAgainstTeam(incident) && (incident.recleanStatus === "completed" || incident.refundStatus === "issued");
 }
 
-/** Staff actions on an incident (primary record). */
+/** Optional staff overrides on an incident (primary record). Never required: the workflow is automatic. */
 export const qualityIncidentActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("attribute"), id: z.number().int().positive(), leadflowJobId: z.number().int().positive(), note: z.string().trim().max(500).optional() }).strict(),
   z.object({ action: z.literal("unattribute"), id: z.number().int().positive(), note: z.string().trim().max(500).optional() }).strict(),
