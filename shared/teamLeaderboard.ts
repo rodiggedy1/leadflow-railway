@@ -26,9 +26,18 @@ export type TeamLeaderboardPublication = {
   publishedLabel: string;
   teams: TeamLeaderboardRow[];
   // Restricted to the signed-in team's incidents BEFORE this view receives them.
-  ownIncidents: Array<{ id: string; teamId: string; date: string; summary: string; outcome: string; sourceLabel: string }>;
+  ownIncidents: Array<{ id: string; teamId: string; date: string; summary: string; outcome: string; sourceLabel: string;
+    /** Owner decision (2026-11-28): the team sees each of its own complaints in full. Saved-record weeks only. */
+    complaint?: TeamComplaintDetail }>;
 };
 
+/** One cleaning complaint as the team sees it: who, when, the customer's own words, severity and recovery status. */
+export type TeamComplaintDetail = {
+  customerName: string | null; cleaningDate: string | null;
+  /** The customer's own words (quoted), and the fuller saved message or call excerpt when it adds context. */
+  wording: string | null; fullMessage: string | null;
+  severity: string; reclean: string; refund: string;
+};
 export function calculateTeamScore(team: TeamLeaderboardRow): TeamScore {
   const points = {} as Record<TeamScoreMetric, number | null>;
   for (const metric of TEAM_SCORE_METRICS) {

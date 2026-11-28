@@ -361,10 +361,10 @@ export async function listQualityIncidents(pool: Pool, weekStart: string): Promi
   return { incidents: primaries.map(p => ({ ...p, messages: children.filter(c => c.primaryId === p.id) })), unprocessed };
 }
 /** Incidents (primaries) used for the week's scores. */
-export async function readWeekIncidents(pool: Pool, weekStart: string): Promise<Array<QualityIncidentRow & { jobDate: string | null }>> {
+export async function readWeekIncidents(pool: Pool, weekStart: string): Promise<Array<QualityIncidentRow & { jobDate: string | null; jobCustomerName: string | null }>> {
   const prefixed = COLUMNS.split(", ").map(column => `t.${column}`).join(", ");
-  return (await rows(pool, `SELECT ${prefixed}, j.jobDate AS jobDate FROM team_quality_incidents t LEFT JOIN leadflow_jobs j ON j.id = t.leadflowJobId
-    WHERE t.primaryId IS NULL AND t.weekStart = ? ORDER BY t.id ASC`, [weekStart])).map(row => ({ ...fromRow(row), jobDate: row.jobDate == null ? null : String(row.jobDate) }));
+  return (await rows(pool, `SELECT ${prefixed}, j.jobDate AS jobDate, j.customerName AS jobCustomerName FROM team_quality_incidents t LEFT JOIN leadflow_jobs j ON j.id = t.leadflowJobId
+    WHERE t.primaryId IS NULL AND t.weekStart = ? ORDER BY t.id ASC`, [weekStart])).map(row => ({ ...fromRow(row), jobDate: row.jobDate == null ? null : String(row.jobDate), jobCustomerName: row.jobCustomerName == null ? null : String(row.jobCustomerName) }));
 }
 /** Visits staff can choose from when correcting attribution (30 days either side of the report). */
 export async function attributionChoices(pool: Pool, id: number): Promise<Array<{ leadflowJobId: number; jobDate: string; bookingStatus: string; teamId: number | null; teamName: string | null }>> {

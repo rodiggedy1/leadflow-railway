@@ -48,7 +48,10 @@ export function restrictTeamLeaderboardPublication(
   }
   const ownIncidents = teams.some(row => row.id === ownTeamId)
     ? publication.ownIncidents.filter(incident => incident.teamId === ownTeamId)
-      .map(({ id, teamId, date, summary, outcome, sourceLabel }) => ({ id, teamId, date, summary, outcome, sourceLabel }))
+      // The team's own complaints only, in full (customer name, cleaning date, the customer's words, severity, recovery).
+      .map(({ id, teamId, date, summary, outcome, sourceLabel, complaint }) => ({ id, teamId, date, summary, outcome, sourceLabel,
+        ...(complaint ? { complaint: { customerName: complaint.customerName, cleaningDate: complaint.cleaningDate, wording: complaint.wording,
+          fullMessage: complaint.fullMessage, severity: complaint.severity, reclean: complaint.reclean, refund: complaint.refund } } : {}) }))
     : [];
   const result: TeamLeaderboardPublishedResponse = {
     publication: {

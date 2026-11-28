@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { TEAM_SCORE_METRICS, type MetricEvidence, type TeamLeaderboardRow, type TeamScoreMetric } from "../shared/teamLeaderboard";
+import { TEAM_SCORE_METRICS, type MetricEvidence, type TeamComplaintDetail, type TeamLeaderboardRow, type TeamScoreMetric } from "../shared/teamLeaderboard";
 import type { TeamLeaderboardDetails, TeamLeaderboardPeriod } from "../shared/teamLeaderboardPublication";
 import type { TeamComplaintMatch, TeamComplaintVisitGroup, TeamEvidenceWindow } from "../shared/teamLeaderboardEvidence";
 import { isValidBookingRescheduleDate, shiftBookingDate } from "../shared/bookingReschedule";
@@ -327,7 +327,7 @@ export function aggregateTeamPublications(records: Array<{ id: string; published
       }
       for (const incident of teamIncidents) {
         const key = stable(incident.id) ? incident.id : `${record.id}:${incident.id}`;
-        incidents.set(key, { id: incident.id, teamId: incident.teamId, date: incident.date, sourceLabel: incident.sourceLabel, summary: incident.summary, outcome: incident.outcome });
+        incidents.set(key, { id: incident.id, teamId: incident.teamId, date: incident.date, sourceLabel: incident.sourceLabel, summary: incident.summary, outcome: incident.outcome, ...(incident.complaint ? { complaint: incident.complaint } : {}) });
       }
       for (const item of recordsForTeam ?? []) {
         if (!stable(item.id)) continue;
@@ -353,8 +353,19 @@ export function aggregateTeamPublications(records: Array<{ id: string; published
   return result;
 }
 
-export type StoredIncident = IncidentForScoring & { reportedAtMs: number; severity: string; jobDate?: string | null };
+export type StoredIncident = IncidentForScoring & { reportedAtMs: number; severity: string; jobDate?: string | null; customerName?: string | null; jobCustomerName?: string | null };
 const CATEGORY_LABELS: Record<string, string> = { cleaning_quality: "Cleaning quality complaint", team_service: "Team service complaint" };
+/** The customer's own complaint, never a generic label (owner, 2026-11-28); the category label only if no words were saved. */
+function complaintSummary(incident: StoredIncident): string {
+  const words = incident.evidenceQuote?.trim() || incident.evidenceText?.trim();
+  return words ? words : `${CATEGORY_LABELS[incident.category] ?? "Complaint"} (${incident.severity}).`;
+}
+function complaintDetail(incident: StoredIncident): TeamComplaintDetail {
+  const quote = incident.evidenceQuote?.trim() || null, text = incident.evidenceText?.trim() || null;
+  return { customerName: incident.customerName?.trim() || incident.jobCustomerName?.trim() || null, cleaningDate: incident.jobDate ?? null,
+    wording: quote ?? text, fullMessage: quote && text && text !== quote ? text : null,
+    severity: incident.severity, reclean: incident.recleanStatus, refund: incident.refundStatus };
+}
 /** Phase 2: the week's scores from saved quality records, without any AI review. Same metrics and details as the
  * reviewed publication: one count per incident (several messages about one problem are already one incident),
  * completed recleans/refunds count once per incident, and only team-attributable incidents count. */
@@ -377,7 +388,7 @@ export function buildTeamWeekPublicationFromIncidents(counts: TeamWeekCounts, in
     const id = `week-${incident.id}:${tid}`;
     incidentRecords.push({ id, teamId: tid, includeComplaint: true, completedRecovery: recovered, refundRequest });
     ownIncidents.push({ id, teamId: tid, date: `Reported ${new Date(incident.reportedAtMs).toISOString().slice(0, 10)} · Service ${incident.jobDate ?? `job ${incident.leadflowJobId}`}`,
-      sourceLabel: "Quality record", summary: `${CATEGORY_LABELS[incident.category] ?? "Complaint"} (${incident.severity}).`,
+      sourceLabel: "Quality record", summary: complaintSummary(incident), complaint: complaintDetail(incident),
       outcome: recovered ? "Completed recovery recorded by staff." : incident.recleanStatus === "requested" || refundRequest ? "Recovery requested; not yet recorded as completed." : "No completed recovery recorded." });
   }
   if (notCounted) warnings.push(`${notCounted} quality record(s) were not counted against a team automatically (office, billing or scheduling issues, supporting signals such as ratings, or no matching visit).`);

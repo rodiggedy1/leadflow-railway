@@ -160,7 +160,8 @@ describe("approved weekly production view — synthetic SSR only", () => {
   it("imports only the approved scorer, public types, UI dependencies and local CSS; no real fixtures or client data", () => {
     const source = readFileSync(new URL("../client/src/components/TeamLeaderboardView.tsx", import.meta.url), "utf8");
     const imports = Array.from(source.matchAll(/^import\s+.*?(?:from\s+)?["']([^"']+)["'];/gm)).map(match => match[1]);
-    expect(imports).toEqual(["@shared/teamLeaderboardReviewScores", "@shared/teamLeaderboardPublication", "react", "lucide-react", "@shared/teamLeaderboard", "./team-leaderboard.css"]);
+    // Owner decision (2026-11-28): the team page also shows its own complaints in full and its areas for improvement.
+    expect(imports).toEqual(["@shared/teamLeaderboardReviewScores", "@shared/teamLeaderboardPublication", "react", "lucide-react", "@shared/teamLeaderboard", "./TeamComplaintDetails", "./team-leaderboard.css"]);
     expect(source).toContain('import type { TeamLeaderboardDetails } from "@shared/teamLeaderboardPublication";');
     expect(source).toContain("rankAssessedScores(publication?.teams ?? [], details)");
     expect(source).not.toMatch(/day-data|dayDetails|dayPublication|fixtures|client-data|rankTeamScores/);

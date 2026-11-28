@@ -1,0 +1,20 @@
+/* Team's own complaints in full + areas for improvement (owner, 2026-11-28) */
+.tl-complaint-card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;padding:16px;border:1px solid var(--tl-line);border-radius:14px;background:#fff;margin:10px 0}
+.tl-complaint-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px}
+.tl-complaint-head h3{margin:0;font-size:17px;overflow-wrap:anywhere}
+.tl-severity{font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;background:#f3ece6;color:#7a5b44}
+.tl-severity-high{background:#fbe3dd;color:#a3412b}.tl-severity-low{background:#eef3ec;color:#4c6b45}
+.tl-complaint-date{margin:4px 0 8px;color:var(--tl-muted);font-size:13px}
+.tl-complaint-words{margin:0 0 8px;padding:10px 12px;border-left:3px solid var(--tl-coral);background:#fbf7f4;border-radius:0 8px 8px 0;font-size:15px;line-height:1.5;overflow-wrap:anywhere}
+.tl-complaint-full{margin:0 0 8px;color:#57514b;font-size:13px;line-height:1.5;overflow-wrap:anywhere}.tl-complaint-full span{font-weight:700}
+.tl-complaint-facts{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.tl-complaint-facts li{font-size:12.5px;padding:4px 9px;border-radius:999px;background:#f4f1ed;color:#4a4540}
+.tl-complaint-facts .tl-complaint-impact{background:#fbe3dd;color:#a3412b;font-weight:700}
+.tl-improve{margin:18px 0;padding:18px 20px;border:1px solid var(--tl-line);border-radius:18px;background:#fff}
+.tl-improve-head{display:flex;align-items:center;gap:8px;color:var(--tl-coral)}.tl-improve-head h2{margin:0;font-size:18px;color:var(--tl-ink)}
+.tl-improve ol{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:10px}
+.tl-improve li{padding:10px 12px;border-radius:12px;background:#fbf7f4}
+.tl-improve li>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px}
+.tl-improve-lost{display:inline-flex;align-items:center;gap:4px;color:#a3412b;font-weight:700;font-size:13px}
+.tl-improve li p{margin:4px 0 0;font-size:13.5px;line-height:1.5;color:#4a4540}
+.tl-improve-none{margin:10px 0 0;color:#4c6b45}
