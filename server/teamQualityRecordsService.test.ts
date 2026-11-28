@@ -46,7 +46,8 @@ describe("scores from saved quality records (no AI review)", () => {
     const { snapshot, countsComplete } = await env.service.live("2026-11-22");
     expect(countsComplete).toBe(true);
     expect(snapshot.details["1"]).toMatchObject({ complaintCases: 2, confirmedRecoveryCases: 1, refundRequests: 1 });
-    expect(snapshot.details["2"]).toMatchObject({ complaintCases: 1, confirmedRecoveryCases: 0 });
+    // Owner rule (2026-11-28): a team-service record (arrival, timing, conduct) is kept but no longer counts.
+    expect(snapshot.details["2"]).toMatchObject({ complaintCases: 0, confirmedRecoveryCases: 0 });
     const ranked = rankAssessedScores(snapshot.publication.teams, snapshot.details);
     expect(ranked.map(t => [t.id, t.rank])).toEqual([["2", 1], ["1", 2]]);
     expect(env.record).not.toHaveBeenCalled();

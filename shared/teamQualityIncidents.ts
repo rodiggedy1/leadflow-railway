@@ -68,13 +68,43 @@ export function categoryGroup(category: string): "team" | "other" | "unclassifie
 export type IncidentForScoring = {
   id: number; teamId: number | null; leadflowJobId: number | null; category: string; attribution: string;
   status: string; recleanStatus: string; refundStatus: string; processingStatus: string;
+  evidenceQuote?: string | null; evidenceText?: string | null;
 };
-/** One incident counts once against one team, automatically, when it is about the team's service, matched to a
- * visit and team, processed, and not dismissed by a staff override. Refund requests or upset-customer labels on their
- * own never count: the category must be cleaning_quality or team_service. */
+
+// Owner rule (2026-11-28): only the quality of the cleaning performed counts (missed areas, incomplete cleaning, poor
+// workmanship, damage during cleaning, and the recleans/refunds for those). Arrival and scheduling issues never count:
+// late arrivals, arrival windows, "where are my cleaners / is anyone coming", delays, appointment changes, missed
+// appointments, and refunds caused by them. Applied when scores are calculated, so saved records are kept unchanged.
+const ARRIVAL_OR_SCHEDULING = [
+  /\blate\b|\blateness\b|running behind|\bdelay(ed|s)?\b/i,
+  /\barriv(e|ed|al|ing)\b|\bon (their|the|her|his) way\b|\beta\b/i,
+  /\bwhere (are|is)\b|\b(is|are) (any|some)(one|body) (coming|here|on)\b|\bnobody (came|showed|is here)\b|\bno one (came|showed|is here)\b|\bwaiting (for|on)\b/i,
+  /\bno[- ]?show\b|\bdid ?n[o']t (show|come)\b|\bnever (showed|came|arrived)\b|\bmissed (my|the|our|her|his|their)? ?(appointment|visit|cleaning|booking)\b/i,
+  /\bwindow\b|\breschedul|\bappointment\b|\bcancel|\bbooking\b|\bscheduling\b|\bwrong (day|date|time)\b/i,
+];
+// Words about the cleaning itself. "missed appointment/visit" is removed first, so only missed AREAS count.
+const CLEANING_QUALITY = /\b(dirty|filthy|not clean(ed)?|was ?n[o']t clean(ed)?|did ?n[o']t clean|did not clean|missed|skipped|left (out|undone)|not done|unfinished|incomplete|sloppy|streak|dust(y)?|hair|stain|sticky|grim(e|y)|mold|smell|poor (job|quality|work)|bad (job|cleaning)|re-?clean|redo|not satisfied|floor|kitchen|bathroom|toilet|shower|tub|sink|counter|oven|stove|fridge|refrigerator|baseboard|window ?sill|mirror|carpet|vacuum|mop|damag(e|ed)|broke(n)?|scratch(ed)?|crack(ed)?)\b/i;
+const MISSED_VISIT = /\bmissed (my|the|our|her|his|their)? ?(appointment|visit|cleaning|booking)\b/gi;
+/** True when a complaint is about arrival or scheduling and says nothing about the cleaning itself. */
+export function isArrivalOrSchedulingOnly(text: string | null | undefined): boolean {
+  const value = (text ?? "").trim();
+  if (!value || !ARRIVAL_OR_SCHEDULING.some(pattern => pattern.test(value))) return false;
+  return !CLEANING_QUALITY.test(value.replace(MISSED_VISIT, " "));
+}
+/** Why a saved incident does not count against a team (null when it counts). Shown next to the kept record. */
+export function qualityExclusionReason(incident: IncidentForScoring): string | null {
+  if (incident.status === "dismissed") return "dismissed by staff";
+  if (incident.processingStatus !== "ok") return "not processed yet";
+  if (incident.attribution === "unattributed" || incident.teamId === null || incident.leadflowJobId === null) return "not matched to a visit";
+  if (incident.category === "team_service") return "not about the cleaning (arrival, timing or conduct)";
+  if (incident.category !== "cleaning_quality") return "not the cleaning team's responsibility";
+  if (isArrivalOrSchedulingOnly([incident.evidenceQuote, incident.evidenceText].filter(Boolean).join(" \n "))) return "arrival or scheduling issue, not cleaning quality";
+  return null;
+}
+/** One incident counts once against one team, automatically, only when it is about the quality of the cleaning,
+ * matched to a visit and team, processed, and not dismissed by a staff override. */
 export function countsAgainstTeam(incident: IncidentForScoring): boolean {
-  return incident.status !== "dismissed" && incident.processingStatus === "ok" && isTeamCategory(incident.category)
-    && incident.attribution !== "unattributed" && incident.teamId !== null && incident.leadflowJobId !== null;
+  return qualityExclusionReason(incident) === null;
 }
 /** A completed reclean or issued refund for a counted incident is one recovery event, never two. */
 export function isCompletedRecovery(incident: IncidentForScoring): boolean {

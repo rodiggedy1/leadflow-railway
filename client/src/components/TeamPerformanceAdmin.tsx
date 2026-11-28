@@ -3,7 +3,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
 import { trpc } from "@/lib/trpc";
 import { rankAssessedScores } from "@shared/teamLeaderboardReviewScores";
-import { countsAgainstTeam } from "@shared/teamQualityIncidents";
+import { countsAgainstTeam, qualityExclusionReason } from "@shared/teamQualityIncidents";
 import { shiftBookingDate } from "@shared/bookingReschedule";
 import { TeamLeaderboardAdminLink } from "./TeamLeaderboardAdminLink";
 import { TeamQualityRecords } from "./TeamQualityRecords";
@@ -19,7 +19,7 @@ const opts = { retry: false as const, throwOnError: false as const, staleTime: 0
 const STATE_LABEL: Record<AnalysisStatus["state"], string> = {
   not_started: "Not started", running: "In progress", complete: "Complete", incomplete: "Incomplete", failed: "Failed",
 };
-const CATEGORY: Record<string, string> = { cleaning_quality: "Cleaning quality", team_service: "Team service", office_service: "Office",
+const CATEGORY: Record<string, string> = { cleaning_quality: "Complaint", team_service: "Arrival / team conduct", office_service: "Office",
   pricing_billing: "Billing / pricing", scheduling: "Scheduling", other: "Other", unclassified: "Related signal" };
 const CHANNEL: Record<string, string> = { sms: "Text", email: "Email", call: "Call", rating: "Rating", signoff: "Cleaner sign-off", review: "Weekly analysis", staff: "Staff" };
 const ERRORS: Record<string, string> = {
@@ -152,7 +152,7 @@ export function TeamPerformanceAdmin({ agentId }: { agentId: number }) {
                 const list = teamIncidents(team.id);
                 if (!list.length) return <p className="tp-note">{final ? "No complaints about this team this week." : "No complaints found so far. The analysis is not finished."}</p>;
                 return list.map(incident => <article key={incident.id} className="tp-complaint">
-                  <strong>{CATEGORY[incident.category] ?? incident.category}{countsAgainstTeam(incident) ? "" : " · not counted against the team"}</strong>
+                  <strong>{countsAgainstTeam(incident) ? "Cleaning quality" : `${CATEGORY[incident.category] ?? incident.category} · not counted (${qualityExclusionReason(incident)})`}</strong>
                   <small>{CHANNEL[incident.channel] ?? incident.channel} · {time(incident.reportedAtMs)}{incident.customerName ? ` · ${incident.customerName}` : ""}{incident.leadflowJobId ? ` · job ${incident.leadflowJobId}` : ""}{incident.messages.length ? ` · ${incident.messages.length + 1} messages about it` : ""}</small>
                   {incident.evidenceQuote ? <blockquote>“{incident.evidenceQuote}”</blockquote> : incident.evidenceText ? <blockquote>{incident.evidenceText}</blockquote> : null}
                   {(incident.recleanStatus !== "none" || incident.refundStatus !== "none") && <small>Reclean: {incident.recleanStatus} · Refund: {incident.refundStatus}</small>}

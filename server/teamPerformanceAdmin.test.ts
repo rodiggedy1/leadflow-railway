@@ -97,7 +97,7 @@ describe("Team performance card", () => {
     const html = render();
     expect(html).toContain("Cleaning quality</strong>"); expect(html).toContain("“the bathroom was not cleaned”"); expect(html).toContain("2 messages about it");
     expect(html).toContain("Reclean: requested");
-    expect(html).toContain("Billing / pricing · not counted against the team");
+    expect(html).toContain("Billing / pricing · not counted (not the cleaning team&#x27;s responsibility)");
     expect(html).toContain("Copy leaderboard magic link for Martha Calderon");
   });
   it("technical details are only inside the collapsed Advanced section", () => {
