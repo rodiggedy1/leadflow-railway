@@ -215,6 +215,16 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     await expect(actions.executeBookingAction(db, nativeTask, { revision: 1, jobId: l27, availabilityConfirmed: true }, ana)).rejects.toThrow(/visit for this booking change has changed/);
     expect(await jobOf(l27)).toEqual(l27Before);
     expect(await bookingOf(b)).toMatchObject({ requestedLocalDate: nativeDate, requestedLocalTime: "10:00" });
+    // Same customer (both systems): the native appointment, identified unambiguously, still executes and verifies
+    // automatically, and the Launch27 visit is untouched.
+    expect((await actions.taskBookingSource(db, nativeTask)).source).toBe("both");
+    expect((await actions.getBookingActionView(db, nativeTask))!.assessment).toMatchObject({ executable: true, visit: { jobId: j } });
+    expect((await actions.executeBookingAction(db, nativeTask, { revision: 1, jobId: j, availabilityConfirmed: true }, ana)).executedNow).toBe(true);
+    const mixedVerified = await actions.verifyBookingAction(db, nativeTask, ana, verifyOptions());
+    expect(mixedVerified.status).toBe("verified");
+    expect(mixedVerified.confirmation!.text).toContain("you're all set! Your cleaning has been moved to");
+    expect(await bookingOf(b)).toMatchObject({ requestedLocalDate: addDays(nativeDate, 1) });
+    expect(await jobOf(l27)).toEqual(l27Before);
     // Customer with only a Launch27 booking: the task and its reply are created as usual; the change stays manual.
     const onlyPhone = newPhone(), onlyDate = addDays(today(), 7); const only = await launch27Visit(onlyPhone, onlyDate); const onlyBefore = await jobOf(only);
     const onlyTask = await task(onlyPhone, "Could you move my cleaning to Friday?", { type: "reschedule_visit", visitDate: onlyDate, newDate: addDays(onlyDate, 2), newTime: null, evidenceQuote: "move my cleaning to Friday" });
@@ -253,11 +263,11 @@ run("booking changes on a real local TiDB", { timeout: 60_000 }, () => {
     // Imported recurrence row without a booking id (no Launch27 id stored) is still Launch27
     const recPhone = newPhone(); await l27Job(recPhone, addDays(today(), 3), null, "leadflow_recurrence");
     expect(await actions.taskBookingSource(db, await task(recPhone, ask, null))).toEqual({ source: "launch27", launch27BookingIds: [] });
-    // Both systems: not reliable, so manual (unknown) with the Launch27 link
+    // Both systems: "both" (notice shown with the L27 link; a native appointment keeps the native workflow)
     const bothPhone = newPhone(), bothDate = addDays(today(), 6), bothL27 = 800000 + ++seq;
     const bb = await booking({ phone: bothPhone, date: bothDate, time: "10:00" }); await visit(bb, bothDate, "10:00");
     await l27Job(bothPhone, addDays(today(), 2), bothL27);
-    expect(await actions.taskBookingSource(db, await task(bothPhone, ask, null))).toEqual({ source: "unknown", launch27BookingIds: [bothL27] });
+    expect(await actions.taskBookingSource(db, await task(bothPhone, ask, null))).toEqual({ source: "both", launch27BookingIds: [bothL27] });
     // No bookings anywhere: unknown (manual)
     expect(await actions.taskBookingSource(db, await task(newPhone(), ask, null))).toEqual({ source: "unknown", launch27BookingIds: [] });
   });

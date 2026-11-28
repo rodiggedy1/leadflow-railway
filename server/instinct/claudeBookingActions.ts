@@ -191,8 +191,8 @@ export async function upcomingVisits(q: Q, phone: string, today = getEasternBusi
 }
 
 /** Which booking system this customer's visits are in. LeadFlow changes only native bookings; a change to a Launch27
- * booking is always manual. "unknown" (no visits, both systems, or no phone) is treated as manual too. */
-export type TaskBookingSource = { source: "native" | "launch27" | "unknown"; launch27BookingIds: number[] };
+ * booking is always manual. "unknown" (no visits or no phone) is treated as manual too. */
+export type TaskBookingSource = { source: "native" | "launch27" | "both" | "unknown"; launch27BookingIds: number[] };
 export async function taskBookingSource(db: Db, taskId: number, today = getEasternBusinessDate()): Promise<TaskBookingSource> {
   const task = await readTask(db, taskId);
   const phone = task.customerPhone ? normalizePhone(task.customerPhone) : null;
@@ -209,6 +209,8 @@ export async function taskBookingSource(db: Db, taskId: number, today = getEaste
   const ids = Array.from(new Set(imported.map(row => Number(row.launch27BookingId)).filter(id => Number.isSafeInteger(id) && id > 0))).slice(0, 3);
   if (imported.length && !native.length) return { source: "launch27", launch27BookingIds: ids };
   if (native.length && !imported.length) return { source: "native", launch27BookingIds: [] };
+  // Both systems: a native appointment chosen explicitly (or matched by Claude's proposal) still uses the native workflow.
+  if (native.length && imported.length) return { source: "both", launch27BookingIds: ids };
   return { source: "unknown", launch27BookingIds: ids };
 }
 

@@ -5,6 +5,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { claimsBookingChangeDone, looksLikeBookingChange } from "../shared/bookingChangeClaims";
 import { validateClaudeCustomerReplyPlan } from "./instinct/claudeCustomerSmsGeneration";
+import { bookingConfirmationText } from "../shared/claudeBookingActions";
+import { readFileSync } from "node:fs";
 (globalThis as any).React = React; // harness compiles JSX classically; the app build does not need this
 
 let withRecords: { data?: Record<string, string>; isLoading: boolean; isError: boolean } = { data: {}, isLoading: false, isError: false };
@@ -65,6 +67,23 @@ describe("AI replies never claim a requested booking change is done", () => {
     expect(validateClaudeCustomerReplyPlan(plan("Hi Maya, thanks for letting us know! Our team will cancel Friday's cleaning and confirm with you shortly."),
       input("Please cancel my cleaning on Friday")).replyText).toContain("Our team will cancel");
   });
+  it.each(["Thanks for rescheduling!", "Thank you so much for moving it", "Great, I see it was moved to Friday. Thanks!", "Got it, it's cancelled. Appreciate it",
+    "thx for changing the time"])("after a change was made, the customer's thanks is not a new request, so 'You're all set!' is kept: %s", inbound => {
+    expect(looksLikeBookingChange(inbound)).toBe(false);
+    expect(validateClaudeCustomerReplyPlan(JSON.stringify({ replyText: "You're all set! Your cleaning has been moved to Friday.", task: null }), input(inbound)).replyText)
+      .toContain("You're all set!");
+  });
+  it("a new request in the same message is still checked", () => {
+    expect(looksLikeBookingChange("Thanks for rescheduling! Can you also cancel the one after?")).toBe(true);
+  });
+  it("the staff confirmation after a verified native change is the fixed template, sent directly; the AI check never sees it", () => {
+    const text = bookingConfirmationText({ customerName: "Maya Lane", type: "reschedule_visit", date: "2026-12-05", time: "14:00", arrivalWindow: null });
+    expect(text).toContain("you're all set! Your cleaning has been moved to");
+    for (const file of ["server/instinct/claudeBookingActions.ts", "shared/claudeBookingActions.ts", "client/src/components/ClaudeBookingChangePanel.tsx", "server/routers.ts"])
+      expect(readFileSync(file, "utf8")).not.toMatch(/claimsBookingChangeDone|validateClaudeCustomerReplyPlan/);
+    expect(readFileSync("client/src/components/ClaudeBookingChangePanel.tsx", "utf8"))
+      .toContain("send: reserved => send.mutateAsync({ sessionId: reserved.sessionId, message: reserved.text })");
+  });
   it("does not touch replies to messages that are not booking-change requests", () => {
     expect(validateClaudeCustomerReplyPlan(JSON.stringify({ replyText: "You're all set, thanks Maya!", task: null }), input("Thanks so much!")).replyText).toBe("You're all set, thanks Maya!");
   });
@@ -124,5 +143,18 @@ describe("task card: native keeps its workflow; Launch27 or unclear is manual", 
     expect(manualHtml).toContain("Dismiss proposal");
     expect(manualHtml).not.toMatch(/verified/i);
     expect(render(nativeView, null)).toContain("Approve &amp; cancel");
+  });
+  it("both systems: notice shown, native set-up and native Approve stay available", () => {
+    const t = task("Please cancel my cleaning on Friday");
+    const both = panel.manualBookingChange(t, null, { source: "both", launch27BookingIds: [4512] }, false);
+    expect(both).toEqual({ source: "both", launch27BookingIds: [4512] });
+    expect(panel.manualBookingChange(t, nativeView as any, { source: "both", launch27BookingIds: [4512] }, false)).toBeNull(); // native match: native workflow
+    const notice = renderToStaticMarkup(React.createElement(panel.ManualBookingNotice, { task: t, manual: both! }));
+    expect(notice).toContain("Check booking — Launch27 and LeadFlow");
+    expect(notice).toContain("NOT</strong> been made automatically");
+    expect(notice).toContain("a LeadFlow booking can be changed below");
+    expect(notice).toContain('href="https://maidsinblack.launch27.com/admin/bookings/4512"');
+    current = null; withRecords = { data: {}, isLoading: false, isError: false };
+    expect(renderToStaticMarkup(React.createElement(panel.ClaudeBookingChangePanel, { task: t, manual: both }))).toContain("Set up booking change");
   });
 });

@@ -2,9 +2,12 @@
  * A request to cancel, reschedule, skip, pause or change the frequency of a cleaning.
  * Frequency words alone ("a biweekly cleaning") are how new leads ask for a quote, so only a CHANGE of frequency counts. */
 const BOOKING_CHANGE_REQUEST = /\bcancel|\breschedul|\bpostpone|\bpush (it|this|my|the|our)\b|\bmove (it|this|my|the|our|to)\b|\bskip|\bpause|\bfrequency\b|\b(change|switch|go|move|reduce|increase|cut)\b[^.?!\n]{0,40}\b(weekly|bi-?weekly|monthly|every (other|two|three|four|2|3|4) weeks?)\b|\bchange (my|the|our)? ?(date|day|time|booking|appointment|cleaning|schedule|plan)\b|\bdifferent (day|date|time)\b|\bnot (be )?(home|available)\b|\bcan'?t make it\b/i;
+// Thanks for, or mentions of, a change that was already made ("thanks for rescheduling", "it was moved") are not a
+// new request, so the reply to them ("you're all set!") is never blocked.
+const ALREADY_MADE = /\b(thanks?|thank you|thx|appreciate( it)?)( so much| very much)?( for)?( the| you)? (cancel\w*|reschedul\w*|mov\w*|chang\w*|skipp\w*|paus\w*|updat\w*)|\b(was|were|been|got|is|are|it'?s|now) (cancel(l)?ed|rescheduled|moved|changed|skipped|paused|updated)\b/gi;
 /** True when the text asks for a booking change of any kind. */
 export function looksLikeBookingChange(...texts: Array<string | null | undefined>): boolean {
-  return texts.some(text => BOOKING_CHANGE_REQUEST.test(text ?? ""));
+  return texts.some(text => BOOKING_CHANGE_REQUEST.test((text ?? "").replace(ALREADY_MADE, " ")));
 }
 
 // Verbs that always describe a booking change; softer verbs count only in a sentence about the booking itself

@@ -67,7 +67,7 @@ export function createClaudeCustomerTasksRouter(options: CustomerTasksRouterOpti
       .query(() => bookingActions((actions, db) => actions.bookingActionVersions(db), false)),
     /** Native LeadFlow or Launch27: a Launch27 (or unclear) booking change is always manual. Read-only. */
     bookingSource: opsChatProcedure.input(idInput)
-      .output(z.object({ source: z.enum(["native", "launch27", "unknown"]), launch27BookingIds: z.array(z.number().int().positive()) }).strict())
+      .output(z.object({ source: z.enum(["native", "launch27", "both", "unknown"]), launch27BookingIds: z.array(z.number().int().positive()) }).strict())
       .query(({ input }) => bookingActions((actions, db) => actions.taskBookingSource(db, input.id), false)),
     bookingActionVisits: opsChatProcedure.input(idInput).output(z.array(bookingActionVisitSchema))
       .query(({ input }) => bookingActions((actions, db) => actions.taskUpcomingVisits(db, input.id), false)),
